@@ -157,7 +157,22 @@ async function main() {
     const provider = detectUrlImportProvider(url);
     diagnostics.normalizedUrl = normalizedUrl;
     diagnostics.detectedProvider = provider;
-    Object.assign(diagnostics, await diagnoseExternalProvider(normalizedUrl));
+    const externalDiagnostics = await diagnoseExternalProvider(normalizedUrl);
+    Object.assign(diagnostics, externalDiagnostics);
+
+    if (externalDiagnostics.externalProviderUsed) {
+      diagnostics.localFetchSkipped = true;
+      diagnostics.reason = "external_provider_configured";
+      const status = externalDiagnostics.providerStatus;
+      diagnostics.finalUserFacingMessage = status === 200
+        ? "OK"
+        : status === "fetch_failed"
+          ? "Eksterni provider trenutno nije dostupan."
+          : "Eksterni provider nije uspeo da preuzme podatke.";
+      if (status !== 200) diagnostics.slugFallbackPreview = buildSlugFallbackPreview(normalizedUrl);
+      print(diagnostics);
+      return;
+    }
 
     if (provider === "unknown") {
       finalReason = "unsupported_provider";

@@ -40,6 +40,34 @@ describe("URL import provider API", () => {
     await expect(fetch(`${baseUrl}/health`).then((response) => response.json())).resolves.toEqual({ ok: true });
   });
 
+  it("returns verbose health diagnostics", async () => {
+    const baseUrl = await start({
+      fetcher: async () => htmlResponse("<html>ok</html>"),
+    });
+    const response = await fetch(`${baseUrl}/health?verbose=1`);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      providerVersion: "0.1.0",
+      outboundFetchCapability: "ok",
+    });
+  });
+
+  it("returns production diagnostics", async () => {
+    const baseUrl = await start({
+      fetcher: async () => htmlResponse("<html>ok</html>"),
+    });
+    const response = await fetch(`${baseUrl}/diagnostics`);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      providerVersion: "0.1.0",
+      dnsTestResult: expect.any(Object),
+      httpsTestResult: expect.any(Object),
+    });
+  });
+
   it("requires bearer token when configured", async () => {
     const baseUrl = await start({ token: "dev-url-import-token" });
     const response = await fetch(`${baseUrl}/preview`, {
@@ -101,5 +129,28 @@ describe("URL import provider API", () => {
 
     expect(response.status).toBe(423);
     await expect(response.json()).resolves.toMatchObject({ reason: "BLOCKED" });
+  });
+
+  it("records the last fetch error for diagnostics", async () => {
+    const baseUrl = await start({
+      fetcher: async () => {
+        throw new TypeError("fetch failed", { cause: new Error("connect ETIMEDOUT 203.0.113.10:443") });
+      },
+    });
+
+    const previewResponse = await fetch(`${baseUrl}/preview`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ productUrl: "https://www.alibaba.com/product-detail/Timeout-Charger_1600000000003.html" }),
+    });
+    expect(previewResponse.status).toBe(502);
+
+    const diagnostics = await fetch(`${baseUrl}/diagnostics`).then((response) => response.json()) as {
+      lastFetchError?: { reason?: string; errorName?: string };
+    };
+    expect(diagnostics.lastFetchError).toMatchObject({
+      reason: "FETCH_FAILURE",
+      errorName: "TypeError",
+    });
   });
 });

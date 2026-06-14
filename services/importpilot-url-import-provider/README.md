@@ -48,6 +48,25 @@ Returns:
 { "ok": true }
 ```
 
+Verbose health:
+
+```text
+GET /health?verbose=1
+```
+
+Includes provider version, DNS probe, HTTPS probe and the last fetch error.
+
+### `GET /diagnostics`
+
+Returns production-safe diagnostics:
+
+- provider version
+- environment
+- outbound fetch capability
+- DNS test result for Alibaba and Made-in-China
+- HTTPS test result for Alibaba and Made-in-China
+- last fetch error, if any
+
 ### `POST /preview`
 
 If `URL_IMPORT_PROVIDER_TOKEN` is set, send:

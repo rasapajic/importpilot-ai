@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 
 import { detectProvider, hasProductIdentifier, parseProductPreview } from "./parser.js";
 import { previewRequestSchema, type ProductPreview } from "./contract.js";
+import { classifyFetchError, rememberFetchError } from "./diagnostics.js";
 
 export class UrlImportProviderError extends Error {
   constructor(public readonly reason: "NETWORK_ERROR" | "BLOCKED" | "PARSING_FAILED" | "INVALID_URL", message: string = reason) {
@@ -95,7 +96,15 @@ export async function previewProductUrl(productUrl: string, options: FetchOption
     logDevelopment({ provider, upstreamStatus: response.status, finalUrl: response.url });
     const html = await readLimited(response, options.maxResponseBytes ?? 1_000_000);
     await maybeSaveDebugHtml(html, provider, Boolean(options.debugHtml));
-    if (!response.ok) throw new UrlImportProviderError("NETWORK_ERROR", `HTTP ${response.status}`);
+    if (!response.ok) {
+      rememberFetchError({
+        provider,
+        productUrl: parsed.data.productUrl,
+        reason: "FETCH_FAILURE",
+        statusCode: response.status,
+      });
+      throw new UrlImportProviderError("NETWORK_ERROR", `HTTP ${response.status}`);
+    }
     const preview = parseProductPreview(html, parsed.data.productUrl);
     logDevelopment({
       provider,
@@ -110,21 +119,36 @@ export async function previewProductUrl(productUrl: string, options: FetchOption
     return preview;
   } catch (error) {
     if (error instanceof UrlImportProviderError) {
+      rememberFetchError({
+        provider,
+        productUrl: parsed.data.productUrl,
+        reason: error.reason === "BLOCKED" ? "BLOCKED" : error.reason === "PARSING_FAILED" ? "PROVIDER_BUG" : "FETCH_FAILURE",
+        error,
+      });
       logDevelopment({ provider, finalReason: error.reason, errorMessage: error.message });
       throw error;
     }
     if (error instanceof Error && error.message === "BLOCKED") {
+      rememberFetchError({ provider, productUrl: parsed.data.productUrl, reason: "BLOCKED", error });
       logDevelopment({ provider, blocked: true, finalReason: "BLOCKED" });
       throw new UrlImportProviderError("BLOCKED");
     }
     if (error instanceof Error && error.message === "PARSING_FAILED") {
+      rememberFetchError({ provider, productUrl: parsed.data.productUrl, reason: "PROVIDER_BUG", error });
       logDevelopment({ provider, parserResult: "failure", finalReason: "PARSING_FAILED" });
       throw new UrlImportProviderError("PARSING_FAILED");
     }
     if (controller.signal.aborted) {
+      rememberFetchError({ provider, productUrl: parsed.data.productUrl, reason: "TIMEOUT", error, timeout: true });
       logDevelopment({ provider, timeout: true, finalReason: "NETWORK_ERROR", errorMessage: "Timeout." });
       throw new UrlImportProviderError("NETWORK_ERROR", "Timeout.");
     }
+    rememberFetchError({
+      provider,
+      productUrl: parsed.data.productUrl,
+      reason: classifyFetchError(error),
+      error,
+    });
     logDevelopment({
       provider,
       finalReason: "NETWORK_ERROR",

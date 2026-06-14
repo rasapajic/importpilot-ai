@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { previewRequestSchema, type PreviewFailure, type PreviewSuccess } from "./contract.js";
+import { getProviderDiagnostics, PROVIDER_VERSION } from "./diagnostics.js";
 import { previewProductUrl, UrlImportProviderError } from "./fetcher.js";
 
 type AppOptions = {
@@ -54,15 +55,32 @@ function failure(error: unknown): { status: number; body: PreviewFailure } {
 
 export function createUrlImportProviderApp(options: AppOptions = {}) {
   return async function handler(request: IncomingMessage, response: ServerResponse) {
-    if (request.method === "GET" && request.url === "/health") {
+    const url = new URL(request.url ?? "/", "http://localhost");
+
+    if (request.method === "GET" && url.pathname === "/health") {
+      if (url.searchParams.get("verbose") === "1") {
+        const diagnostics = await getProviderDiagnostics({
+          fetcher: options.fetcher,
+          timeoutMs: options.timeoutMs,
+        });
+        return sendJson(response, 200, { ok: true, ...diagnostics });
+      }
       return sendJson(response, 200, { ok: true });
+    }
+
+    if (request.method === "GET" && url.pathname === "/diagnostics") {
+      const diagnostics = await getProviderDiagnostics({
+        fetcher: options.fetcher,
+        timeoutMs: options.timeoutMs,
+      });
+      return sendJson(response, 200, diagnostics);
     }
 
     if (!authorized(request.headers.authorization, options.token)) {
       return sendJson(response, 401, { error: "Unauthorized." });
     }
 
-    if (request.method === "POST" && request.url === "/preview") {
+    if (request.method === "POST" && url.pathname === "/preview") {
       try {
         const parsed = previewRequestSchema.safeParse(await readJson(request, options.maxRequestBytes ?? 100_000));
         if (!parsed.success) return sendJson(response, 400, { error: "Invalid URL.", reason: "INVALID_URL" } satisfies PreviewFailure);
@@ -82,6 +100,6 @@ export function createUrlImportProviderApp(options: AppOptions = {}) {
       }
     }
 
-    return sendJson(response, 404, { error: "Not found." });
+    return sendJson(response, 404, { error: "Not found.", providerVersion: PROVIDER_VERSION });
   };
 }
