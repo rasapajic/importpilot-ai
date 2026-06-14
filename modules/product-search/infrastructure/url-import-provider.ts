@@ -589,11 +589,14 @@ export function createExternalSupplierOfferUrlImportProvider(options: {
           signal: controller.signal,
         });
         const payload = await response.json().catch(() => null) as unknown;
+        const payloadRecord = payload && typeof payload === "object" ? payload as Record<string, unknown> : null;
         logUrlImportFlow({
           localParserUsed: false,
           externalProviderUsed: true,
           providerUrl: options.endpoint,
           providerStatus: response.status,
+          previewPresent: Boolean(payloadRecord && "preview" in payloadRecord && payloadRecord.preview),
+          errorPresent: Boolean(payloadRecord && "error" in payloadRecord && payloadRecord.error),
         });
         if (!response.ok) {
           if (response.status === 423 || (payload && typeof payload === "object" && "reason" in payload && String(payload.reason).toLowerCase().includes("block"))) {
@@ -601,8 +604,8 @@ export function createExternalSupplierOfferUrlImportProvider(options: {
           }
           throw new UrlImportExternalProviderError(`External URL import provider failed with HTTP ${response.status}.`);
         }
-        const candidate = payload && typeof payload === "object" && "preview" in payload
-          ? (payload as { preview: unknown }).preview
+        const candidate = payloadRecord && "preview" in payloadRecord
+          ? payloadRecord.preview
           : payload;
         const preview = supplierOfferUrlPreviewSchema.parse(normalizeExternalPreview(candidate));
         logUrlImportFlow({
@@ -644,7 +647,7 @@ function normalizeExternalPreview(candidate: unknown) {
       source = "external-url-import-provider";
     }
   }
-  return {
+  const normalized = {
     title: record.title ?? record.productTitle ?? null,
     supplierName: record.supplierName ?? null,
     supplierCountry: record.supplierCountry ?? null,
@@ -655,8 +658,22 @@ function normalizeExternalPreview(candidate: unknown) {
     productUrl,
     imageUrl: record.imageUrl ?? null,
     source,
-    isPartial: record.isPartial ?? false,
     titleFromSlug: record.titleFromSlug ?? false,
+  };
+  const requiredPreviewValues = [
+    normalized.title,
+    normalized.supplierName,
+    normalized.price,
+    normalized.currency,
+    normalized.minimumOrderQuantity,
+    normalized.imageUrl,
+    normalized.productUrl,
+  ];
+  const inferredIsPartial = requiredPreviewValues.some(Boolean) && !requiredPreviewValues.every(Boolean);
+  const isPartial = record.isPartial ?? inferredIsPartial;
+  return {
+    ...normalized,
+    isPartial,
   };
 }
 

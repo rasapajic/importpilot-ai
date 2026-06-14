@@ -93,6 +93,38 @@ describe("supplier offer URL import provider", () => {
     });
   });
 
+  it("accepts partial successful Made-in-China previews from the external provider", async () => {
+    const productUrl = "https://engtianvehicle.en.made-in-china.com/product/dOfmlFDuEHcI/China-Electric-Scooter-Hot-Selling-Made-in-China-High-Quality-Popular-Model-and-Cheaper-CKD-Price.html";
+    const provider = createExternalSupplierOfferUrlImportProvider({
+      endpoint: "https://url-import.example/preview",
+      token: "secret-token",
+      fetcher: async () => Response.json({
+        preview: {
+          productTitle: "China Electric Scooter Hot Selling Made in China High Quality Popular Model and Cheaper CKD Price",
+          supplierName: null,
+          price: "165.00",
+          currency: "USD",
+          minimumOrderQuantity: null,
+          incoterm: "EXW",
+          productUrl,
+          imageUrl: "https://image.made-in-china.com/202f0j00electric-scooter.jpg",
+        },
+      }),
+    });
+
+    await expect(provider.previewSupplierOfferUrl(productUrl)).resolves.toMatchObject({
+      title: "China Electric Scooter Hot Selling Made in China High Quality Popular Model and Cheaper CKD Price",
+      supplierName: null,
+      price: 165,
+      currency: "USD",
+      minimumOrderQuantity: null,
+      incoterm: "EXW",
+      imageUrl: "https://image.made-in-china.com/202f0j00electric-scooter.jpg",
+      source: "engtianvehicle.en.made-in-china.com",
+      isPartial: true,
+    });
+  });
+
   it("keeps manual fallback available when the external provider fails", async () => {
     const provider = createExternalSupplierOfferUrlImportProvider({
       endpoint: "https://url-import.example/preview",
