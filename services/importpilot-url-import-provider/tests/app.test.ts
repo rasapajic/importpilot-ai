@@ -322,7 +322,7 @@ describe("URL import provider API", () => {
     const parser = await fetch(`${parserBaseUrl}/preview`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: productBody,
+      body: JSON.stringify({ productUrl: "https://www.alibaba.com/product-detail/_1600000000002.html" }),
     });
     expect(parser.status).toBe(422);
     expect(parser.status).not.toBe(423);

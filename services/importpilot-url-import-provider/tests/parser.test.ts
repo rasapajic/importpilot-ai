@@ -78,6 +78,41 @@ describe("URL import provider parser", () => {
     expect(snapshot.fieldCount).toBeGreaterThanOrEqual(7);
   });
 
+  it("rejects Made-in-China navigation and HTML fragment false positives", () => {
+    const productUrl = "https://engtianvehicle.en.made-in-china.com/product/dOfmlFDuEHcI/China-Electric-Scooter-Hot-Selling-Made-in-China-High-Quality-Popular-Model-and-Cheaper-CKD-Price.html";
+    const html = `
+      <html>
+        <head>
+          <title>English</title>
+          <meta property="og:title" content="English">
+          <meta property="og:image" content="//image.made-in-china.com/202f0j00electric-scooter.jpg">
+        </head>
+        <body>
+          <nav>English Deutsch Español Home Products Supplier</nav>
+          <div>Supplier: chat button-block J-sr-side-contSupplier-chat"&gt;</div>
+          <div class="price">FOB Price: US$ 165.00 / Piece</div>
+          <div>Min. Order: 20 Pieces</div>
+          <div>EXW Shanghai</div>
+        </body>
+      </html>
+    `;
+
+    const preview = parseProductPreview(html, productUrl);
+    const snapshot = inspectPreviewExtraction(html);
+
+    expect(preview).toMatchObject({
+      productTitle: "China Electric Scooter Hot Selling Made in China High Quality Popular Model and Cheaper CKD Price",
+      supplierName: null,
+      price: "165.00",
+      currency: "USD",
+      minimumOrderQuantity: "20",
+      incoterm: "EXW",
+      imageUrl: "https://image.made-in-china.com/202f0j00electric-scooter.jpg",
+    });
+    expect(snapshot.candidates.some((candidate) => candidate.value === "English")).toBe(false);
+    expect(snapshot.candidates.some((candidate) => /chat button-block|J-sr|Supplier-chat/i.test(candidate.value))).toBe(false);
+  });
+
   it("detects blocked pages clearly", () => {
     expect(() => parseProductPreview(
       fixture("blocked-page.html"),

@@ -87,6 +87,70 @@ function normalizeUrl(value: string | null) {
   return value;
 }
 
+function isGenericTitle(value: string | null) {
+  if (!value) return true;
+  const normalized = value.trim().replace(/\s+/g, " ").toLowerCase();
+  return [
+    "english",
+    "deutsch",
+    "español",
+    "espanol",
+    "made-in-china.com",
+    "home",
+    "products",
+    "product",
+    "supplier",
+    "suppliers",
+  ].includes(normalized);
+}
+
+function cleanTitle(value: string | null) {
+  if (!value || isGenericTitle(value)) return null;
+  return value;
+}
+
+function cleanSupplierName(value: string | null) {
+  if (!value) return null;
+  if (/[<>]/.test(value)) return null;
+  if (/class\s*=|button|chat|j-sr|supplier-chat/i.test(value)) return null;
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (!normalized || /^(supplier|company|manufacturer)$/i.test(normalized)) return null;
+  return normalized;
+}
+
+function titleFromSlug(productUrl: string) {
+  let url: URL;
+  try {
+    url = new URL(productUrl);
+  } catch {
+    return null;
+  }
+  const segments = url.pathname.split("/").filter(Boolean);
+  const candidate = [...segments].reverse().find((segment) =>
+    /[a-z]/i.test(segment) && !/^(product-detail|productdetail|product|pd|p-detail)$/i.test(segment)
+  );
+  if (!candidate) return null;
+  const withoutExtension = candidate
+    .replace(/\.html?$/i, "")
+    .replace(/[_-]?\d{6,}.*$/i, "")
+    .replace(/_[a-z0-9]+$/i, "");
+  const words = withoutExtension
+    .split(/[-_]+/)
+    .map((word) => word.trim())
+    .filter((word) => word && !/^\d+$/.test(word));
+  if (words.length === 0) return null;
+  const lowercaseWords = new Set(["a", "an", "and", "for", "in", "of", "or", "the", "to"]);
+  return words
+    .map((word, index) => {
+      const normalized = word.toLowerCase();
+      if (index > 0 && lowercaseWords.has(normalized)) return normalized;
+      return word.length <= 3 && word === word.toUpperCase()
+        ? word
+        : `${word.charAt(0).toUpperCase()}${word.slice(1).toLowerCase()}`;
+    })
+    .join(" ");
+}
+
 export type ParserCandidate = {
   field: string;
   value: string;
@@ -115,25 +179,34 @@ function firstLargeProductImage(html: string) {
   return image ?? null;
 }
 
+function extractIncoterm(bodyText: string) {
+  const matches = [...bodyText.matchAll(/\b(EXW|FCA|FAS|FOB|CFR|CIF|CPT|CIP|DAP|DPU|DDP)\b/gi)];
+  const preferred = matches.find((match) => {
+    const after = bodyText.slice((match.index ?? 0) + match[0].length, (match.index ?? 0) + match[0].length + 12);
+    return !/^\s*price\b/i.test(after);
+  });
+  return (preferred ?? matches[0])?.[1]?.toUpperCase() ?? null;
+}
+
 export function inspectPreviewExtraction(html: string): PreviewExtractionSnapshot {
   const blocked = isBlockedHtml(html);
   const pageTitle = pageTitleFromHtml(html);
   const bodyText = html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>|<[^>]+>/gi, " ");
-  const productTitle = embeddedJsonString(html, ["productTitle", "subject", "productName", "seoTitle", "name", "title"])
+  const productTitle = cleanTitle(embeddedJsonString(html, ["productTitle", "subject", "productName", "seoTitle", "name", "title"])
     ?? meta(html, "og:title")
     ?? regexText(html, [
       /<h1[^>]*>([\s\S]*?)<\/h1>/i,
       /<[^>]+(?:class|id)=["'][^"']*(?:product(?:-|\s)?title|prod(?:-|\s)?title|title)[^"']*["'][^>]*>([\s\S]*?)<\/[^>]+>/i,
     ])
-    ?? pageTitle;
-  const supplierName = embeddedJsonString(html, ["companyName", "supplierName", "storeName", "sellerName", "shopName"])
+    ?? pageTitle);
+  const supplierName = cleanSupplierName(embeddedJsonString(html, ["companyName", "supplierName", "storeName", "sellerName", "shopName"])
     ?? meta(html, "author")
     ?? regexText(html, [
       /(?:Company\s+Name|Supplier|Manufacturer)\s*:?<\/?[^>]*>\s*([^<\n]+)/i,
       /(?:Company\s+Name|Supplier|Manufacturer)\s*[:\-]\s*([^<\n]+)/i,
       /<[^>]+(?:class|id)=["'][^"']*(?:company|supplier|manufacturer)[^"']*["'][^>]*>\s*<a[^>]*>([\s\S]*?)<\/a>/i,
       /<a[^>]+href=["'][^"']*\.made-in-china\.com["'][^>]*>([\s\S]*?(?:Co\.|Ltd\.|Limited|Factory|Supplier)[\s\S]*?)<\/a>/i,
-    ]);
+    ]));
   const price = embeddedJsonNumber(html, ["price", "minPrice", "salePrice", "offerPrice", "fobPrice", "unitPrice"])
     ?? regexText(html, [
       /"priceRange"\s*:\s*"[^0-9"]*([0-9]+(?:[.,][0-9]+)?)/i,
@@ -150,7 +223,7 @@ export function inspectPreviewExtraction(html: string): PreviewExtractionSnapsho
     ?? (bodyText.match(/(?:MOQ|minimum\s+order(?:\s+quantity)?|min\.\s*order)\s*[:\-]?\s*(\d+)/i)?.[1]
       ?? bodyText.match(/(\d+)\s*(?:piece|pieces|pcs|set|sets|unit|units)\s*\(?(?:MOQ|Min\.\s*Order|Minimum\s+Order)\)?/i)?.[1]
       ?? null);
-  const incoterm = bodyText.match(/\b(EXW|FCA|FAS|FOB|CFR|CIF|CPT|CIP|DAP|DPU|DDP)\b/i)?.[1]?.toUpperCase() ?? null;
+  const incoterm = extractIncoterm(bodyText);
   const imageUrl = normalizeUrl(meta(html, "og:image")
     ?? meta(html, "twitter:image")
     ?? embeddedJsonString(html, ["imageUrl", "mainImage", "mainImageUrl", "imagePath", "imgUrl", "productImage", "originalImage"])
@@ -180,8 +253,8 @@ export function parseProductPreview(html: string, productUrl: string): ProductPr
   const snapshot = inspectPreviewExtraction(html);
   if (snapshot.blocked) throw new Error("BLOCKED");
   const value = (field: string) => snapshot.candidates.find((candidate) => candidate.field === field)?.value ?? null;
-  const productTitle = value("productTitle");
-  const supplierName = value("supplierName");
+  const productTitle = value("productTitle") ?? titleFromSlug(productUrl);
+  const supplierName = cleanSupplierName(value("supplierName"));
   const price = value("price");
   const currency = value("currency");
   const minimumOrderQuantity = value("minimumOrderQuantity");
