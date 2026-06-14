@@ -127,7 +127,7 @@ describe("URL import provider API", () => {
 
   it("accepts Made-in-China supplier subdomain product URLs", async () => {
     const baseUrl = await start({
-      fetcher: async () => htmlResponse(fixture("made-in-china-product.html")),
+      fetcher: async () => htmlResponse(fixture("made-in-china-supplier-product.html")),
     });
     const productUrl = "https://engtianvehicle.en.made-in-china.com/product/dOfmlFDuEHcI/China-Electric-Scooter-Hot-Selling-Made-in-China-High-Quality-Popular-Model-and-Cheaper-CKD-Price.html";
 
@@ -140,10 +140,33 @@ describe("URL import provider API", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
       preview: {
-        productTitle: "20W Mobile Phone Charger",
-        supplierName: "Xiamen Charger Supplier",
+        productTitle: "China Electric Scooter Hot Selling Made in China High Quality Popular Model and Cheaper CKD Price",
+        supplierName: "Jiangsu Engtian Vehicle Co., Ltd.",
+        price: "168.50",
+        currency: "USD",
+        minimumOrderQuantity: "20",
+        imageUrl: "https://image.made-in-china.com/202f0j00scooter-main.jpg",
         productUrl,
       },
+    });
+
+    const diagnostics = await fetch(`${baseUrl}/diagnostics`).then((result) => result.json()) as {
+      lastPreviewDiagnostics?: Record<string, unknown>;
+    };
+    expect(diagnostics.lastPreviewDiagnostics).toMatchObject({
+      provider: "made-in-china",
+      detectedProvider: "made-in-china",
+      finalReason: "OK",
+      httpStatus: 200,
+      antiBotDetected: false,
+      pageTitle: "China Electric Scooter Hot Selling Made in China High Quality Popular Model and Cheaper CKD Price - Electric Scooter and E Scooter",
+      htmlLength: expect.any(Number),
+      parserFieldCount: expect.any(Number),
+      parserCandidates: [
+        { field: "productTitle", value: "China Electric Scooter Hot Selling Made in China High Quality Popular Model and Cheaper CKD Price" },
+        { field: "supplierName", value: "Jiangsu Engtian Vehicle Co., Ltd." },
+        { field: "price", value: "168.50" },
+      ],
     });
   });
 

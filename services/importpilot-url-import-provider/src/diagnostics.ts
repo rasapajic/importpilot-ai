@@ -27,7 +27,12 @@ type LastPreviewDiagnostics = {
   provider: string;
   urlHost: string;
   httpStatus?: number;
+  finalUrl?: string;
   finalReason: "OK" | "BLOCKED" | "PARSING_FAILED" | "NETWORK_ERROR" | "TIMEOUT" | "INVALID_URL";
+  htmlLength?: number;
+  pageTitle?: string | null;
+  detectedProvider?: string;
+  antiBotDetected?: boolean;
   parserFieldCount: number;
   parserCandidates: Array<{ field: string; value: string }>;
   timeout?: boolean;
@@ -95,7 +100,12 @@ export function rememberPreviewDiagnostics(input: Omit<LastPreviewDiagnostics, "
     urlHost,
     provider: input.provider,
     httpStatus: input.httpStatus,
+    finalUrl: input.finalUrl,
     finalReason: input.finalReason,
+    htmlLength: input.htmlLength,
+    pageTitle: input.pageTitle,
+    detectedProvider: input.detectedProvider,
+    antiBotDetected: input.antiBotDetected,
     parserFieldCount: input.parserFieldCount,
     parserCandidates: input.parserCandidates.slice(0, 3),
     timeout: input.timeout,

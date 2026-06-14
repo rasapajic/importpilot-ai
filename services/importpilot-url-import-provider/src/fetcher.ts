@@ -89,6 +89,7 @@ export async function previewProductUrl(productUrl: string, options: FetchOption
   const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? 8_000);
   let lastSnapshot: PreviewExtractionSnapshot | null = null;
   let upstreamStatus: number | undefined;
+  let finalUrl: string | undefined;
   try {
     const response = await (options.fetcher ?? fetch)(parsed.data.productUrl, {
       headers: requestHeaders(url),
@@ -96,6 +97,7 @@ export async function previewProductUrl(productUrl: string, options: FetchOption
       signal: controller.signal,
     });
     upstreamStatus = response.status;
+    finalUrl = response.url;
     logDevelopment({ provider, upstreamStatus: response.status, finalUrl: response.url });
     const html = await readLimited(response, options.maxResponseBytes ?? 1_000_000);
     await maybeSaveDebugHtml(html, provider, Boolean(options.debugHtml));
@@ -105,7 +107,12 @@ export async function previewProductUrl(productUrl: string, options: FetchOption
         provider,
         productUrl: parsed.data.productUrl,
         httpStatus: response.status,
+        finalUrl,
         finalReason: "NETWORK_ERROR",
+        htmlLength: lastSnapshot.htmlLength,
+        pageTitle: lastSnapshot.pageTitle,
+        detectedProvider: provider,
+        antiBotDetected: lastSnapshot.blocked,
         parserFieldCount: lastSnapshot.fieldCount,
         parserCandidates: lastSnapshot.candidates,
       });
@@ -122,7 +129,12 @@ export async function previewProductUrl(productUrl: string, options: FetchOption
       provider,
       productUrl: parsed.data.productUrl,
       httpStatus: response.status,
+      finalUrl,
       finalReason: "OK",
+      htmlLength: lastSnapshot.htmlLength,
+      pageTitle: lastSnapshot.pageTitle,
+      detectedProvider: provider,
+      antiBotDetected: lastSnapshot.blocked,
       parserFieldCount: lastSnapshot.fieldCount,
       parserCandidates: lastSnapshot.candidates,
     });
@@ -143,7 +155,12 @@ export async function previewProductUrl(productUrl: string, options: FetchOption
         provider,
         productUrl: parsed.data.productUrl,
         httpStatus: upstreamStatus,
+        finalUrl,
         finalReason: error.reason === "BLOCKED" ? "BLOCKED" : error.reason === "PARSING_FAILED" ? "PARSING_FAILED" : error.reason === "INVALID_URL" ? "INVALID_URL" : error.reason === "TIMEOUT" ? "TIMEOUT" : "NETWORK_ERROR",
+        htmlLength: lastSnapshot?.htmlLength,
+        pageTitle: lastSnapshot?.pageTitle,
+        detectedProvider: provider,
+        antiBotDetected: lastSnapshot?.blocked,
         parserFieldCount: lastSnapshot?.fieldCount ?? 0,
         parserCandidates: lastSnapshot?.candidates ?? [],
         errorName: error.name,
@@ -163,7 +180,12 @@ export async function previewProductUrl(productUrl: string, options: FetchOption
         provider,
         productUrl: parsed.data.productUrl,
         httpStatus: upstreamStatus,
+        finalUrl,
         finalReason: "BLOCKED",
+        htmlLength: lastSnapshot?.htmlLength,
+        pageTitle: lastSnapshot?.pageTitle,
+        detectedProvider: provider,
+        antiBotDetected: lastSnapshot?.blocked,
         parserFieldCount: lastSnapshot?.fieldCount ?? 0,
         parserCandidates: lastSnapshot?.candidates ?? [],
         errorName: error.name,
@@ -178,7 +200,12 @@ export async function previewProductUrl(productUrl: string, options: FetchOption
         provider,
         productUrl: parsed.data.productUrl,
         httpStatus: upstreamStatus,
+        finalUrl,
         finalReason: "PARSING_FAILED",
+        htmlLength: lastSnapshot?.htmlLength,
+        pageTitle: lastSnapshot?.pageTitle,
+        detectedProvider: provider,
+        antiBotDetected: lastSnapshot?.blocked,
         parserFieldCount: lastSnapshot?.fieldCount ?? 0,
         parserCandidates: lastSnapshot?.candidates ?? [],
         errorName: error.name,
@@ -193,6 +220,8 @@ export async function previewProductUrl(productUrl: string, options: FetchOption
         provider,
         productUrl: parsed.data.productUrl,
         finalReason: "TIMEOUT",
+        detectedProvider: provider,
+        antiBotDetected: false,
         parserFieldCount: 0,
         parserCandidates: [],
         timeout: true,
@@ -217,6 +246,8 @@ export async function previewProductUrl(productUrl: string, options: FetchOption
       provider,
       productUrl: parsed.data.productUrl,
       finalReason,
+      detectedProvider: provider,
+      antiBotDetected: false,
       parserFieldCount: 0,
       parserCandidates: [],
       timeout: diagnosticsReason === "TIMEOUT",

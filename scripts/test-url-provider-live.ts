@@ -95,9 +95,11 @@ async function main() {
     process.exit(previewResponse.ok ? 0 : 1);
   }
 
-  console.log(`lastPreviewDiagnostics.finalReason: ${String(lastPreviewDiagnostics.finalReason ?? "unknown")}`);
-  console.log(`parserFieldCount: ${String(lastPreviewDiagnostics.parserFieldCount ?? 0)}`);
-  printJson("parserCandidates", lastPreviewDiagnostics.parserCandidates ?? []);
+console.log(`lastPreviewDiagnostics.finalReason: ${String(lastPreviewDiagnostics.finalReason ?? "unknown")}`);
+console.log(`htmlLength: ${String(lastPreviewDiagnostics.htmlLength ?? 0)}`);
+console.log(`antiBotDetected: ${String(lastPreviewDiagnostics.antiBotDetected ?? false)}`);
+console.log(`parserFieldCount: ${String(lastPreviewDiagnostics.parserFieldCount ?? 0)}`);
+printJson("parserCandidates", lastPreviewDiagnostics.parserCandidates ?? []);
 
   process.exit(previewResponse.ok ? 0 : 1);
 }
