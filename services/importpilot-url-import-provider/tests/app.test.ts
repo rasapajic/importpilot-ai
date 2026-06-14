@@ -79,6 +79,26 @@ describe("URL import provider API", () => {
     expect(response.status).toBe(401);
   });
 
+  it("confirms token validation without exposing the token", async () => {
+    const baseUrl = await start({ token: "dev-url-import-token" });
+
+    const missing = await fetch(`${baseUrl}/auth-check`).then((response) => response.json());
+    expect(missing).toEqual({
+      tokenConfigured: true,
+      authPresent: false,
+      tokenAccepted: false,
+    });
+
+    const valid = await fetch(`${baseUrl}/auth-check`, {
+      headers: { authorization: "Bearer dev-url-import-token" },
+    }).then((response) => response.json());
+    expect(valid).toEqual({
+      tokenConfigured: true,
+      authPresent: true,
+      tokenAccepted: true,
+    });
+  });
+
   it("returns preview data for a valid Alibaba product URL", async () => {
     const baseUrl = await start({
       token: "dev-url-import-token",
@@ -117,7 +137,7 @@ describe("URL import provider API", () => {
     await expect(response.json()).resolves.toMatchObject({ reason: "INVALID_URL" });
   });
 
-  it("returns BLOCKED when upstream page is a CAPTCHA or anti-bot page", async () => {
+  it("returns BLOCKED as an upstream failure when the page is CAPTCHA or anti-bot", async () => {
     const baseUrl = await start({
       fetcher: async () => htmlResponse(fixture("blocked-page.html")),
     });
@@ -127,7 +147,7 @@ describe("URL import provider API", () => {
       body: JSON.stringify({ productUrl: "https://www.alibaba.com/product-detail/Blocked-Charger_1600000000002.html" }),
     });
 
-    expect(response.status).toBe(423);
+    expect(response.status).toBe(502);
     await expect(response.json()).resolves.toMatchObject({ reason: "BLOCKED" });
   });
 
@@ -152,5 +172,76 @@ describe("URL import provider API", () => {
       reason: "FETCH_FAILURE",
       errorName: "TypeError",
     });
+  });
+
+  it("never returns 423 for normal preview failures", async () => {
+    const blockedBaseUrl = await start({
+      token: "dev-url-import-token",
+      fetcher: async () => htmlResponse(fixture("blocked-page.html")),
+    });
+    const validHeaders = {
+      "authorization": "Bearer dev-url-import-token",
+      "content-type": "application/json",
+    };
+    const productBody = JSON.stringify({
+      productUrl: "https://www.alibaba.com/product-detail/Blocked-Charger_1600000000002.html",
+    });
+
+    const invalidToken = await fetch(`${blockedBaseUrl}/preview`, {
+      method: "POST",
+      headers: { "authorization": "Bearer wrong-token", "content-type": "application/json" },
+      body: productBody,
+    });
+    expect(invalidToken.status).toBe(401);
+    expect(invalidToken.status).not.toBe(423);
+
+    const invalidBody = await fetch(`${blockedBaseUrl}/preview`, {
+      method: "POST",
+      headers: validHeaders,
+      body: JSON.stringify({ productUrl: "not-a-url" }),
+    });
+    expect(invalidBody.status).toBe(400);
+    expect(invalidBody.status).not.toBe(423);
+
+    const blocked = await fetch(`${blockedBaseUrl}/preview`, {
+      method: "POST",
+      headers: validHeaders,
+      body: productBody,
+    });
+    expect(blocked.status).toBe(502);
+    expect(blocked.status).not.toBe(423);
+    await expect(blocked.json()).resolves.toMatchObject({ reason: "BLOCKED" });
+
+    await new Promise<void>((resolve, reject) => server?.close((error) => error ? reject(error) : resolve()));
+    server = undefined;
+
+    const networkBaseUrl = await start({
+      fetcher: async () => {
+        throw new TypeError("fetch failed");
+      },
+    });
+    const network = await fetch(`${networkBaseUrl}/preview`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: productBody,
+    });
+    expect(network.status).toBe(502);
+    expect(network.status).not.toBe(423);
+    await expect(network.json()).resolves.toMatchObject({ reason: "NETWORK_ERROR" });
+
+    await new Promise<void>((resolve, reject) => server?.close((error) => error ? reject(error) : resolve()));
+    server = undefined;
+
+    const parserBaseUrl = await start({
+      fetcher: async () => htmlResponse("<html><body>No product fields here</body></html>"),
+    });
+    const parser = await fetch(`${parserBaseUrl}/preview`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: productBody,
+    });
+    expect(parser.status).toBe(422);
+    expect(parser.status).not.toBe(423);
+    await expect(parser.json()).resolves.toMatchObject({ reason: "PARSING_FAILED" });
   });
 });

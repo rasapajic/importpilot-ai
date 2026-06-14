@@ -107,6 +107,52 @@ Error reasons:
 - `PARSING_FAILED`
 - `INVALID_URL`
 
+`BLOCKED` is returned with HTTP `502` because the supplier site is an upstream
+fetch failure, not an application lock.
+
+### `GET /auth-check`
+
+Use this to verify Render has the expected token configured. It never returns
+the token value.
+
+```bash
+curl https://provider-domain/auth-check \
+  -H "Authorization: Bearer <token>"
+```
+
+Expected when the token matches:
+
+```json
+{
+  "tokenConfigured": true,
+  "authPresent": true,
+  "tokenAccepted": true
+}
+```
+
+PowerShell:
+
+```powershell
+Invoke-RestMethod `
+  -Uri "https://provider-domain/auth-check" `
+  -Headers @{ Authorization = "Bearer <token>" }
+```
+
+Preview with PowerShell:
+
+```powershell
+$body = @{ productUrl = "https://www.alibaba.com/product-detail/..." } | ConvertTo-Json
+
+Invoke-RestMethod `
+  -Uri "https://provider-domain/preview" `
+  -Method Post `
+  -Headers @{
+    Authorization = "Bearer <token>"
+    "Content-Type" = "application/json"
+  } `
+  -Body $body
+```
+
 ## Supported URLs
 
 - Alibaba product-detail URLs
