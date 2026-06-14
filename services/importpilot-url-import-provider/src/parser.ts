@@ -87,8 +87,19 @@ function normalizeUrl(value: string | null) {
   return value;
 }
 
-export function parseProductPreview(html: string, productUrl: string): ProductPreview {
-  if (isBlockedHtml(html)) throw new Error("BLOCKED");
+export type ParserCandidate = {
+  field: string;
+  value: string;
+};
+
+export type PreviewExtractionSnapshot = {
+  blocked: boolean;
+  candidates: ParserCandidate[];
+  fieldCount: number;
+};
+
+export function inspectPreviewExtraction(html: string): PreviewExtractionSnapshot {
+  const blocked = isBlockedHtml(html);
   const bodyText = html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>|<[^>]+>/gi, " ");
   const productTitle = embeddedJsonString(html, ["productTitle", "subject", "productName", "seoTitle", "name", "title"])
     ?? meta(html, "og:title")
@@ -114,6 +125,36 @@ export function parseProductPreview(html: string, productUrl: string): ProductPr
   const imageUrl = normalizeUrl(meta(html, "og:image")
     ?? meta(html, "twitter:image")
     ?? embeddedJsonString(html, ["imageUrl", "mainImage", "mainImageUrl", "imagePath", "imgUrl", "productImage"]));
+  const values = {
+    productTitle,
+    supplierName,
+    price,
+    currency,
+    minimumOrderQuantity,
+    incoterm,
+    imageUrl,
+  };
+  const candidates = Object.entries(values)
+    .filter((entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].trim().length > 0)
+    .map(([field, value]) => ({ field, value }));
+  return {
+    blocked,
+    candidates,
+    fieldCount: candidates.length,
+  };
+}
+
+export function parseProductPreview(html: string, productUrl: string): ProductPreview {
+  const snapshot = inspectPreviewExtraction(html);
+  if (snapshot.blocked) throw new Error("BLOCKED");
+  const value = (field: string) => snapshot.candidates.find((candidate) => candidate.field === field)?.value ?? null;
+  const productTitle = value("productTitle");
+  const supplierName = value("supplierName");
+  const price = value("price");
+  const currency = value("currency");
+  const minimumOrderQuantity = value("minimumOrderQuantity");
+  const incoterm = value("incoterm");
+  const imageUrl = value("imageUrl");
 
   if (!productTitle && !supplierName && !price && !currency && !minimumOrderQuantity && !imageUrl) {
     throw new Error("PARSING_FAILED");

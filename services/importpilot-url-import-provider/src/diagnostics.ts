@@ -22,7 +22,22 @@ type LastFetchError = {
   timeout?: boolean;
 };
 
+type LastPreviewDiagnostics = {
+  at: string;
+  provider: string;
+  urlHost: string;
+  httpStatus?: number;
+  finalReason: "OK" | "BLOCKED" | "PARSING_FAILED" | "NETWORK_ERROR" | "TIMEOUT" | "INVALID_URL";
+  parserFieldCount: number;
+  parserCandidates: Array<{ field: string; value: string }>;
+  timeout?: boolean;
+  errorName?: string;
+  errorMessage?: string;
+  errorCause?: string;
+};
+
 let lastFetchError: LastFetchError | null = null;
+let lastPreviewDiagnostics: LastPreviewDiagnostics | null = null;
 
 export function classifyFetchError(error: unknown, timeout = false): DiagnosticsReason {
   if (timeout) return "TIMEOUT";
@@ -30,6 +45,7 @@ export function classifyFetchError(error: unknown, timeout = false): Diagnostics
   if (/captcha|robot|security check|access denied|blocked/i.test(message)) return "BLOCKED";
   if (/ENOTFOUND|EAI_AGAIN|getaddrinfo|dns/i.test(message)) return "DNS";
   if (/CERT|TLS|SSL|certificate|handshake|self[-\s]?signed/i.test(message)) return "TLS";
+  if (/AbortError|ETIMEDOUT|timeout|timed out/i.test(message)) return "TIMEOUT";
   return "FETCH_FAILURE";
 }
 
@@ -65,6 +81,33 @@ export function rememberFetchError(input: {
 
 export function getLastFetchError() {
   return lastFetchError;
+}
+
+export function rememberPreviewDiagnostics(input: Omit<LastPreviewDiagnostics, "at" | "urlHost"> & { productUrl: string }) {
+  let urlHost = "unknown";
+  try {
+    urlHost = new URL(input.productUrl).hostname;
+  } catch {
+    urlHost = "invalid-url";
+  }
+  lastPreviewDiagnostics = {
+    at: new Date().toISOString(),
+    urlHost,
+    provider: input.provider,
+    httpStatus: input.httpStatus,
+    finalReason: input.finalReason,
+    parserFieldCount: input.parserFieldCount,
+    parserCandidates: input.parserCandidates.slice(0, 3),
+    timeout: input.timeout,
+    errorName: input.errorName,
+    errorMessage: input.errorMessage,
+    errorCause: input.errorCause,
+  };
+  console.info(JSON.stringify({ event: "preview_final_diagnostics", ...lastPreviewDiagnostics }));
+}
+
+export function getLastPreviewDiagnostics() {
+  return lastPreviewDiagnostics;
 }
 
 export async function runDnsDiagnostics(hostnames = ["www.alibaba.com", "www.made-in-china.com"]) {
@@ -147,5 +190,6 @@ export async function getProviderDiagnostics(options: {
     dnsTestResult: dns,
     httpsTestResult: https,
     lastFetchError,
+    lastPreviewDiagnostics,
   };
 }

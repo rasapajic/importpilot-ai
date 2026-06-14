@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { parseProductPreview } from "../src/parser.js";
+import { inspectPreviewExtraction, parseProductPreview } from "../src/parser.js";
 
 const fixturePath = (...parts: string[]) => join(import.meta.dirname, "fixtures", ...parts);
 const fixture = (name: string) => readFileSync(fixturePath(name), "utf8");
@@ -25,6 +25,17 @@ describe("URL import provider parser", () => {
       imageUrl: "https://sc04.alicdn.com/kf/charger-main.jpg",
       productUrl: "https://www.alibaba.com/product-detail/Factory-65W-USB-C-GaN-Charger_1600000000001.html",
     });
+  });
+
+  it("reports parser candidates before normalization", () => {
+    const snapshot = inspectPreviewExtraction(fixture("alibaba-product-detail.html"));
+
+    expect(snapshot.fieldCount).toBeGreaterThanOrEqual(6);
+    expect(snapshot.candidates.slice(0, 3)).toEqual([
+      { field: "productTitle", value: "Factory 65W USB C GaN Charger" },
+      { field: "supplierName", value: "Shenzhen Reliable Power Co., Ltd." },
+      { field: "price", value: "4.80" },
+    ]);
   });
 
   it("extracts normalized Made-in-China product fields", () => {

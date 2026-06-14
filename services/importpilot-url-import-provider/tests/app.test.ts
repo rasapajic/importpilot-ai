@@ -151,7 +151,7 @@ describe("URL import provider API", () => {
     await expect(response.json()).resolves.toMatchObject({ reason: "BLOCKED" });
   });
 
-  it("records the last fetch error for diagnostics", async () => {
+  it("records timeout fetch errors for diagnostics", async () => {
     const baseUrl = await start({
       fetcher: async () => {
         throw new TypeError("fetch failed", { cause: new Error("connect ETIMEDOUT 203.0.113.10:443") });
@@ -164,13 +164,52 @@ describe("URL import provider API", () => {
       body: JSON.stringify({ productUrl: "https://www.alibaba.com/product-detail/Timeout-Charger_1600000000003.html" }),
     });
     expect(previewResponse.status).toBe(502);
+    await expect(previewResponse.json()).resolves.toMatchObject({ reason: "TIMEOUT" });
 
     const diagnostics = await fetch(`${baseUrl}/diagnostics`).then((response) => response.json()) as {
-      lastFetchError?: { reason?: string; errorName?: string };
+      lastFetchError?: { reason?: string; errorName?: string; timeout?: boolean };
+      lastPreviewDiagnostics?: { finalReason?: string; timeout?: boolean };
     };
     expect(diagnostics.lastFetchError).toMatchObject({
-      reason: "FETCH_FAILURE",
+      reason: "TIMEOUT",
       errorName: "TypeError",
+      timeout: true,
+    });
+    expect(diagnostics.lastPreviewDiagnostics).toMatchObject({
+      finalReason: "TIMEOUT",
+      timeout: true,
+    });
+  });
+
+  it("stores final preview diagnostics with parser candidates", async () => {
+    const baseUrl = await start({
+      fetcher: async () => htmlResponse(fixture("alibaba-product-detail.html")),
+    });
+
+    const response = await fetch(`${baseUrl}/preview`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ productUrl: "https://www.alibaba.com/product-detail/Factory-65W-USB-C-GaN-Charger_1600000000001.html" }),
+    });
+    expect(response.status).toBe(200);
+
+    const diagnostics = await fetch(`${baseUrl}/diagnostics`).then((result) => result.json()) as {
+      lastPreviewDiagnostics?: {
+        finalReason?: string;
+        httpStatus?: number;
+        parserFieldCount?: number;
+        parserCandidates?: Array<{ field: string; value: string }>;
+      };
+    };
+    expect(diagnostics.lastPreviewDiagnostics).toMatchObject({
+      finalReason: "OK",
+      httpStatus: 200,
+      parserFieldCount: expect.any(Number),
+      parserCandidates: [
+        { field: "productTitle", value: "Factory 65W USB C GaN Charger" },
+        { field: "supplierName", value: "Shenzhen Reliable Power Co., Ltd." },
+        { field: "price", value: "4.80" },
+      ],
     });
   });
 

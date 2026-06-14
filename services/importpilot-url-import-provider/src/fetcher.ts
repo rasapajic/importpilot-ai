@@ -2,12 +2,12 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-import { detectProvider, hasProductIdentifier, parseProductPreview } from "./parser.js";
+import { detectProvider, hasProductIdentifier, inspectPreviewExtraction, parseProductPreview, type PreviewExtractionSnapshot } from "./parser.js";
 import { previewRequestSchema, type ProductPreview } from "./contract.js";
-import { classifyFetchError, rememberFetchError } from "./diagnostics.js";
+import { classifyFetchError, rememberFetchError, rememberPreviewDiagnostics } from "./diagnostics.js";
 
 export class UrlImportProviderError extends Error {
-  constructor(public readonly reason: "NETWORK_ERROR" | "BLOCKED" | "PARSING_FAILED" | "INVALID_URL", message: string = reason) {
+  constructor(public readonly reason: "NETWORK_ERROR" | "BLOCKED" | "PARSING_FAILED" | "INVALID_URL" | "TIMEOUT", message: string = reason) {
     super(message);
   }
 }
@@ -87,16 +87,28 @@ export async function previewProductUrl(productUrl: string, options: FetchOption
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? 8_000);
+  let lastSnapshot: PreviewExtractionSnapshot | null = null;
+  let upstreamStatus: number | undefined;
   try {
     const response = await (options.fetcher ?? fetch)(parsed.data.productUrl, {
       headers: requestHeaders(url),
       redirect: "follow",
       signal: controller.signal,
     });
+    upstreamStatus = response.status;
     logDevelopment({ provider, upstreamStatus: response.status, finalUrl: response.url });
     const html = await readLimited(response, options.maxResponseBytes ?? 1_000_000);
     await maybeSaveDebugHtml(html, provider, Boolean(options.debugHtml));
+    lastSnapshot = inspectPreviewExtraction(html);
     if (!response.ok) {
+      rememberPreviewDiagnostics({
+        provider,
+        productUrl: parsed.data.productUrl,
+        httpStatus: response.status,
+        finalReason: "NETWORK_ERROR",
+        parserFieldCount: lastSnapshot.fieldCount,
+        parserCandidates: lastSnapshot.candidates,
+      });
       rememberFetchError({
         provider,
         productUrl: parsed.data.productUrl,
@@ -106,6 +118,14 @@ export async function previewProductUrl(productUrl: string, options: FetchOption
       throw new UrlImportProviderError("NETWORK_ERROR", `HTTP ${response.status}`);
     }
     const preview = parseProductPreview(html, parsed.data.productUrl);
+    rememberPreviewDiagnostics({
+      provider,
+      productUrl: parsed.data.productUrl,
+      httpStatus: response.status,
+      finalReason: "OK",
+      parserFieldCount: lastSnapshot.fieldCount,
+      parserCandidates: lastSnapshot.candidates,
+    });
     logDevelopment({
       provider,
       finalReason: "success",
@@ -119,44 +139,99 @@ export async function previewProductUrl(productUrl: string, options: FetchOption
     return preview;
   } catch (error) {
     if (error instanceof UrlImportProviderError) {
+      rememberPreviewDiagnostics({
+        provider,
+        productUrl: parsed.data.productUrl,
+        httpStatus: upstreamStatus,
+        finalReason: error.reason === "BLOCKED" ? "BLOCKED" : error.reason === "PARSING_FAILED" ? "PARSING_FAILED" : error.reason === "INVALID_URL" ? "INVALID_URL" : error.reason === "TIMEOUT" ? "TIMEOUT" : "NETWORK_ERROR",
+        parserFieldCount: lastSnapshot?.fieldCount ?? 0,
+        parserCandidates: lastSnapshot?.candidates ?? [],
+        errorName: error.name,
+        errorMessage: error.message,
+      });
       rememberFetchError({
         provider,
         productUrl: parsed.data.productUrl,
-        reason: error.reason === "BLOCKED" ? "BLOCKED" : error.reason === "PARSING_FAILED" ? "PROVIDER_BUG" : "FETCH_FAILURE",
+        reason: error.reason === "BLOCKED" ? "BLOCKED" : error.reason === "PARSING_FAILED" ? "PROVIDER_BUG" : error.reason === "TIMEOUT" ? "TIMEOUT" : "FETCH_FAILURE",
         error,
       });
       logDevelopment({ provider, finalReason: error.reason, errorMessage: error.message });
       throw error;
     }
     if (error instanceof Error && error.message === "BLOCKED") {
+      rememberPreviewDiagnostics({
+        provider,
+        productUrl: parsed.data.productUrl,
+        httpStatus: upstreamStatus,
+        finalReason: "BLOCKED",
+        parserFieldCount: lastSnapshot?.fieldCount ?? 0,
+        parserCandidates: lastSnapshot?.candidates ?? [],
+        errorName: error.name,
+        errorMessage: error.message,
+      });
       rememberFetchError({ provider, productUrl: parsed.data.productUrl, reason: "BLOCKED", error });
       logDevelopment({ provider, blocked: true, finalReason: "BLOCKED" });
       throw new UrlImportProviderError("BLOCKED");
     }
     if (error instanceof Error && error.message === "PARSING_FAILED") {
+      rememberPreviewDiagnostics({
+        provider,
+        productUrl: parsed.data.productUrl,
+        httpStatus: upstreamStatus,
+        finalReason: "PARSING_FAILED",
+        parserFieldCount: lastSnapshot?.fieldCount ?? 0,
+        parserCandidates: lastSnapshot?.candidates ?? [],
+        errorName: error.name,
+        errorMessage: error.message,
+      });
       rememberFetchError({ provider, productUrl: parsed.data.productUrl, reason: "PROVIDER_BUG", error });
       logDevelopment({ provider, parserResult: "failure", finalReason: "PARSING_FAILED" });
       throw new UrlImportProviderError("PARSING_FAILED");
     }
     if (controller.signal.aborted) {
+      rememberPreviewDiagnostics({
+        provider,
+        productUrl: parsed.data.productUrl,
+        finalReason: "TIMEOUT",
+        parserFieldCount: 0,
+        parserCandidates: [],
+        timeout: true,
+        errorName: error instanceof Error ? error.name : "Unknown",
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorCause: error instanceof Error && "cause" in error ? String(error.cause) : undefined,
+      });
       rememberFetchError({ provider, productUrl: parsed.data.productUrl, reason: "TIMEOUT", error, timeout: true });
       logDevelopment({ provider, timeout: true, finalReason: "NETWORK_ERROR", errorMessage: "Timeout." });
-      throw new UrlImportProviderError("NETWORK_ERROR", "Timeout.");
+      throw new UrlImportProviderError("TIMEOUT", "Timeout.");
     }
+    const diagnosticsReason = classifyFetchError(error);
+    const finalReason = diagnosticsReason === "TIMEOUT" ? "TIMEOUT" : "NETWORK_ERROR";
     rememberFetchError({
       provider,
       productUrl: parsed.data.productUrl,
-      reason: classifyFetchError(error),
+      reason: diagnosticsReason,
       error,
+      timeout: diagnosticsReason === "TIMEOUT",
     });
-    logDevelopment({
+    rememberPreviewDiagnostics({
       provider,
-      finalReason: "NETWORK_ERROR",
+      productUrl: parsed.data.productUrl,
+      finalReason,
+      parserFieldCount: 0,
+      parserCandidates: [],
+      timeout: diagnosticsReason === "TIMEOUT",
       errorName: error instanceof Error ? error.name : "Unknown",
       errorMessage: error instanceof Error ? error.message : String(error),
       errorCause: error instanceof Error && "cause" in error ? String(error.cause) : undefined,
     });
-    throw new UrlImportProviderError("NETWORK_ERROR", error instanceof Error ? error.message : "Fetch failed.");
+    logDevelopment({
+      provider,
+      finalReason,
+      errorName: error instanceof Error ? error.name : "Unknown",
+      errorMessage: error instanceof Error ? error.message : String(error),
+      errorCause: error instanceof Error && "cause" in error ? String(error.cause) : undefined,
+    });
+    throw new UrlImportProviderError(finalReason === "TIMEOUT" ? "TIMEOUT" : "NETWORK_ERROR", error instanceof Error ? error.message : "Fetch failed.");
   } finally {
     clearTimeout(timeout);
   }

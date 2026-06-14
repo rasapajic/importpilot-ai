@@ -41,7 +41,7 @@ export const productPreviewSchema = z.object({
 export type PreviewRequest = z.infer<typeof previewRequestSchema>;
 export type ProductPreview = z.infer<typeof productPreviewSchema>;
 
-export type ErrorReason = "NETWORK_ERROR" | "BLOCKED" | "PARSING_FAILED" | "INVALID_URL";
+export type ErrorReason = "NETWORK_ERROR" | "BLOCKED" | "PARSING_FAILED" | "INVALID_URL" | "TIMEOUT";
 
 export type PreviewSuccess = { preview: ProductPreview };
 export type PreviewFailure = { error: string; reason: ErrorReason };
