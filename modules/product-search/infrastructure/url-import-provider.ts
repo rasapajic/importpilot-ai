@@ -83,7 +83,7 @@ export function hasUrlProductIdentifier(provider: UrlImportProviderName, url: UR
   if (provider === "alibaba") {
     return /product-detail|product\/|_\d+\.html|\/p-detail\//.test(value) || url.hostname.toLowerCase().startsWith("s.");
   }
-  return /\/productdetail\/|\/product-detail\/|_[a-z0-9]+\.html|\/pd\//i.test(value);
+  return /\/product\/|\/productdetail\/|\/product-detail\/|_[a-z0-9]+\.html|\/pd\//i.test(value);
 }
 
 export function isBlockedHtml(html: string) {
@@ -183,10 +183,15 @@ function titleFromSlug(url: URL) {
     .map((word) => word.trim())
     .filter((word) => word && !/^\d+$/.test(word));
   if (words.length === 0) return null;
+  const lowercaseWords = new Set(["a", "an", "and", "for", "in", "of", "or", "the", "to"]);
   return words
-    .map((word) => word.length <= 3 && word === word.toUpperCase()
-      ? word
-      : `${word.charAt(0).toUpperCase()}${word.slice(1).toLowerCase()}`)
+    .map((word, index) => {
+      const normalized = word.toLowerCase();
+      if (index > 0 && lowercaseWords.has(normalized)) return normalized;
+      return word.length <= 3 && word === word.toUpperCase()
+        ? word
+        : `${word.charAt(0).toUpperCase()}${word.slice(1).toLowerCase()}`;
+    })
     .join(" ");
 }
 

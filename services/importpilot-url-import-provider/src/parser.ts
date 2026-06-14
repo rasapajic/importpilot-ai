@@ -11,7 +11,7 @@ export function hasProductIdentifier(url: URL) {
   const value = `${url.hostname}${url.pathname}${url.search}`.toLowerCase();
   const provider = detectProvider(url);
   if (provider === "alibaba") return /product-detail|product\/|_\d+\.html|\/p-detail\//.test(value) || url.hostname.toLowerCase().startsWith("s.");
-  if (provider === "made-in-china") return /\/productdetail\/|\/product-detail\/|_[a-z0-9]+\.html|\/pd\//i.test(value);
+  if (provider === "made-in-china") return /\/product\/|\/productdetail\/|\/product-detail\/|_[a-z0-9]+\.html|\/pd\//i.test(value);
   return false;
 }
 

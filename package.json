@@ -16,6 +16,7 @@
     "db:seed": "tsx prisma/seed.ts",
     "diagnose:supplier-search": "node scripts/diagnose-supplier-search.mjs",
     "diagnose:url-import": "tsx scripts/diagnose-url-import.ts",
+    "test:url-provider-live": "tsx scripts/test-url-provider-live.ts",
     "cache:import-supplier-fixture": "tsx scripts/import-supplier-search-fixture.ts"
   },
   "dependencies": {

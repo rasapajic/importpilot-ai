@@ -191,6 +191,34 @@ describe("supplier offer URL import provider", () => {
     });
   });
 
+  it("accepts Made-in-China supplier subdomain URLs and builds a readable slug fallback", async () => {
+    const productUrl = "https://engtianvehicle.en.made-in-china.com/product/dOfmlFDuEHcI/China-Electric-Scooter-Hot-Selling-Made-in-China-High-Quality-Popular-Model-and-Cheaper-CKD-Price.html";
+    const provider = createSupplierOfferUrlImportProvider({
+      resolveHost: publicResolver,
+      fetcher: async () => htmlResponse(`
+        <html><head><meta property="og:image" content="https://image.made-in-china.com/scooter.jpg"></head>
+          <body>
+            <h1>Electric Scooter Hot Selling Model</h1>
+            <div>Company Name: Tian Vehicle Supplier</div>
+            <div>FOB Price: US$ 120.00 / Piece</div>
+            <div>MOQ: 10 Pieces</div>
+          </body>
+        </html>
+      `),
+    });
+
+    await expect(provider.previewSupplierOfferUrl(productUrl)).resolves.toMatchObject({
+      title: "Electric Scooter Hot Selling Model",
+      supplierName: "Tian Vehicle Supplier",
+      price: 120,
+      currency: "USD",
+      minimumOrderQuantity: 10,
+      source: "engtianvehicle.en.made-in-china.com",
+    });
+    expect(buildSlugFallbackPreview(productUrl)?.title)
+      .toBe("China Electric Scooter Hot Selling Made in China High Quality Popular Model and Cheaper CKD Price");
+  });
+
   it("rejects invalid, non-HTTPS, unsupported and private URLs with specific failures", async () => {
     expect(supplierOfferUrlImportRequestSchema.safeParse({ productUrl: "http://www.alibaba.com/product-detail/fan_1.html" }).success).toBe(false);
 

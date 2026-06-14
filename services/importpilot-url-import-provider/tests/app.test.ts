@@ -125,6 +125,28 @@ describe("URL import provider API", () => {
     });
   });
 
+  it("accepts Made-in-China supplier subdomain product URLs", async () => {
+    const baseUrl = await start({
+      fetcher: async () => htmlResponse(fixture("made-in-china-product.html")),
+    });
+    const productUrl = "https://engtianvehicle.en.made-in-china.com/product/dOfmlFDuEHcI/China-Electric-Scooter-Hot-Selling-Made-in-China-High-Quality-Popular-Model-and-Cheaper-CKD-Price.html";
+
+    const response = await fetch(`${baseUrl}/preview`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ productUrl }),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      preview: {
+        productTitle: "20W Mobile Phone Charger",
+        supplierName: "Xiamen Charger Supplier",
+        productUrl,
+      },
+    });
+  });
+
   it("returns INVALID_URL for invalid or unsupported URLs", async () => {
     const baseUrl = await start();
     const response = await fetch(`${baseUrl}/preview`, {
