@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: importpilot-url-import-provider
+    runtime: node
+    rootDir: services/importpilot-url-import-provider
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: URL_IMPORT_PROVIDER_TOKEN
+        sync: false
+      - key: URL_IMPORT_DEBUG_HTML
+        value: "false"
+      - key: URL_IMPORT_TIMEOUT_MS
+        value: "8000"
+      - key: URL_IMPORT_MAX_RESPONSE_BYTES
+        value: "1000000"
