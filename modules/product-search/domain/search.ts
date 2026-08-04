@@ -96,7 +96,7 @@ export const projectSupplierSearchRequestSchema = supplierOfferSearchInputSchema
   .extend({
     maxUnitPrice: optionalRequestNumber(z.number().positive().finite()),
     maxUnitPriceCurrency: optionalRequestCurrency,
-    strictPriceLimit: z.boolean().optional().default(false),
+    strictPriceLimit: z.boolean().optional(),
     maxMoq: optionalRequestNumber(z.number().int().positive()),
     targetMarginPercent: optionalRequestNumber(z.number().min(0).max(100).finite()),
     avoidComplexCompliance: z.boolean().optional().default(false),
