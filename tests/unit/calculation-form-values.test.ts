@@ -2,7 +2,7 @@ import { CalculationStatus, Prisma } from "@prisma/client";
 import { describe, expect, it } from "vitest";
 
 import { getCalculationFormValues } from "../../modules/cost-engine/application/calculation-form-values";
-import { SERBIA_LANDED_COST_VERSION } from "../../modules/cost-engine/domain/serbia-landed-cost";
+import { createLandedCostAssumptions } from "../../modules/cost-engine/domain/serbia-landed-cost";
 import { translateBusinessText } from "../../modules/i18n/translations";
 
 describe("calculation edit values", () => {
@@ -37,7 +37,7 @@ describe("calculation edit values", () => {
     });
   });
 
-  it("restores the original Serbia transport and clearance breakdown", () => {
+  it("restores a versioned country transport and clearance breakdown", () => {
     const calculation = {
       shippingCost: new Prisma.Decimal("160"),
       customsDutyRate: new Prisma.Decimal("5"),
@@ -48,8 +48,8 @@ describe("calculation edit values", () => {
       targetSellingPrice: new Prisma.Decimal("25"),
       calculationStatus: CalculationStatus.CALCULATED,
     };
-    const assumptions = {
-      version: SERBIA_LANDED_COST_VERSION,
+    const assumptions = createLandedCostAssumptions({
+      countryCode: "AT",
       chinaDomesticTransportCost: "50.00",
       internationalTransportCost: "100.00",
       insuranceCost: "10.00",
@@ -57,8 +57,8 @@ describe("calculation edit values", () => {
       otherCosts: "10.00",
       transportConfirmed: true,
       customsDutyConfirmed: true,
-      vatSource: "SERBIA_DEFAULT_20" as const,
-    };
+      vatSource: "COUNTRY_PROFILE_DEFAULT",
+    });
 
     expect(getCalculationFormValues(calculation as never, assumptions)).toMatchObject({
       chinaDomesticTransportCost: "50.00",
@@ -68,7 +68,7 @@ describe("calculation edit values", () => {
       otherCosts: "10.00",
       transportConfirmed: true,
       customsDutyConfirmed: true,
-      vatSource: "SERBIA_DEFAULT_20",
+      vatSource: "COUNTRY_PROFILE_DEFAULT",
     });
   });
 
