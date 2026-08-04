@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useMemo, useState } from "react";
+import { createContext, useContext, useMemo } from "react";
 
 import {
   LOCALE_COOKIE,
@@ -24,24 +24,17 @@ export function I18nProvider({
   children: React.ReactNode;
   initialLocale: Locale;
 }) {
-  const [locale, updateLocale] = useState(initialLocale);
-
   const value = useMemo<I18nValue>(() => ({
-    locale,
+    locale: initialLocale,
     setLocale(nextLocale) {
       const resolved = resolveLocale(nextLocale);
-      if (resolved === locale) return;
+      if (resolved === initialLocale) return;
 
       document.cookie = `${LOCALE_COOKIE}=${resolved}; path=/; max-age=31536000; SameSite=Lax`;
-      document.documentElement.lang = resolved === "sr" ? "sr-Latn" : resolved;
-      updateLocale(resolved);
-
-      // A full render starts from canonical translation keys and prevents
-      // already translated text from being translated a second time.
       window.location.reload();
     },
-    t: (text) => translateBusinessText(text, locale),
-  }), [locale]);
+    t: (text) => translateBusinessText(text, initialLocale),
+  }), [initialLocale]);
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }
