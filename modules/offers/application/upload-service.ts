@@ -12,6 +12,7 @@ import { prisma } from "@/lib/database/prisma";
 import { jobQueue } from "@/lib/queue/postgres-job-queue";
 import {
   createDirectUploadUrl,
+  deleteStoredObject,
   inspectStoredObject,
 } from "@/lib/storage/s3";
 import { findOrganizationProject } from "@/modules/projects/application/project-service";
@@ -31,6 +32,10 @@ export class LinkedOfferNotFoundError extends Error {}
 
 function storagePrefix(organizationId: string, projectId: string) {
   return `organizations/${organizationId}/projects/${projectId}/`;
+}
+
+function isMainProductImageUpload(input: CompleteUploadInput) {
+  return input.documentType === DocumentType.PRODUCT_IMAGE && !input.linkedOfferId;
 }
 
 export async function initiateUpload(input: InitiateUploadInput, organizationId: string) {
@@ -78,8 +83,20 @@ export async function completeUpload(input: CompleteUploadInput, organizationId:
     throw new InvalidStoredObjectError();
   }
 
-  return prisma.$transaction(async (transaction) => {
-    const file = await transaction.uploadedFile.create({
+  const previousProjectImages = isMainProductImageUpload(input)
+    ? await prisma.uploadedFile.findMany({
+        where: {
+          organizationId,
+          projectId: input.projectId,
+          documentType: DocumentType.PRODUCT_IMAGE,
+          linkedOfferId: null,
+        },
+        select: { id: true, storageKey: true },
+      })
+    : [];
+
+  const file = await prisma.$transaction(async (transaction) => {
+    const createdFile = await transaction.uploadedFile.create({
       data: {
         organizationId,
         projectId: input.projectId,
@@ -96,13 +113,24 @@ export async function completeUpload(input: CompleteUploadInput, organizationId:
             : FileProcessingStatus.COMPLETED,
       },
     });
+
+    if (previousProjectImages.length > 0) {
+      await transaction.uploadedFile.deleteMany({
+        where: {
+          id: { in: previousProjectImages.map((previous) => previous.id) },
+          organizationId,
+          projectId: input.projectId,
+        },
+      });
+    }
+
     if (input.documentType === DocumentType.OFFER) {
       await jobQueue.enqueue(
         {
           type: ProcessingJobType.OCR_EXTRACTION,
-          fileId: file.id,
+          fileId: createdFile.id,
           payload: {
-            fileId: file.id,
+            fileId: createdFile.id,
             organizationId,
             projectId: input.projectId,
             storageKey: input.storageKey,
@@ -119,13 +147,16 @@ export async function completeUpload(input: CompleteUploadInput, organizationId:
       organizationId,
       projectId: input.projectId,
       type: ProjectActivityType.DOCUMENT_UPLOADED,
-      title: "Dokument je uploadovan",
+      title: input.documentType === DocumentType.PRODUCT_IMAGE
+        ? "Slika proizvoda je sačuvana"
+        : "Dokument je uploadovan",
       description: input.originalFilename,
       metadata: {
-        documentId: file.id,
+        documentId: createdFile.id,
         documentType: input.documentType,
         originalFilename: input.originalFilename,
         linkedOfferId: input.linkedOfferId ?? null,
+        replacedDocumentIds: previousProjectImages.map((previous) => previous.id),
       },
     });
     if (input.documentType === DocumentType.OFFER) {
@@ -135,11 +166,24 @@ export async function completeUpload(input: CompleteUploadInput, organizationId:
         type: ProjectActivityType.OFFER_ADDED,
         title: "Ponuda je dodata",
         description: input.originalFilename,
-        metadata: { documentId: file.id, source: "UPLOAD" },
+        metadata: { documentId: createdFile.id, source: "UPLOAD" },
       });
     }
-    return file;
+    return createdFile;
   });
+
+  for (const previous of previousProjectImages) {
+    try {
+      await deleteStoredObject(previous.storageKey);
+    } catch (error) {
+      console.error("Failed to remove replaced product image object.", {
+        storageKey: previous.storageKey,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  return file;
 }
 
 async function validateLinkedOffer(
