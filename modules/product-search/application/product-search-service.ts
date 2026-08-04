@@ -20,6 +20,12 @@ import { searchSupplierOffersWithPersistentFallback } from "./search-fallback";
 
 export class ProductSearchProjectNotFoundError extends Error {}
 
+export class DuplicateSupplierOfferUrlError extends Error {
+  constructor(readonly existingOfferId: string) {
+    super("Ponuda sa istim izvornim linkom je već dodata u projekat.");
+  }
+}
+
 export async function searchProjectSupplierOffers(
   projectId: string,
   organizationId: string,
@@ -64,6 +70,20 @@ export async function importSearchResult(
     select: { id: true },
   });
   if (!project) throw new ProductSearchProjectNotFoundError();
+
+  const existingOffer = await prisma.supplierOffer.findFirst({
+    where: {
+      organizationId,
+      projectId,
+      source: SupplierOfferSource.SEARCH_RESULT,
+      sourceMetadata: {
+        path: ["productUrl"],
+        equals: result.productUrl,
+      },
+    },
+    select: { id: true },
+  });
+  if (existingOffer) throw new DuplicateSupplierOfferUrlError(existingOffer.id);
 
   return prisma.$transaction(async (transaction) => {
     const offer = await transaction.supplierOffer.create({
