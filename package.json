@@ -14,6 +14,7 @@
     "db:migrate:dev": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
+    "db:seed:country-costs": "tsx scripts/seed-primary-country-costs.ts",
     "diagnose:supplier-search": "node scripts/diagnose-supplier-search.mjs",
     "diagnose:url-import": "tsx scripts/diagnose-url-import.ts",
     "test:url-provider-live": "tsx scripts/test-url-provider-live.ts",
