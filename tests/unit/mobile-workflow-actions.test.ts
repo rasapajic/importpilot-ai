@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import { getMobileWorkflowActions } from "../../modules/projects/domain/mobile-workflow-actions";
-import { translateText } from "../../modules/i18n/translations";
 
 const baseInput = {
   projectId: "project-1",
@@ -19,33 +18,28 @@ describe("mobile workflow actions", () => {
     ]);
   });
 
-  it("asks for calculation before analysis", () => {
+  it("asks for costs before profitability check", () => {
     expect(getMobileWorkflowActions({
       ...baseInput,
       offerCount: 2,
       calculatedOfferCount: 1,
-    })[0]).toMatchObject({ href: "#workflow-step-decision", label: "Izračunaj" });
+    })).toEqual([
+      { href: "#workflow-step-decision", label: "Unesi troškove", variant: "PRIMARY" },
+    ]);
   });
 
-  it("asks for analysis before recommendation", () => {
+  it("uses one profitability action instead of separate assessment and recommendation actions", () => {
     expect(getMobileWorkflowActions({
       ...baseInput,
       offerCount: 2,
       calculatedOfferCount: 2,
-      assessedOfferCount: 1,
-    })[0]).toMatchObject({ href: "#workflow-step-decision", label: "Oceni" });
+      assessedOfferCount: 0,
+    })).toEqual([
+      { href: "#workflow-step-decision", label: "Proveri isplativost", variant: "PRIMARY" },
+    ]);
   });
 
-  it("asks for recommendation before final next actions", () => {
-    expect(getMobileWorkflowActions({
-      ...baseInput,
-      offerCount: 1,
-      calculatedOfferCount: 1,
-      assessedOfferCount: 1,
-    })[0]).toMatchObject({ href: "#workflow-step-decision", label: "Generiši preporuku" });
-  });
-
-  it("shows compact final actions when the decision is ready", () => {
+  it("opens negotiation directly when negotiation is recommended", () => {
     expect(getMobileWorkflowActions({
       ...baseInput,
       offerCount: 1,
@@ -54,15 +48,33 @@ describe("mobile workflow actions", () => {
       hasFinalRecommendation: true,
       decisionStatus: "NEGOTIATE_FIRST",
     })).toEqual([
-      { href: "/projects/project-1/summary", label: "PDF", variant: "PRIMARY" },
-      { href: "#negotiation-assistant", label: "Kontakt", variant: "SECONDARY" },
-      { href: "/projects/project-1?newAnalysis=1#workflow-step-decision", label: "Nova analiza", variant: "SECONDARY" },
+      { href: "#negotiation-assistant", label: "Pregovaraj", variant: "PRIMARY" },
     ]);
   });
 
-  it("localizes mobile labels", () => {
-    expect(translateText("Izračunaj", "en")).toBe("Calculate");
-    expect(translateText("Oceni", "de")).toBe("Bewerten");
-    expect(translateText("Kontakt", "sr")).toBe("Kontakt");
+  it("returns to offer search when the current offer should be skipped", () => {
+    expect(getMobileWorkflowActions({
+      ...baseInput,
+      offerCount: 1,
+      calculatedOfferCount: 1,
+      assessedOfferCount: 1,
+      hasFinalRecommendation: true,
+      decisionStatus: "DO_NOT_BUY",
+    })).toEqual([
+      { href: "#workflow-step-offer", label: "Pronađi nove ponude", variant: "PRIMARY" },
+    ]);
+  });
+
+  it("shows one continuation action for a buy decision", () => {
+    expect(getMobileWorkflowActions({
+      ...baseInput,
+      offerCount: 1,
+      calculatedOfferCount: 1,
+      assessedOfferCount: 1,
+      hasFinalRecommendation: true,
+      decisionStatus: "READY_TO_BUY",
+    })).toEqual([
+      { href: "#documents", label: "Nastavi kupovinu", variant: "PRIMARY" },
+    ]);
   });
 });
