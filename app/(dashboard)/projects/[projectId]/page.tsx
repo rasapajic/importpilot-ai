@@ -54,6 +54,7 @@ export default async function ProjectPage({
   const { projectId } = await params;
   const project = await getProject(projectId, auth.membership.organizationId);
   if (!project) notFound();
+  const projectDisplayName = t(project.name);
 
   const comparison = await compareProjectOffers(projectId, auth.membership.organizationId);
   const decision = await getLatestProjectDecision(projectId, auth.membership.organizationId);
@@ -168,7 +169,7 @@ export default async function ProjectPage({
       <header className="dashboard-header">
         <div>
           <p className="eyebrow">{getStatusLabel(project.status, locale)}</p>
-          <h1>{translateText(project.name, locale)}</h1>
+          <h1>{projectDisplayName}</h1>
         </div>
       </header>
 
@@ -188,7 +189,7 @@ export default async function ProjectPage({
           lockedText={lockedText}
         >
           <section className="dashboard-card project-summary">
-            <p>{t("Naziv proizvoda")}: <strong>{translateText(project.name, locale)}</strong></p>
+            <p>{t("Naziv proizvoda")}: <strong>{projectDisplayName}</strong></p>
             <p>{t("Ciljna zemlja")}: <strong>{targetCountryName}</strong></p>
             <p>{t("Količina")}: <strong>{project.quantity}</strong></p>
             <p>{t("Ciljna marža")}: <strong>{project.targetMargin.toString()}%</strong></p>
@@ -207,7 +208,7 @@ export default async function ProjectPage({
         >
           <SupplierOfferSearch
             projectId={project.id}
-            productName={project.name}
+            productName={projectDisplayName}
             quantity={project.quantity}
             targetCountry={project.targetCountry}
             openUrlImport={resolvedSearchParams.importUrl === "1"}
@@ -220,7 +221,7 @@ export default async function ProjectPage({
           )}
           <OffersPanel
             projectId={project.id}
-            projectName={project.name}
+            projectName={projectDisplayName}
             targetCountry={project.targetCountry}
             projectQuantity={project.quantity}
             offers={project.offers}
@@ -256,7 +257,7 @@ export default async function ProjectPage({
                 <p className="workflow-helper-text">{t("Dodajte transport, poreze i troškove da biste dobili realnu cenu.")}</p>
                 <OffersPanel
                   projectId={project.id}
-                  projectName={project.name}
+                  projectName={projectDisplayName}
                   targetCountry={project.targetCountry}
                   projectQuantity={project.quantity}
                   offers={project.offers}
@@ -269,7 +270,7 @@ export default async function ProjectPage({
                 <h3>{t("Detaljna analiza")}</h3>
                 <OffersPanel
                   projectId={project.id}
-                  projectName={project.name}
+                  projectName={projectDisplayName}
                   targetCountry={project.targetCountry}
                   projectQuantity={project.quantity}
                   offers={project.offers}
