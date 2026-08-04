@@ -13,6 +13,10 @@ import type { LandedCostAssumptions } from "@/modules/cost-engine/domain/serbia-
 import type { ProjectDecisionResult } from "@/modules/decisions/domain/project-decision";
 import { getEuroDisplay } from "@/modules/fx/euro-display";
 import type { Locale } from "@/modules/i18n/translations";
+import {
+  createRecoverySearchCriteria,
+  RECOVERY_SEARCH_EVENT,
+} from "@/modules/product-search/domain/recovery-search";
 
 type DecisionView = ProjectDecisionResult & { id: string; createdAt: Date | string };
 
@@ -54,13 +58,13 @@ const copy: Record<Locale, RecoveryCopy> = {
       TARGET_MET: "Ciljna marža je već dostignuta.",
       NEGOTIATE_SUPPLIER: "Tražite nižu cenu dobavljača.",
       RAISE_SELLING_PRICE: "Povećajte prodajnu cenu.",
-      FIND_NEW_OFFERS: "Pronađite nove ponude ili promenite proizvod.",
+      FIND_NEW_OFFERS: "Pronađite bolje ponude ili promenite proizvod.",
     },
     actionButtons: {
       TARGET_MET: "Pogledaj rezultat",
       NEGOTIATE_SUPPLIER: "Predloži poruku",
       RAISE_SELLING_PRICE: "Promeni prodajnu cenu",
-      FIND_NEW_OFFERS: "Pronađi nove ponude",
+      FIND_NEW_OFFERS: "Pronađi bolje ponude",
     },
   },
   de: {
@@ -79,13 +83,13 @@ const copy: Record<Locale, RecoveryCopy> = {
       TARGET_MET: "Die Zielmarge ist bereits erreicht.",
       NEGOTIATE_SUPPLIER: "Einen niedrigeren Lieferantenpreis verhandeln.",
       RAISE_SELLING_PRICE: "Den Verkaufspreis erhöhen.",
-      FIND_NEW_OFFERS: "Neue Angebote suchen oder das Produkt wechseln.",
+      FIND_NEW_OFFERS: "Bessere Angebote suchen oder das Produkt wechseln.",
     },
     actionButtons: {
       TARGET_MET: "Ergebnis ansehen",
       NEGOTIATE_SUPPLIER: "Nachricht vorschlagen",
       RAISE_SELLING_PRICE: "Verkaufspreis ändern",
-      FIND_NEW_OFFERS: "Neue Angebote suchen",
+      FIND_NEW_OFFERS: "Bessere Angebote finden",
     },
   },
   en: {
@@ -104,13 +108,13 @@ const copy: Record<Locale, RecoveryCopy> = {
       TARGET_MET: "The target margin is already reached.",
       NEGOTIATE_SUPPLIER: "Negotiate a lower supplier price.",
       RAISE_SELLING_PRICE: "Increase the selling price.",
-      FIND_NEW_OFFERS: "Find new offers or change the product.",
+      FIND_NEW_OFFERS: "Find better offers or change the product.",
     },
     actionButtons: {
       TARGET_MET: "View result",
       NEGOTIATE_SUPPLIER: "Draft a message",
       RAISE_SELLING_PRICE: "Change selling price",
-      FIND_NEW_OFFERS: "Find new offers",
+      FIND_NEW_OFFERS: "Find better offers",
     },
   },
 };
@@ -186,6 +190,17 @@ export function ProfitabilityRecoveryPanel({
     ? text.unavailable
     : `${displayMoney(recovery.supplierReductionAmount, offer.currency)} (${recovery.supplierReductionPercent}%)`;
   const sellingIncrease = `${displayMoney(recovery.sellingPriceIncreaseAmount, offer.currency)} (${recovery.sellingPriceIncreasePercent}%)`;
+  const betterOfferCriteria = recovery.maximumSupplierUnitPrice === null
+    ? null
+    : createRecoverySearchCriteria(recovery.maximumSupplierUnitPrice, offer.currency);
+
+  function startBetterOfferSearch() {
+    if (!betterOfferCriteria) return;
+    const offerStep = document.getElementById("workflow-step-offer") as HTMLDetailsElement | null;
+    if (offerStep) offerStep.open = true;
+    window.dispatchEvent(new CustomEvent(RECOVERY_SEARCH_EVENT, { detail: betterOfferCriteria }));
+    window.requestAnimationFrame(() => offerStep?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  }
 
   return (
     <section className="dashboard-card profitability-recovery-card">
@@ -223,12 +238,18 @@ export function ProfitabilityRecoveryPanel({
       <div className="empty-state">
         <strong>{text.recommendation}: {text.actions[recovery.action]}</strong>
         <p>{text.assumptions}</p>
-        <Link
-          className="primary-link"
-          href={actionHref(projectId, offer.id, recovery.action)}
-        >
-          {text.actionButtons[recovery.action]}
-        </Link>
+        {recovery.action === ProfitabilityRecoveryActions.FIND_NEW_OFFERS && betterOfferCriteria ? (
+          <button className="primary-link" onClick={startBetterOfferSearch} type="button">
+            {text.actionButtons[recovery.action]}
+          </button>
+        ) : (
+          <Link
+            className="primary-link"
+            href={actionHref(projectId, offer.id, recovery.action)}
+          >
+            {text.actionButtons[recovery.action]}
+          </Link>
+        )}
       </div>
     </section>
   );
