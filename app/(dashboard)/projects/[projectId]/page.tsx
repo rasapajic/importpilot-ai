@@ -6,6 +6,7 @@ import { OffersPanel } from "@/components/offers/offers-panel";
 import { DeleteEmptySearchButton } from "@/components/projects/delete-empty-search-button";
 import { DirectUploadForm } from "@/components/projects/direct-upload-form";
 import { MobileWorkflowActionBar } from "@/components/projects/mobile-workflow-action-bar";
+import { ProfitabilityRecoveryPanel } from "@/components/projects/profitability-recovery-panel";
 import { ProjectBackLink } from "@/components/projects/project-back-link";
 import { ProjectWorkflowStep } from "@/components/projects/project-workflow-step";
 import { SimpleProfitabilityPanel } from "@/components/projects/simple-profitability-panel";
@@ -207,6 +208,13 @@ export default async function ProjectPage({
             decision={decision}
             selectedCalculationOfferId={selectedCalculationOfferId}
             profitabilityError={resolvedSearchParams.profitabilityError}
+          />
+          <ProfitabilityRecoveryPanel
+            projectId={project.id}
+            targetCountry={project.targetCountry}
+            projectTargetMargin={Number(project.targetMargin.toString())}
+            offers={project.offers}
+            decision={decision}
           />
           {decision?.status === "NEGOTIATE_FIRST" && (
             <div id="negotiation-assistant">
