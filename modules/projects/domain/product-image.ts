@@ -4,6 +4,8 @@ export const PRODUCT_IMAGE_MIME_TYPES = [
   "image/webp",
 ] as const;
 
+export const MAX_PRODUCT_IMAGE_SIZE = 25 * 1024 * 1024;
+
 export type ProductImageMimeType = (typeof PRODUCT_IMAGE_MIME_TYPES)[number];
 
 type ProjectFileLike = {
