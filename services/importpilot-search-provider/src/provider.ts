@@ -7,6 +7,7 @@ import {
   createDevelopmentLogger,
   type DevelopmentLogger,
 } from "./development-log.js";
+import { rankRelevantSupplierResults } from "./relevance.js";
 
 export type SupplierSearchOutcome =
   | SupplierSearchResult[]
@@ -63,24 +64,39 @@ export function createFallbackSupplierSearchSource(
         if (!source.implemented) continue;
         try {
           const outcome = outcomeParts(await source.search(input, signal));
+          const relevantResults = rankRelevantSupplierResults(
+            input.productQuery,
+            outcome.results,
+            5,
+          );
           logger("provider_attempt", {
             provider_name: source.name,
             parsed_results: outcome.results.length,
             fallback_used: index > 0,
           });
-          if (outcome.results.length > 0) {
+          logger("provider_relevance_filter", {
+            provider_name: source.name,
+            parsed_results: outcome.results.length,
+            relevant_results: relevantResults.length,
+          });
+          if (relevantResults.length > 0) {
             logger("provider_final_result", {
               final_provider_used: source.name,
-              final_result_count: outcome.results.length,
+              final_result_count: relevantResults.length,
               final_reason: null,
             });
-            return { results: outcome.results };
+            return { results: relevantResults };
           }
         } catch {
           logger("provider_attempt", {
             provider_name: source.name,
             parsed_results: 0,
             fallback_used: index > 0,
+          });
+          logger("provider_relevance_filter", {
+            provider_name: source.name,
+            parsed_results: 0,
+            relevant_results: 0,
           });
         }
       }
