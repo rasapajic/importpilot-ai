@@ -21,6 +21,16 @@ type ProductImageView = {
   size: string;
 };
 
+type ProductImageUploadMetadata = {
+  projectId: string;
+  documentType: "PRODUCT_IMAGE";
+  linkedOfferId: null;
+  originalFilename: string;
+  mimeType: string;
+  size: number;
+  checksum: string;
+};
+
 type ProductImageCopy = {
   title: string;
   description: (assistantName: string) => string;
@@ -141,6 +151,24 @@ function formatSize(size: string, locale: Locale) {
   return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(bytes / 1024)} KB`;
 }
 
+async function uploadThroughApplication(
+  file: File,
+  metadata: ProductImageUploadMetadata,
+  storageKey: string,
+  fallbackError: string,
+) {
+  const formData = new FormData();
+  formData.set("metadata", JSON.stringify({ ...metadata, storageKey }));
+  formData.set("file", file);
+
+  const response = await fetch("/api/uploads/product-image-fallback", {
+    method: "POST",
+    body: formData,
+  });
+  const result = (await response.json().catch(() => ({}))) as { error?: string };
+  if (!response.ok) throw new Error(result.error ?? fallbackError);
+}
+
 export function ProductImageCard({
   projectId,
   productName,
@@ -179,9 +207,9 @@ export function ProductImageCard({
     showMessage(text.preparing);
     try {
       const checksum = await sha256(file);
-      const metadata = {
+      const metadata: ProductImageUploadMetadata = {
         projectId,
-        documentType: "PRODUCT_IMAGE" as const,
+        documentType: "PRODUCT_IMAGE",
         linkedOfferId: null,
         originalFilename: file.name,
         mimeType: file.type,
@@ -204,12 +232,30 @@ export function ProductImageCard({
       }
 
       showMessage(text.uploading);
-      const storageResponse = await fetch(initiation.uploadUrl, {
-        method: "PUT",
-        headers: initiation.requiredHeaders,
-        body: file,
-      });
-      if (!storageResponse.ok) throw new Error(text.uploadFailed);
+      let directUploadSucceeded = false;
+      try {
+        const storageResponse = await fetch(initiation.uploadUrl, {
+          method: "PUT",
+          headers: initiation.requiredHeaders,
+          body: file,
+        });
+        directUploadSucceeded = storageResponse.ok;
+      } catch {
+        directUploadSucceeded = false;
+      }
+
+      if (!directUploadSucceeded) {
+        showMessage(text.saving);
+        await uploadThroughApplication(
+          file,
+          metadata,
+          initiation.storageKey,
+          text.uploadFailed,
+        );
+        showMessage(text.saved);
+        router.refresh();
+        return;
+      }
 
       showMessage(text.saving);
       const completeResponse = await fetch("/api/uploads/complete", {

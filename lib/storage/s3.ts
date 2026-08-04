@@ -50,6 +50,25 @@ export async function createDirectUploadUrl(input: {
   );
 }
 
+export async function storeObject(input: {
+  storageKey: string;
+  mimeType: string;
+  checksum: string;
+  body: Uint8Array;
+}) {
+  const { bucket, storageClient } = clients();
+  await storageClient.send(
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: input.storageKey,
+      Body: input.body,
+      ContentLength: input.body.byteLength,
+      ContentType: input.mimeType,
+      Metadata: { checksum: input.checksum },
+    }),
+  );
+}
+
 export async function inspectStoredObject(storageKey: string) {
   const { bucket, storageClient } = clients();
   return storageClient.send(
