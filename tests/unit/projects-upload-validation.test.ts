@@ -68,8 +68,8 @@ describe("direct upload validation", () => {
     expect(initiateUploadSchema.safeParse(valid).success).toBe(true);
   });
 
-  it("accepts every document vault type and an optional offer link", () => {
-    for (const documentType of ["OFFER", "PROFORMA", "SHIPPING_QUOTE", "PRODUCT_IMAGE", "OTHER"]) {
+  it("accepts document vault types and optional offer links", () => {
+    for (const documentType of ["OFFER", "PROFORMA", "SHIPPING_QUOTE", "OTHER"]) {
       expect(
         initiateUploadSchema.safeParse({
           ...valid,
@@ -78,6 +78,22 @@ describe("direct upload validation", () => {
         }).success,
       ).toBe(true);
     }
+  });
+
+  it("accepts only image formats for PRODUCT_IMAGE", () => {
+    expect(initiateUploadSchema.safeParse({
+      ...valid,
+      documentType: "PRODUCT_IMAGE",
+      originalFilename: "product.webp",
+      mimeType: "image/webp",
+    }).success).toBe(true);
+
+    expect(initiateUploadSchema.safeParse({
+      ...valid,
+      documentType: "PRODUCT_IMAGE",
+      originalFilename: "product.pdf",
+      mimeType: "application/pdf",
+    }).success).toBe(false);
   });
 
   it("rejects unsupported, oversized and malformed uploads", () => {
