@@ -52,11 +52,13 @@ const checklistRequestMap: Record<string, NegotiationRequestValue | undefined> =
 export function deriveNegotiationRequests(
   checklistKeys: string[],
   decisionStatus: string,
+  facts?: Pick<NegotiationFacts, "moq">,
 ): NegotiationRequestValue[] {
   const requests = checklistKeys.flatMap((key) => {
     const mapped = checklistRequestMap[key];
     return mapped ? [mapped] : [];
   });
+  if (facts?.moq === null) requests.push(NegotiationRequests.LOWER_MOQ);
   if (decisionStatus !== "READY_TO_BUY") requests.push(NegotiationRequests.BETTER_PRICE);
   requests.push(NegotiationRequests.FINAL_PROFORMA_INVOICE);
   return [...new Set(requests)];
@@ -91,7 +93,9 @@ function closing(tone: NegotiationToneValue) {
 function requestLine(request: NegotiationRequestValue, facts: NegotiationFacts) {
   switch (request) {
     case NegotiationRequests.LOWER_MOQ:
-      return `Please confirm whether the MOQ can be reduced to better match our planned quantity of ${facts.projectQuantity} units.`;
+      return facts.moq === null
+        ? `Please confirm your MOQ and whether you can accept our planned order quantity of ${facts.projectQuantity} units.`
+        : `Please confirm whether the MOQ of ${facts.moq} units can be reduced to our planned quantity of ${facts.projectQuantity} units.`;
     case NegotiationRequests.BETTER_PRICE:
       return facts.unitPrice !== null && facts.currency
         ? `Please provide your best revised unit price compared with the current offer of ${facts.unitPrice} ${facts.currency}.`
@@ -101,11 +105,11 @@ function requestLine(request: NegotiationRequestValue, facts: NegotiationFacts) 
         ? `Please confirm that the quoted Incoterm is ${facts.incoterm} and specify the named place or port.`
         : "Please confirm the applicable Incoterm and the named place or port.";
     case NegotiationRequests.CONFIRM_SHIPPING:
-      return "Please confirm the shipping method, total shipping cost, lead time, and what is included in the quotation.";
+      return "Please confirm the shipping method, total shipping cost, lead time, and what is included in the quotation. Please also provide packing details: units per carton, carton dimensions, gross and net weight per carton, total number of cartons, and total CBM.";
     case NegotiationRequests.REQUEST_SAMPLE:
       return "Please confirm sample availability, sample cost, and delivery time.";
     case NegotiationRequests.FINAL_PROFORMA_INVOICE:
-      return "Please provide a final proforma invoice including product specification, quantity, unit price, Incoterm, shipping, payment terms, and lead time.";
+      return "Please provide a final proforma invoice including product specification, confirmed MOQ, quantity, unit price, Incoterm, shipping, packing details, payment terms, and lead time.";
   }
 }
 
@@ -129,4 +133,3 @@ export function generateNegotiationMessage(
 
   return { tone, requestTypes: uniqueRequests, lockedFacts: facts, subject, body };
 }
-
