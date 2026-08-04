@@ -8,13 +8,13 @@ import {
 describe("decision step summary", () => {
   it("explains completed decisions and the next action", () => {
     expect(getDecisionStepSummary("READY_TO_BUY", "sr")).toBe(
-      "Isplati se — nastavite sa proverama",
+      "Isplati se — nastavi sa proverama",
     );
     expect(getDecisionStepSummary("NEGOTIATE_FIRST", "sr")).toBe(
-      "Može se isplatiti — tražite bolje uslove",
+      "Može se isplatiti — traži bolje uslove",
     );
     expect(getDecisionStepSummary("DO_NOT_BUY", "sr")).toBe(
-      "Ne isplati se — tražite bolju ponudu",
+      "Ne isplati se — traži bolju ponudu",
     );
   });
 
