@@ -3,12 +3,59 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { useI18n } from "@/components/i18n/i18n-provider";
+import type { Locale } from "@/modules/i18n/translations";
+
 type AuthFormProps = {
   mode: "login" | "register";
 };
 
+const authCopy: Record<Locale, {
+  fullName: string;
+  companyName: string;
+  email: string;
+  password: string;
+  processing: string;
+  createAccount: string;
+  signIn: string;
+  genericError: string;
+}> = {
+  sr: {
+    fullName: "Ime i prezime",
+    companyName: "Naziv kompanije",
+    email: "Email",
+    password: "Lozinka",
+    processing: "Obrada...",
+    createAccount: "Kreiraj nalog",
+    signIn: "Prijavi se",
+    genericError: "Došlo je do greške.",
+  },
+  de: {
+    fullName: "Vor- und Nachname",
+    companyName: "Firmenname",
+    email: "E-Mail",
+    password: "Passwort",
+    processing: "Verarbeitung...",
+    createAccount: "Konto erstellen",
+    signIn: "Anmelden",
+    genericError: "Ein Fehler ist aufgetreten.",
+  },
+  en: {
+    fullName: "Full name",
+    companyName: "Company name",
+    email: "Email",
+    password: "Password",
+    processing: "Processing...",
+    createAccount: "Create account",
+    signIn: "Sign in",
+    genericError: "An error occurred.",
+  },
+};
+
 export function AuthForm({ mode }: AuthFormProps) {
   const router = useRouter();
+  const { locale, t } = useI18n();
+  const copy = authCopy[locale];
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
   const isRegister = mode === "register";
@@ -28,7 +75,7 @@ export function AuthForm({ mode }: AuthFormProps) {
     const data = (await response.json()) as { error?: string };
 
     if (!response.ok) {
-      setError(data.error ?? "Došlo je do greške.");
+      setError(t(data.error ?? copy.genericError));
       setPending(false);
       return;
     }
@@ -42,21 +89,21 @@ export function AuthForm({ mode }: AuthFormProps) {
       {isRegister && (
         <>
           <label>
-            Ime i prezime
+            {copy.fullName}
             <input name="name" autoComplete="name" required minLength={2} maxLength={120} />
           </label>
           <label>
-            Naziv kompanije
+            {copy.companyName}
             <input name="organizationName" autoComplete="organization" required minLength={2} maxLength={160} />
           </label>
         </>
       )}
       <label>
-        Email
+        {copy.email}
         <input name="email" type="email" autoComplete="email" required maxLength={320} />
       </label>
       <label>
-        Lozinka
+        {copy.password}
         <input
           name="password"
           type="password"
@@ -68,9 +115,8 @@ export function AuthForm({ mode }: AuthFormProps) {
       </label>
       {error && <p className="form-error" role="alert">{error}</p>}
       <button disabled={pending} type="submit">
-        {pending ? "Obrada..." : isRegister ? "Kreiraj nalog" : "Prijavi se"}
+        {pending ? copy.processing : isRegister ? copy.createAccount : copy.signIn}
       </button>
     </form>
   );
 }
-
