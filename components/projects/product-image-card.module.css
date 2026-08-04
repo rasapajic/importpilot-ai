@@ -1,0 +1,144 @@
+.card {
+  border-top: 1px solid #dce7e1;
+  display: grid;
+  gap: 1rem;
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+}
+
+.header {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.header h3,
+.header p {
+  margin: 0;
+}
+
+.header p,
+.hint,
+.message,
+.meta {
+  color: #60766c;
+  line-height: 1.5;
+}
+
+.dropZone {
+  background: #f8fbf9;
+  border: 1px dashed #9fb8ac;
+  border-radius: 0.85rem;
+  display: grid;
+  gap: 0.5rem;
+  justify-items: center;
+  min-height: 9rem;
+  padding: 1.5rem;
+  text-align: center;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.dragging {
+  background: #eef6f2;
+  border-color: #137752;
+}
+
+.dropZone strong,
+.dropZone p {
+  margin: 0;
+}
+
+.preview {
+  align-items: start;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1.15fr) minmax(12rem, 0.85fr);
+}
+
+.imageFrame {
+  background: #f8fbf9;
+  border: 1px solid #dce7e1;
+  border-radius: 0.85rem;
+  display: grid;
+  min-height: 14rem;
+  overflow: hidden;
+  place-items: center;
+}
+
+.imageFrame img {
+  display: block;
+  height: auto;
+  max-height: 24rem;
+  max-width: 100%;
+  object-fit: contain;
+  width: 100%;
+}
+
+.details {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.details strong,
+.details p {
+  margin: 0;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.fileButton {
+  background: #137752;
+  border-radius: 0.5rem;
+  color: white;
+  cursor: pointer;
+  display: inline-flex;
+  font-weight: 700;
+  padding: 0.75rem 0.9rem;
+}
+
+.fileButtonSecondary {
+  background: white;
+  border: 1px solid #137752;
+  color: #137752;
+}
+
+.hiddenInput {
+  display: none;
+}
+
+.message {
+  margin: 0;
+}
+
+.error {
+  color: #a32121;
+}
+
+.analysisNote {
+  background: #eef6f2;
+  border-radius: 0.75rem;
+  color: #31584a;
+  margin: 0;
+  padding: 0.85rem;
+}
+
+@media (max-width: 720px) {
+  .preview {
+    grid-template-columns: 1fr;
+  }
+
+  .actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .actions button,
+  .fileButton {
+    justify-content: center;
+    text-align: center;
+    width: 100%;
+  }
+}
