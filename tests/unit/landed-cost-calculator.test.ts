@@ -31,6 +31,19 @@ describe("calculateLandedCost", () => {
     });
   });
 
+  it("includes customs broker cost in the VAT base and landed total", () => {
+    const result = calculateLandedCost({
+      ...baseInput,
+      targetCountry: "RS",
+      shippingCost: "160.00",
+      customsBrokerCost: "40.00",
+    });
+    expect(result.customsDutyAmount).toBe("58.00");
+    expect(result.vatAmount).toBe("257.60");
+    expect(result.landedCostTotal).toBe("1575.60");
+    expect(result.landedCostPerUnit).toBe("15.76");
+  });
+
   it("supports zero shipping", () => {
     const result = calculateLandedCost({
       ...baseInput,
