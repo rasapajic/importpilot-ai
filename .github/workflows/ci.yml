@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - feature/luna-search-mvp
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://tradepilot:tradepilot@localhost:5432/tradepilot?schema=public
+      S3_ENDPOINT: http://localhost:9000
+      S3_PUBLIC_ENDPOINT: http://localhost:9000
+      S3_REGION: eu-central-1
+      S3_BUCKET: tradepilot-private
+      S3_ACCESS_KEY: tradepilot
+      S3_SECRET_KEY: ci-only-secret
+      SUPPLIER_SEARCH_PROVIDER_URL: ""
+      SUPPLIER_SEARCH_PROVIDER_HEALTH_URL: ""
+      SUPPLIER_SEARCH_PROVIDER_TOKEN: ""
+      URL_IMPORT_PROVIDER_URL: ""
+      URL_IMPORT_PROVIDER_TOKEN: ""
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run db:generate
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit and integration test suite
+        run: npm test
+
+      - name: Production build
+        env:
+          NODE_ENV: production
+        run: npm run build

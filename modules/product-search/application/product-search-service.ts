@@ -1,18 +1,34 @@
 import { OfferExtractionStatus, ProjectActivityType, SupplierOfferSource } from "@prisma/client";
 import { prisma } from "../../../lib/database/prisma";
 import {
+  projectSupplierSearchRequestSchema,
   supplierOfferSearchInputSchema,
   supplierOfferSearchResultsSchema,
   type SupplierOfferSearchProvider,
   type SupplierOfferSearchResult,
   type SupplierOfferUrlImportProvider,
 } from "../domain/search";
+import {
+  applyLunaSearchConstraints,
+  buildLunaProviderSearchInput,
+  createLunaSearchPlan,
+} from "../domain/luna-search-plan";
+import {
+  createBrowserAssisted1688Preview,
+  createSupplierOfferSourceMetadata,
+} from "../domain/source-provenance";
 import { getSupplierOfferSearchProvider } from "../infrastructure/provider";
 import { getSupplierOfferUrlImportProvider } from "../infrastructure/url-import-provider";
 import { recordProjectActivity } from "../../timeline/application/timeline-service";
 import { searchSupplierOffersWithPersistentFallback } from "./search-fallback";
 
 export class ProductSearchProjectNotFoundError extends Error {}
+
+export class DuplicateSupplierOfferUrlError extends Error {
+  constructor(readonly existingOfferId: string) {
+    super("Ponuda sa istim izvornim linkom je već dodata u projekat.");
+  }
+}
 
 export async function searchProjectSupplierOffers(
   projectId: string,
@@ -22,12 +38,41 @@ export async function searchProjectSupplierOffers(
 ) {
   const project = await prisma.importProject.findFirst({
     where: { id: projectId, organizationId },
-    select: { id: true },
+    select: { id: true, targetMargin: true },
   });
   if (!project) throw new ProductSearchProjectNotFoundError();
 
-  const input = supplierOfferSearchInputSchema.parse(searchInput);
-  return searchSupplierOffersWithPersistentFallback(input, provider);
+  const request = projectSupplierSearchRequestSchema.parse(searchInput);
+  const effectiveRequest = {
+    ...request,
+    targetMarginPercent: request.targetMarginPercent ?? Number(project.targetMargin.toString()),
+  };
+  const lunaPlan = createLunaSearchPlan(effectiveRequest);
+  const providerInput = supplierOfferSearchInputSchema.parse(
+    buildLunaProviderSearchInput(lunaPlan, effectiveRequest),
+  );
+  const outcome = await searchSupplierOffersWithPersistentFallback(providerInput, provider);
+  const fetchedAt = new Date().toISOString();
+  const results = applyLunaSearchConstraints(outcome.results, effectiveRequest).map((result) => ({
+    ...result,
+    provenance: {
+      fetchedAt,
+      resultOrigin: outcome.resultOrigin ?? "live",
+      originalQuery: effectiveRequest.query,
+      providerQuery: lunaPlan.providerQuery,
+      chinese1688Query: lunaPlan.chinese1688Query,
+      targetCountry: effectiveRequest.targetCountry,
+      quantity: effectiveRequest.quantity,
+    },
+  }));
+
+  return {
+    ...outcome,
+    results,
+    unfilteredResultCount: outcome.results.length,
+    lunaPlan,
+    fetchedAt,
+  };
 }
 
 export async function importSearchResult(
@@ -42,6 +87,22 @@ export async function importSearchResult(
   });
   if (!project) throw new ProductSearchProjectNotFoundError();
 
+  const existingOffer = await prisma.supplierOffer.findFirst({
+    where: {
+      organizationId,
+      projectId,
+      source: SupplierOfferSource.SEARCH_RESULT,
+      sourceMetadata: {
+        path: ["productUrl"],
+        equals: result.productUrl,
+      },
+    },
+    select: { id: true },
+  });
+  if (existingOffer) throw new DuplicateSupplierOfferUrlError(existingOffer.id);
+
+  const sourceMetadata = createSupplierOfferSourceMetadata(result);
+
   return prisma.$transaction(async (transaction) => {
     const offer = await transaction.supplierOffer.create({
       data: {
@@ -55,12 +116,7 @@ export async function importSearchResult(
         incoterm: result.incoterm,
         extractionStatus: OfferExtractionStatus.MANUAL,
         source: SupplierOfferSource.SEARCH_RESULT,
-        sourceMetadata: {
-          title: result.title,
-          productUrl: result.productUrl,
-          imageUrl: result.imageUrl,
-          providerSource: result.source,
-        },
+        sourceMetadata,
       },
     });
     await recordProjectActivity(transaction, {
@@ -69,7 +125,14 @@ export async function importSearchResult(
       type: ProjectActivityType.OFFER_ADDED,
       title: "Ponuda iz pretrage je dodata",
       description: offer.supplierName,
-      metadata: { offerId: offer.id, supplierName: offer.supplierName, source: result.source },
+      metadata: {
+        offerId: offer.id,
+        supplierName: offer.supplierName,
+        source: result.source,
+        sourceHost: sourceMetadata.sourceHost,
+        fetchedAt: sourceMetadata.fetchedAt,
+        resultOrigin: sourceMetadata.resultOrigin,
+      },
     });
     return offer;
   });
@@ -86,5 +149,9 @@ export async function previewProjectSupplierOfferUrl(
     select: { id: true },
   });
   if (!project) throw new ProductSearchProjectNotFoundError();
+
+  const browserAssisted1688Preview = createBrowserAssisted1688Preview(productUrl);
+  if (browserAssisted1688Preview) return browserAssisted1688Preview;
+
   return provider.previewSupplierOfferUrl(productUrl);
 }
