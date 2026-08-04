@@ -1,13 +1,10 @@
 import Link from "next/link";
 
 import { DashboardPrimaryActions } from "@/components/dashboard/dashboard-primary-actions";
-import { DeleteDemoProjectButton } from "@/components/projects/delete-demo-project-button";
 import { requireSession } from "@/modules/auth/infrastructure/session";
-import { getOrganizationAnalytics } from "@/modules/feedback/application/feedback-service";
 import { getCountryDisplayName } from "@/modules/i18n/country-names";
 import { getServerLocale } from "@/modules/i18n/server";
 import { getStatusLabel, translateText } from "@/modules/i18n/translations";
-import { isDemoProjectName } from "@/modules/projects/domain/project-access";
 import { getDashboardProjectStage } from "@/modules/projects/application/dashboard-project-stage";
 import { listProjects } from "@/modules/projects/application/project-service";
 import { listProjectsSchema } from "@/modules/projects/domain/validation";
@@ -35,9 +32,6 @@ export default async function DashboardPage({
     pageSize: 10,
   });
   const result = await listProjects(query, membership.organizationId);
-  const analytics = await getOrganizationAnalytics(membership.organizationId);
-  const showAnalytics =
-    analytics.usage.projectCount >= 3 || analytics.usage.offerCount >= 5;
   const hasActiveFilters = Boolean(
     query.search || query.status || query.completionStatus || query.targetCountry,
   );
@@ -51,10 +45,6 @@ export default async function DashboardPage({
       }),
       locale,
     );
-  }
-
-  function documentLabel(count: number) {
-    return `📄 ${count} ${translateText("dokumenata", locale)}`;
   }
 
   function pageUrl(page: number) {
@@ -111,11 +101,9 @@ export default async function DashboardPage({
                   <small><span aria-hidden="true">📍</span> {getCountryDisplayName(project.targetCountry, locale)}</small>
                   <small><span aria-hidden="true">📦</span> {project.quantity} {translateText("kom", locale)}</small>
                   <small className="project-stage">{projectStage(project)}</small>
-                  <small>{documentLabel(project._count.files)}</small>
                 </span>
               </span>
             </Link>
-            {isDemoProjectName(project.name) && <DeleteDemoProjectButton projectId={project.id} />}
           </article>
         ))}
         {result.projects.length === 0 && (
@@ -133,30 +121,6 @@ export default async function DashboardPage({
           <span>{translateText("Strana", locale)} {query.page} {translateText("od", locale)} {result.pagination.pageCount}</span>
           {query.page < result.pagination.pageCount && <Link href={pageUrl(query.page + 1)}>{translateText("Sledeća", locale)}</Link>}
         </nav>
-      )}
-
-      {showAnalytics ? (
-        <section className="dashboard-card analytics-card">
-          <div><p className="eyebrow">{translateText("Analitika korišćenja", locale)}</p><h2>{translateText("Kako se ImportPilot koristi", locale)}</h2></div>
-          <div className="score-grid">
-            <span>{translateText("Projekti", locale)}<strong>{analytics.usage.projectCount}</strong></span>
-            <span>{translateText("Ponude po projektu", locale)}<strong>{analytics.usage.averageOffersPerProject.toFixed(1)}</strong></span>
-            <span>{translateText("Vreme do odluke", locale)}<strong>{analytics.usage.averageHoursToDecision === null ? "N/A" : `${analytics.usage.averageHoursToDecision.toFixed(1)} h`}</strong></span>
-            <span>{translateText("Pregovaračke poruke", locale)}<strong>{analytics.usage.negotiationMessageCount}</strong></span>
-            <span>{translateText("Uploadovani dokumenti", locale)}<strong>{analytics.usage.documentUploadCount}</strong></span>
-          </div>
-          <h3>{translateText("Pokazatelji tačnosti preporuka", locale)}</h3>
-          <div className="score-grid">
-            <span>{getStatusLabel("READY_TO_BUY", locale)} → {getStatusLabel("BOUGHT", locale)}<strong>{analytics.accuracy.readyToBuyBought}/{analytics.accuracy.readyToBuyRecorded}</strong></span>
-            <span>{getStatusLabel("NEGOTIATE_FIRST", locale)} → {getStatusLabel("NEGOTIATED", locale)}<strong>{analytics.accuracy.negotiateFirstImproved}/{analytics.accuracy.negotiateFirstRecorded}</strong></span>
-            <span>{getStatusLabel("DO_NOT_BUY", locale)} → {getStatusLabel("BOUGHT", locale)}<strong>{analytics.accuracy.doNotBuyBought}/{analytics.accuracy.doNotBuyRecorded}</strong></span>
-            <span>{translateText("Zabeleženi ishodi", locale)}<strong>{analytics.accuracy.recordedOutcomeCount}</strong></span>
-          </div>
-        </section>
-      ) : (
-        <p className="analytics-placeholder">
-          {translateText("Statistika će se prikazati nakon više kupovina.", locale)}
-        </p>
       )}
     </main>
   );
