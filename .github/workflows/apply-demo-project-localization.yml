@@ -1,0 +1,138 @@
+name: Apply demo project localization
+
+on:
+  push:
+    branches:
+      - feature/demo-project-localization
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: feature/demo-project-localization
+          fetch-depth: 0
+
+      - name: Patch localized demo project display names
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          translations_path = Path("modules/i18n/translations.ts")
+          translations = translations_path.read_text(encoding="utf-8")
+
+          mapping_block = r'''
+const demoProjectNames: Record<string, Translation> = {
+  "[DEMO][LANDED-COST][RS] Pametni organizatori": {
+    en: "Demo · Serbia · Smart storage organizers",
+    de: "Demo · Serbien · Smarte Aufbewahrungsorganizer",
+    sr: "Demo · Srbija · Pametni organizatori",
+  },
+  "[DEMO][LANDED-COST][AT] Pametni organizatori": {
+    en: "Demo · Austria · Smart storage organizers",
+    de: "Demo · Österreich · Smarte Aufbewahrungsorganizer",
+    sr: "Demo · Austrija · Pametni organizatori",
+  },
+  "[DEMO][LANDED-COST][DE] Pametni organizatori": {
+    en: "Demo · Germany · Smart storage organizers",
+    de: "Demo · Deutschland · Smarte Aufbewahrungsorganizer",
+    sr: "Demo · Nemačka · Pametni organizatori",
+  },
+  "[DEMO] Električni čajnici — READY_TO_BUY": {
+    en: "Demo · Electric kettles · BUY",
+    de: "Demo · Elektrische Wasserkocher · KAUFEN",
+    sr: "Demo · Električni čajnici · KUPI",
+  },
+  "[DEMO] LED radne lampe — NEGOTIATE_FIRST / različite valute": {
+    en: "Demo · LED work lights · NEGOTIATE · mixed currencies",
+    de: "Demo · LED-Arbeitslampen · VERHANDELN · verschiedene Währungen",
+    sr: "Demo · LED radne lampe · PREGOVARAJ · različite valute",
+  },
+  "[DEMO] Mini grejalice — DO_NOT_BUY": {
+    en: "Demo · Mini heaters · SKIP",
+    de: "Demo · Mini-Heizgeräte · NICHT KAUFEN",
+    sr: "Demo · Mini grejalice · PRESKOČI",
+  },
+};
+
+'''
+
+          marker = "export function translateText(text: string, locale: Locale | string): string {"
+          if "const demoProjectNames:" not in translations:
+              translations = translations.replace(marker, mapping_block + marker)
+
+          old_start = "export function translateText(text: string, locale: Locale | string): string {\n  const resolved = resolveLocale(locale);\n"
+          new_start = old_start + "  const demoProjectName = demoProjectNames[text]?.[resolved];\n  if (demoProjectName) return demoProjectName;\n"
+          if "const demoProjectName = demoProjectNames[text]?.[resolved];" not in translations:
+              if old_start not in translations:
+                  raise SystemExit("translateText insertion point not found")
+              translations = translations.replace(old_start, new_start, 1)
+
+          translations_path.write_text(translations, encoding="utf-8")
+
+          project_page_path = Path("app/(dashboard)/projects/[projectId]/page.tsx")
+          project_page = project_page_path.read_text(encoding="utf-8")
+          not_found_line = "  if (!project) notFound();\n"
+          display_line = "  const projectDisplayName = t(project.name);\n"
+          if display_line not in project_page:
+              project_page = project_page.replace(not_found_line, not_found_line + display_line, 1)
+          project_page = project_page.replace("{translateText(project.name, locale)}", "{projectDisplayName}")
+          project_page = project_page.replace("productName={project.name}", "productName={projectDisplayName}")
+          project_page = project_page.replace("projectName={project.name}", "projectName={projectDisplayName}")
+          project_page_path.write_text(project_page, encoding="utf-8")
+
+          summary_path = Path("app/(dashboard)/projects/[projectId]/summary/page.tsx")
+          summary = summary_path.read_text(encoding="utf-8")
+          summary = summary.replace("<h1>{project.name}</h1>", "<h1>{t(project.name)}</h1>")
+          summary_path.write_text(summary, encoding="utf-8")
+
+          test_path = Path("tests/unit/demo-project-localization.test.ts")
+          test_path.write_text(r'''import { describe, expect, it } from "vitest";
+
+import { translateText } from "../../modules/i18n/translations";
+
+describe("demo project localization", () => {
+  it("shows primary-country demo projects without Serbian or technical titles in German", () => {
+    expect(translateText("[DEMO][LANDED-COST][DE] Pametni organizatori", "de"))
+      .toBe("Demo · Deutschland · Smarte Aufbewahrungsorganizer");
+    expect(translateText("[DEMO][LANDED-COST][AT] Pametni organizatori", "de"))
+      .toBe("Demo · Österreich · Smarte Aufbewahrungsorganizer");
+    expect(translateText("[DEMO][LANDED-COST][RS] Pametni organizatori", "de"))
+      .toBe("Demo · Serbien · Smarte Aufbewahrungsorganizer");
+  });
+
+  it("localizes the standard demo catalogue in all supported languages", () => {
+    const source = "[DEMO] Električni čajnici — READY_TO_BUY";
+    expect(translateText(source, "sr")).toBe("Demo · Električni čajnici · KUPI");
+    expect(translateText(source, "de")).toBe("Demo · Elektrische Wasserkocher · KAUFEN");
+    expect(translateText(source, "en")).toBe("Demo · Electric kettles · BUY");
+  });
+
+  it("never translates a real user-entered project name", () => {
+    expect(translateText("Merimin uvoz za lokal", "de")).toBe("Merimin uvoz za lokal");
+  });
+});
+''', encoding="utf-8")
+          PY
+
+      - name: Commit patch
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add modules/i18n/translations.ts \
+            'app/(dashboard)/projects/[projectId]/page.tsx' \
+            'app/(dashboard)/projects/[projectId]/summary/page.tsx' \
+            tests/unit/demo-project-localization.test.ts
+          git commit -m "Localize demo project titles for SR DE EN"
+          git push origin HEAD:feature/demo-project-localization
