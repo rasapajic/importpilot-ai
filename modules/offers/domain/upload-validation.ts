@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { isProductImageMimeType } from "@/modules/projects/domain/product-image";
+import { isProductImageMimeType } from "../../projects/domain/product-image";
 
 export const allowedUploadMimeTypes = [
   "application/pdf",
