@@ -4,18 +4,19 @@ import type { CostCalculation } from "@prisma/client";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { TransportCostAssistant } from "@/components/costs/transport-cost-assistant";
+import { getLandedCostCopy } from "@/components/costs/landed-cost-copy";
 import { FxSourceNote } from "@/components/fx/fx-source-note";
 import { useI18n } from "@/components/i18n/i18n-provider";
-import { TransportCostAssistant } from "@/components/costs/transport-cost-assistant";
-import { getSerbiaLandedCostCopy } from "@/components/costs/serbia-landed-cost-copy";
 import { getCalculationFormValues } from "@/modules/cost-engine/application/calculation-form-values";
 import {
   formatDisplayedPercent,
   getDisplayedProfitSummary,
 } from "@/modules/cost-engine/application/calculation-summary";
+import { getImportCountryProfile } from "@/modules/cost-engine/domain/import-country-profiles";
 import {
   sumCostAmounts,
-  type SerbiaLandedCostAssumptions,
+  type LandedCostAssumptions,
 } from "@/modules/cost-engine/domain/serbia-landed-cost";
 import { getAutomaticVatRate, resolveVatRate } from "@/modules/cost-engine/domain/vat-rates";
 import { getEuroDisplay } from "@/modules/fx/euro-display";
@@ -45,15 +46,16 @@ export function CostCalculatorForm({
   quantity: number;
   sourceMetadata?: unknown;
   latestCalculation?: CostCalculation;
-  latestCostAssumptions?: SerbiaLandedCostAssumptions | null;
+  latestCostAssumptions?: LandedCostAssumptions | null;
   editInitially?: boolean;
 }) {
   const { locale, t } = useI18n();
-  const copy = getSerbiaLandedCostCopy(locale);
   const router = useRouter();
-  const isSerbia = targetCountry.trim().toUpperCase() === "RS";
+  const profile = getImportCountryProfile(targetCountry);
+  const isPrimaryCountry = profile !== null;
+  const automaticVatRate = profile?.defaultVatRate ?? getAutomaticVatRate(targetCountry);
+  const copy = getLandedCostCopy(locale, targetCountry, automaticVatRate);
   const values = getCalculationFormValues(latestCalculation, latestCostAssumptions);
-  const automaticVatRate = getAutomaticVatRate(targetCountry);
   const previousVatIsOverride = Boolean(
     latestCalculation &&
     (values.vatSource === "MANUAL_OVERRIDE" ||
@@ -77,7 +79,7 @@ export function CostCalculatorForm({
     return Number.isFinite(amount) ? amount.toFixed(2) : "0.00";
   }, [quantity, unitPrice]);
   const currentTransportTotal = useMemo(() => {
-    if (!isSerbia) return safeAmount(shippingCost);
+    if (!isPrimaryCountry) return safeAmount(shippingCost);
     try {
       return sumCostAmounts([
         safeAmount(chinaDomesticTransportCost),
@@ -87,7 +89,7 @@ export function CostCalculatorForm({
     } catch {
       return "0.00";
     }
-  }, [chinaDomesticTransportCost, insuranceCost, internationalTransportCost, isSerbia, shippingCost]);
+  }, [chinaDomesticTransportCost, insuranceCost, internationalTransportCost, isPrimaryCountry, shippingCost]);
   const euroDisplays = latestCalculation && profit ? {
     supplierPrice: getEuroDisplay(latestCalculation.unitPrice, currency),
     goodsCost: getEuroDisplay(goodsCost, currency),
@@ -107,12 +109,12 @@ export function CostCalculatorForm({
     setError("");
     const form = new FormData(event.currentTarget);
     const body: Record<string, FormDataEntryValue | boolean> = Object.fromEntries(form.entries());
-    body.transportConfirmed = !isSerbia || form.has("transportConfirmed");
-    body.customsDutyConfirmed = !isSerbia || form.has("customsDutyConfirmed");
+    body.transportConfirmed = !isPrimaryCountry || form.has("transportConfirmed");
+    body.customsDutyConfirmed = !isPrimaryCountry || form.has("customsDutyConfirmed");
     body.vatSource = overrideVat
       ? "MANUAL_OVERRIDE"
-      : isSerbia
-        ? "SERBIA_DEFAULT_20"
+      : isPrimaryCountry
+        ? "COUNTRY_PROFILE_DEFAULT"
         : "COUNTRY_DEFAULT";
     body.calculationStatus = form.get("needsReview") ? "NEEDS_REVIEW" : "CALCULATED";
     delete body.needsReview;
@@ -138,28 +140,29 @@ export function CostCalculatorForm({
 
   return (
     <div className="cost-panel" id={`offer-cost-${offerId}`} ref={panelRef}>
-      <h3>{isSerbia ? copy.title : t("Kalkulator ukupne nabavne cene")}</h3>
-      {isSerbia && <p className="muted-text">{copy.description}</p>}
+      <h3>{isPrimaryCountry ? copy.title : t("Kalkulator ukupne nabavne cene")}</h3>
+      {isPrimaryCountry && <p className="muted-text">{copy.description}</p>}
       {editing && (
         <form className="cost-form" onSubmit={submit}>
-          {isSerbia && (
+          {isPrimaryCountry && (
             <div className="cost-form-wide empty-state">
               <strong>{copy.assumptionTitle}</strong>
               <p>{copy.assumptionText}</p>
               <p className="warning-text">{copy.reviewWarning}</p>
               <p><strong>{copy.goodsCost}:</strong> {goodsCost} {currency}</p>
+              <p><strong>Country profile:</strong> {profile.countryCode} · {profile.version}</p>
             </div>
           )}
           <div className="cost-form-wide">
             <TransportCostAssistant
               currency={currency}
-              onApply={isSerbia ? setInternationalTransportCost : setShippingCost}
+              onApply={isPrimaryCountry ? setInternationalTransportCost : setShippingCost}
               productName={productName}
               quantity={quantity}
               sourceMetadata={sourceMetadata}
             />
           </div>
-          {isSerbia ? (
+          {isPrimaryCountry ? (
             <>
               <label>{copy.chinaDomesticTransport} ({currency})
                 <input min={0} name="chinaDomesticTransportCost" onChange={(event) => setChinaDomesticTransportCost(event.target.value)} required step="0.01" type="number" value={chinaDomesticTransportCost} />
@@ -184,7 +187,7 @@ export function CostCalculatorForm({
           <label>{copy.customsDuty} (%)
             <input defaultValue={values.customsDutyRate} max={500} min={0} name="customsDutyRate" required step="0.0001" type="number" />
           </label>
-          {isSerbia && (
+          {isPrimaryCountry && (
             <label className="checkbox-label cost-form-wide">
               <input defaultChecked={values.customsDutyConfirmed} name="customsDutyConfirmed" type="checkbox" />
               {copy.customsConfirmed}
@@ -197,11 +200,11 @@ export function CostCalculatorForm({
               ? t("PDV nije automatski podešen jer ciljna država nije podržana.")
               : overrideVat
                 ? t("PDV je ručno izmenjen.")
-                : isSerbia
+                : isPrimaryCountry
                   ? copy.assumptionText
                   : t("PDV je automatski podešen prema ciljnoj državi.")}
           </p>
-          {isSerbia && (
+          {isPrimaryCountry && (
             <label>{copy.customsBroker} ({currency})
               <input defaultValue={values.customsBrokerCost} min={0} name="customsBrokerCost" required step="0.01" type="number" />
             </label>
@@ -239,8 +242,9 @@ export function CostCalculatorForm({
           <strong>{t("Poslednja kalkulacija")} · {getStatusLabel(latestCalculation.calculationStatus, locale)}</strong>
           <span>{t("Supplier price")}: {euroDisplays?.supplierPrice.original}{euroDisplays?.supplierPrice.converted ? ` (≈ ${euroDisplays.supplierPrice.eur})` : ""}</span>
           <span>{copy.goodsCost}: {euroDisplays?.goodsCost.original}{euroDisplays?.goodsCost.converted ? ` (≈ ${euroDisplays.goodsCost.eur})` : ""}</span>
-          {isSerbia && latestCostAssumptions ? (
+          {isPrimaryCountry && latestCostAssumptions ? (
             <>
+              <span>Country profile: {latestCostAssumptions.countryCode} · {latestCostAssumptions.countryProfileVersion}</span>
               <span>{copy.chinaDomesticTransport}: {latestCostAssumptions.chinaDomesticTransportCost} {currency}</span>
               <span>{copy.internationalTransport}: {latestCostAssumptions.internationalTransportCost} {currency}</span>
               <span>{copy.insurance}: {latestCostAssumptions.insuranceCost} {currency}</span>
