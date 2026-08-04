@@ -13,6 +13,10 @@ import {
   buildLunaProviderSearchInput,
   createLunaSearchPlan,
 } from "../domain/luna-search-plan";
+import {
+  createBrowserAssisted1688Preview,
+  createSupplierOfferSourceMetadata,
+} from "../domain/source-provenance";
 import { getSupplierOfferSearchProvider } from "../infrastructure/provider";
 import { getSupplierOfferUrlImportProvider } from "../infrastructure/url-import-provider";
 import { recordProjectActivity } from "../../timeline/application/timeline-service";
@@ -48,14 +52,26 @@ export async function searchProjectSupplierOffers(
     buildLunaProviderSearchInput(lunaPlan, effectiveRequest),
   );
   const outcome = await searchSupplierOffersWithPersistentFallback(providerInput, provider);
-  const results = applyLunaSearchConstraints(outcome.results, effectiveRequest);
+  const fetchedAt = new Date().toISOString();
+  const results = applyLunaSearchConstraints(outcome.results, effectiveRequest).map((result) => ({
+    ...result,
+    provenance: {
+      fetchedAt,
+      resultOrigin: outcome.resultOrigin ?? "live",
+      originalQuery: effectiveRequest.query,
+      providerQuery: lunaPlan.providerQuery,
+      chinese1688Query: lunaPlan.chinese1688Query,
+      targetCountry: effectiveRequest.targetCountry,
+      quantity: effectiveRequest.quantity,
+    },
+  }));
 
   return {
     ...outcome,
     results,
     unfilteredResultCount: outcome.results.length,
     lunaPlan,
-    fetchedAt: new Date().toISOString(),
+    fetchedAt,
   };
 }
 
@@ -85,6 +101,8 @@ export async function importSearchResult(
   });
   if (existingOffer) throw new DuplicateSupplierOfferUrlError(existingOffer.id);
 
+  const sourceMetadata = createSupplierOfferSourceMetadata(result);
+
   return prisma.$transaction(async (transaction) => {
     const offer = await transaction.supplierOffer.create({
       data: {
@@ -98,12 +116,7 @@ export async function importSearchResult(
         incoterm: result.incoterm,
         extractionStatus: OfferExtractionStatus.MANUAL,
         source: SupplierOfferSource.SEARCH_RESULT,
-        sourceMetadata: {
-          title: result.title,
-          productUrl: result.productUrl,
-          imageUrl: result.imageUrl,
-          providerSource: result.source,
-        },
+        sourceMetadata,
       },
     });
     await recordProjectActivity(transaction, {
@@ -112,7 +125,14 @@ export async function importSearchResult(
       type: ProjectActivityType.OFFER_ADDED,
       title: "Ponuda iz pretrage je dodata",
       description: offer.supplierName,
-      metadata: { offerId: offer.id, supplierName: offer.supplierName, source: result.source },
+      metadata: {
+        offerId: offer.id,
+        supplierName: offer.supplierName,
+        source: result.source,
+        sourceHost: sourceMetadata.sourceHost,
+        fetchedAt: sourceMetadata.fetchedAt,
+        resultOrigin: sourceMetadata.resultOrigin,
+      },
     });
     return offer;
   });
@@ -129,5 +149,9 @@ export async function previewProjectSupplierOfferUrl(
     select: { id: true },
   });
   if (!project) throw new ProductSearchProjectNotFoundError();
+
+  const browserAssisted1688Preview = createBrowserAssisted1688Preview(productUrl);
+  if (browserAssisted1688Preview) return browserAssisted1688Preview;
+
   return provider.previewSupplierOfferUrl(productUrl);
 }
