@@ -35,7 +35,7 @@ describe("i18n foundation", () => {
       .toBe("You have 4 offers, but only 2 are directly comparable in EUR.");
     expect(getStatusLabel("DO_NOT_BUY", "en")).not.toContain("DO_NOT_BUY");
     expect(translateText("[DEMO] Mini grejalice — DO_NOT_BUY", "en"))
-      .toBe("[DEMO] Mini grejalice — SKIP");
+      .toBe("Demo · Mini heaters · SKIP");
   });
 
   it("localizes target margin consistently", () => {

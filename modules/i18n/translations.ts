@@ -608,8 +608,44 @@ const aliasPattern = new RegExp(
   "gu",
 );
 
+
+const demoProjectNames: Record<string, Translation> = {
+  "[DEMO][LANDED-COST][RS] Pametni organizatori": {
+    en: "Demo · Serbia · Smart storage organizers",
+    de: "Demo · Serbien · Smarte Aufbewahrungsorganizer",
+    sr: "Demo · Srbija · Pametni organizatori",
+  },
+  "[DEMO][LANDED-COST][AT] Pametni organizatori": {
+    en: "Demo · Austria · Smart storage organizers",
+    de: "Demo · Österreich · Smarte Aufbewahrungsorganizer",
+    sr: "Demo · Austrija · Pametni organizatori",
+  },
+  "[DEMO][LANDED-COST][DE] Pametni organizatori": {
+    en: "Demo · Germany · Smart storage organizers",
+    de: "Demo · Deutschland · Smarte Aufbewahrungsorganizer",
+    sr: "Demo · Nemačka · Pametni organizatori",
+  },
+  "[DEMO] Električni čajnici — READY_TO_BUY": {
+    en: "Demo · Electric kettles · BUY",
+    de: "Demo · Elektrische Wasserkocher · KAUFEN",
+    sr: "Demo · Električni čajnici · KUPI",
+  },
+  "[DEMO] LED radne lampe — NEGOTIATE_FIRST / različite valute": {
+    en: "Demo · LED work lights · NEGOTIATE · mixed currencies",
+    de: "Demo · LED-Arbeitslampen · VERHANDELN · verschiedene Währungen",
+    sr: "Demo · LED radne lampe · PREGOVARAJ · različite valute",
+  },
+  "[DEMO] Mini grejalice — DO_NOT_BUY": {
+    en: "Demo · Mini heaters · SKIP",
+    de: "Demo · Mini-Heizgeräte · NICHT KAUFEN",
+    sr: "Demo · Mini grejalice · PRESKOČI",
+  },
+};
+
 export function translateText(text: string, locale: Locale | string): string {
   const resolved = resolveLocale(locale);
+  const demoProjectName = demoProjectNames[text]?.[resolved];
+  if (demoProjectName) return demoProjectName;
   const withoutInternalStatuses = Object.keys(statusLabels).reduce(
     (result, status) =>
       result.replaceAll(status, statusLabels[status as keyof typeof statusLabels][resolved]),

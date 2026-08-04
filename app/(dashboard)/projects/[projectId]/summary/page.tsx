@@ -35,7 +35,7 @@ export default async function ProjectSummaryPage({
       </div>
       <header>
         <p className="eyebrow">ImportPilot AI · {t("Finalna preporuka projekta")}</p>
-        <h1>{project.name}</h1>
+        <h1>{t(project.name)}</h1>
         <p>{t("Ciljna zemlja")}: {targetCountryName} · {t("Količina")}: {project.quantity} · {t("Ciljna marža")}: {project.targetMargin.toString()}%</p>
       </header>
       <section className="print-decision">
