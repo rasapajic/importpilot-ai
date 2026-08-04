@@ -52,7 +52,7 @@ describe("mobile workflow actions", () => {
     ]);
   });
 
-  it("returns to offer search when the current offer should be skipped", () => {
+  it("leaves the unprofitable better-offer action to the recovery panel", () => {
     expect(getMobileWorkflowActions({
       ...baseInput,
       offerCount: 1,
@@ -60,9 +60,7 @@ describe("mobile workflow actions", () => {
       assessedOfferCount: 1,
       hasFinalRecommendation: true,
       decisionStatus: "DO_NOT_BUY",
-    })).toEqual([
-      { href: "#workflow-step-offer", label: "Pronađi nove ponude", variant: "PRIMARY" },
-    ]);
+    })).toEqual([]);
   });
 
   it("shows one continuation action for a buy decision", () => {
