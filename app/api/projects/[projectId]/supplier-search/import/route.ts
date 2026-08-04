@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { authenticateRequest } from "@/modules/auth/infrastructure/request-auth";
 import {
+  DuplicateSupplierOfferUrlError,
   importSearchResult,
   ProductSearchProjectNotFoundError,
 } from "@/modules/product-search/application/product-search-service";
@@ -32,6 +33,12 @@ export async function POST(
   } catch (error) {
     if (error instanceof ProductSearchProjectNotFoundError) {
       return NextResponse.json({ error: "Projekat nije pronađen." }, { status: 404 });
+    }
+    if (error instanceof DuplicateSupplierOfferUrlError) {
+      return NextResponse.json({
+        error: error.message,
+        existingOfferId: error.existingOfferId,
+      }, { status: 409 });
     }
     throw error;
   }
