@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const SERBIA_LANDED_COST_VERSION = "SERBIA_LANDED_COST_V1" as const;
 
-const decimalAmountSchema = z.string().regex(/^(0|[1-9]\d*)(\.\d+)?$/);
+const decimalAmountSchema = z.string().regex(/^(0|[1-9]\d*)(\.\d{1,2})?$/);
 
 export const vatAssumptionSourceSchema = z.enum([
   "SERBIA_DEFAULT_20",
@@ -27,10 +27,9 @@ export type SerbiaLandedCostAssumptions = z.infer<typeof serbiaLandedCostAssumpt
 
 function parseAmountToCents(value: string) {
   if (!decimalAmountSchema.safeParse(value).success) {
-    throw new Error("Trošak mora biti nenegativan decimalni broj.");
+    throw new Error("Trošak mora biti nenegativan broj sa najviše dve decimale.");
   }
   const [whole, fraction = ""] = value.split(".");
-  if (fraction.length > 2) throw new Error("Trošak može imati najviše dve decimale.");
   return BigInt(whole) * 100n + BigInt(fraction.padEnd(2, "0") || "0");
 }
 
