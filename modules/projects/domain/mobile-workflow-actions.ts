@@ -19,7 +19,7 @@ export function getMobileWorkflowActions(input: MobileWorkflowActionInput): Mobi
   }
 
   if (input.calculatedOfferCount < input.offerCount) {
-    return [{ href: "#workflow-step-decision", label: "Unesi troškove", variant: "PRIMARY" }];
+    return [{ href: "#workflow-step-decision", label: "Izračunaj", variant: "PRIMARY" }];
   }
 
   if (!input.hasFinalRecommendation) {
@@ -34,5 +34,5 @@ export function getMobileWorkflowActions(input: MobileWorkflowActionInput): Mobi
     return [{ href: "#workflow-step-offer", label: "Pronađi nove ponude", variant: "PRIMARY" }];
   }
 
-  return [{ href: "#documents", label: "Nastavi kupovinu", variant: "PRIMARY" }];
+  return [{ href: "#documents", label: "Krenite u kupovinu", variant: "PRIMARY" }];
 }
