@@ -11,19 +11,19 @@ const decisionSummaries: Record<
   Record<Locale, string>
 > = {
   READY_TO_BUY: {
-    sr: "Da — isplativo je",
-    de: "Ja — rentabel",
-    en: "Yes — profitable",
+    sr: "Isplati se — nastavite sa proverama",
+    de: "Rentabel — Prüfungen fortsetzen",
+    en: "Profitable — continue the checks",
   },
   NEGOTIATE_FIRST: {
-    sr: "Može biti isplativo uz bolje uslove",
-    de: "Mit besseren Konditionen rentabel",
-    en: "Can be profitable with better terms",
+    sr: "Može se isplatiti — tražite bolje uslove",
+    de: "Kann rentabel sein — bessere Konditionen verhandeln",
+    en: "Can be profitable — negotiate better terms",
   },
   DO_NOT_BUY: {
-    sr: "Ne — trenutno se ne isplati",
-    de: "Nein — derzeit nicht rentabel",
-    en: "No — not profitable under current terms",
+    sr: "Ne isplati se — tražite bolju ponudu",
+    de: "Nicht rentabel — besseres Angebot suchen",
+    en: "Not profitable — find a better offer",
   },
 };
 
