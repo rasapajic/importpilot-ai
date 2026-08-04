@@ -21,6 +21,13 @@ function clean(value: string) {
     .trim();
 }
 
+function focusedProductQuery(value: string) {
+  const normalized = clean(value).toLowerCase();
+  const carTrunkOrganizer = /\b(?:(?:foldable|folding|collapsible|expandable)\s+)?(?:car|vehicle|automotive)\s+(?:trunk|boot|cargo)\s+(?:storage\s+)?(?:organizer|organiser|box|bag)\b/i;
+  if (carTrunkOrganizer.test(normalized)) return "car trunk organizer";
+  return null;
+}
+
 export function createSupplierSearchQueryVariants(productQuery: string) {
   const original = clean(productQuery);
   const translated = clean(
@@ -32,7 +39,9 @@ export function createSupplierSearchQueryVariants(productQuery: string) {
   const typeCFirst = /\btype c\b/i.test(translated)
     ? clean(`type c ${translated.replace(/\btype c\b/i, "")}`)
     : translated;
+  const focused = focusedProductQuery(translated);
 
-  return [...new Set([original, translated, typeCFirst].filter((query) => query.length >= 2))]
-    .slice(0, 3);
+  return [...new Set([focused, typeCFirst, translated, original].filter(
+    (query): query is string => Boolean(query && query.length >= 2),
+  ))].slice(0, 3);
 }
