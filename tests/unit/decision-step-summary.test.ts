@@ -6,22 +6,24 @@ import {
 } from "../../modules/decisions/application/decision-step-summary";
 
 describe("decision step summary", () => {
-  it("explains completed decisions instead of showing bare commands", () => {
-    expect(getDecisionStepSummary("READY_TO_BUY", "sr")).toBe("Da — isplativo je");
+  it("explains completed decisions and the next action", () => {
+    expect(getDecisionStepSummary("READY_TO_BUY", "sr")).toBe(
+      "Isplati se — nastavite sa proverama",
+    );
     expect(getDecisionStepSummary("NEGOTIATE_FIRST", "sr")).toBe(
-      "Može biti isplativo uz bolje uslove",
+      "Može se isplatiti — tražite bolje uslove",
     );
     expect(getDecisionStepSummary("DO_NOT_BUY", "sr")).toBe(
-      "Ne — trenutno se ne isplati",
+      "Ne isplati se — tražite bolju ponudu",
     );
   });
 
-  it("localizes the outcome explanation", () => {
+  it("localizes the actionable outcome", () => {
     expect(getDecisionStepSummary("DO_NOT_BUY", "de")).toBe(
-      "Nein — derzeit nicht rentabel",
+      "Nicht rentabel — besseres Angebot suchen",
     );
     expect(getDecisionStepSummary("DO_NOT_BUY", "en")).toBe(
-      "No — not profitable under current terms",
+      "Not profitable — find a better offer",
     );
   });
 
