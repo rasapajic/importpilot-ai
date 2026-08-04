@@ -11,13 +11,13 @@ import { CostCalculatorForm } from "@/components/costs/cost-calculator-form";
 import { useI18n } from "@/components/i18n/i18n-provider";
 import { formatDisplayedPercent } from "@/modules/cost-engine/application/calculation-summary";
 import type { LandedCostAssumptions } from "@/modules/cost-engine/domain/serbia-landed-cost";
+import { getClientDecisionSummary } from "@/modules/decisions/application/client-decision-summary";
 import { isFinalDecisionStatus } from "@/modules/decisions/application/decision-step-summary";
 import { getSimplifiedNextActions } from "@/modules/decisions/application/simplified-next-actions";
 import type { ProjectDecisionResult } from "@/modules/decisions/domain/project-decision";
 import { getEuroDisplay } from "@/modules/fx/euro-display";
 import {
   getStatusLabel,
-  translateBusinessText,
   type Locale,
 } from "@/modules/i18n/translations";
 
@@ -250,6 +250,14 @@ export function SimpleProfitabilityPanel({
   const nextAction = hasFinalDecision && decision
     ? getSimplifiedNextActions(decision.status)[0] ?? null
     : null;
+  const decisionSummary = hasFinalDecision && decision && bestOffer
+    ? getClientDecisionSummary({
+        locale,
+        offerCount: decision.summarySnapshot.offerCount,
+        supplierName: bestOffer.supplierName,
+        overallScore: numberValue(assessment?.overallScore),
+      })
+    : "";
 
   return (
     <section className="dashboard-card decision-panel decision-summary-card">
@@ -279,7 +287,7 @@ export function SimpleProfitabilityPanel({
 
       {hasFinalDecision && decision && calculation && bestOffer ? (
         <>
-          <p>{translateBusinessText(decision.decisionReason, locale)}</p>
+          <p>{decisionSummary}</p>
           <div className="decision-summary-primary">
             <div><span>{text.selectedSupplier}</span><strong>{bestOffer.supplierName}</strong></div>
             <div><span>{text.costPerUnit}</span><strong>{money(calculation.landedCostPerUnit, currency)}</strong></div>
@@ -292,7 +300,7 @@ export function SimpleProfitabilityPanel({
 
           {nextAction && (
             <div className="actions">
-              <span><strong>{text.nextStep}:</strong> {t(nextAction)}</span>
+              <span><strong>{text.nextStep}</strong></span>
               <a className="primary-link" href={actionHref(projectId, nextAction)}>{t(nextAction)}</a>
             </div>
           )}
