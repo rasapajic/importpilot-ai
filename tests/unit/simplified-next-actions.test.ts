@@ -20,11 +20,7 @@ describe("simplified next actions", () => {
     ]);
   });
 
-  it("returns replacement actions for PRESKOČI", () => {
-    expect(getSimplifiedNextActions("DO_NOT_BUY")).toEqual([
-      "Pronađi nove ponude",
-      "Ubaci drugi link",
-      "Sačuvaj razlog",
-    ]);
+  it("leaves the unprofitable action to the recovery panel", () => {
+    expect(getSimplifiedNextActions("DO_NOT_BUY")).toEqual([]);
   });
 });

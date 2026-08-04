@@ -105,6 +105,7 @@ export type LunaSearchPlan = {
     targetCountry: string;
     maxUnitPrice: number | null;
     maxUnitPriceCurrency: string | null;
+    strictPriceLimit: boolean;
     maxMoq: number | null;
     targetMarginPercent: number | null;
     avoidComplexCompliance: boolean;
@@ -147,6 +148,7 @@ export function createLunaSearchPlan(input: ProjectSupplierSearchRequest): LunaS
       targetCountry: input.targetCountry,
       maxUnitPrice: input.maxUnitPrice ?? null,
       maxUnitPriceCurrency: input.maxUnitPriceCurrency ?? null,
+      strictPriceLimit: input.strictPriceLimit ?? false,
       maxMoq: input.maxMoq ?? null,
       targetMarginPercent: input.targetMarginPercent ?? null,
       avoidComplexCompliance: input.avoidComplexCompliance ?? false,
@@ -182,12 +184,23 @@ export function applyLunaSearchConstraints(
 
     if (
       request.maxUnitPrice !== undefined &&
-      request.maxUnitPriceCurrency !== undefined &&
-      result.price !== null &&
-      result.currency === request.maxUnitPriceCurrency &&
-      result.price > request.maxUnitPrice
+      request.maxUnitPriceCurrency !== undefined
     ) {
-      return false;
+      if (request.strictPriceLimit) {
+        if (
+          result.price === null ||
+          result.currency !== request.maxUnitPriceCurrency ||
+          result.price > request.maxUnitPrice
+        ) {
+          return false;
+        }
+      } else if (
+        result.price !== null &&
+        result.currency === request.maxUnitPriceCurrency &&
+        result.price > request.maxUnitPrice
+      ) {
+        return false;
+      }
     }
 
     return true;

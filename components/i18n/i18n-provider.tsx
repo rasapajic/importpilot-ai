@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useMemo } from "react";
 
+import { getBetterOffersLabel } from "@/components/search/recovery-search-copy";
 import {
   LOCALE_COOKIE,
   type Locale,
@@ -33,7 +34,9 @@ export function I18nProvider({
       document.cookie = `${LOCALE_COOKIE}=${resolved}; path=/; max-age=31536000; SameSite=Lax`;
       window.location.reload();
     },
-    t: (text) => translateBusinessText(text, initialLocale),
+    t: (text) => text === "Pronađi nove ponude"
+      ? getBetterOffersLabel(initialLocale)
+      : translateBusinessText(text, initialLocale),
   }), [initialLocale]);
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
