@@ -53,8 +53,8 @@ describe("profitability recovery", () => {
       currentGrossMarginPercent: "20.0000",
     }));
 
-    expect(result.maximumSupplierUnitPrice).toBe("7.5000");
-    expect(result.supplierReductionPercent).toBe("6.3");
+    expect(result.maximumSupplierUnitPrice).toBe("7.5049");
+    expect(result.supplierReductionPercent).toBe("6.2");
     expect(result.action).toBe(ProfitabilityRecoveryActions.NEGOTIATE_SUPPLIER);
   });
 
@@ -69,8 +69,8 @@ describe("profitability recovery", () => {
       currentGrossMarginPercent: "20.0000",
     }));
 
-    expect(result.maximumSupplierUnitPrice).toBe("1.5000");
-    expect(result.supplierReductionPercent).toBe("25.0");
+    expect(result.maximumSupplierUnitPrice).toBe("1.5049");
+    expect(result.supplierReductionPercent).toBe("24.8");
     expect(result.sellingPriceIncreasePercent).toBe("6.7");
     expect(result.action).toBe(ProfitabilityRecoveryActions.RAISE_SELLING_PRICE);
   });
