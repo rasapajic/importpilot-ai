@@ -40,6 +40,7 @@ export default async function ProjectPage({
     activityType?: string;
     editCalculationOffer?: string;
     importUrl?: string;
+    profitabilityError?: string;
   }>;
 }) {
   const auth = await requireSession();
@@ -77,9 +78,6 @@ export default async function ProjectPage({
     (offer) => offer.assessments.length > 0,
   ).length;
   const assessedOfferCount = project.offers.filter((offer) => offer.assessments.length > 0).length;
-  const pendingAssessmentOfferIds = project.offers
-    .filter((offer) => offer.assessments.length === 0)
-    .map((offer) => offer.id);
   const workflow = getProjectWorkflow({
     offerCount,
     calculatedOfferCount,
@@ -208,7 +206,7 @@ export default async function ProjectPage({
             offers={project.offers}
             decision={decision}
             selectedCalculationOfferId={selectedCalculationOfferId}
-            pendingAssessmentOfferIds={pendingAssessmentOfferIds}
+            profitabilityError={resolvedSearchParams.profitabilityError}
           />
           {decision?.status === "NEGOTIATE_FIRST" && (
             <div id="negotiation-assistant">
