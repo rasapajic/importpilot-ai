@@ -42,9 +42,58 @@ describe("project decision", () => {
     expect(result.selectedOfferId).toBe("best");
   });
 
-  it("returns NEED_MORE_OFFERS when comparable or assessed offers are insufficient", () => {
+  it("returns READY_TO_BUY for one strong assessed offer and still recommends comparison", () => {
     const result = createProjectDecision([
-      offer({ offerId: "eur", supplierName: "EUR" }),
+      offer({ offerId: "single", supplierName: "Single" }),
+    ]);
+
+    expect(result.status).toBe(ProjectDecisionStatuses.READY_TO_BUY);
+    expect(result.selectedOfferId).toBe("single");
+    expect(result.actionChecklist.map((item) => item.key)).toContain("COMPARE_MORE_OFFERS");
+  });
+
+  it("returns NEGOTIATE_FIRST for one fixable assessed offer", () => {
+    const result = createProjectDecision([
+      offer({
+        offerId: "single",
+        supplierName: "Single",
+        sampleAvailable: false,
+        shippingClarityScore: 40,
+        assessment: {
+          overallScore: 75,
+          supplierRiskScore: 30,
+          supplierRiskLevel: "MEDIUM",
+          confidenceScore: 80,
+          recommendationStatus: "OK_WITH_RISK",
+        },
+      }),
+    ]);
+
+    expect(result.status).toBe(ProjectDecisionStatuses.NEGOTIATE_FIRST);
+    expect(result.actionChecklist.map((item) => item.key)).toContain("CONFIRM_SHIPPING");
+  });
+
+  it("returns DO_NOT_BUY for one assessed offer that is not recommended", () => {
+    const result = createProjectDecision([
+      offer({
+        offerId: "single",
+        supplierName: "Single",
+        assessment: {
+          overallScore: 40,
+          supplierRiskScore: 80,
+          supplierRiskLevel: "HIGH",
+          confidenceScore: 90,
+          recommendationStatus: "NOT_RECOMMENDED",
+        },
+      }),
+    ]);
+
+    expect(result.status).toBe(ProjectDecisionStatuses.DO_NOT_BUY);
+  });
+
+  it("returns NEED_MORE_OFFERS when no usable assessed offer exists", () => {
+    const result = createProjectDecision([
+      offer({ offerId: "eur", supplierName: "EUR", assessment: null }),
       offer({ offerId: "usd", supplierName: "USD", currency: "USD", assessment: null }),
     ]);
     expect(result.status).toBe(ProjectDecisionStatuses.NEED_MORE_OFFERS);

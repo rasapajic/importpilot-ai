@@ -188,10 +188,14 @@ export function createProjectDecision(offers: ProjectDecisionOffer[]): ProjectDe
   const checklist = buildChecklist(bestOverallOffer, comparableOffers.length);
 
   let status: ProjectDecisionStatusValue;
-  if (offers.length < 3 || assessedOfferCount < 2 || comparableOffers.length < 2) {
+  if (
+    offers.length === 0 ||
+    assessedOfferCount === 0 ||
+    comparableOffers.length === 0 ||
+    !bestOverallOffer
+  ) {
     status = ProjectDecisionStatuses.NEED_MORE_OFFERS;
   } else if (
-    !bestOverallOffer ||
     bestOverallOffer.assessment?.recommendationStatus === "NOT_RECOMMENDED"
   ) {
     status = ProjectDecisionStatuses.DO_NOT_BUY;
