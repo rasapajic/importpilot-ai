@@ -2,7 +2,7 @@ import type { RecommendationStatusValue } from "../../intelligence/domain/recomm
 import type { MoqStatusValue } from "../../offers/domain/moq-status";
 import type { SupplierRiskLevel } from "../../intelligence/domain/supplier-risk-v2";
 
-export const PROJECT_DECISION_VERSION = "project-decision-v1";
+export const PROJECT_DECISION_VERSION = "project-decision-v2";
 
 export const ProjectDecisionStatuses = {
   READY_TO_BUY: "READY_TO_BUY",
@@ -166,7 +166,10 @@ function buildChecklist(
   return checklist;
 }
 
-export function createProjectDecision(offers: ProjectDecisionOffer[]): ProjectDecisionResult {
+export function createProjectDecision(
+  offers: ProjectDecisionOffer[],
+  projectTargetMargin = 0,
+): ProjectDecisionResult {
   const primary = primaryCurrencyGroup(offers);
   const primaryCurrency = primary?.[0] ?? null;
   const comparableOffers = primary?.[1] ?? [];
@@ -176,6 +179,14 @@ export function createProjectDecision(offers: ProjectDecisionOffer[]): ProjectDe
     (offer) => offer.assessment?.supplierRiskScore ?? null,
   );
   const bestMarginOffer = maxBy(comparableOffers, (offer) => offer.grossMarginPercent);
+  const bestMargin = bestMarginOffer?.grossMarginPercent ?? null;
+  const severeMarginShortfall =
+    projectTargetMargin > 0 &&
+    bestMargin !== null &&
+    bestMargin < projectTargetMargin * 0.5;
+  const selectedOffer = severeMarginShortfall
+    ? bestMarginOffer ?? bestOverallOffer
+    : bestOverallOffer;
   const assessedOfferCount = offers.filter((offer) => offer.assessment !== null).length;
   const incomparableCurrencies = [
     ...new Set(
@@ -185,31 +196,36 @@ export function createProjectDecision(offers: ProjectDecisionOffer[]): ProjectDe
     ),
   ].sort();
   const incomparableOfferCount = offers.length - comparableOffers.length;
-  const checklist = buildChecklist(bestOverallOffer, comparableOffers.length);
+  const checklist = buildChecklist(selectedOffer, comparableOffers.length);
 
   let status: ProjectDecisionStatusValue;
   if (
     offers.length === 0 ||
     assessedOfferCount === 0 ||
     comparableOffers.length === 0 ||
-    !bestOverallOffer
+    !selectedOffer
   ) {
     status = ProjectDecisionStatuses.NEED_MORE_OFFERS;
+  } else if (severeMarginShortfall) {
+    status = ProjectDecisionStatuses.DO_NOT_BUY;
   } else if (
-    bestOverallOffer.assessment?.recommendationStatus === "NOT_RECOMMENDED"
+    selectedOffer.assessment?.recommendationStatus === "NOT_RECOMMENDED"
   ) {
     status = ProjectDecisionStatuses.DO_NOT_BUY;
   } else if (
-    bestOverallOffer.assessment?.recommendationStatus === "RECOMMENDED" &&
-    bestOverallOffer.assessment.supplierRiskScore <= 30 &&
-    bestOverallOffer.assessment.supplierRiskLevel !== "HIGH" &&
-    bestOverallOffer.assessment.confidenceScore >= 70 &&
-    bestOverallOffer.moqExceedsProjectQuantity !== true &&
-    bestOverallOffer.shippingClarityScore !== null &&
-    bestOverallOffer.shippingClarityScore >= 70 &&
-    Boolean(bestOverallOffer.incoterm) &&
-    bestOverallOffer.sampleAvailable === true &&
-    !bestOverallOffer.calculationNeedsReview
+    selectedOffer.assessment?.recommendationStatus === "RECOMMENDED" &&
+    selectedOffer.assessment.supplierRiskScore <= 30 &&
+    selectedOffer.assessment.supplierRiskLevel !== "HIGH" &&
+    selectedOffer.assessment.confidenceScore >= 70 &&
+    selectedOffer.moqExceedsProjectQuantity !== true &&
+    selectedOffer.shippingClarityScore !== null &&
+    selectedOffer.shippingClarityScore >= 70 &&
+    Boolean(selectedOffer.incoterm) &&
+    selectedOffer.sampleAvailable === true &&
+    !selectedOffer.calculationNeedsReview &&
+    (projectTargetMargin <= 0 ||
+      (selectedOffer.grossMarginPercent !== null &&
+        selectedOffer.grossMarginPercent >= projectTargetMargin))
   ) {
     status = ProjectDecisionStatuses.READY_TO_BUY;
   } else {
@@ -220,9 +236,15 @@ export function createProjectDecision(offers: ProjectDecisionOffer[]): ProjectDe
     incomparableOfferCount > 0
       ? `Imate ${offers.length} ponuda, ali ${comparableOffers.length} su direktno uporedive u valuti ${primaryCurrency ?? "bez potvrđene valute"}.`
       : `Imate ${offers.length} ponuda i sve su uporedive u valuti ${primaryCurrency ?? "bez potvrđene valute"}.`;
-  const bestSentence = bestOverallOffer
-    ? `Najbolja ukupna ponuda je ${bestOverallOffer.supplierName} sa ocenom ${bestOverallOffer.assessment?.overallScore ?? 0}/100.`
+  const bestSentence = selectedOffer
+    ? `Najbolja dostupna ponuda je ${selectedOffer.supplierName} sa ocenom ${selectedOffer.assessment?.overallScore ?? 0}/100.`
     : "Još nema dovoljno ocenjenih ponuda za izbor najbolje ponude.";
+  const marginSentence =
+    projectTargetMargin > 0 && bestMargin !== null
+      ? severeMarginShortfall
+        ? `Najbolja bruto marža je ${bestMargin}%, što je manje od polovine ciljne marže od ${projectTargetMargin}%; po trenutnim cenama projekat nije isplativ.`
+        : `Najbolja bruto marža je ${bestMargin}%, a cilj projekta je ${projectTargetMargin}%.`
+      : "";
   const nextSentence =
     checklist.length > 0
       ? `Pre kupovine: ${checklist.slice(0, 2).map((item) => item.label.toLowerCase()).join(" i ")}.`
@@ -230,8 +252,10 @@ export function createProjectDecision(offers: ProjectDecisionOffer[]): ProjectDe
 
   return {
     status,
-    selectedOfferId: bestOverallOffer?.offerId ?? null,
-    decisionReason: `${comparisonSentence} ${bestSentence} ${nextSentence}`,
+    selectedOfferId: selectedOffer?.offerId ?? null,
+    decisionReason: [comparisonSentence, bestSentence, marginSentence, nextSentence]
+      .filter(Boolean)
+      .join(" "),
     actionChecklist: checklist,
     summarySnapshot: {
       offerCount: offers.length,

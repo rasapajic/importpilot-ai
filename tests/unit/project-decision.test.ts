@@ -200,4 +200,41 @@ describe("project decision", () => {
       ]),
     );
   });
+
+  it("returns DO_NOT_BUY when even the best margin is below half of the project target", () => {
+    const result = createProjectDecision([
+      offer({ offerId: "negative", supplierName: "Negative", grossMarginPercent: -3.3 }),
+      offer({ offerId: "best-margin", supplierName: "Best Margin", grossMarginPercent: 5.8 }),
+      offer({ offerId: "low", supplierName: "Low", grossMarginPercent: 1.8 }),
+    ], 25);
+
+    expect(result.status).toBe(ProjectDecisionStatuses.DO_NOT_BUY);
+    expect(result.selectedOfferId).toBe("best-margin");
+    expect(result.decisionReason).toContain("manje od polovine ciljne marže");
+    expect(result.decisionReason).toContain("po trenutnim cenama projekat nije isplativ");
+  });
+
+  it("returns NEGOTIATE_FIRST when margin is below target but at least half of it", () => {
+    const result = createProjectDecision([
+      offer({
+        offerId: "negotiable",
+        supplierName: "Negotiable",
+        grossMarginPercent: 20,
+      }),
+    ], 25);
+
+    expect(result.status).toBe(ProjectDecisionStatuses.NEGOTIATE_FIRST);
+  });
+
+  it("allows READY_TO_BUY only when the selected offer reaches the project target margin", () => {
+    const belowTarget = createProjectDecision([
+      offer({ offerId: "below", supplierName: "Below", grossMarginPercent: 24.9 }),
+    ], 25);
+    const reachesTarget = createProjectDecision([
+      offer({ offerId: "ready", supplierName: "Ready", grossMarginPercent: 25 }),
+    ], 25);
+
+    expect(belowTarget.status).toBe(ProjectDecisionStatuses.NEGOTIATE_FIRST);
+    expect(reachesTarget.status).toBe(ProjectDecisionStatuses.READY_TO_BUY);
+  });
 });

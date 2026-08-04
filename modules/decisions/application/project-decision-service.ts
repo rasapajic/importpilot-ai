@@ -72,7 +72,7 @@ export async function generateProjectDecision(projectId: string, organizationId:
         : null,
     };
   });
-  const decision = createProjectDecision(offers);
+  const decision = createProjectDecision(offers, project.targetMargin.toNumber());
 
   return prisma.$transaction(async (transaction) => {
     const created = await transaction.projectDecision.create({
