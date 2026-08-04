@@ -46,7 +46,7 @@ describe("Luna Search plan", () => {
     expect(plan.providerQuery).toContain("OEM private label");
     expect(plan.chinese1688Query).toContain("温室大棚全套设备");
     expect(plan.chinese1688Query).toContain("OEM 贴牌");
-    expect(plan.warnings.some((warning) => warning.includes("Sertifikacioni rizik"))).toBe(true);
+    expect(plan.warnings).toContain("COMPLIANCE_NOT_VERIFIED");
   });
 
   it("does not invent a Chinese translation for an unknown product", () => {
@@ -57,7 +57,7 @@ describe("Luna Search plan", () => {
 
     expect(plan.providerQuery).toBe("specijalni proizvod bez kataloškog prevoda");
     expect(plan.chinese1688Query).toBeNull();
-    expect(plan.warnings.some((warning) => warning.includes("Kineski upit"))).toBe(true);
+    expect(plan.warnings).toContain("CHINESE_QUERY_UNCONFIRMED");
   });
 
   it("applies only comparable price and known MOQ constraints", () => {
