@@ -1,13 +1,12 @@
 "use client";
 
-import { createContext, useContext, useLayoutEffect, useMemo, useState } from "react";
+import { createContext, useContext, useMemo, useState } from "react";
 
 import {
   LOCALE_COOKIE,
   type Locale,
   resolveLocale,
   translateBusinessText,
-  translateText,
 } from "@/modules/i18n/translations";
 
 type I18nValue = {
@@ -18,28 +17,6 @@ type I18nValue = {
 
 const I18nContext = createContext<I18nValue | null>(null);
 
-function translateElement(root: ParentNode, locale: Locale) {
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-  let node = walker.nextNode();
-  while (node) {
-    const parent = node.parentElement;
-    if (parent && !["SCRIPT", "STYLE", "PRE"].includes(parent.tagName) && node.textContent) {
-      const translated = translateText(node.textContent, locale);
-      if (translated !== node.textContent) node.textContent = translated;
-    }
-    node = walker.nextNode();
-  }
-
-  root.querySelectorAll?.<HTMLElement>("[placeholder], [title], [aria-label]").forEach((element) => {
-    for (const attribute of ["placeholder", "title", "aria-label"]) {
-      const value = element.getAttribute(attribute);
-      if (!value) continue;
-      const translated = translateText(value, locale);
-      if (translated !== value) element.setAttribute(attribute, translated);
-    }
-  });
-}
-
 export function I18nProvider({
   children,
   initialLocale,
@@ -49,27 +26,19 @@ export function I18nProvider({
 }) {
   const [locale, updateLocale] = useState(initialLocale);
 
-  useLayoutEffect(() => {
-    document.documentElement.lang = locale === "sr" ? "sr-Latn" : locale;
-    translateElement(document.body, locale);
-    const observer = new MutationObserver((mutations) => {
-      for (const mutation of mutations) {
-        mutation.addedNodes.forEach((node) => {
-          if (node instanceof HTMLElement) translateElement(node, locale);
-          else if (node.nodeType === Node.TEXT_NODE && node.parentElement) translateElement(node.parentElement, locale);
-        });
-      }
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
-    return () => observer.disconnect();
-  }, [locale]);
-
   const value = useMemo<I18nValue>(() => ({
     locale,
     setLocale(nextLocale) {
       const resolved = resolveLocale(nextLocale);
-      document.cookie = `${LOCALE_COOKIE}=${resolved}; path=/; max-age=31536000; samesite=lax`;
+      if (resolved === locale) return;
+
+      document.cookie = `${LOCALE_COOKIE}=${resolved}; path=/; max-age=31536000; SameSite=Lax`;
+      document.documentElement.lang = resolved === "sr" ? "sr-Latn" : resolved;
       updateLocale(resolved);
+
+      // A full render starts from canonical translation keys and prevents
+      // already translated text from being translated a second time.
+      window.location.reload();
     },
     t: (text) => translateBusinessText(text, locale),
   }), [locale]);
