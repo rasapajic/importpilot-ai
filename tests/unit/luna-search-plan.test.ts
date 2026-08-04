@@ -14,6 +14,7 @@ const baseRequest: ProjectSupplierSearchRequest = {
   query: "kompletna oprema za plastenike",
   quantity: 100,
   targetCountry: "RS",
+  strictPriceLimit: false,
   avoidComplexCompliance: true,
   privateLabel: false,
 };
@@ -60,7 +61,7 @@ describe("Luna Search plan", () => {
     expect(plan.warnings).toContain("CHINESE_QUERY_UNCONFIRMED");
   });
 
-  it("applies only comparable price and known MOQ constraints", () => {
+  it("applies only comparable price and known MOQ constraints in normal searches", () => {
     const request: ProjectSupplierSearchRequest = {
       ...baseRequest,
       maxUnitPrice: 12,
@@ -93,6 +94,41 @@ describe("Luna Search plan", () => {
       "https://provider.example/greenhouse-kit",
       "https://provider.example/usd-price",
       "https://provider.example/unknown-price",
+    ]);
+  });
+
+  it("strictly keeps only priced same-currency results within the recovery limit", () => {
+    const request: ProjectSupplierSearchRequest = {
+      ...baseRequest,
+      maxUnitPrice: 3.48,
+      maxUnitPriceCurrency: "USD",
+      strictPriceLimit: true,
+    };
+    const results = [
+      result({
+        productUrl: "https://provider.example/good-usd",
+        price: 3.48,
+        currency: "USD",
+      }),
+      result({
+        productUrl: "https://provider.example/expensive-usd",
+        price: 3.49,
+        currency: "USD",
+      }),
+      result({
+        productUrl: "https://provider.example/eur",
+        price: 2,
+        currency: "EUR",
+      }),
+      result({
+        productUrl: "https://provider.example/unknown-price",
+        price: null,
+        currency: null,
+      }),
+    ];
+
+    expect(applyLunaSearchConstraints(results, request).map((item) => item.productUrl)).toEqual([
+      "https://provider.example/good-usd",
     ]);
   });
 
