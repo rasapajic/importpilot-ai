@@ -9,11 +9,13 @@ export type LandedCostInput = {
   vatRate: string;
   storageCost: string;
   inspectionCost: string;
+  customsBrokerCost?: string;
   otherCosts: string;
   targetSellingPrice: string;
 };
 
 export type LandedCostResult = LandedCostInput & {
+  customsBrokerCost: string;
   customsDutyAmount: string;
   vatAmount: string;
   landedCostTotal: string;
@@ -67,6 +69,7 @@ export function calculateLandedCost(input: LandedCostInput): LandedCostResult {
   const shipping = parseDecimal(input.shippingCost, 2, "Transport");
   const storage = parseDecimal(input.storageCost, 2, "Skladištenje");
   const inspection = parseDecimal(input.inspectionCost, 2, "Inspekcija");
+  const customsBroker = parseDecimal(input.customsBrokerCost ?? "0.00", 2, "Špediter i carinjenje");
   const other = parseDecimal(input.otherCosts, 2, "Ostali troškovi");
   const sellingPrice = parseDecimal(input.targetSellingPrice, 2, "Ciljna prodajna cena");
   const customsRate = parseDecimal(input.customsDutyRate, 4, "Carinska stopa");
@@ -80,10 +83,10 @@ export function calculateLandedCost(input: LandedCostInput): LandedCostResult {
   const customsBase = goodsCost + shipping;
   const rateDenominator = 100n * 10_000n;
   const customsDutyAmount = divideHalfUp(customsBase * customsRate, rateDenominator);
-  const vatBase = customsBase + customsDutyAmount + inspection + other;
+  const vatBase = customsBase + customsDutyAmount + customsBroker + inspection + other;
   const vatAmount = divideHalfUp(vatBase * vatRate, rateDenominator);
   const landedCostTotal =
-    goodsCost + shipping + customsDutyAmount + vatAmount + storage + inspection + other;
+    goodsCost + shipping + customsDutyAmount + vatAmount + customsBroker + storage + inspection + other;
   const landedCostPerUnit = divideHalfUp(landedCostTotal, BigInt(input.quantity));
   const grossMarginScaled4 = divideHalfUp(
     (sellingPrice - landedCostPerUnit) * 100n * 10_000n,
@@ -108,6 +111,7 @@ export function calculateLandedCost(input: LandedCostInput): LandedCostResult {
 
   return {
     ...input,
+    customsBrokerCost: formatDecimal(customsBroker, 2),
     customsDutyAmount: formatDecimal(customsDutyAmount, 2),
     vatAmount: formatDecimal(vatAmount, 2),
     landedCostTotal: formatDecimal(landedCostTotal, 2),

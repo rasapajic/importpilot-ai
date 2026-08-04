@@ -7,6 +7,7 @@ import type { z } from "zod";
 
 import { prisma } from "@/lib/database/prisma";
 import { deleteStoredObject } from "@/lib/storage/s3";
+import { getLatestCostAssumptionsByOffer } from "@/modules/cost-engine/domain/serbia-landed-cost";
 import { isFinalDecisionStatus } from "@/modules/decisions/application/decision-step-summary";
 import { canDeleteEmptySearch } from "@/modules/projects/domain/empty-search-deletion";
 import type {
@@ -100,8 +101,8 @@ export function findOrganizationProject(projectId: string, organizationId: strin
   return prisma.importProject.findFirst({ where: { id: projectId, organizationId } });
 }
 
-export function getProject(projectId: string, organizationId: string) {
-  return prisma.importProject.findFirst({
+export async function getProject(projectId: string, organizationId: string) {
+  const project = await prisma.importProject.findFirst({
     where: { id: projectId, organizationId },
     include: {
       files: {
@@ -126,6 +127,27 @@ export function getProject(projectId: string, organizationId: string) {
       },
     },
   });
+  if (!project) return null;
+
+  const costActivities = await prisma.projectActivity.findMany({
+    where: {
+      projectId,
+      organizationId,
+      type: ProjectActivityType.LANDED_COST_CALCULATED,
+    },
+    select: { type: true, metadata: true },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: 100,
+  });
+  const assumptionsByOffer = getLatestCostAssumptionsByOffer(costActivities);
+
+  return {
+    ...project,
+    offers: project.offers.map((offer) => ({
+      ...offer,
+      latestCostAssumptions: assumptionsByOffer[offer.id] ?? null,
+    })),
+  };
 }
 
 export async function deleteDemoProject(

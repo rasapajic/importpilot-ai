@@ -10,6 +10,7 @@ import { CostCalculatorForm } from "@/components/costs/cost-calculator-form";
 import { AssessmentPanel } from "@/components/intelligence/assessment-panel";
 import { useI18n } from "@/components/i18n/i18n-provider";
 import { ResponsiveOfferDetails } from "@/components/offers/responsive-offer-details";
+import type { SerbiaLandedCostAssumptions } from "@/modules/cost-engine/domain/serbia-landed-cost";
 import { getStatusLabel } from "@/modules/i18n/translations";
 import { recommendationBadgeStatus } from "@/modules/intelligence/application/recommendation-display";
 import { getEuroDisplay } from "@/modules/fx/euro-display";
@@ -22,6 +23,7 @@ import {
 type OfferWithDetails = SupplierOffer & {
   costCalculations: CostCalculation[];
   assessments: OfferAssessment[];
+  latestCostAssumptions?: SerbiaLandedCostAssumptions | null;
 };
 
 export function OffersPanel({
@@ -232,12 +234,14 @@ export function OffersPanel({
                   offer.unitPrice && offer.currency && offer.incoterm ? (
                     <CostCalculatorForm
                       offerId={offer.id}
+                      unitPrice={offer.unitPrice.toString()}
                       currency={offer.currency}
                       targetCountry={targetCountry}
                       productName={projectName}
                       quantity={projectQuantity}
                       sourceMetadata={offer.sourceMetadata}
                       latestCalculation={offer.costCalculations[0]}
+                      latestCostAssumptions={offer.latestCostAssumptions}
                       editInitially={selectedCalculationOfferId === offer.id}
                     />
                   ) : (
