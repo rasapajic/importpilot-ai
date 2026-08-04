@@ -96,6 +96,7 @@ export const projectSupplierSearchRequestSchema = supplierOfferSearchInputSchema
   .extend({
     maxUnitPrice: optionalRequestNumber(z.number().positive().finite()),
     maxUnitPriceCurrency: optionalRequestCurrency,
+    strictPriceLimit: z.boolean().optional().default(false),
     maxMoq: optionalRequestNumber(z.number().int().positive()),
     targetMarginPercent: optionalRequestNumber(z.number().min(0).max(100).finite()),
     avoidComplexCompliance: z.boolean().optional().default(false),
@@ -107,6 +108,13 @@ export const projectSupplierSearchRequestSchema = supplierOfferSearchInputSchema
         code: "custom",
         path: ["maxUnitPriceCurrency"],
         message: "Maximum unit price and currency must be provided together.",
+      });
+    }
+    if (request.strictPriceLimit && request.maxUnitPrice === undefined) {
+      context.addIssue({
+        code: "custom",
+        path: ["strictPriceLimit"],
+        message: "Strict price filtering requires a maximum unit price.",
       });
     }
   });
