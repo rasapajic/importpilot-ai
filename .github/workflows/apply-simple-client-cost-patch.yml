@@ -1,0 +1,73 @@
+name: Apply simple client cost patch
+
+on:
+  push:
+    branches:
+      - feature/simple-client-flow
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/simple-client-flow
+      - name: Patch client-facing cost output
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('components/costs/cost-calculator-form.tsx')
+          text = path.read_text()
+          text = text.replace(
+              '  editInitially = false,\n}: {',
+              '  editInitially = false,\n  showResults = true,\n}: {'
+          )
+          text = text.replace(
+              '  editInitially?: boolean;\n}) {',
+              '  editInitially?: boolean;\n  showResults?: boolean;\n}) {'
+          )
+          text = text.replace(
+              '              <p><strong>Country profile:</strong> {profile.countryCode} · {profile.version}</p>\n',
+              ''
+          )
+          text = text.replace(
+              '      {latestCalculation && (',
+              '      {showResults && latestCalculation && ('
+          )
+          text = text.replace(
+              '              <span>Country profile: {latestCostAssumptions.countryCode} · {latestCostAssumptions.countryProfileVersion}</span>\n',
+              ''
+          )
+          text = text.replace(
+              '          <FxSourceNote />\n',
+              '          {currency !== "EUR" && <FxSourceNote />}\n'
+          )
+          path.write_text(text)
+
+          panel = Path('components/projects/simple-profitability-panel.tsx')
+          panel_text = panel.read_text()
+          panel_text = panel_text.replace(
+              '          editInitially\n',
+              '          editInitially\n          showResults={false}\n'
+          )
+          panel_text = panel_text.replace(
+              '                    latestCostAssumptions={offer.latestCostAssumptions}\n                  />',
+              '                    latestCostAssumptions={offer.latestCostAssumptions}\n                    showResults={false}\n                  />'
+          )
+          panel.write_text(panel_text)
+          PY
+      - name: Commit patch
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add components/costs/cost-calculator-form.tsx components/projects/simple-profitability-panel.tsx
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "Hide technical cost details from clients"
+          git push origin HEAD:feature/simple-client-flow
