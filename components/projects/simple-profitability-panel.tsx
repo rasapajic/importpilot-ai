@@ -278,6 +278,7 @@ export function SimpleProfitabilityPanel({
           latestCalculation={editingOffer.costCalculations[0]}
           latestCostAssumptions={editingOffer.latestCostAssumptions}
           editInitially
+          showResults={false}
         />
       </section>
     );
@@ -388,6 +389,7 @@ export function SimpleProfitabilityPanel({
                     quantity={projectQuantity}
                     sourceMetadata={offer.sourceMetadata}
                     latestCostAssumptions={offer.latestCostAssumptions}
+                    showResults={false}
                   />
                 </article>
               );
