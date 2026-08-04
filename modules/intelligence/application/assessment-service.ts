@@ -71,18 +71,18 @@ export async function assessSupplierOffer(offerId: string, organizationId: strin
   return prisma.$transaction(async (transaction) => {
     const assessment = await transaction.offerAssessment.create({
       data: {
-      organizationId,
-      projectId: offer.projectId,
-      offerId: offer.id,
-      costCalculationId: latestCost?.id,
-      supplierRiskScore: result.supplierRiskScore,
-      offerQualityScore: result.offerQualityScore,
-      overallScore: result.overallScore,
-      confidenceScore: result.confidenceScore,
-      recommendationStatus: result.recommendationStatus,
-      explanation: result.explanation,
-      scoreBreakdown: result.scoreBreakdown,
-      assessmentVersion: result.assessmentVersion,
+        organizationId,
+        projectId: offer.projectId,
+        offerId: offer.id,
+        costCalculationId: latestCost?.id,
+        supplierRiskScore: result.supplierRiskScore,
+        offerQualityScore: result.offerQualityScore,
+        overallScore: result.overallScore,
+        confidenceScore: result.confidenceScore,
+        recommendationStatus: result.recommendationStatus,
+        explanation: result.explanation,
+        scoreBreakdown: result.scoreBreakdown,
+        assessmentVersion: result.assessmentVersion,
       },
     });
     await recordProjectActivity(transaction, {
@@ -104,7 +104,7 @@ export async function assessSupplierOffer(offerId: string, organizationId: strin
 export async function compareProjectOffers(projectId: string, organizationId: string) {
   const project = await prisma.importProject.findFirst({
     where: { id: projectId, organizationId },
-    select: { id: true },
+    select: { id: true, targetCountry: true, targetMargin: true },
   });
   if (!project) throw new AssessmentProjectNotFoundError();
 
@@ -125,12 +125,21 @@ export async function compareProjectOffers(projectId: string, organizationId: st
         supplierName: offer.supplierName,
         currency: offer.currency,
         landedCostTotal: cost?.landedCostTotal.toNumber() ?? null,
+        landedCostPerUnit: cost?.landedCostPerUnit.toNumber() ?? null,
         grossMarginPercent: cost?.grossMarginPercent.toNumber() ?? null,
         deliveryTimeDays: offer.deliveryTimeDays,
         supplierRiskScore: assessment?.supplierRiskScore ?? null,
         overallScore: assessment?.overallScore ?? null,
+        confidenceScore: assessment?.confidenceScore.toNumber() ?? null,
         recommendationStatus: assessment?.recommendationStatus ?? null,
+        calculationTargetCountry: cost?.targetCountry ?? null,
+        calculationStatus: cost?.calculationStatus ?? null,
       };
     }),
+    undefined,
+    {
+      targetCountry: project.targetCountry,
+      targetMarginPercent: project.targetMargin.toNumber(),
+    },
   );
 }
