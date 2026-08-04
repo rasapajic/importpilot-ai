@@ -125,8 +125,8 @@ describe("Luna country-aware ranking", () => {
 
     expect(ranking.map((item) => item.status)).toEqual(["INCOMPLETE", "INCOMPLETE"]);
     expect(ranking.flatMap((item) => item.reasons)).toEqual([
-      "MISSING_CALCULATION",
       "MISSING_ASSESSMENT",
+      "MISSING_CALCULATION",
     ]);
   });
 
