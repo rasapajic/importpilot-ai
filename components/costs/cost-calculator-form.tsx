@@ -1,59 +1,96 @@
 "use client";
 
 import type { CostCalculation } from "@prisma/client";
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { FxSourceNote } from "@/components/fx/fx-source-note";
 import { useI18n } from "@/components/i18n/i18n-provider";
+import { TransportCostAssistant } from "@/components/costs/transport-cost-assistant";
+import { getSerbiaLandedCostCopy } from "@/components/costs/serbia-landed-cost-copy";
 import { getCalculationFormValues } from "@/modules/cost-engine/application/calculation-form-values";
 import {
   formatDisplayedPercent,
   getDisplayedProfitSummary,
 } from "@/modules/cost-engine/application/calculation-summary";
+import {
+  sumCostAmounts,
+  type SerbiaLandedCostAssumptions,
+} from "@/modules/cost-engine/domain/serbia-landed-cost";
 import { getAutomaticVatRate, resolveVatRate } from "@/modules/cost-engine/domain/vat-rates";
-import { getStatusLabel } from "@/modules/i18n/translations";
 import { getEuroDisplay } from "@/modules/fx/euro-display";
-import { FxSourceNote } from "@/components/fx/fx-source-note";
-import { TransportCostAssistant } from "@/components/costs/transport-cost-assistant";
+import { getStatusLabel } from "@/modules/i18n/translations";
+
+function safeAmount(value: string) {
+  return value.trim() || "0";
+}
 
 export function CostCalculatorForm({
   offerId,
+  unitPrice,
   currency,
   targetCountry,
   productName,
   quantity,
   sourceMetadata,
   latestCalculation,
+  latestCostAssumptions,
   editInitially = false,
 }: {
   offerId: string;
+  unitPrice: string;
   currency: string;
   targetCountry: string;
   productName: string;
   quantity: number;
   sourceMetadata?: unknown;
   latestCalculation?: CostCalculation;
+  latestCostAssumptions?: SerbiaLandedCostAssumptions | null;
   editInitially?: boolean;
 }) {
   const { locale, t } = useI18n();
+  const copy = getSerbiaLandedCostCopy(locale);
   const router = useRouter();
-  const values = getCalculationFormValues(latestCalculation);
+  const isSerbia = targetCountry.trim().toUpperCase() === "RS";
+  const values = getCalculationFormValues(latestCalculation, latestCostAssumptions);
   const automaticVatRate = getAutomaticVatRate(targetCountry);
   const previousVatIsOverride = Boolean(
     latestCalculation &&
-    (automaticVatRate === null || Number(values.vatRate) !== Number(automaticVatRate)),
+    (values.vatSource === "MANUAL_OVERRIDE" ||
+      automaticVatRate === null ||
+      Number(values.vatRate) !== Number(automaticVatRate)),
   );
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
   const [editing, setEditing] = useState(!latestCalculation || editInitially);
   const [shippingCost, setShippingCost] = useState(values.shippingCost);
+  const [chinaDomesticTransportCost, setChinaDomesticTransportCost] = useState(values.chinaDomesticTransportCost);
+  const [internationalTransportCost, setInternationalTransportCost] = useState(values.internationalTransportCost);
+  const [insuranceCost, setInsuranceCost] = useState(values.insuranceCost);
   const [overrideVat, setOverrideVat] = useState(previousVatIsOverride);
   const [manualVatRate, setManualVatRate] = useState(previousVatIsOverride ? values.vatRate : "");
   const panelRef = useRef<HTMLDivElement>(null);
   const effectiveVatRate = resolveVatRate(targetCountry, overrideVat ? manualVatRate : null) ?? "";
   const profit = latestCalculation ? getDisplayedProfitSummary(latestCalculation) : null;
+  const goodsCost = useMemo(() => {
+    const amount = Number(unitPrice) * quantity;
+    return Number.isFinite(amount) ? amount.toFixed(2) : "0.00";
+  }, [quantity, unitPrice]);
+  const currentTransportTotal = useMemo(() => {
+    if (!isSerbia) return safeAmount(shippingCost);
+    try {
+      return sumCostAmounts([
+        safeAmount(chinaDomesticTransportCost),
+        safeAmount(internationalTransportCost),
+        safeAmount(insuranceCost),
+      ]);
+    } catch {
+      return "0.00";
+    }
+  }, [chinaDomesticTransportCost, insuranceCost, internationalTransportCost, isSerbia, shippingCost]);
   const euroDisplays = latestCalculation && profit ? {
     supplierPrice: getEuroDisplay(latestCalculation.unitPrice, currency),
+    goodsCost: getEuroDisplay(goodsCost, currency),
     landedCostPerUnit: getEuroDisplay(latestCalculation.landedCostPerUnit, currency),
     landedCostTotal: getEuroDisplay(latestCalculation.landedCostTotal, currency),
     expectedProfit: getEuroDisplay(profit.totalProfit, currency),
@@ -69,7 +106,14 @@ export function CostCalculatorForm({
     setPending(true);
     setError("");
     const form = new FormData(event.currentTarget);
-    const body = Object.fromEntries(form.entries());
+    const body: Record<string, FormDataEntryValue | boolean> = Object.fromEntries(form.entries());
+    body.transportConfirmed = !isSerbia || form.has("transportConfirmed");
+    body.customsDutyConfirmed = !isSerbia || form.has("customsDutyConfirmed");
+    body.vatSource = overrideVat
+      ? "MANUAL_OVERRIDE"
+      : isSerbia
+        ? "SERBIA_DEFAULT_20"
+        : "COUNTRY_DEFAULT";
     body.calculationStatus = form.get("needsReview") ? "NEEDS_REVIEW" : "CALCULATED";
     delete body.needsReview;
 
@@ -94,30 +138,75 @@ export function CostCalculatorForm({
 
   return (
     <div className="cost-panel" id={`offer-cost-${offerId}`} ref={panelRef}>
-      <h3>{t("Kalkulator ukupne nabavne cene")}</h3>
+      <h3>{isSerbia ? copy.title : t("Kalkulator ukupne nabavne cene")}</h3>
+      {isSerbia && <p className="muted-text">{copy.description}</p>}
       {editing && (
         <form className="cost-form" onSubmit={submit}>
+          {isSerbia && (
+            <div className="cost-form-wide empty-state">
+              <strong>{copy.assumptionTitle}</strong>
+              <p>{copy.assumptionText}</p>
+              <p className="warning-text">{copy.reviewWarning}</p>
+              <p><strong>{copy.goodsCost}:</strong> {goodsCost} {currency}</p>
+            </div>
+          )}
           <div className="cost-form-wide">
             <TransportCostAssistant
               currency={currency}
-              onApply={setShippingCost}
+              onApply={isSerbia ? setInternationalTransportCost : setShippingCost}
               productName={productName}
               quantity={quantity}
               sourceMetadata={sourceMetadata}
             />
           </div>
-          <label>Transport ({currency})<input min={0} name="shippingCost" onChange={(event) => setShippingCost(event.target.value)} required step="0.01" type="number" value={shippingCost} /></label>
-          <label>Carina (%)<input defaultValue={values.customsDutyRate} max={500} min={0} name="customsDutyRate" required step="0.0001" type="number" /></label>
-          <label>PDV (%)<input aria-describedby={`vat-help-${offerId}`} readOnly type="number" value={effectiveVatRate} /></label>
+          {isSerbia ? (
+            <>
+              <label>{copy.chinaDomesticTransport} ({currency})
+                <input min={0} name="chinaDomesticTransportCost" onChange={(event) => setChinaDomesticTransportCost(event.target.value)} required step="0.01" type="number" value={chinaDomesticTransportCost} />
+              </label>
+              <label>{copy.internationalTransport} ({currency})
+                <input min={0} name="internationalTransportCost" onChange={(event) => setInternationalTransportCost(event.target.value)} required step="0.01" type="number" value={internationalTransportCost} />
+              </label>
+              <label>{copy.insurance} ({currency})
+                <input min={0} name="insuranceCost" onChange={(event) => setInsuranceCost(event.target.value)} required step="0.01" type="number" value={insuranceCost} />
+              </label>
+              <p className="vat-helper"><strong>{copy.transportTotal}:</strong> {currentTransportTotal} {currency}</p>
+              <label className="checkbox-label cost-form-wide">
+                <input defaultChecked={values.transportConfirmed} name="transportConfirmed" type="checkbox" />
+                {copy.transportConfirmed}
+              </label>
+            </>
+          ) : (
+            <label>{copy.legacyTransport} ({currency})
+              <input min={0} name="shippingCost" onChange={(event) => setShippingCost(event.target.value)} required step="0.01" type="number" value={shippingCost} />
+            </label>
+          )}
+          <label>{copy.customsDuty} (%)
+            <input defaultValue={values.customsDutyRate} max={500} min={0} name="customsDutyRate" required step="0.0001" type="number" />
+          </label>
+          {isSerbia && (
+            <label className="checkbox-label cost-form-wide">
+              <input defaultChecked={values.customsDutyConfirmed} name="customsDutyConfirmed" type="checkbox" />
+              {copy.customsConfirmed}
+            </label>
+          )}
+          <label>{copy.vat} (%)<input aria-describedby={`vat-help-${offerId}`} readOnly type="number" value={effectiveVatRate} /></label>
           <input name="vatRate" type="hidden" value={effectiveVatRate} />
           <p className={automaticVatRate === null && !overrideVat ? "form-error vat-helper" : "vat-helper"} id={`vat-help-${offerId}`}>
             {automaticVatRate === null && !overrideVat
               ? t("PDV nije automatski podešen jer ciljna država nije podržana.")
               : overrideVat
                 ? t("PDV je ručno izmenjen.")
-                : t("PDV je automatski podešen prema ciljnoj državi.")}
+                : isSerbia
+                  ? copy.assumptionText
+                  : t("PDV je automatski podešen prema ciljnoj državi.")}
           </p>
-          <label>Prodajna cena ({currency})<input defaultValue={values.targetSellingPrice} min="0.01" name="targetSellingPrice" required step="0.01" type="number" /></label>
+          {isSerbia && (
+            <label>{copy.customsBroker} ({currency})
+              <input defaultValue={values.customsBrokerCost} min={0} name="customsBrokerCost" required step="0.01" type="number" />
+            </label>
+          )}
+          <label>{copy.sellingPrice} ({currency})<input defaultValue={values.targetSellingPrice} min="0.01" name="targetSellingPrice" required step="0.01" type="number" /></label>
           <details
             className="advanced-costs"
             open={previousVatIsOverride || values.needsReview || ["storageCost", "inspectionCost", "otherCosts"].some(
@@ -135,20 +224,36 @@ export function CostCalculatorForm({
                   <input max={100} min={0} onChange={(event) => setManualVatRate(event.target.value)} required step="0.0001" type="number" value={manualVatRate} />
                 </label>
               )}
-              <label>Inspekcija ({currency})<input defaultValue={values.inspectionCost} min={0} name="inspectionCost" required step="0.01" type="number" /></label>
-              <label>Skladištenje ({currency})<input defaultValue={values.storageCost} min={0} name="storageCost" required step="0.01" type="number" /></label>
-              <label>Ostalo ({currency})<input defaultValue={values.otherCosts} min={0} name="otherCosts" required step="0.01" type="number" /></label>
+              <label>{copy.inspection} ({currency})<input defaultValue={values.inspectionCost} min={0} name="inspectionCost" required step="0.01" type="number" /></label>
+              <label>{copy.storage} ({currency})<input defaultValue={values.storageCost} min={0} name="storageCost" required step="0.01" type="number" /></label>
+              <label>{copy.other} ({currency})<input defaultValue={values.otherCosts} min={0} name="otherCosts" required step="0.01" type="number" /></label>
               <label className="checkbox-label"><input defaultChecked={values.needsReview} name="needsReview" type="checkbox" /> Označi za proveru</label>
             </div>
           </details>
           {error && <p className="form-error" role="alert">{error}</p>}
-          <button disabled={pending} type="submit">{pending ? "Računanje..." : "Izračunaj i sačuvaj"}</button>
+          <button disabled={pending} type="submit">{pending ? copy.calculating : copy.calculate}</button>
         </form>
       )}
       {latestCalculation && (
         <div className="cost-results">
           <strong>{t("Poslednja kalkulacija")} · {getStatusLabel(latestCalculation.calculationStatus, locale)}</strong>
           <span>{t("Supplier price")}: {euroDisplays?.supplierPrice.original}{euroDisplays?.supplierPrice.converted ? ` (≈ ${euroDisplays.supplierPrice.eur})` : ""}</span>
+          <span>{copy.goodsCost}: {euroDisplays?.goodsCost.original}{euroDisplays?.goodsCost.converted ? ` (≈ ${euroDisplays.goodsCost.eur})` : ""}</span>
+          {isSerbia && latestCostAssumptions ? (
+            <>
+              <span>{copy.chinaDomesticTransport}: {latestCostAssumptions.chinaDomesticTransportCost} {currency}</span>
+              <span>{copy.internationalTransport}: {latestCostAssumptions.internationalTransportCost} {currency}</span>
+              <span>{copy.insurance}: {latestCostAssumptions.insuranceCost} {currency}</span>
+              <span>{copy.customsBroker}: {latestCostAssumptions.customsBrokerCost} {currency}</span>
+            </>
+          ) : (
+            <span>{copy.legacyTransport}: {latestCalculation.shippingCost.toString()} {currency}</span>
+          )}
+          <span>{copy.customsDuty}: {latestCalculation.customsDutyAmount.toString()} {currency} ({latestCalculation.customsDutyRate.toString()}%)</span>
+          <span>{copy.vat}: {latestCalculation.vatAmount.toString()} {currency} ({latestCalculation.vatRate.toString()}%)</span>
+          <span>{copy.inspection}: {latestCalculation.inspectionCost.toString()} {currency}</span>
+          <span>{copy.storage}: {latestCalculation.storageCost.toString()} {currency}</span>
+          <span>{copy.other}: {latestCostAssumptions?.otherCosts ?? latestCalculation.otherCosts.toString()} {currency}</span>
           <span>{t("Ukupna nabavna cena")}: {euroDisplays?.landedCostTotal.original}{euroDisplays?.landedCostTotal.converted ? ` (≈ ${euroDisplays.landedCostTotal.eur})` : ""}</span>
           <span>{t("Ukupna nabavna cena po jedinici")}: {euroDisplays?.landedCostPerUnit.original}{euroDisplays?.landedCostPerUnit.converted ? ` (≈ ${euroDisplays.landedCostPerUnit.eur})` : ""}</span>
           <span>{t("Bruto marža")}: {formatDisplayedPercent(latestCalculation.grossMarginPercent)}%</span>
