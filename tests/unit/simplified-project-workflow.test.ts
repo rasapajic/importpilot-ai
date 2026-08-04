@@ -13,6 +13,10 @@ const profitabilitySource = readFileSync(
   join(process.cwd(), "components/projects/simple-profitability-panel.tsx"),
   "utf8",
 );
+const profitabilityServiceSource = readFileSync(
+  join(process.cwd(), "modules/projects/application/profitability-check-service.ts"),
+  "utf8",
+);
 
 describe("simple client workflow", () => {
   it("uses only the three client-facing workflow steps", () => {
@@ -33,10 +37,13 @@ describe("simple client workflow", () => {
     expect(pageSource).not.toContain('title={t("Realna nabavna cena")}');
   });
 
-  it("uses one action to assess calculated offers and generate the decision", () => {
+  it("uses one reliable server action to assess calculated offers and generate the decision", () => {
     expect(profitabilitySource).toContain("Proveri isplativost");
-    expect(profitabilitySource).toContain("/assessments");
-    expect(profitabilitySource).toContain("/decisions");
+    expect(profitabilitySource).toContain('action={`/api/projects/${projectId}/profitability-check`}');
+    expect(profitabilitySource).toContain('method="post"');
+    expect(profitabilitySource).not.toContain("onClick={checkProfitability}");
+    expect(profitabilityServiceSource).toContain("assessSupplierOffer");
+    expect(profitabilityServiceSource).toContain("generateProjectDecision");
     expect(profitabilitySource).not.toContain("LUNA_COUNTRY_RANKING_V1");
     expect(profitabilitySource).not.toContain("countryProfileVersion");
   });
