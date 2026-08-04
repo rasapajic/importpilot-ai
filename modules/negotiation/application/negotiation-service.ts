@@ -69,6 +69,7 @@ export async function createNegotiationMessage(
   const requestTypes = deriveNegotiationRequests(
     checklist.map((item) => item.key),
     decision.status,
+    facts,
   );
   const draft = generateNegotiationMessage(tone, facts, requestTypes);
 
