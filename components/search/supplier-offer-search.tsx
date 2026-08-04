@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useI18n } from "@/components/i18n/i18n-provider";
 import { DeleteEmptySearchButton } from "@/components/projects/delete-empty-search-button";
 import { UrlImportReview } from "@/components/search/url-import-review";
+import { getLunaSearchCopy } from "@/components/search/luna-search-copy";
 import { hasSupplierSearchResultCards } from "@/components/search/search-result-display";
 import {
   isPartialLunaSearchResult,
@@ -37,7 +38,8 @@ export function SupplierOfferSearch({
   openUrlImport?: boolean;
   canDeleteSearch?: boolean;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const lunaCopy = getLunaSearchCopy(locale);
   const router = useRouter();
   const [query, setQuery] = useState(productName);
   const hasProjectValues = quantity !== null && Boolean(targetCountry);
@@ -144,7 +146,12 @@ export function SupplierOfferSearch({
         headers: { "content-type": "application/json" },
         body: JSON.stringify(result),
       });
-      const payload = (await response.json()) as { error?: string };
+      const payload = (await response.json()) as { error?: string; existingOfferId?: string };
+      if (response.status === 409 && payload.existingOfferId) {
+        setImported((current) => current.includes(index) ? current : [...current, index]);
+        router.refresh();
+        return;
+      }
       if (!response.ok) throw new Error(payload.error);
       setImported((current) => [...current, index]);
       router.refresh();
@@ -162,7 +169,7 @@ export function SupplierOfferSearch({
       <header className="section-header">
         <div>
           <h2>Luna Search</h2>
-          <p>{t("Luna priprema upite, pronalazi ponude i prosleđuje ih u postojeću računicu uvoza.")}</p>
+          <p>{lunaCopy.description}</p>
         </div>
         {providerStatus && (
           <span className={`provider-status provider-status-${providerStatus}`}>
@@ -196,10 +203,10 @@ export function SupplierOfferSearch({
         {t("Koristi vrednosti iz projekta")}
       </label>
       <details>
-        <summary>{t("Luna kriterijumi")}</summary>
+        <summary>{lunaCopy.criteria}</summary>
         <div className="supplier-search-form">
           <label>
-            {t("Maksimalna cena po komadu")}
+            {lunaCopy.maxUnitPrice}
             <input
               min="0.01"
               onChange={(event) => setMaxUnitPrice(event.target.value)}
@@ -209,7 +216,7 @@ export function SupplierOfferSearch({
             />
           </label>
           <label>
-            {t("Valuta")}
+            {lunaCopy.currency}
             <input
               maxLength={3}
               onChange={(event) => setMaxUnitPriceCurrency(event.target.value.toUpperCase())}
@@ -218,7 +225,7 @@ export function SupplierOfferSearch({
             />
           </label>
           <label>
-            {t("Maksimalni MOQ")}
+            {lunaCopy.maxMoq}
             <input
               min="1"
               onChange={(event) => setMaxMoq(event.target.value)}
@@ -244,7 +251,7 @@ export function SupplierOfferSearch({
             onChange={(event) => setAvoidComplexCompliance(event.target.checked)}
             type="checkbox"
           />
-          {t("Izbegavaj proizvode sa komplikovanom sertifikacijom")}
+          {lunaCopy.avoidComplexCompliance}
         </label>
         <label className="project-values-toggle">
           <input
@@ -252,7 +259,7 @@ export function SupplierOfferSearch({
             onChange={(event) => setPrivateLabel(event.target.checked)}
             type="checkbox"
           />
-          {t("Traži OEM / sopstveni brend")}
+          {lunaCopy.privateLabel}
         </label>
       </details>
       <form className="supplier-search-form" onSubmit={search}>
@@ -293,24 +300,24 @@ export function SupplierOfferSearch({
           />
         </label>
         <button className="primary-button" disabled={loading} type="submit">
-          {loading ? t("Luna pretražuje...") : t("Pokreni Luna Search")}
+          {loading ? lunaCopy.searching : lunaCopy.startSearch}
         </button>
       </form>
       {error && <p className="form-error" role="alert">{t(error)}</p>}
       {lunaPlan && (
         <div className="empty-state">
-          <h3>{t("Luna je pripremila upite")}</h3>
+          <h3>{lunaCopy.preparedQueries}</h3>
           <p><strong>Alibaba / Made-in-China:</strong> {lunaPlan.providerQuery}</p>
           <p>
             <strong>1688:</strong>{" "}
-            {lunaPlan.chinese1688Query ?? t("Kineski upit zahteva ručnu potvrdu.")}
+            {lunaPlan.chinese1688Query ?? lunaCopy.chineseConfirmationRequired}
           </p>
           {unfilteredResultCount !== null && results && unfilteredResultCount !== results.length && (
-            <p>{t("Luna kriterijumi su uklonili")}: {unfilteredResultCount - results.length}</p>
+            <p>{lunaCopy.filteredResultsPrefix}: {unfilteredResultCount - results.length}</p>
           )}
-          {fetchedAt && <p className="muted-text">{t("Preuzeto")}: {new Date(fetchedAt).toLocaleString()}</p>}
+          {fetchedAt && <p className="muted-text">{lunaCopy.fetchedAt}: {new Date(fetchedAt).toLocaleString(locale)}</p>}
           {lunaPlan.warnings.map((warning) => (
-            <p className="muted-text" key={warning}>{t(warning)}</p>
+            <p className="muted-text" key={warning}>{lunaCopy.warnings[warning]}</p>
           ))}
         </div>
       )}
