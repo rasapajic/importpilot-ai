@@ -122,6 +122,20 @@ export function createLunaSearchPlan(input: ProjectSupplierSearchRequest): LunaS
         input.privateLabel ? "OEM 贴牌" : null,
       ].filter(Boolean).join(" ")
     : null;
+  const warnings: string[] = [];
+
+  if (!chinese1688Query) {
+    warnings.push("Kineski upit još nije potvrđen. Koristite originalni upit ili ručno unesite kineski izraz.");
+  }
+  if (input.avoidComplexCompliance) {
+    warnings.push("Sertifikacioni rizik je zabeležen kao uslov, ali u ovom MVP rezu još nije automatski verifikovan.");
+  }
+  if (input.maxUnitPrice !== undefined) {
+    warnings.push("Maksimalna cena se automatski filtrira samo kada je valuta rezultata ista kao zadata valuta.");
+  }
+  if (input.targetMarginPercent !== undefined) {
+    warnings.push("Ciljna marža se potvrđuje tek nakon obračuna ukupne nabavne cene.");
+  }
 
   return {
     mode: "DETERMINISTIC_MVP",
@@ -140,9 +154,7 @@ export function createLunaSearchPlan(input: ProjectSupplierSearchRequest): LunaS
       avoidComplexCompliance: input.avoidComplexCompliance ?? false,
       privateLabel: input.privateLabel ?? false,
     },
-    warnings: chinese1688Query
-      ? []
-      : ["Kineski upit još nije potvrđen. Koristite originalni upit ili ručno unesite kineski izraz."],
+    warnings,
   };
 }
 
