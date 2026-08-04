@@ -12,14 +12,14 @@ import { useI18n } from "@/components/i18n/i18n-provider";
 import { formatDisplayedPercent } from "@/modules/cost-engine/application/calculation-summary";
 import type { LandedCostAssumptions } from "@/modules/cost-engine/domain/serbia-landed-cost";
 import { getClientDecisionSummary } from "@/modules/decisions/application/client-decision-summary";
-import { isFinalDecisionStatus } from "@/modules/decisions/application/decision-step-summary";
+import {
+  getDecisionStepTitle,
+  isFinalDecisionStatus,
+} from "@/modules/decisions/application/decision-step-summary";
 import { getSimplifiedNextActions } from "@/modules/decisions/application/simplified-next-actions";
 import type { ProjectDecisionResult } from "@/modules/decisions/domain/project-decision";
 import { getEuroDisplay } from "@/modules/fx/euro-display";
-import {
-  getStatusLabel,
-  type Locale,
-} from "@/modules/i18n/translations";
+import type { Locale } from "@/modules/i18n/translations";
 
 type DecisionView = ProjectDecisionResult & { id: string; createdAt: Date };
 
@@ -172,7 +172,7 @@ function actionHref(projectId: string, label: string) {
   if (["Predloži poruku", "Traži bolju cenu", "Traži manji MOQ"].includes(label)) {
     return "#negotiation-assistant";
   }
-  if (label === "Pronađi nove ponude") return "#workflow-step-offer";
+  if (label === "Pronađi bolje ponude") return "#workflow-step-offer";
   if (label === "Ubaci drugi link") return `/projects/${projectId}?importUrl=1#workflow-step-offer`;
   if (label === "Izvezi PDF") return `/projects/${projectId}/summary`;
   return "#documents";
@@ -264,7 +264,9 @@ export function SimpleProfitabilityPanel({
       <header className="section-header">
         <div>
           <p className="eyebrow">{text.eyebrow}</p>
-          <h2>{hasFinalDecision && decision ? getStatusLabel(decision.status, locale) : text.question}</h2>
+          <h2>{hasFinalDecision && decision
+            ? getDecisionStepTitle(decision.status, locale)
+            : text.question}</h2>
         </div>
         <form action={`/api/projects/${projectId}/profitability-check`} method="post">
           <button disabled={calculatedOffers.length === 0} type="submit">
