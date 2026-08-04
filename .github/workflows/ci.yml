@@ -6,6 +6,7 @@ on:
     branches:
       - main
       - feature/luna-search-mvp
+      - feature/serbia-landed-cost-mvp
 
 jobs:
   validate:
