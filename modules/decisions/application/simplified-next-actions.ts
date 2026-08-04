@@ -8,7 +8,8 @@ export function getSimplifiedNextActions(status: ProjectDecisionStatusValue) {
     return ["Predloži poruku", "Traži bolju cenu", "Traži manji MOQ", "Izvezi PDF"];
   }
   if (status === "DO_NOT_BUY") {
-    return ["Pronađi nove ponude", "Ubaci drugi link", "Sačuvaj razlog"];
+    // The recovery panel provides the single actionable CTA with a calculated price cap.
+    return [];
   }
   return ["Generiši odluku"];
 }
