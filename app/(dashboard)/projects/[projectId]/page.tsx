@@ -15,6 +15,7 @@ import { ProjectTimeline } from "@/components/timeline/project-timeline";
 import { requireSession } from "@/modules/auth/infrastructure/session";
 import {
   getDecisionStepSummary,
+  getDecisionStepTitle,
   isFinalDecisionStatus,
 } from "@/modules/decisions/application/decision-step-summary";
 import { getLatestProjectDecision } from "@/modules/decisions/application/project-decision-service";
@@ -30,6 +31,11 @@ import {
   type ProjectWorkflowStepId,
   type ProjectWorkflowStepStatus,
 } from "@/modules/projects/domain/project-workflow";
+import {
+  getDecisionStepBadge,
+  getOfferStepDisplay,
+  getProductStepDisplay,
+} from "@/modules/projects/domain/workflow-step-display";
 import { listProjectActivities } from "@/modules/timeline/application/timeline-service";
 
 export default async function ProjectPage({
@@ -112,12 +118,11 @@ export default async function ProjectPage({
   });
   const targetCountryName = getCountryDisplayName(project.targetCountry, locale);
   const lockedText = t("Završite prethodni korak da biste nastavili.");
-  const statusLabel = (status: ProjectWorkflowStepStatus, activeLabel: string) =>
-    status === "COMPLETED"
-      ? t("Završeno")
-      : status === "ACTIVE"
-        ? t(activeLabel)
-        : t("Zaključano");
+  const productStepDisplay = getProductStepDisplay(stepStatus.PRODUCT, locale);
+  const offerStepDisplay = getOfferStepDisplay(stepStatus.OFFER, locale);
+  const decisionStepTitle = getDecisionStepTitle(decision?.status, locale);
+  const decisionStepSummary = getDecisionStepSummary(decision?.status, locale);
+  const decisionStepBadge = getDecisionStepBadge(decisionAreaStatus, locale);
 
   return (
     <main className="dashboard-shell">
@@ -134,7 +139,7 @@ export default async function ProjectPage({
       <div className="project-workflow">
         <ProjectWorkflowStep
           number={1}
-          title={t("Šta želite da kupite?")}
+          title={productStepDisplay.title}
           status={stepStatus.PRODUCT}
           summary={(
             <span className="workflow-product-summary">
@@ -143,7 +148,7 @@ export default async function ProjectPage({
               <span>🎯 {t("Marža")} {project.targetMargin.toString()}%</span>
             </span>
           )}
-          statusLabel={statusLabel(stepStatus.PRODUCT, "Dovršite korak")}
+          statusLabel={productStepDisplay.badge}
           lockedText={lockedText}
         >
           <section className="dashboard-card project-summary">
@@ -158,10 +163,10 @@ export default async function ProjectPage({
           forceOpen={resolvedSearchParams.importUrl === "1"}
           id="workflow-step-offer"
           number={2}
-          title={t("Ponude dobavljača")}
+          title={offerStepDisplay.title}
           status={stepStatus.OFFER}
           summary={offerCount === 0 ? t("Još nema ponuda.") : `${offerCount} ${t("ponuda")}`}
-          statusLabel={statusLabel(stepStatus.OFFER, "Dodaj ponudu")}
+          statusLabel={offerStepDisplay.badge}
           lockedText={lockedText}
         >
           <SupplierOfferSearch
@@ -192,10 +197,10 @@ export default async function ProjectPage({
           forceOpen={Boolean(selectedCalculationOfferId)}
           id="workflow-step-decision"
           number={3}
-          title={t("Da li se isplati?")}
+          title={decisionStepTitle}
           status={decisionAreaStatus}
-          summary={getDecisionStepSummary(decision?.status, locale)}
-          statusLabel={statusLabel(decisionAreaStatus, "Proveri isplativost")}
+          summary={decisionStepSummary}
+          statusLabel={decisionStepBadge}
           lockedText={lockedText}
           helperText={t("Pogledajte realnu nabavnu cenu, rizik dobavljača i očekivanu zaradu.")}
         >
