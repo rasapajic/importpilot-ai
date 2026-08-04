@@ -6,6 +6,7 @@ import { OffersPanel } from "@/components/offers/offers-panel";
 import { DeleteEmptySearchButton } from "@/components/projects/delete-empty-search-button";
 import { DirectUploadForm } from "@/components/projects/direct-upload-form";
 import { MobileWorkflowActionBar } from "@/components/projects/mobile-workflow-action-bar";
+import { ProductImageCard } from "@/components/projects/product-image-card";
 import { ProfitabilityRecoveryPanel } from "@/components/projects/profitability-recovery-panel";
 import { ProjectBackLink } from "@/components/projects/project-back-link";
 import { ProjectWorkflowStep } from "@/components/projects/project-workflow-step";
@@ -31,6 +32,10 @@ import {
   type ProjectWorkflowStepId,
   type ProjectWorkflowStepStatus,
 } from "@/modules/projects/domain/project-workflow";
+import {
+  excludeMainProjectImages,
+  selectMainProjectImage,
+} from "@/modules/projects/domain/product-image";
 import {
   getDecisionStepBadge,
   getOfferStepDisplay,
@@ -123,6 +128,8 @@ export default async function ProjectPage({
   const decisionStepTitle = getDecisionStepTitle(decision?.status, locale);
   const decisionStepSummary = getDecisionStepSummary(decision?.status, locale);
   const decisionStepBadge = getDecisionStepBadge(decisionAreaStatus, locale);
+  const mainProductImage = selectMainProjectImage(project.files);
+  const vaultDocuments = excludeMainProjectImages(project.files);
 
   return (
     <main className="dashboard-shell">
@@ -156,6 +163,18 @@ export default async function ProjectPage({
             <p>{t("Ciljna zemlja")}: <strong>{targetCountryName}</strong></p>
             <p>{t("Količina")}: <strong>{project.quantity}</strong></p>
             <p>{t("Ciljna marža")}: <strong>{project.targetMargin.toString()}%</strong></p>
+            <ProductImageCard
+              projectId={project.id}
+              productName={projectDisplayName}
+              image={mainProductImage
+                ? {
+                    id: mainProductImage.id,
+                    originalFilename: mainProductImage.originalFilename,
+                    mimeType: mainProductImage.mimeType,
+                    size: String(mainProductImage.size),
+                  }
+                : null}
+            />
           </section>
         </ProjectWorkflowStep>
 
@@ -234,7 +253,7 @@ export default async function ProjectPage({
         <details className="dashboard-card secondary-project-section" id="documents">
           <summary>
             <strong>{t("Uvozni dokumenti")}</strong>
-            <span>{project.files.length}</span>
+            <span>{vaultDocuments.length}</span>
           </summary>
           <p>{t("Ponude, proforme, transportne ponude i slike proizvoda na jednom mestu.")}</p>
           <DirectUploadForm
@@ -243,10 +262,10 @@ export default async function ProjectPage({
               id: offer.id,
               supplierName: offer.supplierName,
             }))}
-            documents={project.files.map((file) => ({
+            documents={vaultDocuments.map((file) => ({
               id: file.id,
               originalFilename: file.originalFilename,
-              size: file.size.toString(),
+              size: String(file.size),
               documentType: file.documentType,
               linkedOffer: file.linkedOffer,
             }))}
