@@ -72,8 +72,12 @@ export function createFallbackSupplierSearchSource(
           logger("provider_attempt", {
             provider_name: source.name,
             parsed_results: outcome.results.length,
-            relevant_results: relevantResults.length,
             fallback_used: index > 0,
+          });
+          logger("provider_relevance_filter", {
+            provider_name: source.name,
+            parsed_results: outcome.results.length,
+            relevant_results: relevantResults.length,
           });
           if (relevantResults.length > 0) {
             logger("provider_final_result", {
@@ -87,8 +91,12 @@ export function createFallbackSupplierSearchSource(
           logger("provider_attempt", {
             provider_name: source.name,
             parsed_results: 0,
-            relevant_results: 0,
             fallback_used: index > 0,
+          });
+          logger("provider_relevance_filter", {
+            provider_name: source.name,
+            parsed_results: 0,
+            relevant_results: 0,
           });
         }
       }
