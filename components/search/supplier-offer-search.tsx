@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { useI18n } from "@/components/i18n/i18n-provider";
 import { DeleteEmptySearchButton } from "@/components/projects/delete-empty-search-button";
+import { getRecoverySearchCopy } from "@/components/search/recovery-search-copy";
 import { UrlImportReview } from "@/components/search/url-import-review";
 import { getLunaSearchCopy } from "@/components/search/luna-search-copy";
 import { hasSupplierSearchResultCards } from "@/components/search/search-result-display";
@@ -12,10 +13,20 @@ import {
   isPartialLunaSearchResult,
   type LunaSearchPlan,
 } from "@/modules/product-search/domain/luna-search-plan";
+import {
+  readRecoverySearchCriteria,
+  RECOVERY_SEARCH_EVENT,
+  type RecoverySearchCriteria,
+} from "@/modules/product-search/domain/recovery-search";
 import type { SupplierOfferSearchResult } from "@/modules/product-search/domain/search";
 
 type ProviderStatus = "connected" | "not_configured" | "error";
 type ResultOrigin = "live" | "cache";
+type SearchOverrides = {
+  maxUnitPrice?: string;
+  maxUnitPriceCurrency?: string;
+  strictPriceLimit?: boolean;
+};
 
 function optionalNumber(value: string) {
   if (!value.trim()) return undefined;
@@ -40,6 +51,7 @@ export function SupplierOfferSearch({
 }) {
   const { t, locale } = useI18n();
   const lunaCopy = getLunaSearchCopy(locale);
+  const recoveryCopy = getRecoverySearchCopy(locale);
   const router = useRouter();
   const [query, setQuery] = useState(productName);
   const hasProjectValues = quantity !== null && Boolean(targetCountry);
@@ -48,6 +60,8 @@ export function SupplierOfferSearch({
   const [searchCountry, setSearchCountry] = useState(targetCountry ?? "");
   const [maxUnitPrice, setMaxUnitPrice] = useState("");
   const [maxUnitPriceCurrency, setMaxUnitPriceCurrency] = useState("EUR");
+  const [strictPriceLimit, setStrictPriceLimit] = useState(false);
+  const [recoveryCriteria, setRecoveryCriteria] = useState<RecoverySearchCriteria | null>(null);
   const [maxMoq, setMaxMoq] = useState("");
   const [targetMarginPercent, setTargetMarginPercent] = useState("");
   const [avoidComplexCompliance, setAvoidComplexCompliance] = useState(true);
@@ -65,12 +79,23 @@ export function SupplierOfferSearch({
   const [fetchedAt, setFetchedAt] = useState<string | null>(null);
   const [unfilteredResultCount, setUnfilteredResultCount] = useState<number | null>(null);
   const automaticSearchStarted = useRef(false);
+  const criteriaDetailsRef = useRef<HTMLDetailsElement>(null);
 
-  async function runSearch() {
+  const clearRecoveryMode = useCallback(() => {
+    setStrictPriceLimit(false);
+    setRecoveryCriteria(null);
+  }, []);
+
+  const runSearch = useCallback(async (overrides: SearchOverrides = {}) => {
     setLoading(true);
     setError("");
     try {
-      const parsedMaxUnitPrice = optionalNumber(maxUnitPrice);
+      const effectiveMaxUnitPrice = overrides.maxUnitPrice ?? maxUnitPrice;
+      const effectiveMaxUnitPriceCurrency =
+        overrides.maxUnitPriceCurrency ?? maxUnitPriceCurrency;
+      const effectiveStrictPriceLimit =
+        overrides.strictPriceLimit ?? strictPriceLimit;
+      const parsedMaxUnitPrice = optionalNumber(effectiveMaxUnitPrice);
       const response = await fetch(`/api/projects/${projectId}/supplier-search`, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -81,7 +106,8 @@ export function SupplierOfferSearch({
           maxUnitPrice: parsedMaxUnitPrice,
           maxUnitPriceCurrency: parsedMaxUnitPrice === undefined
             ? undefined
-            : maxUnitPriceCurrency.toUpperCase(),
+            : effectiveMaxUnitPriceCurrency.toUpperCase(),
+          strictPriceLimit: parsedMaxUnitPrice !== undefined && effectiveStrictPriceLimit,
           maxMoq: optionalNumber(maxMoq),
           targetMarginPercent: optionalNumber(targetMarginPercent),
           avoidComplexCompliance,
@@ -117,7 +143,20 @@ export function SupplierOfferSearch({
     } finally {
       setLoading(false);
     }
-  }
+  }, [
+    avoidComplexCompliance,
+    maxMoq,
+    maxUnitPrice,
+    maxUnitPriceCurrency,
+    privateLabel,
+    projectId,
+    query,
+    searchCountry,
+    searchQuantity,
+    strictPriceLimit,
+    t,
+    targetMarginPercent,
+  ]);
 
   function search(event: React.FormEvent) {
     event.preventDefault();
@@ -133,9 +172,30 @@ export function SupplierOfferSearch({
     ) return;
     automaticSearchStarted.current = true;
     void runSearch();
-    // Search once from the initial project values; later changes remain user-controlled.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [query, runSearch, searchCountry, searchQuantity]);
+
+  useEffect(() => {
+    function handleRecoverySearch(event: Event) {
+      const criteria = readRecoverySearchCriteria(
+        (event as CustomEvent<unknown>).detail,
+      );
+      if (!criteria) return;
+
+      setMaxUnitPrice(criteria.maxUnitPrice);
+      setMaxUnitPriceCurrency(criteria.currency);
+      setStrictPriceLimit(true);
+      setRecoveryCriteria(criteria);
+      if (criteriaDetailsRef.current) criteriaDetailsRef.current.open = true;
+      void runSearch({
+        maxUnitPrice: criteria.maxUnitPrice,
+        maxUnitPriceCurrency: criteria.currency,
+        strictPriceLimit: true,
+      });
+    }
+
+    window.addEventListener(RECOVERY_SEARCH_EVENT, handleRecoverySearch);
+    return () => window.removeEventListener(RECOVERY_SEARCH_EVENT, handleRecoverySearch);
+  }, [runSearch]);
 
   async function addResult(result: SupplierOfferSearchResult, index: number) {
     setImporting(index);
@@ -164,6 +224,13 @@ export function SupplierOfferSearch({
     }
   }
 
+  const strictFilterRemovedAll = Boolean(
+    recoveryCriteria &&
+    results?.length === 0 &&
+    unfilteredResultCount !== null &&
+    unfilteredResultCount > 0,
+  );
+
   return (
     <section className="dashboard-card supplier-search">
       <header className="section-header">
@@ -186,6 +253,14 @@ export function SupplierOfferSearch({
       <p className="muted-text">
         {t("Količina i ciljna zemlja mogu se preuzeti iz projekta ili uneti ručno radi poređenja.")}
       </p>
+      {recoveryCriteria && (
+        <div className="empty-state" role="status">
+          <strong>{recoveryCopy.activeLimit(
+            recoveryCriteria.maxUnitPrice,
+            recoveryCriteria.currency,
+          )}</strong>
+        </div>
+      )}
       <label className="project-values-toggle">
         <input
           checked={useProjectValues}
@@ -202,14 +277,17 @@ export function SupplierOfferSearch({
         />
         {t("Koristi vrednosti iz projekta")}
       </label>
-      <details>
+      <details ref={criteriaDetailsRef}>
         <summary>{lunaCopy.criteria}</summary>
         <div className="supplier-search-form">
           <label>
             {lunaCopy.maxUnitPrice}
             <input
               min="0.01"
-              onChange={(event) => setMaxUnitPrice(event.target.value)}
+              onChange={(event) => {
+                setMaxUnitPrice(event.target.value);
+                clearRecoveryMode();
+              }}
               step="0.01"
               type="number"
               value={maxUnitPrice}
@@ -219,7 +297,10 @@ export function SupplierOfferSearch({
             {lunaCopy.currency}
             <input
               maxLength={3}
-              onChange={(event) => setMaxUnitPriceCurrency(event.target.value.toUpperCase())}
+              onChange={(event) => {
+                setMaxUnitPriceCurrency(event.target.value.toUpperCase());
+                clearRecoveryMode();
+              }}
               pattern="[A-Za-z]{3}"
               value={maxUnitPriceCurrency}
             />
@@ -266,7 +347,10 @@ export function SupplierOfferSearch({
         <label>
           {t("Proizvod")}
           <input
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              clearRecoveryMode();
+            }}
             placeholder={t("Unesite naziv proizvoda")}
             required
             minLength={2}
@@ -280,6 +364,7 @@ export function SupplierOfferSearch({
             onChange={(event) => {
               setSearchQuantity(event.target.value);
               setUseProjectValues(false);
+              clearRecoveryMode();
             }}
             required
             type="number"
@@ -293,6 +378,7 @@ export function SupplierOfferSearch({
             onChange={(event) => {
               setSearchCountry(event.target.value.toUpperCase());
               setUseProjectValues(false);
+              clearRecoveryMode();
             }}
             pattern="[A-Za-z]{2}"
             required
@@ -324,8 +410,19 @@ export function SupplierOfferSearch({
       {results === null && <p className="muted-text">{t("Unesite proizvod da biste pronašli ponude.")}</p>}
       {results?.length === 0 && (
         <div className="empty-state">
-          <h3>{t("Automatska pretraga trenutno nije dostupna.")}</h3>
-          <p>{t("Koristite „Uvezi iz linka” ili „Ručno dodaj ponudu”.")}</p>
+          <h3>
+            {strictFilterRemovedAll && recoveryCriteria
+              ? recoveryCopy.noMatchesTitle
+              : t("Automatska pretraga trenutno nije dostupna.")}
+          </h3>
+          <p>
+            {strictFilterRemovedAll && recoveryCriteria
+              ? recoveryCopy.noMatchesDescription(
+                  recoveryCriteria.maxUnitPrice,
+                  recoveryCriteria.currency,
+                )
+              : t("Koristite „Uvezi iz linka” ili „Ručno dodaj ponudu”.")}
+          </p>
           <div className="provider-error-actions">
             <button className="secondary-button" disabled={loading} onClick={() => void runSearch()} type="button">
               {t("Pokušaj ponovo")}
