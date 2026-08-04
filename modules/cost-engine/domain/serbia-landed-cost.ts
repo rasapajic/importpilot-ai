@@ -4,7 +4,7 @@ import {
   getImportCountryProfile,
   PRIMARY_IMPORT_COUNTRY_CODES,
   type PrimaryImportCountryCode,
-} from "@/modules/cost-engine/domain/import-country-profiles";
+} from "./import-country-profiles";
 
 export const LANDED_COST_ASSUMPTIONS_VERSION = "LANDED_COST_ASSUMPTIONS_V2" as const;
 // Compatibility export for code written during the Serbia-only prototype.
