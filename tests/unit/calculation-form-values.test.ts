@@ -2,6 +2,7 @@ import { CalculationStatus, Prisma } from "@prisma/client";
 import { describe, expect, it } from "vitest";
 
 import { getCalculationFormValues } from "../../modules/cost-engine/application/calculation-form-values";
+import { SERBIA_LANDED_COST_VERSION } from "../../modules/cost-engine/domain/serbia-landed-cost";
 import { translateBusinessText } from "../../modules/i18n/translations";
 
 describe("calculation edit values", () => {
@@ -19,13 +20,55 @@ describe("calculation edit values", () => {
 
     expect(getCalculationFormValues(calculation as never)).toEqual({
       shippingCost: "120.5",
+      chinaDomesticTransportCost: "0.00",
+      internationalTransportCost: "120.5",
+      insuranceCost: "0.00",
+      customsBrokerCost: "0.00",
       customsDutyRate: "8.25",
       vatRate: "20",
+      vatSource: "COUNTRY_DEFAULT",
       storageCost: "30",
       inspectionCost: "15",
       otherCosts: "5",
       targetSellingPrice: "25",
+      transportConfirmed: false,
+      customsDutyConfirmed: false,
       needsReview: true,
+    });
+  });
+
+  it("restores the original Serbia transport and clearance breakdown", () => {
+    const calculation = {
+      shippingCost: new Prisma.Decimal("160"),
+      customsDutyRate: new Prisma.Decimal("5"),
+      vatRate: new Prisma.Decimal("20"),
+      storageCost: new Prisma.Decimal("30"),
+      inspectionCost: new Prisma.Decimal("20"),
+      otherCosts: new Prisma.Decimal("50"),
+      targetSellingPrice: new Prisma.Decimal("25"),
+      calculationStatus: CalculationStatus.CALCULATED,
+    };
+    const assumptions = {
+      version: SERBIA_LANDED_COST_VERSION,
+      chinaDomesticTransportCost: "50.00",
+      internationalTransportCost: "100.00",
+      insuranceCost: "10.00",
+      customsBrokerCost: "40.00",
+      otherCosts: "10.00",
+      transportConfirmed: true,
+      customsDutyConfirmed: true,
+      vatSource: "SERBIA_DEFAULT_20" as const,
+    };
+
+    expect(getCalculationFormValues(calculation as never, assumptions)).toMatchObject({
+      chinaDomesticTransportCost: "50.00",
+      internationalTransportCost: "100.00",
+      insuranceCost: "10.00",
+      customsBrokerCost: "40.00",
+      otherCosts: "10.00",
+      transportConfirmed: true,
+      customsDutyConfirmed: true,
+      vatSource: "SERBIA_DEFAULT_20",
     });
   });
 
