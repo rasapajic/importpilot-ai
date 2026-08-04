@@ -22,25 +22,17 @@ export function getMobileWorkflowActions(input: MobileWorkflowActionInput): Mobi
     return [{ href: "#workflow-step-decision", label: "Izračunaj", variant: "PRIMARY" }];
   }
 
-  if (input.assessedOfferCount < input.offerCount) {
-    return [{ href: "#workflow-step-decision", label: "Oceni", variant: "PRIMARY" }];
-  }
-
   if (!input.hasFinalRecommendation) {
-    return [{ href: "#workflow-step-decision", label: "Generiši preporuku", variant: "PRIMARY" }];
+    return [{ href: "#workflow-step-decision", label: "Proveri isplativost", variant: "PRIMARY" }];
   }
 
-  return [
-    { href: `/projects/${input.projectId}/summary`, label: "PDF", variant: "PRIMARY" },
-    {
-      href: input.decisionStatus === "NEGOTIATE_FIRST" ? "#negotiation-assistant" : "#workflow-step-next",
-      label: "Kontakt",
-      variant: "SECONDARY",
-    },
-    {
-      href: `/projects/${input.projectId}?newAnalysis=1#workflow-step-decision`,
-      label: "Nova analiza",
-      variant: "SECONDARY",
-    },
-  ];
+  if (input.decisionStatus === "NEGOTIATE_FIRST") {
+    return [{ href: "#negotiation-assistant", label: "Pregovaraj", variant: "PRIMARY" }];
+  }
+
+  if (input.decisionStatus === "DO_NOT_BUY") {
+    return [{ href: "#workflow-step-offer", label: "Pronađi nove ponude", variant: "PRIMARY" }];
+  }
+
+  return [{ href: "#documents", label: "Krenite u kupovinu", variant: "PRIMARY" }];
 }

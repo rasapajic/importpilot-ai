@@ -37,6 +37,7 @@ export function CostCalculatorForm({
   latestCalculation,
   latestCostAssumptions,
   editInitially = false,
+  showResults = true,
 }: {
   offerId: string;
   unitPrice: string;
@@ -48,6 +49,7 @@ export function CostCalculatorForm({
   latestCalculation?: CostCalculation;
   latestCostAssumptions?: LandedCostAssumptions | null;
   editInitially?: boolean;
+  showResults?: boolean;
 }) {
   const { locale, t } = useI18n();
   const router = useRouter();
@@ -150,7 +152,6 @@ export function CostCalculatorForm({
               <p>{copy.assumptionText}</p>
               <p className="warning-text">{copy.reviewWarning}</p>
               <p><strong>{copy.goodsCost}:</strong> {goodsCost} {currency}</p>
-              <p><strong>Country profile:</strong> {profile.countryCode} · {profile.version}</p>
             </div>
           )}
           <div className="cost-form-wide">
@@ -237,14 +238,13 @@ export function CostCalculatorForm({
           <button disabled={pending} type="submit">{pending ? copy.calculating : copy.calculate}</button>
         </form>
       )}
-      {latestCalculation && (
+      {showResults && latestCalculation && (
         <div className="cost-results">
           <strong>{t("Poslednja kalkulacija")} · {getStatusLabel(latestCalculation.calculationStatus, locale)}</strong>
           <span>{t("Supplier price")}: {euroDisplays?.supplierPrice.original}{euroDisplays?.supplierPrice.converted ? ` (≈ ${euroDisplays.supplierPrice.eur})` : ""}</span>
           <span>{copy.goodsCost}: {euroDisplays?.goodsCost.original}{euroDisplays?.goodsCost.converted ? ` (≈ ${euroDisplays.goodsCost.eur})` : ""}</span>
           {isPrimaryCountry && latestCostAssumptions ? (
             <>
-              <span>Country profile: {latestCostAssumptions.countryCode} · {latestCostAssumptions.countryProfileVersion}</span>
               <span>{copy.chinaDomesticTransport}: {latestCostAssumptions.chinaDomesticTransportCost} {currency}</span>
               <span>{copy.internationalTransport}: {latestCostAssumptions.internationalTransportCost} {currency}</span>
               <span>{copy.insurance}: {latestCostAssumptions.insuranceCost} {currency}</span>
@@ -264,7 +264,7 @@ export function CostCalculatorForm({
           <span>{t("Zarada po komadu")} ({currency}): {profit?.profitPerUnit}</span>
           <span>{t("Ukupna očekivana zarada")}: {euroDisplays?.expectedProfit.original}{euroDisplays?.expectedProfit.converted ? ` (≈ ${euroDisplays.expectedProfit.eur})` : ""}</span>
           <span>{t("Cena pokrića troškova")}: {latestCalculation.breakEvenPrice.toString()} {currency}</span>
-          <FxSourceNote />
+          {currency !== "EUR" && <FxSourceNote />}
           {!editing && (
             <button
               className="secondary-button"

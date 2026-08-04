@@ -9,43 +9,60 @@ const pageSource = readFileSync(
   join(process.cwd(), "app/(dashboard)/projects/[projectId]/page.tsx"),
   "utf8",
 );
+const profitabilitySource = readFileSync(
+  join(process.cwd(), "components/projects/simple-profitability-panel.tsx"),
+  "utf8",
+);
 
-describe("simplified project workflow", () => {
-  it("uses the simplified user-facing section labels", () => {
+describe("simple client workflow", () => {
+  it("uses only the three client-facing workflow steps", () => {
     expect(pageSource).toContain("Šta želite da kupite?");
     expect(pageSource).toContain("Ponude dobavljača");
     expect(pageSource).toContain("Da li se isplati?");
-    expect(pageSource).toContain("Sledeći korak");
-    expect(pageSource).not.toContain('title={t("Izračunajte ukupnu nabavnu cenu")}');
-    expect(pageSource).not.toContain('title={t("Analizirajte ponudu")}');
-    expect(pageSource).not.toContain('title={t("Donesite odluku")}');
+    expect(pageSource).toContain("SimpleProfitabilityPanel");
+    expect(pageSource).not.toContain('id="workflow-step-next"');
+    expect(pageSource).not.toContain('title={t("Sledeći korak")}');
   });
 
-  it("keeps advanced decision details collapsed by default", () => {
-    expect(pageSource).toContain("advanced-decision-details");
-    expect(pageSource).toContain("open={advancedDetailsOpen}");
-    expect(pageSource).toContain("Prikaži detalje");
+  it("removes duplicated technical and analysis panels from the main flow", () => {
+    expect(pageSource).not.toContain("ProjectDecisionPanel");
+    expect(pageSource).not.toContain("ComparisonView");
+    expect(pageSource).not.toContain("ProjectFeedbackPanel");
+    expect(pageSource).not.toContain("advanced-decision-details");
+    expect(pageSource).not.toContain('title={t("Detaljna analiza")}');
+    expect(pageSource).not.toContain('title={t("Realna nabavna cena")}');
   });
 
-  it("adds the mobile workflow action bar without changing workflow sections", () => {
-    expect(pageSource).toContain("MobileWorkflowActionBar");
-    expect(pageSource).toContain("getMobileWorkflowActions");
-    expect(pageSource).toContain('id="workflow-step-next"');
+  it("uses one action to assess calculated offers and generate the decision", () => {
+    expect(profitabilitySource).toContain("Proveri isplativost");
+    expect(profitabilitySource).toContain("/assessments");
+    expect(profitabilitySource).toContain("/decisions");
+    expect(profitabilitySource).not.toContain("LUNA_COUNTRY_RANKING_V1");
+    expect(profitabilitySource).not.toContain("countryProfileVersion");
+  });
+
+  it("keeps the cost breakdown optional and secondary", () => {
+    expect(profitabilitySource).toContain("Kako je izračunato?");
+    expect(profitabilitySource).toContain('<details className="advanced-costs">');
+    expect(profitabilitySource).toContain("Promeni troškove");
   });
 
   it("keeps profitability active until a final recommendation exists", () => {
     expect(pageSource).toContain("const hasFinalRecommendation = isFinalDecisionStatus(decision?.status)");
     expect(pageSource).toContain('hasFinalRecommendation\n      ? "COMPLETED"\n      : "ACTIVE"');
-    expect(pageSource).toContain('summary={hasFinalRecommendation ? getDecisionStepSummary(decision?.status, locale) : t("Nakon preporuke")}');
+    expect(pageSource).toContain("summary={getDecisionStepSummary(decision?.status, locale)}");
   });
 
-  it("localizes simplified labels in EN/DE/SR", () => {
-    expect(translateText("Da li se isplati?", "en")).toBe("Does it pay off?");
-    expect(translateText("Da li se isplati?", "de")).toBe("Lohnt es sich?");
-    expect(translateText("Šta želite da kupite?", "sr")).toBe("Šta želite da kupite?");
-    expect(translateText("Realna nabavna cena", "en")).toBe("Real purchase price");
-    expect(translateText("Sledeći korak", "de")).toBe("Nächster Schritt");
-    expect(translateText("Traži bolju cenu", "en")).toBe("Ask for a better price");
-    expect(translateText("Ubaci drugi link", "de")).toBe("Anderen Link einfügen");
+  it("keeps documents and history as secondary information", () => {
+    expect(pageSource).toContain("Dodatne informacije");
+    expect(pageSource).toContain("Uvozni dokumenti");
+    expect(pageSource).toContain("ProjectTimeline");
+    expect(pageSource).toContain("MobileWorkflowActionBar");
+  });
+
+  it("localizes the primary profitability action", () => {
+    expect(translateText("Proveri isplativost", "en")).toBe("Check profitability");
+    expect(translateText("Proveri isplativost", "de")).toBe("Rentabilität prüfen");
+    expect(translateText("Proveri isplativost", "sr")).toBe("Proveri isplativost");
   });
 });
