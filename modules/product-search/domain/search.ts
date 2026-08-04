@@ -24,12 +24,32 @@ const optionalRequestCurrency = z.preprocess(
   z.string().regex(/^[A-Z]{3}$/).optional(),
 );
 
+const isoDateTime = z.string().trim().refine((value) => {
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) && value.includes("T");
+}, "Invalid ISO date-time.");
+
 export const supplierOfferSearchInputSchema = z
   .object({
     query: z.string().trim().min(2).max(200),
     quantity: z.number().int().positive(),
     targetCountry: z.string().trim().toUpperCase().regex(/^[A-Z]{2}$/)
       .transform(normalizeTargetCountryCode),
+  })
+  .strict();
+
+export const supplierOfferSearchProvenanceSchema = z
+  .object({
+    fetchedAt: isoDateTime,
+    resultOrigin: z.enum(["live", "cache", "url-import", "browser-assisted-1688", "manual"]),
+    originalQuery: optionalText(200),
+    providerQuery: optionalText(300),
+    chinese1688Query: optionalText(300),
+    targetCountry: z.preprocess(
+      (value) => (value === "" || value === undefined || value === null ? null : String(value).toUpperCase()),
+      z.string().regex(/^[A-Z]{2}$/).nullable(),
+    ),
+    quantity: optionalNumber(z.number().int().positive()),
   })
   .strict();
 
@@ -57,6 +77,7 @@ export const supplierOfferSearchResultSchema = z
       "Image URL must be valid.",
     ),
     source: z.string().trim().min(1).max(100),
+    provenance: supplierOfferSearchProvenanceSchema.optional(),
   })
   .strict()
   .superRefine((result, context) => {
@@ -134,6 +155,7 @@ export const supplierOfferUrlPreviewSchema = z
 
 export type SupplierOfferSearchInput = z.infer<typeof supplierOfferSearchInputSchema>;
 export type ProjectSupplierSearchRequest = z.infer<typeof projectSupplierSearchRequestSchema>;
+export type SupplierOfferSearchProvenance = z.infer<typeof supplierOfferSearchProvenanceSchema>;
 export type SupplierOfferSearchResult = z.infer<typeof supplierOfferSearchResultSchema>;
 export type SupplierOfferUrlPreview = z.infer<typeof supplierOfferUrlPreviewSchema>;
 
