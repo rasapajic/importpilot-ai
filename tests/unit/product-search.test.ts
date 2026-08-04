@@ -67,7 +67,28 @@ describe("supplier offer search provider contract", () => {
     }).success).toBe(false);
   });
 
-  it("validates manual quantity and target country search overrides", () => {
+  it("validates manual quantity, target country and Luna search constraints", () => {
+    expect(projectSupplierSearchRequestSchema.parse({
+      query: "industrial fan",
+      quantity: 250,
+      targetCountry: "at",
+      maxUnitPrice: "15.5",
+      maxUnitPriceCurrency: "eur",
+      maxMoq: "300",
+      targetMarginPercent: "45",
+      avoidComplexCompliance: true,
+      privateLabel: true,
+    })).toEqual({
+      query: "industrial fan",
+      quantity: 250,
+      targetCountry: "AT",
+      maxUnitPrice: 15.5,
+      maxUnitPriceCurrency: "EUR",
+      maxMoq: 300,
+      targetMarginPercent: 45,
+      avoidComplexCompliance: true,
+      privateLabel: true,
+    });
     expect(projectSupplierSearchRequestSchema.parse({
       query: "industrial fan",
       quantity: 250,
@@ -76,11 +97,19 @@ describe("supplier offer search provider contract", () => {
       query: "industrial fan",
       quantity: 250,
       targetCountry: "AT",
+      avoidComplexCompliance: false,
+      privateLabel: false,
     });
     expect(projectSupplierSearchRequestSchema.safeParse({
       query: "industrial fan",
       quantity: 0,
       targetCountry: "Austria",
+    }).success).toBe(false);
+    expect(projectSupplierSearchRequestSchema.safeParse({
+      query: "industrial fan",
+      quantity: 250,
+      targetCountry: "AT",
+      maxUnitPrice: 10,
     }).success).toBe(false);
   });
 });
