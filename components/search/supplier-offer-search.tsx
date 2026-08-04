@@ -7,10 +7,20 @@ import { useI18n } from "@/components/i18n/i18n-provider";
 import { DeleteEmptySearchButton } from "@/components/projects/delete-empty-search-button";
 import { UrlImportReview } from "@/components/search/url-import-review";
 import { hasSupplierSearchResultCards } from "@/components/search/search-result-display";
+import {
+  isPartialLunaSearchResult,
+  type LunaSearchPlan,
+} from "@/modules/product-search/domain/luna-search-plan";
 import type { SupplierOfferSearchResult } from "@/modules/product-search/domain/search";
 
 type ProviderStatus = "connected" | "not_configured" | "error";
 type ResultOrigin = "live" | "cache";
+
+function optionalNumber(value: string) {
+  if (!value.trim()) return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
 
 export function SupplierOfferSearch({
   projectId,
@@ -34,6 +44,12 @@ export function SupplierOfferSearch({
   const [useProjectValues, setUseProjectValues] = useState(hasProjectValues);
   const [searchQuantity, setSearchQuantity] = useState(quantity?.toString() ?? "");
   const [searchCountry, setSearchCountry] = useState(targetCountry ?? "");
+  const [maxUnitPrice, setMaxUnitPrice] = useState("");
+  const [maxUnitPriceCurrency, setMaxUnitPriceCurrency] = useState("EUR");
+  const [maxMoq, setMaxMoq] = useState("");
+  const [targetMarginPercent, setTargetMarginPercent] = useState("");
+  const [avoidComplexCompliance, setAvoidComplexCompliance] = useState(true);
+  const [privateLabel, setPrivateLabel] = useState(false);
   const [results, setResults] = useState<SupplierOfferSearchResult[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState<number | null>(null);
@@ -43,12 +59,16 @@ export function SupplierOfferSearch({
   const [urlImportOpen, setUrlImportOpen] = useState(openUrlImport);
   const [providerStatus, setProviderStatus] = useState<ProviderStatus | null>(null);
   const [resultOrigin, setResultOrigin] = useState<ResultOrigin | null>(null);
+  const [lunaPlan, setLunaPlan] = useState<LunaSearchPlan | null>(null);
+  const [fetchedAt, setFetchedAt] = useState<string | null>(null);
+  const [unfilteredResultCount, setUnfilteredResultCount] = useState<number | null>(null);
   const automaticSearchStarted = useRef(false);
 
   async function runSearch() {
     setLoading(true);
     setError("");
     try {
+      const parsedMaxUnitPrice = optionalNumber(maxUnitPrice);
       const response = await fetch(`/api/projects/${projectId}/supplier-search`, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -56,6 +76,14 @@ export function SupplierOfferSearch({
           query,
           quantity: Number(searchQuantity),
           targetCountry: searchCountry,
+          maxUnitPrice: parsedMaxUnitPrice,
+          maxUnitPriceCurrency: parsedMaxUnitPrice === undefined
+            ? undefined
+            : maxUnitPriceCurrency.toUpperCase(),
+          maxMoq: optionalNumber(maxMoq),
+          targetMarginPercent: optionalNumber(targetMarginPercent),
+          avoidComplexCompliance,
+          privateLabel,
         }),
       });
       const payload = (await response.json()) as {
@@ -64,17 +92,26 @@ export function SupplierOfferSearch({
         providerStatus?: ProviderStatus;
         reason?: string;
         resultOrigin?: ResultOrigin | null;
+        lunaPlan?: LunaSearchPlan;
+        fetchedAt?: string;
+        unfilteredResultCount?: number;
       };
       if (!response.ok) throw new Error(payload.error);
       setProviderStatus(payload.providerStatus ?? null);
       setResultOrigin(payload.resultOrigin ?? null);
       setResults(payload.results ?? []);
+      setLunaPlan(payload.lunaPlan ?? null);
+      setFetchedAt(payload.fetchedAt ?? null);
+      setUnfilteredResultCount(payload.unfilteredResultCount ?? null);
     } catch (searchError) {
       setError(searchError instanceof Error && searchError.message
         ? searchError.message
         : t("Pretraga trenutno nije dostupna. Pokušajte ponovo."));
       setProviderStatus("error");
       setResults([]);
+      setLunaPlan(null);
+      setFetchedAt(null);
+      setUnfilteredResultCount(null);
     } finally {
       setLoading(false);
     }
@@ -124,8 +161,8 @@ export function SupplierOfferSearch({
     <section className="dashboard-card supplier-search">
       <header className="section-header">
         <div>
-          <h2>{t("Pretraga ponuda")}</h2>
-          <p>{t("Pronađite ponude dobavljača i dodajte odabrane rezultate u projekat.")}</p>
+          <h2>Luna Search</h2>
+          <p>{t("Luna priprema upite, pronalazi ponude i prosleđuje ih u postojeću računicu uvoza.")}</p>
         </div>
         {providerStatus && (
           <span className={`provider-status provider-status-${providerStatus}`}>
@@ -158,6 +195,66 @@ export function SupplierOfferSearch({
         />
         {t("Koristi vrednosti iz projekta")}
       </label>
+      <details>
+        <summary>{t("Luna kriterijumi")}</summary>
+        <div className="supplier-search-form">
+          <label>
+            {t("Maksimalna cena po komadu")}
+            <input
+              min="0.01"
+              onChange={(event) => setMaxUnitPrice(event.target.value)}
+              step="0.01"
+              type="number"
+              value={maxUnitPrice}
+            />
+          </label>
+          <label>
+            {t("Valuta")}
+            <input
+              maxLength={3}
+              onChange={(event) => setMaxUnitPriceCurrency(event.target.value.toUpperCase())}
+              pattern="[A-Za-z]{3}"
+              value={maxUnitPriceCurrency}
+            />
+          </label>
+          <label>
+            {t("Maksimalni MOQ")}
+            <input
+              min="1"
+              onChange={(event) => setMaxMoq(event.target.value)}
+              type="number"
+              value={maxMoq}
+            />
+          </label>
+          <label>
+            {t("Ciljna marža (%)")}
+            <input
+              max="100"
+              min="0"
+              onChange={(event) => setTargetMarginPercent(event.target.value)}
+              step="0.1"
+              type="number"
+              value={targetMarginPercent}
+            />
+          </label>
+        </div>
+        <label className="project-values-toggle">
+          <input
+            checked={avoidComplexCompliance}
+            onChange={(event) => setAvoidComplexCompliance(event.target.checked)}
+            type="checkbox"
+          />
+          {t("Izbegavaj proizvode sa komplikovanom sertifikacijom")}
+        </label>
+        <label className="project-values-toggle">
+          <input
+            checked={privateLabel}
+            onChange={(event) => setPrivateLabel(event.target.checked)}
+            type="checkbox"
+          />
+          {t("Traži OEM / sopstveni brend")}
+        </label>
+      </details>
       <form className="supplier-search-form" onSubmit={search}>
         <label>
           {t("Proizvod")}
@@ -196,10 +293,27 @@ export function SupplierOfferSearch({
           />
         </label>
         <button className="primary-button" disabled={loading} type="submit">
-          {loading ? t("Pretraga...") : t("Pretraži ponude")}
+          {loading ? t("Luna pretražuje...") : t("Pokreni Luna Search")}
         </button>
       </form>
       {error && <p className="form-error" role="alert">{t(error)}</p>}
+      {lunaPlan && (
+        <div className="empty-state">
+          <h3>{t("Luna je pripremila upite")}</h3>
+          <p><strong>Alibaba / Made-in-China:</strong> {lunaPlan.providerQuery}</p>
+          <p>
+            <strong>1688:</strong>{" "}
+            {lunaPlan.chinese1688Query ?? t("Kineski upit zahteva ručnu potvrdu.")}
+          </p>
+          {unfilteredResultCount !== null && results && unfilteredResultCount !== results.length && (
+            <p>{t("Luna kriterijumi su uklonili")}: {unfilteredResultCount - results.length}</p>
+          )}
+          {fetchedAt && <p className="muted-text">{t("Preuzeto")}: {new Date(fetchedAt).toLocaleString()}</p>}
+          {lunaPlan.warnings.map((warning) => (
+            <p className="muted-text" key={warning}>{t(warning)}</p>
+          ))}
+        </div>
+      )}
       {results === null && <p className="muted-text">{t("Unesite proizvod da biste pronašli ponude.")}</p>}
       {results?.length === 0 && (
         <div className="empty-state">
@@ -246,8 +360,11 @@ export function SupplierOfferSearch({
                     className={`provider-status provider-status-${resultOrigin}`}
                     title={resultOrigin === "cache" ? t("Keširani rezultat") : t("Uživo")}
                   >
-                    {resultOrigin === "live" ? t("Uživo") : t("Keširano")}
+                    {resultOrigin === "live" ? "LIVE" : "CACHED"}
                   </span>
+                )}
+                {isPartialLunaSearchResult(result) && (
+                  <span className="provider-status provider-status-not_configured">PARTIAL</span>
                 )}
                 <h3>{result.title}</h3>
                 <p><strong>{result.supplierName}</strong>{result.supplierCountry ? ` · ${result.supplierCountry}` : ""}</p>
