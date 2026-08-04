@@ -4,12 +4,19 @@ import {
   DEFAULT_EUR_FX_SNAPSHOT,
   type FxSnapshot,
 } from "../../fx/euro-display";
+import {
+  rankLunaOffers,
+  type LunaCalculationStatus,
+  type LunaRankingResult,
+} from "./luna-ranking";
 
 export type ComparableOffer = {
   offerId: string;
   supplierName: string;
   currency: string | null;
+  calculationStatus?: LunaCalculationStatus | null;
   landedCostTotal: number | null;
+  landedCostPerUnit?: number | null;
   grossMarginPercent: number | null;
   deliveryTimeDays: number | null;
   supplierRiskScore: number | null;
@@ -25,6 +32,7 @@ export type ComparisonGroup = {
   lowestRisk: ComparableOffer | null;
   fastestDelivery: ComparableOffer | null;
   bestForResale: ComparableOffer | null;
+  lunaRanking: LunaRankingResult;
 };
 
 function minBy(items: ComparableOffer[], value: (item: ComparableOffer) => number | null) {
@@ -69,7 +77,24 @@ function maxByWithRiskTieBreak(
 export function compareOffers(
   offers: ComparableOffer[],
   fx: FxSnapshot = DEFAULT_EUR_FX_SNAPSHOT,
+  targetMarginPercent = 0,
 ): ComparisonGroup[] {
+  const lunaRanking = rankLunaOffers(
+    offers.map((offer) => ({
+      offerId: offer.offerId,
+      supplierName: offer.supplierName,
+      currency: offer.currency,
+      calculationStatus: offer.calculationStatus ?? null,
+      landedCostPerUnit: offer.landedCostPerUnit ?? null,
+      grossMarginPercent: offer.grossMarginPercent,
+      deliveryTimeDays: offer.deliveryTimeDays,
+      supplierRiskScore: offer.supplierRiskScore,
+      overallScore: offer.overallScore,
+      recommendationStatus: offer.recommendationStatus,
+    })),
+    targetMarginPercent,
+    fx,
+  );
   const comparable = offers.flatMap((offer) => {
     if (!offer.currency || offer.recommendationStatus === null) return [];
     const landedCostTotalEur = offer.landedCostTotal === null
@@ -78,7 +103,14 @@ export function compareOffers(
     if (offer.landedCostTotal !== null && landedCostTotalEur === null) return [];
     return [{ ...offer, landedCostTotalEur }];
   });
-  if (comparable.length === 0) return [];
+  if (
+    comparable.length === 0 &&
+    lunaRanking.ranked.length === 0 &&
+    lunaRanking.needsReview.length === 0 &&
+    lunaRanking.notReady.length === 0
+  ) {
+    return [];
+  }
 
   return [{
     currency: "EUR",
@@ -87,5 +119,6 @@ export function compareOffers(
     lowestRisk: minBy(comparable, (offer) => offer.supplierRiskScore),
     fastestDelivery: minBy(comparable, (offer) => offer.deliveryTimeDays),
     bestForResale: maxByWithRiskTieBreak(comparable, (offer) => offer.grossMarginPercent),
+    lunaRanking,
   }];
 }
