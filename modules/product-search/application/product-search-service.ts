@@ -1,12 +1,18 @@
 import { OfferExtractionStatus, ProjectActivityType, SupplierOfferSource } from "@prisma/client";
 import { prisma } from "../../../lib/database/prisma";
 import {
+  projectSupplierSearchRequestSchema,
   supplierOfferSearchInputSchema,
   supplierOfferSearchResultsSchema,
   type SupplierOfferSearchProvider,
   type SupplierOfferSearchResult,
   type SupplierOfferUrlImportProvider,
 } from "../domain/search";
+import {
+  applyLunaSearchConstraints,
+  buildLunaProviderSearchInput,
+  createLunaSearchPlan,
+} from "../domain/luna-search-plan";
 import { getSupplierOfferSearchProvider } from "../infrastructure/provider";
 import { getSupplierOfferUrlImportProvider } from "../infrastructure/url-import-provider";
 import { recordProjectActivity } from "../../timeline/application/timeline-service";
@@ -22,12 +28,29 @@ export async function searchProjectSupplierOffers(
 ) {
   const project = await prisma.importProject.findFirst({
     where: { id: projectId, organizationId },
-    select: { id: true },
+    select: { id: true, targetMargin: true },
   });
   if (!project) throw new ProductSearchProjectNotFoundError();
 
-  const input = supplierOfferSearchInputSchema.parse(searchInput);
-  return searchSupplierOffersWithPersistentFallback(input, provider);
+  const request = projectSupplierSearchRequestSchema.parse(searchInput);
+  const effectiveRequest = {
+    ...request,
+    targetMarginPercent: request.targetMarginPercent ?? Number(project.targetMargin.toString()),
+  };
+  const lunaPlan = createLunaSearchPlan(effectiveRequest);
+  const providerInput = supplierOfferSearchInputSchema.parse(
+    buildLunaProviderSearchInput(lunaPlan, effectiveRequest),
+  );
+  const outcome = await searchSupplierOffersWithPersistentFallback(providerInput, provider);
+  const results = applyLunaSearchConstraints(outcome.results, effectiveRequest);
+
+  return {
+    ...outcome,
+    results,
+    unfilteredResultCount: outcome.results.length,
+    lunaPlan,
+    fetchedAt: new Date().toISOString(),
+  };
 }
 
 export async function importSearchResult(
