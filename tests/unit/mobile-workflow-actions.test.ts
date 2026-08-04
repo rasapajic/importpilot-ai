@@ -18,13 +18,13 @@ describe("mobile workflow actions", () => {
     ]);
   });
 
-  it("asks for costs before profitability check", () => {
+  it("asks for calculation before profitability check", () => {
     expect(getMobileWorkflowActions({
       ...baseInput,
       offerCount: 2,
       calculatedOfferCount: 1,
     })).toEqual([
-      { href: "#workflow-step-decision", label: "Unesi troškove", variant: "PRIMARY" },
+      { href: "#workflow-step-decision", label: "Izračunaj", variant: "PRIMARY" },
     ]);
   });
 
@@ -74,7 +74,7 @@ describe("mobile workflow actions", () => {
       hasFinalRecommendation: true,
       decisionStatus: "READY_TO_BUY",
     })).toEqual([
-      { href: "#documents", label: "Nastavi kupovinu", variant: "PRIMARY" },
+      { href: "#documents", label: "Krenite u kupovinu", variant: "PRIMARY" },
     ]);
   });
 });
