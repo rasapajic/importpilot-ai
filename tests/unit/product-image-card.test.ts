@@ -15,6 +15,14 @@ const uploadServiceSource = readFileSync(
   join(process.cwd(), "modules/offers/application/upload-service.ts"),
   "utf8",
 );
+const fallbackRouteSource = readFileSync(
+  join(process.cwd(), "app/api/uploads/product-image-fallback/route.ts"),
+  "utf8",
+);
+const storageSource = readFileSync(
+  join(process.cwd(), "lib/storage/s3.ts"),
+  "utf8",
+);
 
 describe("product image card", () => {
   it("places one main product image inside the selected-product step", () => {
@@ -27,9 +35,22 @@ describe("product image card", () => {
   it("supports private upload, drag and drop, gallery selection and phone camera", () => {
     expect(componentSource).toContain('fetch("/api/uploads/initiate"');
     expect(componentSource).toContain('fetch("/api/uploads/complete"');
+    expect(componentSource).toContain('fetch("/api/uploads/product-image-fallback"');
+    expect(componentSource).toContain("new FormData()");
     expect(componentSource).toContain("onDrop={onDrop}");
     expect(componentSource).toContain('capture="environment"');
     expect(componentSource).toContain('accept="image/jpeg,image/png,image/webp"');
+  });
+
+  it("falls back to the authenticated app route when browser-to-MinIO upload fails", () => {
+    expect(componentSource).toContain("directUploadSucceeded");
+    expect(componentSource).toContain("uploadThroughApplication");
+    expect(fallbackRouteSource).toContain("authenticateRequest");
+    expect(fallbackRouteSource).toContain("createHash(\"sha256\")");
+    expect(fallbackRouteSource).toContain("storeObject");
+    expect(fallbackRouteSource).toContain("completeUpload");
+    expect(fallbackRouteSource).toContain("deleteStoredObject");
+    expect(storageSource).toContain("export async function storeObject");
   });
 
   it("shows the authenticated private image and allows replacement or deletion", () => {
