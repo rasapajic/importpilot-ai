@@ -20,9 +20,9 @@ const profitabilityServiceSource = readFileSync(
 
 describe("simple client workflow", () => {
   it("uses only the three client-facing workflow steps", () => {
-    expect(pageSource).toContain("Šta želite da kupite?");
-    expect(pageSource).toContain("Ponude dobavljača");
-    expect(pageSource).toContain("Da li se isplati?");
+    expect(pageSource).toContain("getProductStepDisplay");
+    expect(pageSource).toContain("getOfferStepDisplay");
+    expect(pageSource).toContain("getDecisionStepTitle");
     expect(pageSource).toContain("SimpleProfitabilityPanel");
     expect(pageSource).not.toContain('id="workflow-step-next"');
     expect(pageSource).not.toContain('title={t("Sledeći korak")}');
@@ -57,7 +57,8 @@ describe("simple client workflow", () => {
   it("keeps profitability active until a final recommendation exists", () => {
     expect(pageSource).toContain("const hasFinalRecommendation = isFinalDecisionStatus(decision?.status)");
     expect(pageSource).toContain('hasFinalRecommendation\n      ? "COMPLETED"\n      : "ACTIVE"');
-    expect(pageSource).toContain("summary={getDecisionStepSummary(decision?.status, locale)}");
+    expect(pageSource).toContain("const decisionStepSummary = getDecisionStepSummary(decision?.status, locale)");
+    expect(pageSource).toContain("summary={decisionStepSummary}");
   });
 
   it("keeps documents and history as secondary information", () => {
