@@ -6,8 +6,6 @@ import type {
   SupplierOffer,
 } from "@prisma/client";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
 
 import { CostCalculatorForm } from "@/components/costs/cost-calculator-form";
 import { useI18n } from "@/components/i18n/i18n-provider";
@@ -188,7 +186,7 @@ export function SimpleProfitabilityPanel({
   offers,
   decision,
   selectedCalculationOfferId,
-  pendingAssessmentOfferIds,
+  profitabilityError,
 }: {
   projectId: string;
   projectName: string;
@@ -197,14 +195,10 @@ export function SimpleProfitabilityPanel({
   offers: OfferWithDetails[];
   decision: DecisionView | null;
   selectedCalculationOfferId?: string;
-  pendingAssessmentOfferIds: string[];
+  profitabilityError?: string;
 }) {
   const { locale, t } = useI18n();
   const text = copy[locale];
-  const router = useRouter();
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState("");
-
   const calculatedOffers = offers.filter((offer) => offer.costCalculations.length > 0);
   const hasFinalDecision = isFinalDecisionStatus(decision?.status);
   const selectedOffer = decision?.selectedOfferId
@@ -217,45 +211,6 @@ export function SimpleProfitabilityPanel({
   const editingOffer = selectedCalculationOfferId
     ? offers.find((offer) => offer.id === selectedCalculationOfferId) ?? null
     : null;
-
-  async function checkProfitability() {
-    if (calculatedOffers.length === 0) {
-      setError(text.enterCostsFirst);
-      return;
-    }
-
-    setPending(true);
-    setError("");
-    try {
-      const calculatedOfferIds = new Set(calculatedOffers.map((offer) => offer.id));
-      for (const offerId of pendingAssessmentOfferIds) {
-        if (!calculatedOfferIds.has(offerId)) continue;
-        const assessmentResponse = await fetch(`/api/offers/${offerId}/assessments`, {
-          method: "POST",
-        });
-        if (!assessmentResponse.ok) {
-          const payload = (await assessmentResponse.json()) as { error?: string };
-          throw new Error(payload.error ?? t("Assessment could not be completed. Please try again."));
-        }
-      }
-
-      const decisionResponse = await fetch(`/api/projects/${projectId}/decisions`, {
-        method: "POST",
-      });
-      const payload = (await decisionResponse.json()) as { error?: string; status?: string };
-      if (!decisionResponse.ok) {
-        throw new Error(payload.error ?? t("Odluka nije kreirana. Pokušajte ponovo."));
-      }
-      if (payload.status === "NEGOTIATE_FIRST") {
-        sessionStorage.setItem("focus-negotiation-assistant", "true");
-      }
-      router.refresh();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : t("Veza sa serverom nije dostupna. Pokušajte ponovo."));
-    } finally {
-      setPending(false);
-    }
-  }
 
   function money(value: { toString(): string } | number | null | undefined, currency: string) {
     const numeric = numberValue(value);
@@ -303,12 +258,24 @@ export function SimpleProfitabilityPanel({
           <p className="eyebrow">{text.eyebrow}</p>
           <h2>{hasFinalDecision && decision ? getStatusLabel(decision.status, locale) : text.question}</h2>
         </div>
-        <button disabled={pending || calculatedOffers.length === 0} onClick={checkProfitability} type="button">
-          {pending ? text.checking : hasFinalDecision ? text.checkAgain : text.check}
-        </button>
+        <form action={`/api/projects/${projectId}/profitability-check`} method="post">
+          <button disabled={calculatedOffers.length === 0} type="submit">
+            {hasFinalDecision ? text.checkAgain : text.check}
+          </button>
+        </form>
       </header>
 
-      {error && <p className="form-error" role="alert">{error}</p>}
+      {profitabilityError && (
+        <p className="form-error" role="alert">
+          {profitabilityError === "NO_CALCULATED_OFFERS"
+            ? text.enterCostsFirst
+            : locale === "de"
+              ? "Die Prüfung konnte nicht abgeschlossen werden. Bitte versuchen Sie es erneut."
+              : locale === "en"
+                ? "The profitability check could not be completed. Please try again."
+                : "Provera isplativosti nije završena. Pokušajte ponovo."}
+        </p>
+      )}
 
       {hasFinalDecision && decision && calculation && bestOffer ? (
         <>
