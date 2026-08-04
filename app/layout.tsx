@@ -11,14 +11,17 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "ImportPilot AI",
   description: "Platforma za sigurnije poređenje ponuda i međunarodnu nabavku.",
+  other: {
+    google: "notranslate",
+  },
 };
 
 export default async function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   const locale = resolveLocale((await cookies()).get(LOCALE_COOKIE)?.value);
 
   return (
-    <html lang={locale === "sr" ? "sr-Latn" : locale}>
-      <body>
+    <html lang={locale === "sr" ? "sr-Latn" : locale} translate="no">
+      <body className="notranslate">
         <I18nProvider initialLocale={locale}>
           <header className="global-header">
             <strong className="global-brand">ImportPilot AI</strong>

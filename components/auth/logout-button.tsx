@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+
 import { useI18n } from "@/components/i18n/i18n-provider";
 
 export function LogoutButton({ compact = false }: { compact?: boolean }) {
@@ -16,13 +17,13 @@ export function LogoutButton({ compact = false }: { compact?: boolean }) {
     try {
       const response = await fetch("/api/auth/logout", { method: "POST" });
       if (!response.ok) {
-        setError("Odjava trenutno nije uspela.");
+        setError(t("An error occurred."));
         return;
       }
       router.push("/login");
       router.refresh();
     } catch {
-      setError("Veza sa serverom nije dostupna.");
+      setError(t("The server connection is unavailable. Please try again."));
     } finally {
       setPending(false);
     }
