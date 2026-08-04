@@ -10,10 +10,10 @@ import {
   totalSerbiaTransportCost,
   type SerbiaLandedCostAssumptions,
 } from "@/modules/cost-engine/domain/serbia-landed-cost";
-import type { costCalculationRequestSchema } from "@/modules/cost-engine/domain/validation";
+import { costCalculationRequestSchema } from "@/modules/cost-engine/domain/validation";
 import { recordProjectActivity } from "@/modules/timeline/application/timeline-service";
 
-type CostRequest = z.infer<typeof costCalculationRequestSchema>;
+type CostRequest = z.input<typeof costCalculationRequestSchema>;
 
 export class CostOfferNotFoundError extends Error {}
 export class IncompleteOfferError extends Error {}
@@ -23,6 +23,7 @@ export async function createCostCalculation(
   organizationId: string,
   request: CostRequest,
 ) {
+  const normalizedRequest = costCalculationRequestSchema.parse(request);
   const offer = await prisma.supplierOffer.findFirst({
     where: { id: offerId, organizationId },
     include: { project: true },
@@ -34,26 +35,26 @@ export async function createCostCalculation(
 
   const rawAssumptions: SerbiaLandedCostAssumptions = {
     version: SERBIA_LANDED_COST_VERSION,
-    chinaDomesticTransportCost: request.chinaDomesticTransportCost,
-    internationalTransportCost: request.internationalTransportCost,
-    insuranceCost: request.insuranceCost,
-    customsBrokerCost: request.customsBrokerCost,
-    otherCosts: request.otherCosts,
-    transportConfirmed: request.transportConfirmed,
-    customsDutyConfirmed: request.customsDutyConfirmed,
-    vatSource: request.vatSource,
+    chinaDomesticTransportCost: normalizedRequest.chinaDomesticTransportCost,
+    internationalTransportCost: normalizedRequest.internationalTransportCost,
+    insuranceCost: normalizedRequest.insuranceCost,
+    customsBrokerCost: normalizedRequest.customsBrokerCost,
+    otherCosts: normalizedRequest.otherCosts,
+    transportConfirmed: normalizedRequest.transportConfirmed,
+    customsDutyConfirmed: normalizedRequest.customsDutyConfirmed,
+    vatSource: normalizedRequest.vatSource,
   };
   const rawComponentTransport = totalSerbiaTransportCost(rawAssumptions);
   const assumptions: SerbiaLandedCostAssumptions =
     offer.project.targetCountry === "RS" &&
-    request.shippingCost !== undefined &&
+    normalizedRequest.shippingCost !== undefined &&
     rawComponentTransport === "0.00"
-      ? { ...rawAssumptions, internationalTransportCost: request.shippingCost }
+      ? { ...rawAssumptions, internationalTransportCost: normalizedRequest.shippingCost }
       : rawAssumptions;
   const componentTransport = totalSerbiaTransportCost(assumptions);
-  const shippingCost = componentTransport !== "0.00" || request.shippingCost === undefined
+  const shippingCost = componentTransport !== "0.00" || normalizedRequest.shippingCost === undefined
     ? componentTransport
-    : request.shippingCost;
+    : normalizedRequest.shippingCost;
 
   const result = calculateLandedCost({
     targetCountry: offer.project.targetCountry,
@@ -62,13 +63,13 @@ export async function createCostCalculation(
     currency: offer.currency,
     incoterm: offer.incoterm,
     shippingCost,
-    customsDutyRate: request.customsDutyRate,
-    vatRate: request.vatRate,
-    storageCost: request.storageCost,
-    inspectionCost: request.inspectionCost,
+    customsDutyRate: normalizedRequest.customsDutyRate,
+    vatRate: normalizedRequest.vatRate,
+    storageCost: normalizedRequest.storageCost,
+    inspectionCost: normalizedRequest.inspectionCost,
     customsBrokerCost: assumptions.customsBrokerCost,
     otherCosts: assumptions.otherCosts,
-    targetSellingPrice: request.targetSellingPrice,
+    targetSellingPrice: normalizedRequest.targetSellingPrice,
   });
 
   const calculationStatus = requiresSerbiaCostReview({
@@ -77,7 +78,7 @@ export async function createCostCalculation(
     customsDutyConfirmed: assumptions.customsDutyConfirmed,
   })
     ? CalculationStatus.NEEDS_REVIEW
-    : request.calculationStatus;
+    : normalizedRequest.calculationStatus;
   const {
     customsBrokerCost,
     otherCosts,
@@ -109,8 +110,8 @@ export async function createCostCalculation(
         supplierName: offer.supplierName,
         calculationStatus: calculation.calculationStatus,
         shippingCost,
-        customsDutyRate: request.customsDutyRate,
-        vatRate: request.vatRate,
+        customsDutyRate: normalizedRequest.customsDutyRate,
+        vatRate: normalizedRequest.vatRate,
         costAssumptions: assumptions,
       },
     });
