@@ -3,12 +3,13 @@ import type { z } from "zod";
 
 import { prisma } from "@/lib/database/prisma";
 import { calculateLandedCost } from "@/modules/cost-engine/domain/calculator";
+import { getImportCountryProfile } from "@/modules/cost-engine/domain/import-country-profiles";
 import {
-  requiresSerbiaCostReview,
-  SERBIA_LANDED_COST_VERSION,
+  createLandedCostAssumptions,
+  requiresImportCostReview,
   sumCostAmounts,
-  totalSerbiaTransportCost,
-  type SerbiaLandedCostAssumptions,
+  totalImportTransportCost,
+  type LandedCostAssumptions,
 } from "@/modules/cost-engine/domain/serbia-landed-cost";
 import { costCalculationRequestSchema } from "@/modules/cost-engine/domain/validation";
 import { recordProjectActivity } from "@/modules/timeline/application/timeline-service";
@@ -33,28 +34,48 @@ export async function createCostCalculation(
     throw new IncompleteOfferError();
   }
 
-  const rawAssumptions: SerbiaLandedCostAssumptions = {
-    version: SERBIA_LANDED_COST_VERSION,
-    chinaDomesticTransportCost: normalizedRequest.chinaDomesticTransportCost,
-    internationalTransportCost: normalizedRequest.internationalTransportCost,
-    insuranceCost: normalizedRequest.insuranceCost,
-    customsBrokerCost: normalizedRequest.customsBrokerCost,
-    otherCosts: normalizedRequest.otherCosts,
-    transportConfirmed: normalizedRequest.transportConfirmed,
-    customsDutyConfirmed: normalizedRequest.customsDutyConfirmed,
-    vatSource: normalizedRequest.vatSource,
-  };
-  const rawComponentTransport = totalSerbiaTransportCost(rawAssumptions);
-  const assumptions: SerbiaLandedCostAssumptions =
-    offer.project.targetCountry === "RS" &&
+  const profile = getImportCountryProfile(offer.project.targetCountry);
+  let assumptions: LandedCostAssumptions | null = profile
+    ? createLandedCostAssumptions({
+        countryCode: profile.countryCode,
+        chinaDomesticTransportCost: normalizedRequest.chinaDomesticTransportCost,
+        internationalTransportCost: normalizedRequest.internationalTransportCost,
+        insuranceCost: normalizedRequest.insuranceCost,
+        customsBrokerCost: normalizedRequest.customsBrokerCost,
+        otherCosts: normalizedRequest.otherCosts,
+        transportConfirmed: normalizedRequest.transportConfirmed,
+        customsDutyConfirmed: normalizedRequest.customsDutyConfirmed,
+        vatSource: normalizedRequest.vatSource,
+      })
+    : null;
+
+  if (
+    assumptions &&
     normalizedRequest.shippingCost !== undefined &&
-    rawComponentTransport === "0.00"
-      ? { ...rawAssumptions, internationalTransportCost: normalizedRequest.shippingCost }
-      : rawAssumptions;
-  const componentTransport = totalSerbiaTransportCost(assumptions);
-  const shippingCost = componentTransport !== "0.00" || normalizedRequest.shippingCost === undefined
-    ? componentTransport
-    : normalizedRequest.shippingCost;
+    totalImportTransportCost(assumptions) === "0.00"
+  ) {
+    assumptions = createLandedCostAssumptions({
+      countryCode: assumptions.countryCode,
+      chinaDomesticTransportCost: assumptions.chinaDomesticTransportCost,
+      internationalTransportCost: normalizedRequest.shippingCost,
+      insuranceCost: assumptions.insuranceCost,
+      customsBrokerCost: assumptions.customsBrokerCost,
+      otherCosts: assumptions.otherCosts,
+      transportConfirmed: assumptions.transportConfirmed,
+      customsDutyConfirmed: assumptions.customsDutyConfirmed,
+      vatSource: assumptions.vatSource,
+    });
+  }
+
+  const shippingCost = assumptions
+    ? totalImportTransportCost(assumptions)
+    : normalizedRequest.shippingCost ?? sumCostAmounts([
+        normalizedRequest.chinaDomesticTransportCost,
+        normalizedRequest.internationalTransportCost,
+        normalizedRequest.insuranceCost,
+      ]);
+  const customsBrokerCost = assumptions?.customsBrokerCost ?? normalizedRequest.customsBrokerCost;
+  const otherCosts = assumptions?.otherCosts ?? normalizedRequest.otherCosts;
 
   const result = calculateLandedCost({
     targetCountry: offer.project.targetCountry,
@@ -67,21 +88,23 @@ export async function createCostCalculation(
     vatRate: normalizedRequest.vatRate,
     storageCost: normalizedRequest.storageCost,
     inspectionCost: normalizedRequest.inspectionCost,
-    customsBrokerCost: assumptions.customsBrokerCost,
-    otherCosts: assumptions.otherCosts,
+    customsBrokerCost,
+    otherCosts,
     targetSellingPrice: normalizedRequest.targetSellingPrice,
   });
 
-  const calculationStatus = requiresSerbiaCostReview({
-    targetCountry: offer.project.targetCountry,
-    transportConfirmed: assumptions.transportConfirmed,
-    customsDutyConfirmed: assumptions.customsDutyConfirmed,
+  const calculationStatus = profile && requiresImportCostReview({
+    targetCountry: profile.countryCode,
+    transportConfirmed: assumptions?.transportConfirmed ?? false,
+    customsDutyConfirmed: assumptions?.customsDutyConfirmed ?? false,
+    vatRate: normalizedRequest.vatRate,
+    vatSource: normalizedRequest.vatSource,
   })
     ? CalculationStatus.NEEDS_REVIEW
     : normalizedRequest.calculationStatus;
   const {
-    customsBrokerCost,
-    otherCosts,
+    customsBrokerCost: calculatedBrokerCost,
+    otherCosts: calculatedOtherCosts,
     ...persistedResult
   } = result;
 
@@ -92,7 +115,7 @@ export async function createCostCalculation(
         projectId: offer.projectId,
         offerId,
         ...persistedResult,
-        otherCosts: sumCostAmounts([otherCosts, customsBrokerCost]),
+        otherCosts: sumCostAmounts([calculatedOtherCosts, calculatedBrokerCost]),
         calculationStatus,
       },
     });
@@ -100,8 +123,8 @@ export async function createCostCalculation(
       organizationId,
       projectId: offer.projectId,
       type: ProjectActivityType.LANDED_COST_CALCULATED,
-      title: offer.project.targetCountry === "RS"
-        ? "Stvarna cena do Srbije je izračunata"
+      title: profile
+        ? `Stvarna cena do magacina (${profile.countryCode}) je izračunata`
         : "Landed cost je izračunat",
       description: offer.supplierName,
       metadata: {
@@ -112,7 +135,14 @@ export async function createCostCalculation(
         shippingCost,
         customsDutyRate: normalizedRequest.customsDutyRate,
         vatRate: normalizedRequest.vatRate,
-        costAssumptions: assumptions,
+        ...(profile ? {
+          countryProfile: {
+            countryCode: profile.countryCode,
+            version: profile.version,
+            defaultVatRate: profile.defaultVatRate,
+          },
+          costAssumptions: assumptions,
+        } : {}),
       },
     });
     return calculation;
