@@ -1,0 +1,2 @@
+export const ASSISTANT_DISPLAY_NAME =
+  process.env.NEXT_PUBLIC_ASSISTANT_DISPLAY_NAME?.trim() || "TAJA";
