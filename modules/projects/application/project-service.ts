@@ -6,16 +6,17 @@ import {
 import type { z } from "zod";
 
 import { prisma } from "@/lib/database/prisma";
+import { serializeClientData } from "@/lib/serialization/client-data";
 import { deleteStoredObject } from "@/lib/storage/s3";
 import { getLatestCostAssumptionsByOffer } from "@/modules/cost-engine/domain/serbia-landed-cost";
 import { isFinalDecisionStatus } from "@/modules/decisions/application/decision-step-summary";
+import { DEMO_PROJECT_PREFIX, isDemoProjectName } from "@/modules/projects/domain/project-access";
 import { canDeleteEmptySearch } from "@/modules/projects/domain/empty-search-deletion";
 import type {
   createProjectSchema,
   listProjectsSchema,
 } from "@/modules/projects/domain/validation";
 import { recordProjectActivity } from "@/modules/timeline/application/timeline-service";
-import { DEMO_PROJECT_PREFIX, isDemoProjectName } from "@/modules/projects/domain/project-access";
 
 type CreateProjectInput = z.infer<typeof createProjectSchema>;
 type ListProjectsInput = z.infer<typeof listProjectsSchema>;
@@ -141,13 +142,13 @@ export async function getProject(projectId: string, organizationId: string) {
   });
   const assumptionsByOffer = getLatestCostAssumptionsByOffer(costActivities);
 
-  return {
+  return serializeClientData({
     ...project,
     offers: project.offers.map((offer) => ({
       ...offer,
       latestCostAssumptions: assumptionsByOffer[offer.id] ?? null,
     })),
-  };
+  });
 }
 
 export async function deleteDemoProject(
