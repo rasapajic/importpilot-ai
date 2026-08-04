@@ -31,7 +31,8 @@ export function getMobileWorkflowActions(input: MobileWorkflowActionInput): Mobi
   }
 
   if (input.decisionStatus === "DO_NOT_BUY") {
-    return [{ href: "#workflow-step-offer", label: "Pronađi nove ponude", variant: "PRIMARY" }];
+    // The recovery panel owns the price-aware better-offer action.
+    return [];
   }
 
   return [{ href: "#documents", label: "Krenite u kupovinu", variant: "PRIMARY" }];
