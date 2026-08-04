@@ -13,6 +13,17 @@ const optionalNumber = (schema: z.ZodNumber) =>
     schema.nullable(),
   );
 
+const optionalRequestNumber = (schema: z.ZodNumber) =>
+  z.preprocess(
+    (value) => (value === "" || value === null || value === undefined ? undefined : Number(value)),
+    schema.optional(),
+  );
+
+const optionalRequestCurrency = z.preprocess(
+  (value) => (value === "" || value === null || value === undefined ? undefined : String(value).toUpperCase()),
+  z.string().regex(/^[A-Z]{3}$/).optional(),
+);
+
 export const supplierOfferSearchInputSchema = z
   .object({
     query: z.string().trim().min(2).max(200),
@@ -60,7 +71,24 @@ export const supplierOfferSearchResultSchema = z
 
 export const supplierOfferSearchResultsSchema = z.array(supplierOfferSearchResultSchema).max(100);
 
-export const projectSupplierSearchRequestSchema = supplierOfferSearchInputSchema;
+export const projectSupplierSearchRequestSchema = supplierOfferSearchInputSchema
+  .extend({
+    maxUnitPrice: optionalRequestNumber(z.number().positive().finite()),
+    maxUnitPriceCurrency: optionalRequestCurrency,
+    maxMoq: optionalRequestNumber(z.number().int().positive()),
+    targetMarginPercent: optionalRequestNumber(z.number().min(0).max(100).finite()),
+    avoidComplexCompliance: z.boolean().optional().default(false),
+    privateLabel: z.boolean().optional().default(false),
+  })
+  .superRefine((request, context) => {
+    if ((request.maxUnitPrice === undefined) !== (request.maxUnitPriceCurrency === undefined)) {
+      context.addIssue({
+        code: "custom",
+        path: ["maxUnitPriceCurrency"],
+        message: "Maximum unit price and currency must be provided together.",
+      });
+    }
+  });
 
 export const supplierOfferUrlImportRequestSchema = z
   .object({
@@ -105,6 +133,7 @@ export const supplierOfferUrlPreviewSchema = z
   .strict();
 
 export type SupplierOfferSearchInput = z.infer<typeof supplierOfferSearchInputSchema>;
+export type ProjectSupplierSearchRequest = z.infer<typeof projectSupplierSearchRequestSchema>;
 export type SupplierOfferSearchResult = z.infer<typeof supplierOfferSearchResultSchema>;
 export type SupplierOfferUrlPreview = z.infer<typeof supplierOfferUrlPreviewSchema>;
 
