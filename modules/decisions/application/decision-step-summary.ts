@@ -6,29 +6,47 @@ const finalDecisionStatuses = new Set([
   "DO_NOT_BUY",
 ]);
 
-const decisionSummaries: Record<
-  "READY_TO_BUY" | "NEGOTIATE_FIRST" | "DO_NOT_BUY",
-  Record<Locale, string>
-> = {
+type FinalDecisionStatus = "READY_TO_BUY" | "NEGOTIATE_FIRST" | "DO_NOT_BUY";
+
+type DecisionDisplayCopy = {
+  title: string;
+  summary: string;
+};
+
+const decisionDisplay: Record<FinalDecisionStatus, Record<Locale, DecisionDisplayCopy>> = {
   READY_TO_BUY: {
-    sr: "Isplati se — nastavi sa proverama",
-    de: "Rentabel — Prüfungen fortsetzen",
-    en: "Profitable — continue the checks",
+    sr: { title: "Isplati se", summary: "Nastavi sa proverama" },
+    de: { title: "Rentabel", summary: "Prüfungen fortsetzen" },
+    en: { title: "Profitable", summary: "Continue the checks" },
   },
   NEGOTIATE_FIRST: {
-    sr: "Može se isplatiti — traži bolje uslove",
-    de: "Kann rentabel sein — bessere Konditionen verhandeln",
-    en: "Can be profitable — negotiate better terms",
+    sr: { title: "Može se isplatiti", summary: "Traži bolje uslove" },
+    de: { title: "Kann rentabel sein", summary: "Bessere Konditionen verhandeln" },
+    en: { title: "Can be profitable", summary: "Negotiate better terms" },
   },
   DO_NOT_BUY: {
-    sr: "Ne isplati se — traži bolju ponudu",
-    de: "Nicht rentabel — besseres Angebot suchen",
-    en: "Not profitable — find a better offer",
+    sr: { title: "Ne isplati se", summary: "Traži bolju ponudu" },
+    de: { title: "Nicht rentabel", summary: "Besseres Angebot suchen" },
+    en: { title: "Not profitable", summary: "Find a better offer" },
   },
 };
 
+function resolveLocale(locale: Locale | string): Locale {
+  return locale === "de" || locale === "sr" ? locale : "en";
+}
+
 export function isFinalDecisionStatus(status: string | null | undefined) {
   return Boolean(status && finalDecisionStatuses.has(status));
+}
+
+export function getDecisionStepTitle(
+  status: string | null | undefined,
+  locale: Locale | string,
+) {
+  if (!isFinalDecisionStatus(status)) {
+    return translateText("Da li se isplati?", locale);
+  }
+  return decisionDisplay[status as FinalDecisionStatus][resolveLocale(locale)].title;
 }
 
 export function getDecisionStepSummary(
@@ -38,8 +56,5 @@ export function getDecisionStepSummary(
   if (!isFinalDecisionStatus(status)) {
     return translateText("Generate recommendation", locale);
   }
-  const resolvedLocale: Locale = locale === "de" || locale === "sr" ? locale : "en";
-  return decisionSummaries[
-    status as "READY_TO_BUY" | "NEGOTIATE_FIRST" | "DO_NOT_BUY"
-  ][resolvedLocale];
+  return decisionDisplay[status as FinalDecisionStatus][resolveLocale(locale)].summary;
 }
