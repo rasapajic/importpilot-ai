@@ -40,8 +40,11 @@ export function createSupplierSearchQueryVariants(productQuery: string) {
     ? clean(`type c ${translated.replace(/\btype c\b/i, "")}`)
     : translated;
   const focused = focusedProductQuery(translated);
+  const ordered = focused
+    ? [focused, original, translated, typeCFirst]
+    : [original, translated, typeCFirst];
 
-  return [...new Set([focused, typeCFirst, translated, original].filter(
+  return [...new Set(ordered.filter(
     (query): query is string => Boolean(query && query.length >= 2),
   ))].slice(0, 3);
 }
