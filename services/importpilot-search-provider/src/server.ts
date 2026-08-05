@@ -7,14 +7,20 @@ import { createMadeInChinaSupplierSearchSource } from "./made-in-china-provider.
 import { createOpenAIWebSearchSource } from "./openai-web-search-source.js";
 import { createFallbackSupplierSearchSource } from "./provider.js";
 
+function openAISearchContextSize(value: string | undefined): "low" | "medium" | "high" {
+  return value === "low" || value === "high" ? value : "medium";
+}
+
 const port = Number(process.env.PORT ?? 4000);
 const token = process.env.SEARCH_PROVIDER_TOKEN ?? "";
 const logger = createDevelopmentLogger();
 const source = createFallbackSupplierSearchSource([
   createOpenAIWebSearchSource({
     apiKey: process.env.OPENAI_API_KEY,
-    model: process.env.OPENAI_SEARCH_MODEL ?? "gpt-5",
-    maxResults: Number(process.env.OPENAI_SEARCH_MAX_RESULTS ?? 10),
+    model: process.env.OPENAI_SEARCH_MODEL ?? "gpt-5-mini",
+    maxResults: Number(process.env.OPENAI_SEARCH_MAX_RESULTS ?? 5),
+    requestTimeoutMs: Number(process.env.OPENAI_SEARCH_TIMEOUT_MS ?? 45_000),
+    searchContextSize: openAISearchContextSize(process.env.OPENAI_SEARCH_CONTEXT_SIZE),
     logger,
   }),
   createAlibabaSupplierSearchSource({
