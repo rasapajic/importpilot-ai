@@ -32,9 +32,12 @@ const manualFallbackErrors = new Set([
   "Link nije odgovorio na vreme. Pokušajte ponovo.",
 ]);
 
-function previewToFallbackOffer(preview?: SupplierOfferUrlPreview): FallbackOffer {
+function previewToFallbackOffer(
+  preview?: SupplierOfferUrlPreview,
+  initialTitle = "",
+): FallbackOffer {
   return {
-    title: preview?.title ?? "",
+    title: preview?.title ?? initialTitle,
     supplierName: preview?.supplierName ?? "",
     price: preview?.price === null || preview?.price === undefined ? "" : String(preview.price),
     currency: preview?.currency ?? "",
@@ -44,17 +47,26 @@ function previewToFallbackOffer(preview?: SupplierOfferUrlPreview): FallbackOffe
   };
 }
 
-export function CreateProjectFromUrlForm() {
+export function CreateProjectFromUrlForm({
+  initialProductUrl = "",
+  initialProductName = "",
+}: {
+  initialProductUrl?: string;
+  initialProductName?: string;
+}) {
   const { t } = useI18n();
   const router = useRouter();
   const urlInputRef = useRef<HTMLInputElement>(null);
-  const [productUrl, setProductUrl] = useState("");
+  const [productUrl, setProductUrl] = useState(initialProductUrl);
   const [preview, setPreview] = useState<SupplierOfferUrlPreview | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
   const [showManualFallback, setShowManualFallback] = useState(false);
-  const [fallbackOffer, setFallbackOffer] = useState<FallbackOffer>(emptyFallbackOffer);
+  const [fallbackOffer, setFallbackOffer] = useState<FallbackOffer>(() => ({
+    ...emptyFallbackOffer,
+    title: initialProductName,
+  }));
   const [fallbackTitleFromSlug, setFallbackTitleFromSlug] = useState(false);
 
   useEffect(() => {
@@ -76,10 +88,10 @@ export function CreateProjectFromUrlForm() {
       const payload = (await response.json()) as { preview?: SupplierOfferUrlPreview; fallbackPreview?: SupplierOfferUrlPreview; error?: string };
       if (!response.ok || !payload.preview) {
         if (payload.fallbackPreview) {
-          setFallbackOffer(previewToFallbackOffer(payload.fallbackPreview));
+          setFallbackOffer(previewToFallbackOffer(payload.fallbackPreview, initialProductName));
           setFallbackTitleFromSlug(Boolean(payload.fallbackPreview.titleFromSlug));
         } else {
-          setFallbackOffer(emptyFallbackOffer);
+          setFallbackOffer({ ...emptyFallbackOffer, title: initialProductName });
           setFallbackTitleFromSlug(false);
         }
         throw new Error(payload.error);
@@ -147,7 +159,7 @@ export function CreateProjectFromUrlForm() {
     setCreating(true);
     setError("");
     const form = new FormData(event.currentTarget);
-    const projectName = preview.title ?? new URL(preview.productUrl).hostname;
+    const projectName = preview.title ?? initialProductName ?? new URL(preview.productUrl).hostname;
     try {
       const result: SupplierOfferSearchResult = {
         title: preview.title ?? projectName,
