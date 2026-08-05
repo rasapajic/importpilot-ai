@@ -19,6 +19,12 @@ export const FALLBACK_UNAVAILABLE_REASON =
 export interface SupplierSearchSource {
   readonly name: string;
   readonly implemented: boolean;
+  /**
+   * Sources that already perform semantic product matching can bypass the
+   * English lexical filter. This is required for TAJA searches started in
+   * Serbian or German while supplier titles are usually English.
+   */
+  readonly trustedRelevance?: boolean;
   search(
     input: SearchRequest,
     signal: AbortSignal,
@@ -64,11 +70,13 @@ export function createFallbackSupplierSearchSource(
         if (!source.implemented) continue;
         try {
           const outcome = outcomeParts(await source.search(input, signal));
-          const relevantResults = rankRelevantSupplierResults(
-            input.productQuery,
-            outcome.results,
-            5,
-          );
+          const relevantResults = source.trustedRelevance
+            ? outcome.results.slice(0, 10)
+            : rankRelevantSupplierResults(
+                input.productQuery,
+                outcome.results,
+                5,
+              );
           logger("provider_attempt", {
             provider_name: source.name,
             parsed_results: outcome.results.length,
@@ -78,6 +86,7 @@ export function createFallbackSupplierSearchSource(
             provider_name: source.name,
             parsed_results: outcome.results.length,
             relevant_results: relevantResults.length,
+            semantic_relevance_trusted: Boolean(source.trustedRelevance),
           });
           if (relevantResults.length > 0) {
             logger("provider_final_result", {
@@ -97,6 +106,7 @@ export function createFallbackSupplierSearchSource(
             provider_name: source.name,
             parsed_results: 0,
             relevant_results: 0,
+            semantic_relevance_trusted: Boolean(source.trustedRelevance),
           });
         }
       }
