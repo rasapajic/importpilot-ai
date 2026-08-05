@@ -49,6 +49,14 @@ function outcomeParts(outcome: SupplierSearchOutcome) {
     : outcome;
 }
 
+function sanitizeProviderErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return message
+    .replace(/Bearer\s+\S+/gi, "Bearer [REDACTED]")
+    .replace(/sk-[A-Za-z0-9_-]+/g, "[REDACTED]")
+    .slice(0, 500);
+}
+
 export function createFallbackSupplierSearchSource(
   sources: SupplierSearchSource[],
   logger: DevelopmentLogger = createDevelopmentLogger(),
@@ -96,7 +104,12 @@ export function createFallbackSupplierSearchSource(
             });
             return { results: relevantResults };
           }
-        } catch {
+        } catch (error) {
+          logger("provider_attempt_failed", {
+            provider_name: source.name,
+            error_name: error instanceof Error ? error.name : "UnknownError",
+            error_message: sanitizeProviderErrorMessage(error),
+          });
           logger("provider_attempt", {
             provider_name: source.name,
             parsed_results: 0,
