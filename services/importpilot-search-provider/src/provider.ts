@@ -110,6 +110,7 @@ export function createFallbackSupplierSearchSource(
             error_name: error instanceof Error ? error.name : "UnknownError",
             error_message: sanitizeProviderErrorMessage(error),
           });
+          if (signal.aborted) throw error;
           logger("provider_attempt", {
             provider_name: source.name,
             parsed_results: 0,
