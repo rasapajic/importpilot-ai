@@ -227,11 +227,15 @@ export function createOpenAIWebSearchSource({
   logger = createDevelopmentLogger(),
 }: OpenAIWebSearchOptions = {}): SupplierSearchSource {
   const configured = Boolean(apiKey?.trim());
-  const safeMaxResults = Math.max(1, Math.min(DEFAULT_MAX_RESULTS, Math.trunc(maxResults)));
+  const requestedMaxResults = Number.isFinite(maxResults)
+    ? Math.trunc(maxResults)
+    : DEFAULT_MAX_RESULTS;
+  const safeMaxResults = Math.max(1, Math.min(DEFAULT_MAX_RESULTS, requestedMaxResults));
 
   return {
     name: "openai-web-search-v1",
     implemented: configured,
+    trustedRelevance: true,
 
     async healthCheck() {
       return configured;
