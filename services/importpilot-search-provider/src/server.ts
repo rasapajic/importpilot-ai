@@ -4,12 +4,19 @@ import { createSearchProviderApp } from "./app.js";
 import { createAlibabaSupplierSearchSource } from "./alibaba-source.js";
 import { createDevelopmentLogger } from "./development-log.js";
 import { createMadeInChinaSupplierSearchSource } from "./made-in-china-provider.js";
+import { createOpenAIWebSearchSource } from "./openai-web-search-source.js";
 import { createFallbackSupplierSearchSource } from "./provider.js";
 
 const port = Number(process.env.PORT ?? 4000);
 const token = process.env.SEARCH_PROVIDER_TOKEN ?? "";
 const logger = createDevelopmentLogger();
 const source = createFallbackSupplierSearchSource([
+  createOpenAIWebSearchSource({
+    apiKey: process.env.OPENAI_API_KEY,
+    model: process.env.OPENAI_SEARCH_MODEL ?? "gpt-5",
+    maxResults: Number(process.env.OPENAI_SEARCH_MAX_RESULTS ?? 10),
+    logger,
+  }),
   createAlibabaSupplierSearchSource({
     userAgent: process.env.ALIBABA_USER_AGENT,
     requestTimeoutMs: Number(process.env.ALIBABA_TIMEOUT_MS ?? 4_000),
@@ -27,7 +34,7 @@ const server = createServer(createSearchProviderApp({
   token,
   source,
   logger,
-  timeoutMs: Number(process.env.UPSTREAM_TIMEOUT_MS ?? 30_000),
+  timeoutMs: Number(process.env.UPSTREAM_TIMEOUT_MS ?? 90_000),
   rateLimitMax: Number(process.env.SEARCH_RATE_LIMIT_MAX ?? 30),
   rateLimitWindowMs: Number(process.env.SEARCH_RATE_LIMIT_WINDOW_MS ?? 60_000),
 }));
