@@ -1,32 +1,49 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
-import { dashboardPrimaryActions } from "../../modules/dashboard/primary-actions";
-import { getProjectCreationDestination } from "../../modules/projects/application/project-creation-destination";
-import { translateText } from "../../modules/i18n/translations";
+const intakeSource = readFileSync(
+  join(process.cwd(), "components/dashboard/dashboard-primary-actions.tsx"),
+  "utf8",
+);
+const dashboardSource = readFileSync(
+  join(process.cwd(), "app/(dashboard)/dashboard/page.tsx"),
+  "utf8",
+);
+const newProjectSource = readFileSync(
+  join(process.cwd(), "app/(dashboard)/projects/new/page.tsx"),
+  "utf8",
+);
 
-describe("dashboard primary actions", () => {
-  it("renders product description and URL entry points", () => {
-    expect(dashboardPrimaryActions.map((action) => action.key)).toEqual([
-      "describe",
-      "url",
-    ]);
-    expect(dashboardPrimaryActions.map((action) => action.href)).toEqual([
-      "/projects/new",
-      "/projects/new?mode=url",
-    ]);
+describe("unified dashboard product intake", () => {
+  it("keeps text, image and link in one intake", () => {
+    expect(intakeSource).toContain("Opišite proizvod");
+    expect(intakeSource).toContain("Dodajte sliku");
+    expect(intakeSource).toContain("Nalepite link");
+    expect(intakeSource).toContain("Nastavite");
+    expect(intakeSource).toContain('type="file"');
+    expect(intakeSource).toContain('type="url"');
   });
 
-  it("opens URL import after creating a project from the link flow", () => {
-    expect(getProjectCreationDestination("project-1", "url"))
-      .toBe("/projects/project-1?importUrl=1#workflow-step-offer");
-    expect(getProjectCreationDestination("project-1", "search")).toBe("/projects/project-1");
+  it("asks for business details only in the second step", () => {
+    expect(intakeSource).toContain('step === "product"');
+    expect(intakeSource).toContain("Još samo osnovni podaci");
+    expect(intakeSource).toContain('name="targetCountry"');
+    expect(intakeSource).toContain('name="quantity"');
+    expect(intakeSource).toContain('name="targetMargin"');
   });
 
-  it("keeps search and URL import entry experiences different", () => {
-    expect(dashboardPrimaryActions[0].href).not.toBe(dashboardPrimaryActions[1].href);
-    expect(translateText("Nova pretraga", "en")).toBe("New search");
-    expect(translateText("Ubaci link proizvoda", "en")).toBe("Paste product link");
-    expect(translateText("Kreiraj pretragu", "en")).toBe("Create search");
-    expect(getProjectCreationDestination("project-1", "url")).toContain("importUrl=1");
+  it("keeps saved searches beside the new demand on desktop", () => {
+    expect(dashboardSource).toContain("demandColumn");
+    expect(dashboardSource).toContain("searchesColumn");
+    expect(dashboardSource).toContain("Moje pretrage");
+  });
+
+  it("prefills the existing robust URL flow", () => {
+    expect(intakeSource).toContain('params.set("description", cleanDescription)');
+    expect(intakeSource).toContain("productUrl: cleanUrl");
+    expect(newProjectSource).toContain("initialProductUrl={initialProductUrl}");
+    expect(newProjectSource).toContain("initialProductName={initialDescription}");
   });
 });
