@@ -87,12 +87,14 @@ describe("OpenAI web supplier search source", () => {
       store: false,
       tool_choice: "required",
       include: ["web_search_call.action.sources"],
-      tools: [{ type: "web_search", search_context_size: "high" }],
+      tools: [{ type: "web_search", search_context_size: "medium" }],
       text: { format: { type: "json_schema", strict: true } },
     });
     expect(events).toContainEqual({
       event: "openai_web_search",
       details: expect.objectContaining({
+        search_context_size: "medium",
+        request_timeout_ms: 45_000,
         cited_sources: 1,
         parsed_results: 2,
         accepted_results: 1,
@@ -133,5 +135,29 @@ describe("OpenAI web supplier search source", () => {
       results: [],
       reason: "TAJA web search returned no cited sources.",
     });
+  });
+
+  it("uses a source-specific timeout without aborting the parent fallback budget", async () => {
+    vi.useFakeTimers();
+    try {
+      const parent = new AbortController();
+      const source = createOpenAIWebSearchSource({
+        apiKey: "sk-test",
+        requestTimeoutMs: 5_000,
+        fetcher: async (_url, init) => new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => {
+            reject(new DOMException("Aborted", "AbortError"));
+          }, { once: true });
+        }),
+      });
+
+      const search = source.search(input, parent.signal);
+      await vi.advanceTimersByTimeAsync(5_000);
+
+      await expect(search).rejects.toThrow("OpenAI web search timed out after 5 seconds.");
+      expect(parent.signal.aborted).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
