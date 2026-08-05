@@ -1,0 +1,74 @@
+.shell {
+  max-width: 78rem;
+}
+
+.layout {
+  align-items: start;
+  display: grid;
+  gap: 2rem;
+  grid-template-columns: minmax(0, 1.15fr) minmax(22rem, 0.85fr);
+  padding-top: 4.5rem;
+}
+
+.demandColumn,
+.searchesColumn {
+  min-width: 0;
+}
+
+.hero {
+  margin-bottom: 1.5rem;
+}
+
+.hero h1 {
+  margin-bottom: 0.65rem;
+}
+
+.hero p {
+  color: #60766c;
+  font-size: 1.05rem;
+  line-height: 1.55;
+  margin: 0;
+  max-width: 38rem;
+}
+
+.searchesColumn {
+  background: rgb(255 255 255 / 58%);
+  border: 1px solid #dce7e1;
+  border-radius: 1rem;
+  padding: 1.15rem;
+}
+
+.searchesTitle {
+  margin: 0 0 0.75rem;
+}
+
+.searchesColumn :global(.dashboard-filters) {
+  margin-bottom: 0.85rem;
+}
+
+.searchesColumn :global(.filters) {
+  grid-template-columns: 1fr;
+}
+
+.searchesColumn :global(.project-list) {
+  max-height: calc(100vh - 14rem);
+  overflow-y: auto;
+  padding-right: 0.2rem;
+}
+
+.searchesColumn :global(.pagination) {
+  flex-wrap: wrap;
+  margin-bottom: 0;
+}
+
+@media (max-width: 920px) {
+  .layout {
+    grid-template-columns: 1fr;
+    padding-top: 4rem;
+  }
+
+  .searchesColumn :global(.project-list) {
+    max-height: none;
+    overflow: visible;
+  }
+}
