@@ -1,6 +1,6 @@
-import { ASSISTANT_DISPLAY_NAME } from "@/modules/assistant/brand";
-import type { Locale } from "@/modules/i18n/translations";
-import type { LunaSearchWarning } from "@/modules/product-search/domain/luna-search-plan";
+import { ASSISTANT_DISPLAY_NAME } from "../../modules/assistant/brand";
+import type { Locale } from "../../modules/i18n/translations";
+import type { LunaSearchWarning } from "../../modules/product-search/domain/luna-search-plan";
 
 type LunaSearchCopy = {
   title: string;
