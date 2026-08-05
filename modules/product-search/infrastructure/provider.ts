@@ -10,6 +10,8 @@ export function getSupplierOfferSearchProvider(): SupplierOfferSearchProvider {
     endpoint,
     healthEndpoint: process.env.SUPPLIER_SEARCH_PROVIDER_HEALTH_URL,
     token: process.env.SUPPLIER_SEARCH_PROVIDER_TOKEN,
+    timeoutMs: Number(process.env.SUPPLIER_SEARCH_PROVIDER_TIMEOUT_MS ?? 100_000),
+    maxAttempts: Number(process.env.SUPPLIER_SEARCH_PROVIDER_MAX_ATTEMPTS ?? 1),
     allowInsecureLocalhost: process.env.NODE_ENV === "development",
   });
 }
