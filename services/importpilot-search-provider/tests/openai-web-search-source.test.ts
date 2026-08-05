@@ -152,9 +152,11 @@ describe("OpenAI web supplier search source", () => {
       });
 
       const search = source.search(input, parent.signal);
+      const rejection = expect(search)
+        .rejects.toThrow("OpenAI web search timed out after 5 seconds.");
       await vi.advanceTimersByTimeAsync(5_000);
 
-      await expect(search).rejects.toThrow("OpenAI web search timed out after 5 seconds.");
+      await rejection;
       expect(parent.signal.aborted).toBe(false);
     } finally {
       vi.useRealTimers();
