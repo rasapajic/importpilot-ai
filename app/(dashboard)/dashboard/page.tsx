@@ -13,6 +13,8 @@ import { getDashboardProjectStage } from "@/modules/projects/application/dashboa
 import { listProjects } from "@/modules/projects/application/project-service";
 import { listProjectsSchema } from "@/modules/projects/domain/validation";
 
+import styles from "./dashboard.module.css";
+
 type DashboardCopy = {
   title: string;
   subtitle: string;
@@ -103,70 +105,74 @@ export default async function DashboardPage({
   }
 
   return (
-    <main className="dashboard-shell">
-      <header className="dashboard-header">
-        <div>
-          <h1>{copy.title}</h1>
-          <p>{copy.subtitle}</p>
-        </div>
-      </header>
-      <DashboardPrimaryActions />
+    <main className={`dashboard-shell ${styles.shell}`}>
+      <div className={styles.layout}>
+        <section className={styles.demandColumn}>
+          <header className={styles.hero}>
+            <h1>{copy.title}</h1>
+            <p>{copy.subtitle}</p>
+          </header>
+          <DashboardPrimaryActions />
+        </section>
 
-      <h2 className="dashboard-section-title">{copy.searchesTitle}</h2>
-      <details className="dashboard-filters" open={hasActiveFilters}>
-        <summary><span aria-hidden="true">⚙</span> {translateText("Filteri", locale)}</summary>
-        <form className="filters">
-          <input defaultValue={query.search} name="search" placeholder={copy.searchPlaceholder} />
-          <select defaultValue={query.status ?? ""} name="status">
-            <option value="">{translateText("Svi statusi", locale)}</option>
-            <option value="DRAFT">{getStatusLabel("DRAFT", locale)}</option>
-            <option value="COLLECTING_OFFERS">{getStatusLabel("COLLECTING_OFFERS", locale)}</option>
-            <option value="ANALYZING">{getStatusLabel("ANALYZING", locale)}</option>
-            <option value="READY">{getStatusLabel("READY", locale)}</option>
-          </select>
-          <select defaultValue={query.completionStatus ?? ""} name="completionStatus">
-            <option value="">{translateText("Svi statusi završetka", locale)}</option>
-            <option value="ACTIVE">{getStatusLabel("ACTIVE", locale)}</option>
-            <option value="DECIDED">{getStatusLabel("DECIDED", locale)}</option>
-            <option value="COMPLETED">{getStatusLabel("COMPLETED", locale)}</option>
-            <option value="ARCHIVED">{getStatusLabel("ARCHIVED", locale)}</option>
-          </select>
-          <input defaultValue={query.targetCountry} name="targetCountry" placeholder={translateText("Zemlja, npr. DE", locale)} maxLength={2} />
-          <button type="submit">{translateText("Filtriraj", locale)}</button>
-        </form>
-      </details>
+        <section className={styles.searchesColumn} aria-labelledby="my-searches-title">
+          <h2 className={styles.searchesTitle} id="my-searches-title">{copy.searchesTitle}</h2>
+          <details className="dashboard-filters" open={hasActiveFilters}>
+            <summary><span aria-hidden="true">⚙</span> {translateText("Filteri", locale)}</summary>
+            <form className="filters">
+              <input defaultValue={query.search} name="search" placeholder={copy.searchPlaceholder} />
+              <select defaultValue={query.status ?? ""} name="status">
+                <option value="">{translateText("Svi statusi", locale)}</option>
+                <option value="DRAFT">{getStatusLabel("DRAFT", locale)}</option>
+                <option value="COLLECTING_OFFERS">{getStatusLabel("COLLECTING_OFFERS", locale)}</option>
+                <option value="ANALYZING">{getStatusLabel("ANALYZING", locale)}</option>
+                <option value="READY">{getStatusLabel("READY", locale)}</option>
+              </select>
+              <select defaultValue={query.completionStatus ?? ""} name="completionStatus">
+                <option value="">{translateText("Svi statusi završetka", locale)}</option>
+                <option value="ACTIVE">{getStatusLabel("ACTIVE", locale)}</option>
+                <option value="DECIDED">{getStatusLabel("DECIDED", locale)}</option>
+                <option value="COMPLETED">{getStatusLabel("COMPLETED", locale)}</option>
+                <option value="ARCHIVED">{getStatusLabel("ARCHIVED", locale)}</option>
+              </select>
+              <input defaultValue={query.targetCountry} name="targetCountry" placeholder={translateText("Zemlja, npr. DE", locale)} maxLength={2} />
+              <button type="submit">{translateText("Filtriraj", locale)}</button>
+            </form>
+          </details>
 
-      <section className="project-list">
-        {result.projects.map((project) => (
-          <article className="project-row project-list-row" key={project.id}>
-            <Link className="project-row-link" href={`/projects/${project.id}`}>
-              <span className="project-card-content">
-                <strong>{translateText(project.name, locale)}</strong>
-                <span className="project-card-meta">
-                  <small><span aria-hidden="true">📍</span> {getCountryDisplayName(project.targetCountry, locale)}</small>
-                  <small><span aria-hidden="true">📦</span> {project.quantity} {translateText("kom", locale)}</small>
-                  <small className="project-stage">{projectStage(project)}</small>
-                </span>
-              </span>
-            </Link>
-          </article>
-        ))}
-        {result.projects.length === 0 && (
-          <div className="dashboard-card empty-state">
-            <h2>{copy.emptyTitle}</h2>
-            <p>{copy.emptyText}</p>
-            <Link className="primary-link" href="/projects/new">{copy.newSearch}</Link>
-          </div>
-        )}
-      </section>
+          <section className="project-list">
+            {result.projects.map((project) => (
+              <article className="project-row project-list-row" key={project.id}>
+                <Link className="project-row-link" href={`/projects/${project.id}`}>
+                  <span className="project-card-content">
+                    <strong>{translateText(project.name, locale)}</strong>
+                    <span className="project-card-meta">
+                      <small><span aria-hidden="true">📍</span> {getCountryDisplayName(project.targetCountry, locale)}</small>
+                      <small><span aria-hidden="true">📦</span> {project.quantity} {translateText("kom", locale)}</small>
+                      <small className="project-stage">{projectStage(project)}</small>
+                    </span>
+                  </span>
+                </Link>
+              </article>
+            ))}
+            {result.projects.length === 0 && (
+              <div className="dashboard-card empty-state">
+                <h2>{copy.emptyTitle}</h2>
+                <p>{copy.emptyText}</p>
+                <Link className="primary-link" href="/projects/new">{copy.newSearch}</Link>
+              </div>
+            )}
+          </section>
 
-      {result.pagination.pageCount > 1 && (
-        <nav className="pagination">
-          {query.page > 1 && <Link href={pageUrl(query.page - 1)}>{translateText("Prethodna", locale)}</Link>}
-          <span>{translateText("Strana", locale)} {query.page} {translateText("od", locale)} {result.pagination.pageCount}</span>
-          {query.page < result.pagination.pageCount && <Link href={pageUrl(query.page + 1)}>{translateText("Sledeća", locale)}</Link>}
-        </nav>
-      )}
+          {result.pagination.pageCount > 1 && (
+            <nav className="pagination">
+              {query.page > 1 && <Link href={pageUrl(query.page - 1)}>{translateText("Prethodna", locale)}</Link>}
+              <span>{translateText("Strana", locale)} {query.page} {translateText("od", locale)} {result.pagination.pageCount}</span>
+              {query.page < result.pagination.pageCount && <Link href={pageUrl(query.page + 1)}>{translateText("Sledeća", locale)}</Link>}
+            </nav>
+          )}
+        </section>
+      </div>
     </main>
   );
 }
