@@ -6,6 +6,15 @@ const nullableText = (max: number) =>
     z.string().trim().min(1).max(max).nullable(),
   );
 
+const nullableCode = (max: number) =>
+  z.preprocess(
+    (value) => {
+      if (value === undefined || value === "") return null;
+      return typeof value === "string" ? value.trim().toUpperCase() : value;
+    },
+    z.string().min(1).max(max).nullable(),
+  );
+
 const nullableNumber = (schema: z.ZodNumber) =>
   z.preprocess(
     (value) => (value === undefined || value === "" ? null : value),
@@ -41,17 +50,17 @@ export const supplierSearchResultSchema = z
   .object({
     title: z.string().trim().min(1).max(300),
     supplierName: z.string().trim().min(1).max(200),
-    supplierCountry: nullableText(2).refine(
+    supplierCountry: nullableCode(2).refine(
       (value) => value === null || /^[A-Z]{2}$/.test(value),
       "supplierCountry must be a two-letter code.",
     ),
     price: nullableNumber(z.number().nonnegative().finite()),
-    currency: nullableText(3).refine(
+    currency: nullableCode(3).refine(
       (value) => value === null || /^[A-Z]{3}$/.test(value),
       "currency must be a three-letter code.",
     ),
     minimumOrderQuantity: nullableNumber(z.number().int().positive()),
-    incoterm: nullableText(20),
+    incoterm: nullableCode(20),
     productUrl: z.url().max(2_000),
     imageUrl: nullableText(2_000).refine(
       (value) => value === null || z.url().safeParse(value).success,
