@@ -8,7 +8,15 @@ import { createOpenAIWebSearchSource } from "./openai-web-search-source.js";
 import { createFallbackSupplierSearchSource } from "./provider.js";
 
 function openAISearchContextSize(value: string | undefined): "low" | "medium" | "high" {
-  return value === "low" || value === "high" ? value : "medium";
+  return value === "medium" || value === "high" ? value : "low";
+}
+
+function openAIReasoningEffort(
+  value: string | undefined,
+): "minimal" | "low" | "medium" | "high" {
+  return value === "low" || value === "medium" || value === "high"
+    ? value
+    : "minimal";
 }
 
 const port = Number(process.env.PORT ?? 4000);
@@ -18,9 +26,10 @@ const source = createFallbackSupplierSearchSource([
   createOpenAIWebSearchSource({
     apiKey: process.env.OPENAI_API_KEY,
     model: process.env.OPENAI_SEARCH_MODEL ?? "gpt-5-mini",
-    maxResults: Number(process.env.OPENAI_SEARCH_MAX_RESULTS ?? 5),
+    maxResults: Number(process.env.OPENAI_SEARCH_MAX_RESULTS ?? 3),
     requestTimeoutMs: Number(process.env.OPENAI_SEARCH_TIMEOUT_MS ?? 45_000),
     searchContextSize: openAISearchContextSize(process.env.OPENAI_SEARCH_CONTEXT_SIZE),
+    reasoningEffort: openAIReasoningEffort(process.env.OPENAI_REASONING_EFFORT),
     logger,
   }),
   createAlibabaSupplierSearchSource({

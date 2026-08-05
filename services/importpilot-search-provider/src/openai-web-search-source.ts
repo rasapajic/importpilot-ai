@@ -13,15 +13,17 @@ import type {
 } from "./provider.js";
 
 const DEFAULT_MODEL = "gpt-5-mini";
-const DEFAULT_MAX_RESULTS = 5;
+const DEFAULT_MAX_RESULTS = 3;
 const MAX_RESULTS = 10;
 const DEFAULT_REQUEST_TIMEOUT_MS = 45_000;
 const MIN_REQUEST_TIMEOUT_MS = 5_000;
 const MAX_REQUEST_TIMEOUT_MS = 80_000;
-const DEFAULT_SEARCH_CONTEXT_SIZE = "medium";
+const DEFAULT_SEARCH_CONTEXT_SIZE = "low";
+const DEFAULT_REASONING_EFFORT = "minimal";
 
 type Fetcher = typeof fetch;
 type SearchContextSize = "low" | "medium" | "high";
+type ReasoningEffort = "minimal" | "low" | "medium" | "high";
 
 type OpenAIWebSearchOptions = {
   apiKey?: string;
@@ -29,6 +31,7 @@ type OpenAIWebSearchOptions = {
   maxResults?: number;
   requestTimeoutMs?: number;
   searchContextSize?: SearchContextSize;
+  reasoningEffort?: ReasoningEffort;
   fetcher?: Fetcher;
   logger?: DevelopmentLogger;
 };
@@ -212,15 +215,18 @@ function buildPrompt(input: SearchRequest, maxResults: number) {
   return [
     "You are TAJA, a rigorous international sourcing analyst.",
     "Use live web search. Do not answer from memory.",
-    `Find up to ${maxResults} current, directly openable supplier product pages for this product: ${input.productQuery}`,
-    `Requested quantity: ${input.quantity}. Import destination: ${input.targetCountry}.`,
+    "Perform one focused supplier-discovery pass and finish as soon as enough verified direct pages are found.",
+    `Translate the product into concise English sourcing keywords before searching, while preserving every required specification: ${input.productQuery}`,
+    `Find up to ${maxResults} current, directly openable supplier product pages. Requested quantity: ${input.quantity}. Import destination: ${input.targetCountry}.`,
     "Prioritize manufacturers and B2B suppliers in China and India, including Alibaba, Made-in-China, Global Sources, 1688, IndiaMART, TradeIndia and direct manufacturer websites.",
     "Return only direct product-detail pages. Never return a homepage, category page, search-result page, blog post, marketplace editorial page or social-media page.",
     "Every productUrl must be a URL you actually opened or used as a web-search source during this response.",
+    "Stop searching when the requested number of relevant direct product pages is verified.",
     "Never invent a supplier, price, currency, MOQ, Incoterm, image URL or product URL.",
-    "Use price and currency only when an explicit numeric unit price is visible on the cited page. If not confirmed, set both to null.",
-    "Use MOQ only when explicitly stated as an integer. Otherwise set it to null.",
-    "Use Incoterm only when explicitly stated. Otherwise set it to null.",
+    "Commercial details are secondary. Do not perform extra searches solely to find price, MOQ, Incoterm or image data.",
+    "Use price and currency only when an explicit numeric unit price is visible on an already opened cited page. Otherwise set both to null.",
+    "Use MOQ only when explicitly visible as an integer on an already opened cited page. Otherwise set it to null.",
+    "Use Incoterm only when explicitly visible on an already opened cited page. Otherwise set it to null.",
     "Use a two-letter supplier-country code only when confirmed; otherwise null.",
     "Keep the original product title and supplier name from the cited page.",
     "Return an empty results array when no verifiable direct product pages are found.",
@@ -261,6 +267,7 @@ export function createOpenAIWebSearchSource({
   maxResults = DEFAULT_MAX_RESULTS,
   requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
   searchContextSize = DEFAULT_SEARCH_CONTEXT_SIZE,
+  reasoningEffort = DEFAULT_REASONING_EFFORT,
   fetcher = fetch,
   logger = createDevelopmentLogger(),
 }: OpenAIWebSearchOptions = {}): SupplierSearchSource {
@@ -300,6 +307,7 @@ export function createOpenAIWebSearchSource({
           body: JSON.stringify({
             model,
             store: false,
+            reasoning: { effort: reasoningEffort },
             tool_choice: "required",
             tools: [{
               type: "web_search",
@@ -311,7 +319,7 @@ export function createOpenAIWebSearchSource({
                 role: "developer",
                 content: [{
                   type: "input_text",
-                  text: "Use web search and produce only the requested structured supplier-offer data. Accuracy and source traceability are more important than returning many results.",
+                  text: "Use web search and produce only the requested structured supplier-page data. Prefer speed, direct-page verification and source traceability over optional commercial details.",
                 }],
               },
               {
@@ -363,6 +371,7 @@ export function createOpenAIWebSearchSource({
 
       logger("openai_web_search", {
         model,
+        reasoning_effort: reasoningEffort,
         search_context_size: searchContextSize,
         request_timeout_ms: safeRequestTimeoutMs,
         response_id: payload.id ?? null,
