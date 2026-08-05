@@ -45,6 +45,53 @@ describe("supplier provider fallback chain", () => {
     });
   });
 
+  it("trusts TAJA semantic relevance when the user query and supplier title use different languages", async () => {
+    const events: Array<{ event: string; details?: Record<string, unknown> }> = [];
+    const tajaSource: SupplierSearchSource = {
+      name: "openai-web-search-v1",
+      implemented: true,
+      trustedRelevance: true,
+      async search() {
+        return {
+          results: [{
+            title: "Foldable Car Trunk Organizer with Three Compartments",
+            supplierName: "Ningbo Example Auto Accessories Co., Ltd.",
+            supplierCountry: "CN",
+            price: 4.8,
+            currency: "USD",
+            minimumOrderQuantity: 100,
+            incoterm: "FOB",
+            productUrl: "https://supplier.example.com/product/trunk-organizer",
+            imageUrl: null,
+            source: "TAJA web · supplier.example.com",
+          }],
+        };
+      },
+    };
+    const source = createFallbackSupplierSearchSource(
+      [tajaSource],
+      (event, details) => events.push({ event, details }),
+    );
+
+    const outcome = await source.search({
+      productQuery: "sklopivi organizator za gepek sa tri pregrade",
+      quantity: 100,
+      targetCountry: "RS",
+      language: "sr",
+    }, new AbortController().signal);
+
+    expect(Array.isArray(outcome) ? outcome : outcome.results).toHaveLength(1);
+    expect(events).toContainEqual({
+      event: "provider_relevance_filter",
+      details: {
+        provider_name: "openai-web-search-v1",
+        parsed_results: 1,
+        relevant_results: 1,
+        semantic_relevance_trusted: true,
+      },
+    });
+  });
+
   it("returns empty results when all providers fail", async () => {
     const failing = (name: string, reason: string): SupplierSearchSource => ({
       name,

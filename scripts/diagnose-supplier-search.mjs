@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
-const APP_URL = "http://localhost:3000";
+const APP_URL = process.env.IMPORTPILOT_APP_URL ?? "http://localhost:3001";
 const QUERY = {
   productQuery: "punjac za telefon typ c",
   query: "punjac za telefon typ c",
@@ -29,7 +29,7 @@ async function envFile(path) {
 
 async function responseJson(url, init = {}) {
   try {
-    const response = await fetch(url, { ...init, signal: AbortSignal.timeout(40_000) });
+    const response = await fetch(url, { ...init, signal: AbortSignal.timeout(120_000) });
     return {
       reachable: true,
       status: response.status,
@@ -111,15 +111,20 @@ const appSearch = selectedProject?.id
 
 const diagnosis = {
   configuration: {
+    appUrl: APP_URL,
     providerUrlSet: Boolean(providerUrl),
     healthUrlSet: Boolean(healthUrl),
     rootTokenSet: Boolean(rootToken),
     providerTokenSet: Boolean(providerToken),
     tokensMatch: tokenMatches,
+    tajaOpenAIWebSearchConfigured: Boolean(providerEnv.OPENAI_API_KEY),
+    tajaOpenAIModel: providerEnv.OPENAI_SEARCH_MODEL || "gpt-5",
+    tajaOpenAIMaxResults: Number(providerEnv.OPENAI_SEARCH_MAX_RESULTS || 10),
   },
   providerReachable: health.reachable,
   providerAuthOk: tokenMatches && ![401, 403].includes(health.status) && healthWithoutAuth.status === 401,
   providerHealthStatus: health.status,
+  providerSourceChain: health.body?.source ?? null,
   providerResultCount: count(providerSearch.body),
   providerFinalReason: providerSearch.body?.reason ?? null,
   appLoginStatus: login.status,
@@ -135,7 +140,7 @@ const diagnosis = {
   uiFacingReason: count(appSearch.body) === 0 ? UI_UNAVAILABLE : null,
 };
 
-console.log("Supplier search end-to-end diagnosis");
+console.log("TAJA supplier search end-to-end diagnosis");
 console.log(JSON.stringify(diagnosis, null, 2));
 
 if (!diagnosis.configuration.tokensMatch) process.exitCode = 2;

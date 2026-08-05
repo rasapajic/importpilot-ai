@@ -235,7 +235,7 @@ export function SupplierOfferSearch({
     <section className="dashboard-card supplier-search">
       <header className="section-header">
         <div>
-          <h2>Luna Search</h2>
+          <h2>{lunaCopy.title}</h2>
           <p>{lunaCopy.description}</p>
         </div>
         {providerStatus && (
