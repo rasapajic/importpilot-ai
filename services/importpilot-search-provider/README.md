@@ -1,13 +1,18 @@
 # ImportPilot Search Provider
 
 Separate lightweight Node.js/TypeScript service that supplies structured,
-validated supplier-search results to ImportPilot. It does not scrape inside the
+validated supplier-search results to ImportPilot. It does not search inside the
 main application and never persists raw HTML.
 
-Provider v1 uses an experimental fallback chain: Alibaba, then Made-in-China.
-Each adapter fetches search HTML only in memory, reads embedded structured
-JSON, normalizes up to five supplier offers, then discards the HTML. The chain
-stops on the first provider that returns usable results.
+The primary source is **TAJA live web search** through the OpenAI Responses API
+with the built-in web-search tool. Alibaba and Made-in-China direct adapters
+remain bounded fallbacks. The chain stops on the first source that returns
+usable results.
+
+TAJA accepts only direct HTTPS product pages that also occur in the web-search
+sources/citations returned by OpenAI. Supplier names, URLs, prices, currencies,
+MOQ values and Incoterms are never invented. Unconfirmed optional values remain
+`null`.
 
 ## Run locally
 
@@ -29,6 +34,30 @@ npm run dev
 
 The service listens on `http://localhost:4000` by default.
 
+## Enable TAJA real web search
+
+Create an OpenAI API key for the server-side project and add it only to:
+
+```text
+services/importpilot-search-provider/.env
+```
+
+Example configuration:
+
+```env
+OPENAI_API_KEY=your-server-side-api-key
+OPENAI_SEARCH_MODEL=gpt-5
+OPENAI_SEARCH_MAX_RESULTS=10
+UPSTREAM_TIMEOUT_MS=90000
+```
+
+Do not expose the API key through `NEXT_PUBLIC_*`, browser code, screenshots or
+Git history. The OpenAI request uses `store: false`. The model is configurable
+so production can switch to another Responses-API model without code changes.
+
+If `OPENAI_API_KEY` is missing, the OpenAI source is disabled and the provider
+continues with Alibaba and Made-in-China.
+
 To capture a real Made-in-China response while adapting the parser:
 
 ```powershell
@@ -47,6 +76,8 @@ Configure the ImportPilot application:
 SUPPLIER_SEARCH_PROVIDER_URL=http://localhost:4000/search
 SUPPLIER_SEARCH_PROVIDER_HEALTH_URL=http://localhost:4000/health
 SUPPLIER_SEARCH_PROVIDER_TOKEN=change-this-search-provider-token
+SUPPLIER_SEARCH_PROVIDER_TIMEOUT_MS=100000
+SUPPLIER_SEARCH_PROVIDER_MAX_ATTEMPTS=1
 ```
 
 Use HTTPS outside local development.
@@ -89,7 +120,7 @@ Successful response:
     "incoterm": "FOB",
     "productUrl": "https://supplier.example/ptz",
     "imageUrl": "https://supplier.example/ptz.jpg",
-    "source": "provider-name"
+    "source": "TAJA web · supplier.example"
   }]
 }
 ```
@@ -108,13 +139,36 @@ pairs are rejected.
 
 ### `GET /health`
 
-Returns source health and whether a real source is implemented.
+Returns source-chain health and whether at least one real source is implemented.
+The endpoint does not spend an OpenAI search call merely to validate the API
+key; an invalid key is reported by the first actual search and the fallback
+chain then continues.
 
-## Implement a real source
+## TAJA source guarantees
+
+- OpenAI web search is mandatory for every TAJA source call.
+- Structured Outputs constrain the response to the existing supplier-offer
+  contract.
+- A returned `productUrl` is accepted only when the same normalized direct page
+  is present in the response's web-search sources or URL citations.
+- Homepages, category pages, ordinary search pages and non-HTTPS URLs are
+  rejected.
+- Duplicate product URLs are removed.
+- Semantic relevance is trusted for this source so Serbian and German requests
+  can match English supplier titles without being discarded by a lexical
+  filter.
+- Up to ten verified results can be returned. Direct providers remain limited
+  and lexically ranked.
+- Token usage, cited-source count and accepted-result count are logged without
+  logging the API key.
+
+## Implement another real source
 
 Implement `SupplierSearchSource` from `src/provider.ts` and pass it to
 `createSearchProviderApp` in `src/server.ts`. The source receives validated
 search input and an `AbortSignal`, and must return only structured result data.
+Set `trustedRelevance: true` only when that source already performs reliable
+semantic product matching.
 
 Security controls included:
 
@@ -123,11 +177,14 @@ Security controls included:
 - upstream timeout signal
 - 100 KB request-body limit
 - strict request and provider-response validation
-- no raw HTML persistence
+- no raw HTML persistence during normal operation
+- server-only OpenAI credentials
 
 Search resilience:
 
-- Alibaba gets a short bounded attempt before fallback.
+- TAJA OpenAI web search is attempted first when configured.
+- Alibaba gets a short bounded attempt after TAJA returns no verified pages or
+  fails.
 - Made-in-China retries up to three deterministic query variants, including
   normalized English purchasing terms for common Serbian/German queries.
 - Normalized variants use both the SEO hot-products endpoint and Made-in-China's
@@ -138,11 +195,11 @@ Search resilience:
 - Each upstream attempt, the complete provider chain, and the ImportPilot HTTP
   client have separate finite timeout budgets.
 
-## Alibaba v1 limitations
+## Alibaba fallback limitations
 
 - Alibaba may block automated requests, require CAPTCHA verification, or return
-  region-specific markup. In those cases the service returns an empty result
-  with a clear reason.
+  region-specific markup. In those cases the service continues to the next
+  source with a clear internal reason.
 - The parser intentionally reads only embedded structured JSON. It does not use
   a browser, bypass anti-bot controls, or persist raw HTML.
 - Alibaba can change its response format without notice. Fixture-based tests
@@ -159,8 +216,8 @@ Search resilience:
 
 ## Made-in-China fallback limitations
 
-- Made-in-China is called only when Alibaba returns no usable results, is
-  blocked, or fails.
+- Made-in-China is called only when earlier sources return no usable results,
+  are blocked, or fail.
 - It may also return anti-bot pages or change its markup without notice.
 - The adapter intentionally parses embedded structured JSON only. It does not
   bypass anti-bot controls. It also reads the live server-rendered
@@ -175,9 +232,22 @@ Search resilience:
   chain.
 - Tests use saved fixture HTML only. There are no live network tests.
 
-## Verify
+## Diagnose and verify
+
+From the repository root, while the application and provider are running:
 
 ```powershell
+npm run diagnose:supplier-search
+```
+
+The diagnostic output reports whether TAJA OpenAI web search is configured,
+which model name is selected, the provider source chain and the end-to-end
+result count. It never prints the API key.
+
+Provider checks:
+
+```powershell
+cd services/importpilot-search-provider
 npm run typecheck
 npm test
 ```
