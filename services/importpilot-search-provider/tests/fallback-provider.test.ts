@@ -92,6 +92,53 @@ describe("supplier provider fallback chain", () => {
     });
   });
 
+  it("logs a sanitized provider error and continues the fallback chain", async () => {
+    const events: Array<{ event: string; details?: Record<string, unknown> }> = [];
+    const failingSource: SupplierSearchSource = {
+      name: "openai-web-search-v1",
+      implemented: true,
+      async search() {
+        throw new Error("OpenAI returned 401 for Bearer sk-secret-value");
+      },
+    };
+    const succeedingSource: SupplierSearchSource = {
+      name: "made-in-china-v1",
+      implemented: true,
+      async search() {
+        return {
+          results: [{
+            title: "PTZ Camera 3MP",
+            supplierName: "Example Supplier",
+            supplierCountry: "CN",
+            price: 12,
+            currency: "USD",
+            minimumOrderQuantity: 100,
+            incoterm: "FOB",
+            productUrl: "https://supplier.example.com/product/ptz-camera",
+            imageUrl: null,
+            source: "Made-in-China",
+          }],
+        };
+      },
+    };
+    const source = createFallbackSupplierSearchSource(
+      [failingSource, succeedingSource],
+      (event, details) => events.push({ event, details }),
+    );
+
+    const outcome = await source.search(input, new AbortController().signal);
+
+    expect(Array.isArray(outcome) ? outcome : outcome.results).toHaveLength(1);
+    expect(events).toContainEqual({
+      event: "provider_attempt_failed",
+      details: {
+        provider_name: "openai-web-search-v1",
+        error_name: "Error",
+        error_message: "OpenAI returned 401 for Bearer [REDACTED]",
+      },
+    });
+  });
+
   it("returns empty results when all providers fail", async () => {
     const failing = (name: string, reason: string): SupplierSearchSource => ({
       name,
