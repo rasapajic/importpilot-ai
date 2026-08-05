@@ -26,7 +26,7 @@ function result(productUrl: string, overrides: Record<string, unknown> = {}) {
 }
 
 describe("OpenAI web supplier search source", () => {
-  it("uses mandatory live web search and accepts only cited direct product pages", async () => {
+  it("uses mandatory low-latency live web search and accepts only cited direct product pages", async () => {
     const citedUrl = "https://supplier.example.com/product/trunk-organizer?utm_source=openai";
     const uncitedUrl = "https://invented.example.com/product/not-cited";
     let requestBody: Record<string, unknown> | null = null;
@@ -85,15 +85,17 @@ describe("OpenAI web supplier search source", () => {
     expect(requestBody).toMatchObject({
       model: "gpt-5",
       store: false,
+      reasoning: { effort: "minimal" },
       tool_choice: "required",
       include: ["web_search_call.action.sources"],
-      tools: [{ type: "web_search", search_context_size: "medium" }],
+      tools: [{ type: "web_search", search_context_size: "low" }],
       text: { format: { type: "json_schema", strict: true } },
     });
     expect(events).toContainEqual({
       event: "openai_web_search",
       details: expect.objectContaining({
-        search_context_size: "medium",
+        reasoning_effort: "minimal",
+        search_context_size: "low",
         request_timeout_ms: 45_000,
         cited_sources: 1,
         parsed_results: 2,
@@ -101,6 +103,32 @@ describe("OpenAI web supplier search source", () => {
         total_tokens: 150,
       }),
     });
+  });
+
+  it("accepts an explicitly configured reasoning effort", async () => {
+    let requestBody: Record<string, unknown> | null = null;
+    const source = createOpenAIWebSearchSource({
+      apiKey: "sk-test",
+      reasoningEffort: "low",
+      fetcher: async (_url, init) => {
+        requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        return new Response(JSON.stringify({
+          id: "resp_test",
+          status: "completed",
+          output: [{
+            type: "message",
+            content: [{
+              type: "output_text",
+              text: JSON.stringify({ results: [] }),
+              annotations: [],
+            }],
+          }],
+        }), { status: 200, headers: { "content-type": "application/json" } });
+      },
+    });
+
+    await source.search(input, new AbortController().signal);
+    expect(requestBody).toMatchObject({ reasoning: { effort: "low" } });
   });
 
   it("is disabled without an API key so direct providers can take over", async () => {
