@@ -32,10 +32,13 @@ describe("project URL entry flow", () => {
   it("focuses product name for standard search flow", () => {
     expect(createFormSource).toContain('if (mode === "search") productNameRef.current?.focus()');
     expect(createFormSource).toContain('data-entry-mode={mode}');
+    expect(createFormSource).toContain("if (!detailsVisible)");
+    expect(createFormSource).toContain("setDetailsVisible(true)");
   });
 
   it("renders a URL-first form for URL import mode", () => {
-    expect(newProjectPageSource).toContain('mode === "url" ? t("Ubaci link proizvoda") : t("Nova pretraga")');
+    expect(newProjectPageSource).toContain('title: "Koji proizvod tražite?"');
+    expect(newProjectPageSource).toContain('mode === "url" ? copy.urlIntro : copy.searchIntro');
     expect(newProjectPageSource).toContain("CreateProjectFromUrlForm");
     expect(urlFirstFormSource).toContain("Link proizvoda");
     expect(urlFirstFormSource.indexOf("Link proizvoda")).toBeLessThan(urlFirstFormSource.indexOf("Količina"));

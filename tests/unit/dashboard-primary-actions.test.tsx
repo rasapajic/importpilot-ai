@@ -5,10 +5,10 @@ import { getProjectCreationDestination } from "../../modules/projects/applicatio
 import { translateText } from "../../modules/i18n/translations";
 
 describe("dashboard primary actions", () => {
-  it("renders search and URL import entry points", () => {
-    expect(dashboardPrimaryActions.map((action) => action.label)).toEqual([
-      "New search",
-      "Paste product link",
+  it("renders product description and URL entry points", () => {
+    expect(dashboardPrimaryActions.map((action) => action.key)).toEqual([
+      "describe",
+      "url",
     ]);
     expect(dashboardPrimaryActions.map((action) => action.href)).toEqual([
       "/projects/new",

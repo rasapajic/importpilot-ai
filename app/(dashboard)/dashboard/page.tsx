@@ -4,10 +4,54 @@ import { DashboardPrimaryActions } from "@/components/dashboard/dashboard-primar
 import { requireSession } from "@/modules/auth/infrastructure/session";
 import { getCountryDisplayName } from "@/modules/i18n/country-names";
 import { getServerLocale } from "@/modules/i18n/server";
-import { getStatusLabel, translateText } from "@/modules/i18n/translations";
+import {
+  getStatusLabel,
+  translateText,
+  type Locale,
+} from "@/modules/i18n/translations";
 import { getDashboardProjectStage } from "@/modules/projects/application/dashboard-project-stage";
 import { listProjects } from "@/modules/projects/application/project-service";
 import { listProjectsSchema } from "@/modules/projects/domain/validation";
+
+type DashboardCopy = {
+  title: string;
+  subtitle: string;
+  searchesTitle: string;
+  searchPlaceholder: string;
+  emptyTitle: string;
+  emptyText: string;
+  newSearch: string;
+};
+
+const dashboardCopy: Record<Locale, DashboardCopy> = {
+  sr: {
+    title: "Koji proizvod tražite?",
+    subtitle: "Opišite proizvod, dodajte sliku ili nalepite link.",
+    searchesTitle: "Moje pretrage",
+    searchPlaceholder: "Pretražite moje pretrage",
+    emptyTitle: "Još nema pretraga.",
+    emptyText: "Započnite tako što ćete opisati proizvod koji tražite.",
+    newSearch: "Nova pretraga",
+  },
+  de: {
+    title: "Welches Produkt suchen Sie?",
+    subtitle: "Beschreiben Sie das Produkt, fügen Sie ein Bild hinzu oder fügen Sie einen Link ein.",
+    searchesTitle: "Meine Suchen",
+    searchPlaceholder: "Meine Suchen durchsuchen",
+    emptyTitle: "Noch keine Suchen vorhanden.",
+    emptyText: "Beginnen Sie mit einer Beschreibung des gesuchten Produkts.",
+    newSearch: "Neue Suche",
+  },
+  en: {
+    title: "Which product are you looking for?",
+    subtitle: "Describe the product, add an image, or paste a link.",
+    searchesTitle: "My searches",
+    searchPlaceholder: "Search my searches",
+    emptyTitle: "No searches yet.",
+    emptyText: "Start by describing the product you are looking for.",
+    newSearch: "New search",
+  },
+};
 
 export default async function DashboardPage({
   searchParams,
@@ -16,6 +60,7 @@ export default async function DashboardPage({
 }) {
   const { membership } = await requireSession();
   const locale = await getServerLocale();
+  const copy = dashboardCopy[locale];
   const raw = await searchParams;
   const query = listProjectsSchema.parse({
     search: typeof raw.search === "string" ? raw.search : "",
@@ -61,17 +106,17 @@ export default async function DashboardPage({
     <main className="dashboard-shell">
       <header className="dashboard-header">
         <div>
-          <h1>{translateText("Uporedite ponude i kupujte sigurnije", locale)}</h1>
-          <p>{translateText("Dodajte ponude, izračunajte realnu cenu i donesite odluku za nekoliko minuta.", locale)}</p>
+          <h1>{copy.title}</h1>
+          <p>{copy.subtitle}</p>
         </div>
       </header>
       <DashboardPrimaryActions />
 
-      <h2 className="dashboard-section-title">{translateText("Your active searches", locale)}</h2>
+      <h2 className="dashboard-section-title">{copy.searchesTitle}</h2>
       <details className="dashboard-filters" open={hasActiveFilters}>
         <summary><span aria-hidden="true">⚙</span> {translateText("Filteri", locale)}</summary>
         <form className="filters">
-          <input defaultValue={query.search} name="search" placeholder={translateText("Pretraži kupovine", locale)} />
+          <input defaultValue={query.search} name="search" placeholder={copy.searchPlaceholder} />
           <select defaultValue={query.status ?? ""} name="status">
             <option value="">{translateText("Svi statusi", locale)}</option>
             <option value="DRAFT">{getStatusLabel("DRAFT", locale)}</option>
@@ -108,9 +153,9 @@ export default async function DashboardPage({
         ))}
         {result.projects.length === 0 && (
           <div className="dashboard-card empty-state">
-            <h2>{translateText("Nema projekata za izabrane filtere.", locale)}</h2>
-            <p>{translateText("Očistite filtere ili kreirajte prvu kupovinu.", locale)}</p>
-            <Link className="primary-link" href="/projects/new">{translateText("New search", locale)}</Link>
+            <h2>{copy.emptyTitle}</h2>
+            <p>{copy.emptyText}</p>
+            <Link className="primary-link" href="/projects/new">{copy.newSearch}</Link>
           </div>
         )}
       </section>

@@ -12,24 +12,24 @@ function resolveLocale(locale: Locale | string): Locale {
 
 const productCopy: Record<Locale, { activeTitle: string; completedTitle: string; activeBadge: string; completedBadge: string; lockedBadge: string }> = {
   sr: {
-    activeTitle: "Šta želite da kupite?",
-    completedTitle: "Odabrani proizvod",
-    activeBadge: "IZABERI PROIZVOD",
-    completedBadge: "ODABRANO",
+    activeTitle: "Koji proizvod tražite?",
+    completedTitle: "Proizvod",
+    activeBadge: "UNESITE PROIZVOD",
+    completedBadge: "POTVRĐENO",
     lockedBadge: "ZAKLJUČANO",
   },
   de: {
-    activeTitle: "Was möchten Sie kaufen?",
-    completedTitle: "Ausgewähltes Produkt",
-    activeBadge: "PRODUKT AUSWÄHLEN",
-    completedBadge: "AUSGEWÄHLT",
+    activeTitle: "Welches Produkt suchen Sie?",
+    completedTitle: "Produkt",
+    activeBadge: "PRODUKT ANGEBEN",
+    completedBadge: "BESTÄTIGT",
     lockedBadge: "GESPERRT",
   },
   en: {
-    activeTitle: "What do you want to buy?",
-    completedTitle: "Selected product",
-    activeBadge: "SELECT PRODUCT",
-    completedBadge: "SELECTED",
+    activeTitle: "Which product are you looking for?",
+    completedTitle: "Product",
+    activeBadge: "ENTER PRODUCT",
+    completedBadge: "CONFIRMED",
     lockedBadge: "LOCKED",
   },
 };

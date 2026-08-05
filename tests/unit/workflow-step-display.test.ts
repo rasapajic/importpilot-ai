@@ -7,14 +7,14 @@ import {
 } from "../../modules/projects/domain/workflow-step-display";
 
 describe("workflow step display", () => {
-  it("describes the selected product instead of repeating the question", () => {
+  it("uses demand wording before confirmation and a neutral product title afterwards", () => {
     expect(getProductStepDisplay("COMPLETED", "sr")).toEqual({
-      title: "Odabrani proizvod",
-      badge: "ODABRANO",
+      title: "Proizvod",
+      badge: "POTVRĐENO",
     });
     expect(getProductStepDisplay("ACTIVE", "sr")).toEqual({
-      title: "Šta želite da kupite?",
-      badge: "IZABERI PROIZVOD",
+      title: "Koji proizvod tražite?",
+      badge: "UNESITE PROIZVOD",
     });
   });
 
@@ -27,7 +27,10 @@ describe("workflow step display", () => {
   });
 
   it("localizes completed workflow states", () => {
-    expect(getProductStepDisplay("COMPLETED", "de").title).toBe("Ausgewähltes Produkt");
+    expect(getProductStepDisplay("COMPLETED", "de")).toEqual({
+      title: "Produkt",
+      badge: "BESTÄTIGT",
+    });
     expect(getOfferStepDisplay("COMPLETED", "en").badge).toBe("OFFERS ADDED");
     expect(getDecisionStepBadge("COMPLETED", "de")).toBe("ENTSCHEIDUNG GETROFFEN");
   });
