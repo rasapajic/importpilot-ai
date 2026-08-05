@@ -139,6 +139,34 @@ describe("supplier provider fallback chain", () => {
     });
   });
 
+  it("does not start more fallback sources after the global budget is aborted", async () => {
+    const controller = new AbortController();
+    let fallbackCalls = 0;
+    const source = createFallbackSupplierSearchSource([
+      {
+        name: "openai-web-search-v1",
+        implemented: true,
+        async search() {
+          controller.abort();
+          throw new DOMException("Aborted", "AbortError");
+        },
+      },
+      {
+        name: "made-in-china-v1",
+        implemented: true,
+        async search() {
+          fallbackCalls += 1;
+          return [];
+        },
+      },
+    ]);
+
+    await expect(source.search(input, controller.signal)).rejects.toMatchObject({
+      name: "AbortError",
+    });
+    expect(fallbackCalls).toBe(0);
+  });
+
   it("returns empty results when all providers fail", async () => {
     const failing = (name: string, reason: string): SupplierSearchSource => ({
       name,

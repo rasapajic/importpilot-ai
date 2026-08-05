@@ -12,15 +12,23 @@ import type {
   SupplierSearchSource,
 } from "./provider.js";
 
-const DEFAULT_MODEL = "gpt-5";
-const DEFAULT_MAX_RESULTS = 10;
+const DEFAULT_MODEL = "gpt-5-mini";
+const DEFAULT_MAX_RESULTS = 5;
+const MAX_RESULTS = 10;
+const DEFAULT_REQUEST_TIMEOUT_MS = 45_000;
+const MIN_REQUEST_TIMEOUT_MS = 5_000;
+const MAX_REQUEST_TIMEOUT_MS = 80_000;
+const DEFAULT_SEARCH_CONTEXT_SIZE = "medium";
 
 type Fetcher = typeof fetch;
+type SearchContextSize = "low" | "medium" | "high";
 
 type OpenAIWebSearchOptions = {
   apiKey?: string;
   model?: string;
   maxResults?: number;
+  requestTimeoutMs?: number;
+  searchContextSize?: SearchContextSize;
   fetcher?: Fetcher;
   logger?: DevelopmentLogger;
 };
@@ -70,7 +78,7 @@ const supplierResultsJsonSchema = {
   properties: {
     results: {
       type: "array",
-      maxItems: DEFAULT_MAX_RESULTS,
+      maxItems: MAX_RESULTS,
       items: {
         type: "object",
         additionalProperties: false,
@@ -219,18 +227,51 @@ function buildPrompt(input: SearchRequest, maxResults: number) {
   ].join("\n");
 }
 
+function clampInteger(value: number | undefined, fallback: number, minimum: number, maximum: number) {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(minimum, Math.min(maximum, Math.trunc(value!)));
+}
+
+function createRequestSignal(parentSignal: AbortSignal, timeoutMs: number) {
+  const controller = new AbortController();
+  let timedOut = false;
+
+  const abortFromParent = () => controller.abort(parentSignal.reason);
+  if (parentSignal.aborted) abortFromParent();
+  else parentSignal.addEventListener("abort", abortFromParent, { once: true });
+
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort(new DOMException("OpenAI web search timed out.", "TimeoutError"));
+  }, timeoutMs);
+
+  return {
+    signal: controller.signal,
+    timedOut: () => timedOut,
+    cleanup() {
+      clearTimeout(timer);
+      parentSignal.removeEventListener("abort", abortFromParent);
+    },
+  };
+}
+
 export function createOpenAIWebSearchSource({
   apiKey,
   model = DEFAULT_MODEL,
   maxResults = DEFAULT_MAX_RESULTS,
+  requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
+  searchContextSize = DEFAULT_SEARCH_CONTEXT_SIZE,
   fetcher = fetch,
   logger = createDevelopmentLogger(),
 }: OpenAIWebSearchOptions = {}): SupplierSearchSource {
   const configured = Boolean(apiKey?.trim());
-  const requestedMaxResults = Number.isFinite(maxResults)
-    ? Math.trunc(maxResults)
-    : DEFAULT_MAX_RESULTS;
-  const safeMaxResults = Math.max(1, Math.min(DEFAULT_MAX_RESULTS, requestedMaxResults));
+  const safeMaxResults = clampInteger(maxResults, DEFAULT_MAX_RESULTS, 1, MAX_RESULTS);
+  const safeRequestTimeoutMs = clampInteger(
+    requestTimeoutMs,
+    DEFAULT_REQUEST_TIMEOUT_MS,
+    MIN_REQUEST_TIMEOUT_MS,
+    MAX_REQUEST_TIMEOUT_MS,
+  );
 
   return {
     name: "openai-web-search-v1",
@@ -246,49 +287,62 @@ export function createOpenAIWebSearchSource({
         return { results: [], reason: "OpenAI web search is not configured." };
       }
 
-      const response = await fetcher("https://api.openai.com/v1/responses", {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${apiKey}`,
-          "content-type": "application/json",
-        },
-        signal,
-        body: JSON.stringify({
-          model,
-          store: false,
-          tool_choice: "required",
-          tools: [{
-            type: "web_search",
-            search_context_size: "high",
-          }],
-          include: ["web_search_call.action.sources"],
-          input: [
-            {
-              role: "developer",
-              content: [{
-                type: "input_text",
-                text: "Use web search and produce only the requested structured supplier-offer data. Accuracy and source traceability are more important than returning many results.",
-              }],
-            },
-            {
-              role: "user",
-              content: [{
-                type: "input_text",
-                text: buildPrompt(input, safeMaxResults),
-              }],
-            },
-          ],
-          text: {
-            format: {
-              type: "json_schema",
-              name: "supplier_offer_search_results",
-              description: "Verified live supplier product pages and only fields confirmed by those pages.",
-              strict: true,
-              schema: supplierResultsJsonSchema,
-            },
+      const request = createRequestSignal(signal, safeRequestTimeoutMs);
+      let response: Response;
+      try {
+        response = await fetcher("https://api.openai.com/v1/responses", {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${apiKey}`,
+            "content-type": "application/json",
           },
-        }),
-      });
+          signal: request.signal,
+          body: JSON.stringify({
+            model,
+            store: false,
+            tool_choice: "required",
+            tools: [{
+              type: "web_search",
+              search_context_size: searchContextSize,
+            }],
+            include: ["web_search_call.action.sources"],
+            input: [
+              {
+                role: "developer",
+                content: [{
+                  type: "input_text",
+                  text: "Use web search and produce only the requested structured supplier-offer data. Accuracy and source traceability are more important than returning many results.",
+                }],
+              },
+              {
+                role: "user",
+                content: [{
+                  type: "input_text",
+                  text: buildPrompt(input, safeMaxResults),
+                }],
+              },
+            ],
+            text: {
+              format: {
+                type: "json_schema",
+                name: "supplier_offer_search_results",
+                description: "Verified live supplier product pages and only fields confirmed by those pages.",
+                strict: true,
+                schema: supplierResultsJsonSchema,
+              },
+            },
+          }),
+        });
+      } catch (error) {
+        if (request.timedOut() && !signal.aborted) {
+          throw new Error(
+            `OpenAI web search timed out after ${Math.ceil(safeRequestTimeoutMs / 1_000)} seconds.`,
+          );
+        }
+        throw error;
+      } finally {
+        request.cleanup();
+      }
 
       const payload = await response.json().catch(() => null) as OpenAIResponse | null;
       if (!response.ok || !payload) {
@@ -309,6 +363,8 @@ export function createOpenAIWebSearchSource({
 
       logger("openai_web_search", {
         model,
+        search_context_size: searchContextSize,
+        request_timeout_ms: safeRequestTimeoutMs,
         response_id: payload.id ?? null,
         cited_sources: citedUrls.length,
         parsed_results: parsed.length,
