@@ -29,6 +29,8 @@ const isoDateTime = z.string().trim().refine((value) => {
   return Number.isFinite(timestamp) && value.includes("T");
 }, "Invalid ISO date-time.");
 
+const nonnegativeInteger = z.number().int().nonnegative();
+
 export const supplierOfferSearchInputSchema = z
   .object({
     query: z.string().trim().min(2).max(200),
@@ -91,6 +93,23 @@ export const supplierOfferSearchResultSchema = z
   });
 
 export const supplierOfferSearchResultsSchema = z.array(supplierOfferSearchResultSchema).max(100);
+
+export const supplierOfferSearchSummarySchema = z
+  .object({
+    mode: z.literal("deep-search-phase1"),
+    configuredSources: nonnegativeInteger,
+    successfulSources: nonnegativeInteger,
+    parsedResults: nonnegativeInteger,
+    relevantCandidates: nonnegativeInteger,
+    duplicateResultsRemoved: nonnegativeInteger,
+    unprocessedCandidates: nonnegativeInteger,
+    returnedResults: nonnegativeInteger,
+    sourceResultCounts: z.record(
+      z.string().trim().min(1).max(100),
+      nonnegativeInteger,
+    ),
+  })
+  .strict();
 
 export const projectSupplierSearchRequestSchema = supplierOfferSearchInputSchema
   .extend({
@@ -165,10 +184,17 @@ export type SupplierOfferSearchInput = z.infer<typeof supplierOfferSearchInputSc
 export type ProjectSupplierSearchRequest = z.infer<typeof projectSupplierSearchRequestSchema>;
 export type SupplierOfferSearchProvenance = z.infer<typeof supplierOfferSearchProvenanceSchema>;
 export type SupplierOfferSearchResult = z.infer<typeof supplierOfferSearchResultSchema>;
+export type SupplierOfferSearchSummary = z.infer<typeof supplierOfferSearchSummarySchema>;
 export type SupplierOfferUrlPreview = z.infer<typeof supplierOfferUrlPreviewSchema>;
+export type SupplierOfferSearchProviderOutcome =
+  | SupplierOfferSearchResult[]
+  | {
+      results: SupplierOfferSearchResult[];
+      summary?: SupplierOfferSearchSummary;
+    };
 
 export interface SupplierOfferSearchProvider {
-  searchSupplierOffers(input: SupplierOfferSearchInput): Promise<SupplierOfferSearchResult[]>;
+  searchSupplierOffers(input: SupplierOfferSearchInput): Promise<SupplierOfferSearchProviderOutcome>;
   healthCheck?(): Promise<boolean>;
 }
 
