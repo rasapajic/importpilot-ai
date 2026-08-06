@@ -105,6 +105,21 @@ describe("TAJA Deep Search phase 1", () => {
       "Made-in-China",
       "TAJA 1688",
     ]);
+    expect(outcome.summary).toEqual({
+      mode: "deep-search-phase1",
+      configuredSources: 3,
+      successfulSources: 3,
+      parsedResults: 5,
+      relevantCandidates: 5,
+      duplicateResultsRemoved: 1,
+      unprocessedCandidates: 0,
+      returnedResults: 4,
+      sourceResultCounts: {
+        "openai-web": 2,
+        "openai-1688": 2,
+        "made-in-china": 1,
+      },
+    });
     expect(events).toContainEqual({
       event: "provider_aggregation_complete",
       details: expect.objectContaining({
@@ -137,7 +152,14 @@ describe("TAJA Deep Search phase 1", () => {
     ]);
 
     const outcome = await source.search(input, new AbortController().signal);
-    expect(Array.isArray(outcome) ? outcome : outcome.results).toHaveLength(1);
+    expect(Array.isArray(outcome)).toBe(false);
+    if (Array.isArray(outcome)) throw new Error("Expected structured outcome.");
+    expect(outcome.results).toHaveLength(1);
+    expect(outcome.summary).toMatchObject({
+      configuredSources: 2,
+      successfulSources: 1,
+      returnedResults: 1,
+    });
   });
 
   it("runs a dedicated 1688 query and accepts only verified 1688 product pages", async () => {
