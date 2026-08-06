@@ -31,10 +31,10 @@ describe("multi-offer comparison flow", () => {
     expect(searchSource).toContain('document.getElementById("workflow-step-decision")');
   });
 
-  it("keeps an open workflow step controlled by preserved client state", () => {
-    expect(workflowSource).toContain("resolveWorkflowStepOpenState");
+  it("keeps an open workflow step uncontrolled across server refreshes", () => {
+    expect(workflowSource).toContain("shouldOpenWorkflowStep");
     expect(workflowSource).toContain("shouldAutoScrollWorkflowStep");
-    expect(workflowSource).toContain("open={isOpen}");
-    expect(workflowSource).not.toContain('open={status === "ACTIVE" || forceOpen}');
+    expect(workflowSource).toContain("defaultOpen={shouldOpen}");
+    expect(workflowSource).not.toContain("open={isOpen}");
   });
 });
