@@ -1,5 +1,6 @@
 import { createServer } from "node:http";
 
+import { DEFAULT_OPENAI_PRICING } from "./ai-cost.js";
 import { createSearchProviderApp } from "./app.js";
 import { createAlibabaSupplierSearchSource } from "./alibaba-source.js";
 import { createDevelopmentLogger } from "./development-log.js";
@@ -11,9 +12,33 @@ import {
 import { createOpenAIWebSearchSource } from "./openai-web-search-source.js";
 import { createFallbackSupplierSearchSource } from "./provider.js";
 
+function nonnegativeNumber(value: string | undefined, fallback: number) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
 const port = Number(process.env.PORT ?? 4000);
 const token = process.env.SEARCH_PROVIDER_TOKEN ?? "";
 const logger = createDevelopmentLogger();
+const openAiPricing = {
+  version: process.env.OPENAI_PRICING_VERSION ?? DEFAULT_OPENAI_PRICING.version,
+  inputPricePerMillionUsd: nonnegativeNumber(
+    process.env.OPENAI_INPUT_PRICE_PER_MILLION_USD,
+    DEFAULT_OPENAI_PRICING.inputPricePerMillionUsd,
+  ),
+  cachedInputPricePerMillionUsd: nonnegativeNumber(
+    process.env.OPENAI_CACHED_INPUT_PRICE_PER_MILLION_USD,
+    DEFAULT_OPENAI_PRICING.cachedInputPricePerMillionUsd,
+  ),
+  outputPricePerMillionUsd: nonnegativeNumber(
+    process.env.OPENAI_OUTPUT_PRICE_PER_MILLION_USD,
+    DEFAULT_OPENAI_PRICING.outputPricePerMillionUsd,
+  ),
+  webSearchPricePerCallUsd: nonnegativeNumber(
+    process.env.OPENAI_WEB_SEARCH_PRICE_PER_CALL_USD,
+    DEFAULT_OPENAI_PRICING.webSearchPricePerCallUsd,
+  ),
+};
 const source = createFallbackSupplierSearchSource([
   createOpenAIWebSearchSource({
     apiKey: process.env.OPENAI_API_KEY,
@@ -22,6 +47,7 @@ const source = createFallbackSupplierSearchSource([
     requestTimeoutMs: Number(process.env.OPENAI_SEARCH_TIMEOUT_MS ?? 45_000),
     searchContextSize: openAISearchContextSize(process.env.OPENAI_SEARCH_CONTEXT_SIZE),
     reasoningEffort: openAIReasoningEffort(process.env.OPENAI_REASONING_EFFORT),
+    pricing: openAiPricing,
     logger,
   }),
   createAlibabaSupplierSearchSource({

@@ -1,5 +1,7 @@
 import {
+  aiUsageReportsSchema,
   supplierSearchResultsSchema,
+  type AiUsageReport,
   type SearchRequest,
   type SupplierSearchResult,
 } from "./contract.js";
@@ -11,7 +13,11 @@ import { rankRelevantSupplierResults } from "./relevance.js";
 
 export type SupplierSearchOutcome =
   | SupplierSearchResult[]
-  | { results: SupplierSearchResult[]; reason?: string };
+  | {
+      results: SupplierSearchResult[];
+      reason?: string;
+      aiUsage?: AiUsageReport[];
+    };
 
 export const FALLBACK_UNAVAILABLE_REASON =
   "Automatic supplier search is currently unavailable. Import from a link or add an offer manually.";
@@ -45,7 +51,7 @@ export const unconfiguredSupplierSearchSource: SupplierSearchSource = {
 
 function outcomeParts(outcome: SupplierSearchOutcome) {
   return Array.isArray(outcome)
-    ? { results: outcome, reason: undefined }
+    ? { results: outcome, reason: undefined, aiUsage: undefined }
     : outcome;
 }
 
@@ -55,6 +61,10 @@ function sanitizeProviderErrorMessage(error: unknown) {
     .replace(/Bearer\s+\S+/gi, "Bearer [REDACTED]")
     .replace(/sk-[A-Za-z0-9_-]+/g, "[REDACTED]")
     .slice(0, 500);
+}
+
+function usageLogDetails(events: AiUsageReport[]) {
+  return events.length > 0 ? { ai_usage_events: events.length } : {};
 }
 
 export function createFallbackSupplierSearchSource(
@@ -74,10 +84,13 @@ export function createFallbackSupplierSearchSource(
     },
 
     async search(input, signal) {
+      const accumulatedAiUsage: AiUsageReport[] = [];
+
       for (const [index, source] of sources.entries()) {
         if (!source.implemented) continue;
         try {
           const outcome = outcomeParts(await source.search(input, signal));
+          if (outcome.aiUsage?.length) accumulatedAiUsage.push(...outcome.aiUsage);
           const relevantResults = source.trustedRelevance
             ? outcome.results.slice(0, 10)
             : rankRelevantSupplierResults(
@@ -101,8 +114,12 @@ export function createFallbackSupplierSearchSource(
               final_provider_used: source.name,
               final_result_count: relevantResults.length,
               final_reason: null,
+              ...usageLogDetails(accumulatedAiUsage),
             });
-            return { results: relevantResults };
+            return {
+              results: relevantResults,
+              ...(accumulatedAiUsage.length > 0 ? { aiUsage: accumulatedAiUsage } : {}),
+            };
           }
         } catch (error) {
           logger("provider_attempt_failed", {
@@ -128,10 +145,12 @@ export function createFallbackSupplierSearchSource(
         final_provider_used: null,
         final_result_count: 0,
         final_reason: FALLBACK_UNAVAILABLE_REASON,
+        ...usageLogDetails(accumulatedAiUsage),
       });
       return {
         results: [],
         reason: FALLBACK_UNAVAILABLE_REASON,
+        ...(accumulatedAiUsage.length > 0 ? { aiUsage: accumulatedAiUsage } : {}),
       };
     },
   };
@@ -143,9 +162,10 @@ export async function runValidatedSearch(
   signal: AbortSignal,
 ) {
   const outcome = await source.search(input, signal);
-  const { results, reason } = outcomeParts(outcome);
+  const { results, reason, aiUsage } = outcomeParts(outcome);
   return {
     results: supplierSearchResultsSchema.parse(results),
     reason,
+    ...(aiUsage?.length ? { aiUsage: aiUsageReportsSchema.parse(aiUsage) } : {}),
   };
 }

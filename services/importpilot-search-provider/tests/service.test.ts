@@ -7,6 +7,32 @@ import type { SupplierSearchSource } from "../src/provider.js";
 
 const token = "test-provider-token";
 const servers: ReturnType<typeof createServer>[] = [];
+const aiUsage = {
+  provider: "openai" as const,
+  operation: "supplier_search" as const,
+  model: "gpt-5-mini",
+  responseId: "resp_service_test",
+  status: "completed" as const,
+  inputTokens: 100,
+  cachedInputTokens: 20,
+  outputTokens: 50,
+  reasoningOutputTokens: 10,
+  totalTokens: 150,
+  webSearchCalls: 1,
+  durationMs: 500,
+  currency: "USD" as const,
+  pricingVersion: "openai-standard-2026-08-06",
+  inputPricePerMillionUsd: 0.25,
+  cachedInputPricePerMillionUsd: 0.025,
+  outputPricePerMillionUsd: 2,
+  webSearchPricePerCallUsd: 0.01,
+  inputCostUsd: 0.00002,
+  cachedInputCostUsd: 0.0000005,
+  outputCostUsd: 0.0001,
+  webSearchCostUsd: 0.01,
+  estimatedTotalCostUsd: 0.0101205,
+  estimated: true as const,
+};
 
 async function start(source?: SupplierSearchSource) {
   const server = createServer(createSearchProviderApp({ token, source }));
@@ -76,6 +102,33 @@ describe("ImportPilot Search Provider service", () => {
     await expect(response.json()).resolves.toEqual({
       results: [],
       reason: "No real supplier-search source is configured.",
+    });
+  });
+
+  it("returns validated AI usage metadata with search results", async () => {
+    const source: SupplierSearchSource = {
+      name: "ai-source",
+      implemented: true,
+      async search() {
+        return { results: [], reason: "No offers.", aiUsage: [aiUsage] };
+      },
+    };
+    const baseUrl = await start(source);
+    const response = await request(baseUrl, "/search", {
+      method: "POST",
+      body: JSON.stringify({
+        productQuery: "PTZ camera",
+        quantity: 100,
+        targetCountry: "RS",
+        language: "sr",
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      results: [],
+      reason: "No offers.",
+      aiUsage: [aiUsage],
     });
   });
 

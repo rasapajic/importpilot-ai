@@ -21,6 +21,32 @@ const result = {
   imageUrl: "https://supplier.example/ptz-camera.jpg",
   source: "supplier-provider",
 };
+const aiUsage = {
+  provider: "openai" as const,
+  operation: "supplier_search",
+  model: "gpt-5-mini",
+  responseId: "resp_usage_1",
+  status: "completed" as const,
+  inputTokens: 1_000,
+  cachedInputTokens: 200,
+  outputTokens: 500,
+  reasoningOutputTokens: 100,
+  totalTokens: 1_500,
+  webSearchCalls: 1,
+  durationMs: 2_500,
+  currency: "USD" as const,
+  pricingVersion: "openai-standard-2026-08-06",
+  inputPricePerMillionUsd: 0.25,
+  cachedInputPricePerMillionUsd: 0.025,
+  outputPricePerMillionUsd: 2,
+  webSearchPricePerCallUsd: 0.01,
+  inputCostUsd: 0.0002,
+  cachedInputCostUsd: 0.000005,
+  outputCostUsd: 0.001,
+  webSearchCostUsd: 0.01,
+  estimatedTotalCostUsd: 0.011205,
+  estimated: true as const,
+};
 
 describe("HTTP supplier search provider", () => {
   it("sends a server-side structured search request and validates real results", async () => {
@@ -39,6 +65,52 @@ describe("HTTP supplier search provider", () => {
     await expect(provider.searchSupplierOffers(input)).resolves.toEqual([result]);
     expect(JSON.parse(receivedBody)).toEqual(input);
     expect(authorization).toBe("Bearer secret");
+  });
+
+  it("records validated AI usage returned with live results", async () => {
+    const recorded: unknown[] = [];
+    const provider = createHttpSupplierOfferSearchProvider({
+      endpoint: "https://search-provider.example/offers",
+      onAiUsage: async (events) => {
+        recorded.push(...events);
+      },
+      fetcher: async () => Response.json({ results: [result], aiUsage: [aiUsage] }),
+    });
+
+    await expect(provider.searchSupplierOffers(input)).resolves.toEqual([result]);
+    expect(recorded).toEqual([aiUsage]);
+  });
+
+  it("records AI usage even when no supplier result is returned", async () => {
+    const recorded: unknown[] = [];
+    const provider = createHttpSupplierOfferSearchProvider({
+      endpoint: "https://search-provider.example/offers",
+      maxAttempts: 1,
+      onAiUsage: async (events) => {
+        recorded.push(...events);
+      },
+      fetcher: async () => Response.json({
+        results: [],
+        reason: "No verified direct supplier pages were found.",
+        aiUsage: [aiUsage],
+      }),
+    });
+
+    await expect(provider.searchSupplierOffers(input))
+      .rejects.toBeInstanceOf(SupplierSearchProviderUnavailableError);
+    expect(recorded).toEqual([aiUsage]);
+  });
+
+  it("does not fail the supplier search when cost persistence fails", async () => {
+    const provider = createHttpSupplierOfferSearchProvider({
+      endpoint: "https://search-provider.example/offers",
+      onAiUsage: async () => {
+        throw new Error("Database unavailable");
+      },
+      fetcher: async () => Response.json({ results: [result], aiUsage: [aiUsage] }),
+    });
+
+    await expect(provider.searchSupplierOffers(input)).resolves.toEqual([result]);
   });
 
   it("rejects non-HTTPS provider endpoints", () => {
