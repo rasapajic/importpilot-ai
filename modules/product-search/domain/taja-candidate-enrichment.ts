@@ -1,4 +1,3 @@
-import type { SupplierOfferSearchResult } from "./search";
 import {
   TajaLandedCostStatuses,
   type TajaCandidateEnrichment,
@@ -74,43 +73,4 @@ export function mergeTajaCandidateEnrichment(
     landedCostCurrency: preferredCost.landedCostCurrency ?? null,
     landedCostIncoterm: preferredCost.landedCostIncoterm ?? null,
   };
-}
-
-function samePrice(left: number | null | undefined, right: number | null) {
-  return left !== null && left !== undefined && right !== null &&
-    Math.abs(left - right) <= 0.0001;
-}
-
-/**
- * A stored landed cost is valid only for the same unit price, currency and
- * Incoterm that are currently shown by the supplier. Quantity and destination
- * are filtered by the database query before this check. Changed commercial
- * terms invalidate the old calculation but preserve supplier-risk evidence.
- */
-export function useMatchingTajaLandedCost(
-  enrichment: TajaCandidateEnrichment | undefined,
-  result: SupplierOfferSearchResult,
-) {
-  if (!enrichment) return undefined;
-  if (
-    enrichment.landedCostStatus === undefined ||
-    enrichment.landedCostStatus === TajaLandedCostStatuses.UNAVAILABLE
-  ) {
-    return enrichment;
-  }
-
-  const matches = samePrice(enrichment.landedCostUnitPrice, result.price) &&
-    enrichment.landedCostCurrency === result.currency &&
-    enrichment.landedCostIncoterm === result.incoterm;
-  if (matches) return enrichment;
-
-  return {
-    ...enrichment,
-    landedCostPerUnit: null,
-    grossMarginPercent: null,
-    landedCostStatus: TajaLandedCostStatuses.UNAVAILABLE,
-    landedCostUnitPrice: null,
-    landedCostCurrency: null,
-    landedCostIncoterm: null,
-  } satisfies TajaCandidateEnrichment;
 }
