@@ -4,20 +4,12 @@ import { createSearchProviderApp } from "./app.js";
 import { createAlibabaSupplierSearchSource } from "./alibaba-source.js";
 import { createDevelopmentLogger } from "./development-log.js";
 import { createMadeInChinaSupplierSearchSource } from "./made-in-china-provider.js";
+import {
+  openAIReasoningEffort,
+  openAISearchContextSize,
+} from "./openai-search-config.js";
 import { createOpenAIWebSearchSource } from "./openai-web-search-source.js";
 import { createFallbackSupplierSearchSource } from "./provider.js";
-
-function openAISearchContextSize(value: string | undefined): "low" | "medium" | "high" {
-  return value === "medium" || value === "high" ? value : "low";
-}
-
-function openAIReasoningEffort(
-  value: string | undefined,
-): "minimal" | "low" | "medium" | "high" {
-  return value === "low" || value === "medium" || value === "high"
-    ? value
-    : "minimal";
-}
 
 const port = Number(process.env.PORT ?? 4000);
 const token = process.env.SEARCH_PROVIDER_TOKEN ?? "";
