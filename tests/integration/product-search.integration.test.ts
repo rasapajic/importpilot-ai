@@ -1,4 +1,8 @@
-import { OrganizationRole, SupplierOfferSource } from "@prisma/client";
+import {
+  CalculationStatus,
+  OrganizationRole,
+  SupplierOfferSource,
+} from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
@@ -11,6 +15,7 @@ describeWithDatabase("supplier search result import and tenant isolation", () =>
   let otherOrganizationId: string;
   let projectId: string;
   let userId: string;
+  let importedOfferId: string;
 
   const result = {
     title: "Industrial fan",
@@ -57,6 +62,13 @@ describeWithDatabase("supplier search result import and tenant isolation", () =>
 
   afterAll(async () => {
     if (!prisma || !userId) return;
+    await prisma.supplierSearchCache.deleteMany({
+      where: {
+        query: "fan",
+        targetCountry: "AT",
+        quantity: { in: [275, 300] },
+      },
+    });
     await prisma.organization.delete({ where: { id: organizationId } });
     await prisma.organization.delete({ where: { id: otherOrganizationId } });
     await prisma.user.delete({ where: { id: userId } });
@@ -65,6 +77,7 @@ describeWithDatabase("supplier search result import and tenant isolation", () =>
 
   it("imports a result as a SEARCH_RESULT offer with source metadata", async () => {
     const offer = await service.importSearchResult(projectId, organizationId, result);
+    importedOfferId = offer.id;
     expect(offer.source).toBe(SupplierOfferSource.SEARCH_RESULT);
     expect(offer.supplierName).toBe("Search Supplier");
     expect(offer.sourceMetadata).toMatchObject({
@@ -74,30 +87,142 @@ describeWithDatabase("supplier search result import and tenant isolation", () =>
     });
   });
 
+  it("rejects the same supplier page when only tracking parameters changed", async () => {
+    await expect(service.importSearchResult(projectId, organizationId, {
+      ...result,
+      productUrl: `${result.productUrl}?utm_source=repeat&spm=tracking#details`,
+    })).rejects.toMatchObject({ existingOfferId: importedOfferId });
+  });
+
   it("stores manual corrections made before URL import", async () => {
+    const correctedUrl = "https://provider.example/products/industrial-fan-corrected";
     const corrected = await service.importSearchResult(projectId, organizationId, {
       ...result,
+      productUrl: correctedUrl,
       supplierName: "Corrected Supplier Name",
       minimumOrderQuantity: 250,
     });
     expect(corrected.supplierName).toBe("Corrected Supplier Name");
     expect(corrected.moq).toBe(250);
-    expect(corrected.sourceMetadata).toMatchObject({ productUrl: result.productUrl });
+    expect(corrected.sourceMetadata).toMatchObject({ productUrl: correctedUrl });
   });
 
-  it("passes validated manual comparison values to the provider", async () => {
+  it("passes validated manual comparison values to the provider and returns candidate analysis", async () => {
     let received: unknown;
-    await service.searchProjectSupplierOffers(projectId, organizationId, {
+    const outcome = await service.searchProjectSupplierOffers(projectId, organizationId, {
       query: "fan",
       quantity: 275,
       targetCountry: "AT",
     }, {
       async searchSupplierOffers(input) {
         received = input;
-        return [];
+        return [result];
       },
     });
+
     expect(received).toEqual({ query: "fan", quantity: 275, targetCountry: "AT" });
+    expect(outcome.results).toHaveLength(1);
+    expect(outcome.candidateAnalyses).toEqual([
+      expect.objectContaining({
+        productUrl: result.productUrl,
+        rank: 1,
+        status: "PRELIMINARY",
+        finalEligible: false,
+        landedCostStatus: "UNAVAILABLE",
+        missingData: expect.arrayContaining([
+          "LANDED_COST",
+          "SUPPLIER_VERIFICATION",
+          "SUPPLIER_RISK_DATA",
+        ]),
+      }),
+    ]);
+  });
+
+  it("reuses persisted landed cost and supplier evidence across tracking URL changes", async () => {
+    await prisma.supplierOffer.update({
+      where: { id: importedOfferId },
+      data: {
+        supplierVerified: true,
+        yearsOnPlatform: 5,
+        responseRatePercent: 92,
+        transactionCount: 120,
+        employeeCount: 80,
+        profileCompletenessScore: 90,
+        deliveryTimeDays: 20,
+        sampleAvailable: true,
+        termsClarityScore: 90,
+        shippingClarityScore: 90,
+      },
+    });
+    await prisma.costCalculation.create({
+      data: {
+        organizationId,
+        projectId,
+        offerId: importedOfferId,
+        targetCountry: "AT",
+        quantity: 275,
+        unitPrice: 12.5,
+        currency: "USD",
+        incoterm: "FOB",
+        shippingCost: 300,
+        customsDutyRate: 5,
+        customsDutyAmount: 190,
+        vatRate: 20,
+        vatAmount: 798,
+        storageCost: 50,
+        inspectionCost: 80,
+        otherCosts: 30,
+        landedCostTotal: 4455,
+        landedCostPerUnit: 16.2,
+        targetSellingPrice: 28,
+        grossMarginPercent: 42.14,
+        breakEvenPrice: 16.2,
+        calculationStatus: CalculationStatus.CALCULATED,
+      },
+    });
+
+    const repeatedUrl = `${result.productUrl}?utm_source=repeat&spm=tracking`;
+    const outcome = await service.searchProjectSupplierOffers(projectId, organizationId, {
+      query: "fan",
+      quantity: 275,
+      targetCountry: "AT",
+    }, {
+      async searchSupplierOffers() {
+        return [{ ...result, productUrl: repeatedUrl }];
+      },
+    });
+
+    expect(outcome.candidateAnalyses).toEqual([
+      expect.objectContaining({
+        productUrl: repeatedUrl,
+        status: "FINAL",
+        finalEligible: true,
+        landedCostStatus: "CONFIRMED",
+        supplierRiskLevel: expect.not.stringMatching(/^UNKNOWN$/),
+      }),
+    ]);
+  });
+
+  it("does not reuse a confirmed calculation for a different quantity", async () => {
+    const outcome = await service.searchProjectSupplierOffers(projectId, organizationId, {
+      query: "fan",
+      quantity: 300,
+      targetCountry: "AT",
+    }, {
+      async searchSupplierOffers() {
+        return [result];
+      },
+    });
+
+    expect(outcome.candidateAnalyses).toEqual([
+      expect.objectContaining({
+        productUrl: result.productUrl,
+        status: "PRELIMINARY",
+        finalEligible: false,
+        landedCostStatus: "UNAVAILABLE",
+        missingData: expect.arrayContaining(["LANDED_COST"]),
+      }),
+    ]);
   });
 
   it("does not import or search a project from another tenant", async () => {

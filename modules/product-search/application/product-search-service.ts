@@ -1,4 +1,9 @@
-import { OfferExtractionStatus, ProjectActivityType, SupplierOfferSource } from "@prisma/client";
+import {
+  CalculationStatus,
+  OfferExtractionStatus,
+  ProjectActivityType,
+  SupplierOfferSource,
+} from "@prisma/client";
 import { prisma } from "../../../lib/database/prisma";
 import { recordAiUsageEvents } from "../../ai-usage/application/ai-usage-service";
 import {
@@ -14,7 +19,13 @@ import {
   buildLunaProviderSearchInput,
   createLunaSearchPlan,
 } from "../domain/luna-search-plan";
-import { rankPreliminarySupplierOffers } from "../domain/preliminary-supplier-ranking";
+import {
+  analyzeAndRankTajaCandidates,
+  TajaLandedCostStatuses,
+  type TajaCandidateEnrichment,
+} from "../domain/taja-candidate-analysis";
+import { mergeTajaCandidateEnrichment } from "../domain/taja-candidate-enrichment";
+import { canonicalSupplierProductUrl } from "../domain/supplier-product-url";
 import {
   createBrowserAssisted1688Preview,
   createSupplierOfferSourceMetadata,
@@ -30,6 +41,121 @@ export class DuplicateSupplierOfferUrlError extends Error {
   constructor(readonly existingOfferId: string) {
     super("Ponuda sa istim izvornim linkom je već dodata u projekat.");
   }
+}
+
+function sourceMetadataProductUrl(metadata: unknown) {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  const productUrl = (metadata as Record<string, unknown>).productUrl;
+  return typeof productUrl === "string" && productUrl.trim() ? productUrl : null;
+}
+
+function landedCostStatus(status: CalculationStatus | undefined) {
+  if (status === CalculationStatus.CALCULATED) return TajaLandedCostStatuses.CONFIRMED;
+  if (status === CalculationStatus.DRAFT || status === CalculationStatus.NEEDS_REVIEW) {
+    return TajaLandedCostStatuses.ESTIMATED;
+  }
+  return TajaLandedCostStatuses.UNAVAILABLE;
+}
+
+function offerCandidateEnrichment(offer: {
+  supplierVerified: boolean | null;
+  yearsOnPlatform: number | null;
+  responseRatePercent: { toNumber(): number } | null;
+  transactionCount: number | null;
+  employeeCount: number | null;
+  profileCompletenessScore: number | null;
+  deliveryTimeDays: number | null;
+  sampleAvailable: boolean | null;
+  termsClarityScore: number | null;
+  shippingClarityScore: number | null;
+  costCalculations: Array<{
+    unitPrice: { toNumber(): number };
+    currency: string;
+    incoterm: string;
+    landedCostPerUnit: { toNumber(): number };
+    grossMarginPercent: { toNumber(): number };
+    calculationStatus: CalculationStatus;
+  }>;
+}): TajaCandidateEnrichment {
+  const cost = offer.costCalculations[0];
+  return {
+    supplierVerified: offer.supplierVerified,
+    yearsOnPlatform: offer.yearsOnPlatform,
+    responseRatePercent: offer.responseRatePercent?.toNumber() ?? null,
+    transactionCount: offer.transactionCount,
+    employeeCount: offer.employeeCount,
+    profileCompletenessScore: offer.profileCompletenessScore,
+    deliveryTimeDays: offer.deliveryTimeDays,
+    sampleAvailable: offer.sampleAvailable,
+    termsClarityScore: offer.termsClarityScore,
+    shippingClarityScore: offer.shippingClarityScore,
+    landedCostPerUnit: cost?.landedCostPerUnit.toNumber() ?? null,
+    grossMarginPercent: cost?.grossMarginPercent.toNumber() ?? null,
+    landedCostStatus: landedCostStatus(cost?.calculationStatus),
+    landedCostUnitPrice: cost?.unitPrice.toNumber() ?? null,
+    landedCostCurrency: cost?.currency ?? null,
+    landedCostIncoterm: cost?.incoterm ?? null,
+  };
+}
+
+async function findCandidateEnrichment(
+  projectId: string,
+  organizationId: string,
+  targetCountry: string,
+  quantity: number,
+): Promise<Map<string, TajaCandidateEnrichment>> {
+  const offers = await prisma.supplierOffer.findMany({
+    where: {
+      projectId,
+      organizationId,
+      source: SupplierOfferSource.SEARCH_RESULT,
+    },
+    orderBy: { updatedAt: "desc" },
+    include: {
+      costCalculations: {
+        where: { targetCountry, quantity },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+      },
+    },
+  });
+
+  const enrichment = new Map<string, TajaCandidateEnrichment>();
+  for (const offer of offers) {
+    const productUrl = sourceMetadataProductUrl(offer.sourceMetadata);
+    if (!productUrl) continue;
+    const key = canonicalSupplierProductUrl(productUrl);
+    enrichment.set(
+      key,
+      mergeTajaCandidateEnrichment(
+        enrichment.get(key),
+        offerCandidateEnrichment(offer),
+      ),
+    );
+  }
+  return enrichment;
+}
+
+async function findExistingSearchResultOffer(
+  projectId: string,
+  organizationId: string,
+  productUrl: string,
+) {
+  const canonicalUrl = canonicalSupplierProductUrl(productUrl);
+  const offers = await prisma.supplierOffer.findMany({
+    where: {
+      organizationId,
+      projectId,
+      source: SupplierOfferSource.SEARCH_RESULT,
+    },
+    select: { id: true, sourceMetadata: true },
+  });
+
+  return offers.find((offer) => {
+    const existingUrl = sourceMetadataProductUrl(offer.sourceMetadata);
+    return existingUrl !== null &&
+      canonicalSupplierProductUrl(existingUrl) === canonicalUrl;
+  }) ?? null;
 }
 
 export async function searchProjectSupplierOffers(
@@ -61,10 +187,23 @@ export async function searchProjectSupplierOffers(
   const outcome = await searchSupplierOffersWithPersistentFallback(providerInput, activeProvider);
   const fetchedAt = new Date().toISOString();
   const constrainedResults = applyLunaSearchConstraints(outcome.results, effectiveRequest);
-  const rankedResults = rankPreliminarySupplierOffers(constrainedResults, {
-    quantity: effectiveRequest.quantity,
-  });
-  const results = rankedResults.map((result) => ({
+  const enrichment = await findCandidateEnrichment(
+    projectId,
+    organizationId,
+    effectiveRequest.targetCountry,
+    effectiveRequest.quantity,
+  );
+  const tajaAnalysis = analyzeAndRankTajaCandidates(
+    constrainedResults.map((result) => ({
+      result,
+      enrichment: enrichment.get(canonicalSupplierProductUrl(result.productUrl)),
+    })),
+    {
+      quantity: effectiveRequest.quantity,
+      targetMarginPercent: effectiveRequest.targetMarginPercent,
+    },
+  );
+  const results = tajaAnalysis.rankedResults.map((result) => ({
     ...result,
     provenance: {
       fetchedAt,
@@ -80,6 +219,7 @@ export async function searchProjectSupplierOffers(
   return {
     ...outcome,
     results,
+    candidateAnalyses: tajaAnalysis.analyses,
     unfilteredResultCount: outcome.results.length,
     lunaPlan,
     fetchedAt,
@@ -98,18 +238,11 @@ export async function importSearchResult(
   });
   if (!project) throw new ProductSearchProjectNotFoundError();
 
-  const existingOffer = await prisma.supplierOffer.findFirst({
-    where: {
-      organizationId,
-      projectId,
-      source: SupplierOfferSource.SEARCH_RESULT,
-      sourceMetadata: {
-        path: ["productUrl"],
-        equals: result.productUrl,
-      },
-    },
-    select: { id: true },
-  });
+  const existingOffer = await findExistingSearchResultOffer(
+    projectId,
+    organizationId,
+    result.productUrl,
+  );
   if (existingOffer) throw new DuplicateSupplierOfferUrlError(existingOffer.id);
 
   const sourceMetadata = createSupplierOfferSourceMetadata(result);
@@ -132,7 +265,7 @@ export async function importSearchResult(
     });
     await recordProjectActivity(transaction, {
       organizationId,
-      projectId,
+      projectId: offer.projectId,
       type: ProjectActivityType.OFFER_ADDED,
       title: "Ponuda iz pretrage je dodata",
       description: offer.supplierName,
