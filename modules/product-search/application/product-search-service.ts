@@ -14,7 +14,7 @@ import {
   buildLunaProviderSearchInput,
   createLunaSearchPlan,
 } from "../domain/luna-search-plan";
-import { rankPreliminarySupplierOffers } from "../domain/preliminary-supplier-ranking";
+import { analyzeAndRankTajaCandidates } from "../domain/taja-candidate-analysis";
 import {
   createBrowserAssisted1688Preview,
   createSupplierOfferSourceMetadata,
@@ -61,10 +61,14 @@ export async function searchProjectSupplierOffers(
   const outcome = await searchSupplierOffersWithPersistentFallback(providerInput, activeProvider);
   const fetchedAt = new Date().toISOString();
   const constrainedResults = applyLunaSearchConstraints(outcome.results, effectiveRequest);
-  const rankedResults = rankPreliminarySupplierOffers(constrainedResults, {
-    quantity: effectiveRequest.quantity,
-  });
-  const results = rankedResults.map((result) => ({
+  const tajaAnalysis = analyzeAndRankTajaCandidates(
+    constrainedResults.map((result) => ({ result })),
+    {
+      quantity: effectiveRequest.quantity,
+      targetMarginPercent: effectiveRequest.targetMarginPercent,
+    },
+  );
+  const results = tajaAnalysis.rankedResults.map((result) => ({
     ...result,
     provenance: {
       fetchedAt,
@@ -80,6 +84,7 @@ export async function searchProjectSupplierOffers(
   return {
     ...outcome,
     results,
+    candidateAnalyses: tajaAnalysis.analyses,
     unfilteredResultCount: outcome.results.length,
     lunaPlan,
     fetchedAt,
@@ -132,7 +137,7 @@ export async function importSearchResult(
     });
     await recordProjectActivity(transaction, {
       organizationId,
-      projectId,
+      projectId: offer.projectId,
       type: ProjectActivityType.OFFER_ADDED,
       title: "Ponuda iz pretrage je dodata",
       description: offer.supplierName,
