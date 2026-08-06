@@ -27,11 +27,12 @@ describe("supplier offer search provider contract", () => {
       },
     };
 
-    const results = await provider.searchSupplierOffers({
+    const outcome = await provider.searchSupplierOffers({
       query: "industrial fan",
       quantity: 500,
       targetCountry: "DE",
     });
+    const results = Array.isArray(outcome) ? outcome : outcome.results;
     expect(results).toHaveLength(1);
     expect(results[0]?.source).toBe("provider-example");
   });
