@@ -5,7 +5,7 @@ on:
   push:
     branches:
       - main
-      - feature/luna-search-mvp
+      - "feature/**"
 
 jobs:
   validate:
