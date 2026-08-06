@@ -3,10 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   mergeTajaCandidateEnrichment,
   tajaCandidateEnrichmentEvidenceScore,
-  useMatchingTajaLandedCost,
 } from "../../modules/product-search/domain/taja-candidate-enrichment";
 import {
   TajaLandedCostStatuses,
+  useMatchingTajaLandedCost,
   type TajaCandidateEnrichment,
 } from "../../modules/product-search/domain/taja-candidate-analysis";
 import type { SupplierOfferSearchResult } from "../../modules/product-search/domain/search";
