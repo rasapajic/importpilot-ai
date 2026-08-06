@@ -1,4 +1,8 @@
-import { OrganizationRole, SupplierOfferSource } from "@prisma/client";
+import {
+  CalculationStatus,
+  OrganizationRole,
+  SupplierOfferSource,
+} from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
@@ -11,6 +15,7 @@ describeWithDatabase("supplier search result import and tenant isolation", () =>
   let otherOrganizationId: string;
   let projectId: string;
   let userId: string;
+  let importedOfferId: string;
 
   const result = {
     title: "Industrial fan",
@@ -68,6 +73,7 @@ describeWithDatabase("supplier search result import and tenant isolation", () =>
 
   it("imports a result as a SEARCH_RESULT offer with source metadata", async () => {
     const offer = await service.importSearchResult(projectId, organizationId, result);
+    importedOfferId = offer.id;
     expect(offer.source).toBe(SupplierOfferSource.SEARCH_RESULT);
     expect(offer.supplierName).toBe("Search Supplier");
     expect(offer.sourceMetadata).toMatchObject({
@@ -117,6 +123,71 @@ describeWithDatabase("supplier search result import and tenant isolation", () =>
           "SUPPLIER_VERIFICATION",
           "SUPPLIER_RISK_DATA",
         ]),
+      }),
+    ]);
+  });
+
+  it("reuses persisted landed cost and supplier evidence across tracking URL changes", async () => {
+    await prisma.supplierOffer.update({
+      where: { id: importedOfferId },
+      data: {
+        supplierVerified: true,
+        yearsOnPlatform: 5,
+        responseRatePercent: 92,
+        transactionCount: 120,
+        employeeCount: 80,
+        profileCompletenessScore: 90,
+        deliveryTimeDays: 20,
+        sampleAvailable: true,
+        termsClarityScore: 90,
+        shippingClarityScore: 90,
+      },
+    });
+    await prisma.costCalculation.create({
+      data: {
+        organizationId,
+        projectId,
+        offerId: importedOfferId,
+        targetCountry: "AT",
+        quantity: 275,
+        unitPrice: 12.5,
+        currency: "USD",
+        incoterm: "FOB",
+        shippingCost: 300,
+        customsDutyRate: 5,
+        customsDutyAmount: 190,
+        vatRate: 20,
+        vatAmount: 798,
+        storageCost: 50,
+        inspectionCost: 80,
+        otherCosts: 30,
+        landedCostTotal: 4455,
+        landedCostPerUnit: 16.2,
+        targetSellingPrice: 28,
+        grossMarginPercent: 42.14,
+        breakEvenPrice: 16.2,
+        calculationStatus: CalculationStatus.CALCULATED,
+      },
+    });
+
+    const repeatedUrl = `${result.productUrl}?utm_source=repeat&spm=tracking`;
+    const outcome = await service.searchProjectSupplierOffers(projectId, organizationId, {
+      query: "fan",
+      quantity: 275,
+      targetCountry: "AT",
+    }, {
+      async searchSupplierOffers() {
+        return [{ ...result, productUrl: repeatedUrl }];
+      },
+    });
+
+    expect(outcome.candidateAnalyses).toEqual([
+      expect.objectContaining({
+        productUrl: repeatedUrl,
+        status: "FINAL",
+        finalEligible: true,
+        landedCostStatus: "CONFIRMED",
+        supplierRiskLevel: expect.not.stringMatching(/^UNKNOWN$/),
       }),
     ]);
   });
