@@ -101,8 +101,8 @@ describe("TAJA Deep Search phase 1", () => {
     expect(outcome.results).toHaveLength(4);
     expect(outcome.results.map((candidate) => candidate.source)).toEqual([
       "TAJA web",
+      "TAJA 1688",
       "Made-in-China",
-      "TAJA web",
       "TAJA 1688",
     ]);
     expect(events).toContainEqual({
