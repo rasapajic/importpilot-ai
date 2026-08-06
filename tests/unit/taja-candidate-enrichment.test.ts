@@ -48,6 +48,22 @@ describe("TAJA candidate enrichment preference", () => {
     expect(selectPreferredTajaCandidateEnrichment(unconfirmed, confirmed)).toBe(confirmed);
   });
 
+  it("prefers estimated landed cost over an otherwise richer unavailable record", () => {
+    const unavailable = enrichment({
+      supplierVerified: true,
+      yearsOnPlatform: 5,
+      responseRatePercent: 95,
+      transactionCount: 100,
+    });
+    const estimated = enrichment({
+      landedCostStatus: TajaLandedCostStatuses.ESTIMATED,
+      landedCostPerUnit: 14,
+      grossMarginPercent: 28,
+    });
+
+    expect(selectPreferredTajaCandidateEnrichment(unavailable, estimated)).toBe(estimated);
+  });
+
   it("prefers the more complete record when landed-cost status is equal", () => {
     const sparse = enrichment({ supplierVerified: true });
     const complete = enrichment({
