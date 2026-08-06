@@ -1,12 +1,12 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 
 import type { ProjectWorkflowStepStatus } from "@/modules/projects/domain/project-workflow";
 import {
-  resolveWorkflowStepOpenState,
   shouldAutoScrollWorkflowStep,
+  shouldOpenWorkflowStep,
 } from "@/modules/projects/domain/workflow-step-interaction";
 
 export function ProjectWorkflowStep({
@@ -34,15 +34,10 @@ export function ProjectWorkflowStep({
 }) {
   const stepRef = useRef<HTMLDetailsElement>(null);
   const hasMounted = useRef(false);
-  const [isOpen, setIsOpen] = useState(status === "ACTIVE" || forceOpen);
+  const shouldOpen = shouldOpenWorkflowStep({ status, forceOpen });
 
   useEffect(() => {
-    setIsOpen((currentOpen) => resolveWorkflowStepOpenState({
-      currentOpen,
-      status,
-      forceOpen,
-    }));
-
+    if (shouldOpen && stepRef.current) stepRef.current.open = true;
     if (shouldAutoScrollWorkflowStep({
       hasMounted: hasMounted.current,
       status,
@@ -51,7 +46,7 @@ export function ProjectWorkflowStep({
       stepRef.current?.scrollIntoView({ block: "start" });
     }
     hasMounted.current = true;
-  }, [forceOpen, status]);
+  }, [forceOpen, shouldOpen, status]);
 
   if (status === "HIDDEN") return null;
 
@@ -80,9 +75,8 @@ export function ProjectWorkflowStep({
   return (
     <details
       className={`workflow-step workflow-step-${status.toLowerCase()}`}
+      defaultOpen={shouldOpen}
       id={id}
-      onToggle={(event) => setIsOpen(event.currentTarget.open)}
-      open={isOpen}
       ref={stepRef}
     >
       <summary className="workflow-step-summary">{heading}</summary>
