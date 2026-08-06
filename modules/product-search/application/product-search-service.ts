@@ -24,10 +24,7 @@ import {
   TajaLandedCostStatuses,
   type TajaCandidateEnrichment,
 } from "../domain/taja-candidate-analysis";
-import {
-  mergeTajaCandidateEnrichment,
-  useMatchingTajaLandedCost,
-} from "../domain/taja-candidate-enrichment";
+import { mergeTajaCandidateEnrichment } from "../domain/taja-candidate-enrichment";
 import { canonicalSupplierProductUrl } from "../domain/supplier-product-url";
 import {
   createBrowserAssisted1688Preview,
@@ -199,10 +196,7 @@ export async function searchProjectSupplierOffers(
   const tajaAnalysis = analyzeAndRankTajaCandidates(
     constrainedResults.map((result) => ({
       result,
-      enrichment: useMatchingTajaLandedCost(
-        enrichment.get(canonicalSupplierProductUrl(result.productUrl)),
-        result,
-      ),
+      enrichment: enrichment.get(canonicalSupplierProductUrl(result.productUrl)),
     })),
     {
       quantity: effectiveRequest.quantity,
