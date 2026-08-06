@@ -1,8 +1,15 @@
+import type { AiUsageEvent } from "../../ai-usage/domain/ai-usage";
 import type { SupplierOfferSearchProvider } from "../domain/search";
 import { createHttpSupplierOfferSearchProvider } from "./http-provider";
 import { unconfiguredSupplierOfferSearchProvider } from "./unconfigured-provider";
 
-export function getSupplierOfferSearchProvider(): SupplierOfferSearchProvider {
+type SupplierProviderOptions = {
+  onAiUsage?: (events: AiUsageEvent[]) => Promise<void> | void;
+};
+
+export function getSupplierOfferSearchProvider(
+  options: SupplierProviderOptions = {},
+): SupplierOfferSearchProvider {
   const endpoint = process.env.SUPPLIER_SEARCH_PROVIDER_URL;
   if (!endpoint) return unconfiguredSupplierOfferSearchProvider;
 
@@ -13,6 +20,7 @@ export function getSupplierOfferSearchProvider(): SupplierOfferSearchProvider {
     timeoutMs: Number(process.env.SUPPLIER_SEARCH_PROVIDER_TIMEOUT_MS ?? 100_000),
     maxAttempts: Number(process.env.SUPPLIER_SEARCH_PROVIDER_MAX_ATTEMPTS ?? 1),
     allowInsecureLocalhost: process.env.NODE_ENV === "development",
+    onAiUsage: options.onAiUsage,
   });
 }
 
