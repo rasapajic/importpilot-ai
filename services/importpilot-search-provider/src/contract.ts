@@ -21,6 +21,9 @@ const nullableNumber = (schema: z.ZodNumber) =>
     schema.nullable(),
   );
 
+const nonnegativeInteger = z.number().int().nonnegative();
+const nonnegativeFinite = z.number().nonnegative().finite();
+
 export const searchRequestSchema = z
   .object({
     productQuery: z.string().trim().min(2).max(200).optional(),
@@ -81,10 +84,43 @@ export const supplierSearchResultSchema = z
 
 export const supplierSearchResultsSchema = z.array(supplierSearchResultSchema).max(100);
 
+export const aiUsageReportSchema = z
+  .object({
+    provider: z.literal("openai"),
+    operation: z.literal("supplier_search"),
+    model: z.string().trim().min(1).max(120),
+    responseId: z.string().trim().min(1).max(200),
+    status: z.literal("completed"),
+    inputTokens: nonnegativeInteger,
+    cachedInputTokens: nonnegativeInteger,
+    outputTokens: nonnegativeInteger,
+    reasoningOutputTokens: nonnegativeInteger,
+    totalTokens: nonnegativeInteger,
+    webSearchCalls: nonnegativeInteger,
+    durationMs: nonnegativeInteger,
+    currency: z.literal("USD"),
+    pricingVersion: z.string().trim().min(1).max(80),
+    inputPricePerMillionUsd: nonnegativeFinite,
+    cachedInputPricePerMillionUsd: nonnegativeFinite,
+    outputPricePerMillionUsd: nonnegativeFinite,
+    webSearchPricePerCallUsd: nonnegativeFinite,
+    inputCostUsd: nonnegativeFinite,
+    cachedInputCostUsd: nonnegativeFinite,
+    outputCostUsd: nonnegativeFinite,
+    webSearchCostUsd: nonnegativeFinite,
+    estimatedTotalCostUsd: nonnegativeFinite,
+    estimated: z.literal(true),
+  })
+  .strict();
+
+export const aiUsageReportsSchema = z.array(aiUsageReportSchema).max(20);
+
 export type SearchRequest = z.infer<typeof searchRequestSchema>;
 export type SupplierSearchResult = z.infer<typeof supplierSearchResultSchema>;
+export type AiUsageReport = z.infer<typeof aiUsageReportSchema>;
 
 export type SearchResponse = {
   results: SupplierSearchResult[];
   reason?: string;
+  aiUsage?: AiUsageReport[];
 };
