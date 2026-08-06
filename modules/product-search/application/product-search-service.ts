@@ -14,6 +14,7 @@ import {
   buildLunaProviderSearchInput,
   createLunaSearchPlan,
 } from "../domain/luna-search-plan";
+import { rankPreliminarySupplierOffers } from "../domain/preliminary-supplier-ranking";
 import {
   createBrowserAssisted1688Preview,
   createSupplierOfferSourceMetadata,
@@ -59,7 +60,11 @@ export async function searchProjectSupplierOffers(
   );
   const outcome = await searchSupplierOffersWithPersistentFallback(providerInput, activeProvider);
   const fetchedAt = new Date().toISOString();
-  const results = applyLunaSearchConstraints(outcome.results, effectiveRequest).map((result) => ({
+  const constrainedResults = applyLunaSearchConstraints(outcome.results, effectiveRequest);
+  const rankedResults = rankPreliminarySupplierOffers(constrainedResults, {
+    quantity: effectiveRequest.quantity,
+  });
+  const results = rankedResults.map((result) => ({
     ...result,
     provenance: {
       fetchedAt,
