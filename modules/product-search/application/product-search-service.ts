@@ -24,6 +24,7 @@ import {
   TajaLandedCostStatuses,
   type TajaCandidateEnrichment,
 } from "../domain/taja-candidate-analysis";
+import { canonicalSupplierProductUrl } from "../domain/supplier-product-url";
 import {
   createBrowserAssisted1688Preview,
   createSupplierOfferSourceMetadata,
@@ -75,7 +76,7 @@ async function findCandidateEnrichment(
     const productUrl = sourceMetadataProductUrl(offer.sourceMetadata);
     if (!productUrl) continue;
     const cost = offer.costCalculations[0];
-    enrichment.set(productUrl, {
+    enrichment.set(canonicalSupplierProductUrl(productUrl), {
       supplierVerified: offer.supplierVerified,
       yearsOnPlatform: offer.yearsOnPlatform,
       responseRatePercent: offer.responseRatePercent?.toNumber() ?? null,
@@ -127,7 +128,7 @@ export async function searchProjectSupplierOffers(
   const tajaAnalysis = analyzeAndRankTajaCandidates(
     constrainedResults.map((result) => ({
       result,
-      enrichment: enrichment.get(result.productUrl),
+      enrichment: enrichment.get(canonicalSupplierProductUrl(result.productUrl)),
     })),
     {
       quantity: effectiveRequest.quantity,
