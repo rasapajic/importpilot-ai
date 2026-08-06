@@ -49,6 +49,20 @@ function confirmedEnrichment(
   };
 }
 
+function riskyEnrichment(): TajaCandidateEnrichment {
+  return confirmedEnrichment({
+    supplierVerified: false,
+    yearsOnPlatform: 0,
+    responseRatePercent: 20,
+    transactionCount: 0,
+    profileCompletenessScore: 20,
+    sampleAvailable: false,
+    termsClarityScore: 20,
+    shippingClarityScore: 20,
+    grossMarginPercent: -5,
+  });
+}
+
 const context = { quantity: 100, targetMarginPercent: 30 };
 
 describe("TAJA candidate final-ranking gate", () => {
@@ -122,7 +136,7 @@ describe("TAJA candidate final-ranking gate", () => {
     });
   });
 
-  it("places final analyses before preliminary candidates while retaining all offers", () => {
+  it("places viable final analyses before preliminary candidates while retaining all offers", () => {
     const cheapButUnknown = result("Cheap", 3);
     const verified = result("Verified", 6);
     const other = result("Other", 7);
@@ -145,23 +159,29 @@ describe("TAJA candidate final-ranking gate", () => {
     ]);
   });
 
+  it("does not place a rejected final analysis above a viable preliminary candidate", () => {
+    const preliminary = result("Promising", 5);
+    const rejected = result("Rejected", 1);
+    const analyzed = analyzeAndRankTajaCandidates([
+      { result: rejected, enrichment: riskyEnrichment() },
+      { result: preliminary },
+    ], context);
+
+    expect(analyzed.rankedResults.map((candidate) => candidate.productUrl)).toEqual([
+      preliminary.productUrl,
+      rejected.productUrl,
+    ]);
+    expect(analyzed.analyses[1]).toMatchObject({
+      status: TajaCandidateAnalysisStatuses.FINAL,
+      finalEligible: true,
+      recommendationStatus: "NOT_RECOMMENDED",
+    });
+  });
+
   it("can finish a high-risk analysis without presenting it as a safe offer", () => {
     const risky = result("Risky", 1);
     const analyzed = analyzeAndRankTajaCandidates([
-      {
-        result: risky,
-        enrichment: confirmedEnrichment({
-          supplierVerified: false,
-          yearsOnPlatform: 0,
-          responseRatePercent: 20,
-          transactionCount: 0,
-          profileCompletenessScore: 20,
-          sampleAvailable: false,
-          termsClarityScore: 20,
-          shippingClarityScore: 20,
-          grossMarginPercent: -5,
-        }),
-      },
+      { result: risky, enrichment: riskyEnrichment() },
     ], context);
 
     expect(analyzed.analyses[0]).toMatchObject({
