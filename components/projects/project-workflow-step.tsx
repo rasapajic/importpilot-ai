@@ -75,7 +75,6 @@ export function ProjectWorkflowStep({
   return (
     <details
       className={`workflow-step workflow-step-${status.toLowerCase()}`}
-      defaultOpen={shouldOpen}
       id={id}
       ref={stepRef}
     >
