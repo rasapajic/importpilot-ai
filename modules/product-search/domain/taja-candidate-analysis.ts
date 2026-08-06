@@ -50,6 +50,9 @@ export type TajaCandidateEnrichment = {
   landedCostPerUnit?: number | null;
   grossMarginPercent?: number | null;
   landedCostStatus?: TajaLandedCostStatus;
+  landedCostUnitPrice?: number | null;
+  landedCostCurrency?: string | null;
+  landedCostIncoterm?: string | null;
 };
 
 export type TajaCandidateAnalysis = {
