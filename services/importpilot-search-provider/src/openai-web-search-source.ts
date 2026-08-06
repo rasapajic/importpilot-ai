@@ -1,5 +1,7 @@
+import { createOpenAiUsageReport, type OpenAiPricingSnapshot } from "./ai-cost.js";
 import {
   supplierSearchResultsSchema,
+  type AiUsageReport,
   type SearchRequest,
   type SupplierSearchResult,
 } from "./contract.js";
@@ -32,8 +34,10 @@ type OpenAIWebSearchOptions = {
   requestTimeoutMs?: number;
   searchContextSize?: SearchContextSize;
   reasoningEffort?: ReasoningEffort;
+  pricing?: OpenAiPricingSnapshot;
   fetcher?: Fetcher;
   logger?: DevelopmentLogger;
+  now?: () => number;
 };
 
 type UrlCitation = {
@@ -65,6 +69,12 @@ type OpenAIResponse = {
     input_tokens?: number;
     output_tokens?: number;
     total_tokens?: number;
+    input_tokens_details?: {
+      cached_tokens?: number;
+    };
+    output_tokens_details?: {
+      reasoning_tokens?: number;
+    };
   };
   error?: {
     message?: string;
@@ -144,6 +154,10 @@ function collectCitedUrls(response: OpenAIResponse) {
     }
   }
   return [...urls];
+}
+
+function countWebSearchCalls(response: OpenAIResponse) {
+  return (response.output ?? []).filter((item) => item.type === "web_search_call").length;
 }
 
 function comparableUrl(value: string) {
@@ -261,6 +275,27 @@ function createRequestSignal(parentSignal: AbortSignal, timeoutMs: number) {
   };
 }
 
+function buildUsageReport(
+  payload: OpenAIResponse,
+  model: string,
+  durationMs: number,
+  pricing: OpenAiPricingSnapshot | undefined,
+): AiUsageReport[] {
+  if (!payload.id || !payload.usage) return [];
+  return [createOpenAiUsageReport({
+    model,
+    responseId: payload.id,
+    inputTokens: payload.usage.input_tokens ?? 0,
+    cachedInputTokens: payload.usage.input_tokens_details?.cached_tokens ?? 0,
+    outputTokens: payload.usage.output_tokens ?? 0,
+    reasoningOutputTokens: payload.usage.output_tokens_details?.reasoning_tokens ?? 0,
+    totalTokens: payload.usage.total_tokens ?? 0,
+    webSearchCalls: countWebSearchCalls(payload),
+    durationMs,
+    pricing,
+  })];
+}
+
 export function createOpenAIWebSearchSource({
   apiKey,
   model = DEFAULT_MODEL,
@@ -268,8 +303,10 @@ export function createOpenAIWebSearchSource({
   requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
   searchContextSize = DEFAULT_SEARCH_CONTEXT_SIZE,
   reasoningEffort = DEFAULT_REASONING_EFFORT,
+  pricing,
   fetcher = fetch,
   logger = createDevelopmentLogger(),
+  now = Date.now,
 }: OpenAIWebSearchOptions = {}): SupplierSearchSource {
   const configured = Boolean(apiKey?.trim());
   const safeMaxResults = clampInteger(maxResults, DEFAULT_MAX_RESULTS, 1, MAX_RESULTS);
@@ -294,6 +331,7 @@ export function createOpenAIWebSearchSource({
         return { results: [], reason: "OpenAI web search is not configured." };
       }
 
+      const startedAt = now();
       const request = createRequestSignal(signal, safeRequestTimeoutMs);
       let response: Response;
       try {
@@ -361,11 +399,34 @@ export function createOpenAIWebSearchSource({
         throw new Error(`OpenAI Responses API status: ${payload.status}.`);
       }
 
+      const durationMs = Math.max(0, now() - startedAt);
+      const aiUsage = buildUsageReport(payload, model, durationMs, pricing);
       const outputText = extractOutputText(payload);
-      if (!outputText) throw new Error("OpenAI Responses API returned no structured output.");
+      if (!outputText) {
+        return {
+          results: [],
+          reason: "OpenAI Responses API returned no structured output.",
+          ...(aiUsage.length > 0 ? { aiUsage } : {}),
+        };
+      }
 
-      const decoded = JSON.parse(outputText) as { results?: unknown };
-      const parsed = supplierSearchResultsSchema.parse(decoded.results ?? []);
+      let parsed: SupplierSearchResult[];
+      try {
+        const decoded = JSON.parse(outputText) as { results?: unknown };
+        parsed = supplierSearchResultsSchema.parse(decoded.results ?? []);
+      } catch (error) {
+        logger("openai_web_search_invalid_output", {
+          model,
+          response_id: payload.id ?? null,
+          error_name: error instanceof Error ? error.name : "UnknownError",
+        });
+        return {
+          results: [],
+          reason: "TAJA web search returned invalid structured output.",
+          ...(aiUsage.length > 0 ? { aiUsage } : {}),
+        };
+      }
+
       const citedUrls = collectCitedUrls(payload);
       const accepted = keepOnlyCitedResults(parsed, citedUrls, safeMaxResults);
 
@@ -379,17 +440,25 @@ export function createOpenAIWebSearchSource({
         parsed_results: parsed.length,
         accepted_results: accepted.length,
         input_tokens: payload.usage?.input_tokens ?? null,
+        cached_input_tokens: payload.usage?.input_tokens_details?.cached_tokens ?? null,
         output_tokens: payload.usage?.output_tokens ?? null,
+        reasoning_output_tokens: payload.usage?.output_tokens_details?.reasoning_tokens ?? null,
         total_tokens: payload.usage?.total_tokens ?? null,
+        web_search_calls: countWebSearchCalls(payload),
+        estimated_cost_usd: aiUsage[0]?.estimatedTotalCostUsd ?? null,
       });
 
       return accepted.length > 0
-        ? { results: accepted }
+        ? {
+            results: accepted,
+            ...(aiUsage.length > 0 ? { aiUsage } : {}),
+          }
         : {
             results: [],
             reason: citedUrls.length === 0
               ? "TAJA web search returned no cited sources."
               : "TAJA web search returned no cited direct supplier product pages.",
+            ...(aiUsage.length > 0 ? { aiUsage } : {}),
           };
     },
   };
