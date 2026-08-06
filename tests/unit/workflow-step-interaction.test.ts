@@ -1,25 +1,27 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  resolveWorkflowStepOpenState,
   shouldAutoScrollWorkflowStep,
+  shouldOpenWorkflowStep,
 } from "../../modules/projects/domain/workflow-step-interaction";
 
 describe("workflow step interaction", () => {
-  it("keeps an already open offer step open when it becomes completed", () => {
-    expect(resolveWorkflowStepOpenState({
-      currentOpen: true,
-      status: "COMPLETED",
-      forceOpen: false,
-    })).toBe(true);
-  });
-
-  it("opens a step when it becomes active", () => {
-    expect(resolveWorkflowStepOpenState({
-      currentOpen: false,
+  it("opens an active or explicitly forced step", () => {
+    expect(shouldOpenWorkflowStep({
       status: "ACTIVE",
       forceOpen: false,
     })).toBe(true);
+    expect(shouldOpenWorkflowStep({
+      status: "COMPLETED",
+      forceOpen: true,
+    })).toBe(true);
+  });
+
+  it("does not force a completed step closed after it was opened by the browser", () => {
+    expect(shouldOpenWorkflowStep({
+      status: "COMPLETED",
+      forceOpen: false,
+    })).toBe(false);
   });
 
   it("does not auto-scroll to a newly activated next step after the page is mounted", () => {
