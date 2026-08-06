@@ -24,7 +24,10 @@ import {
   TajaLandedCostStatuses,
   type TajaCandidateEnrichment,
 } from "../domain/taja-candidate-analysis";
-import { selectPreferredTajaCandidateEnrichment } from "../domain/taja-candidate-enrichment";
+import {
+  mergeTajaCandidateEnrichment,
+  useMatchingTajaLandedCost,
+} from "../domain/taja-candidate-enrichment";
 import { canonicalSupplierProductUrl } from "../domain/supplier-product-url";
 import {
   createBrowserAssisted1688Preview,
@@ -69,6 +72,9 @@ function offerCandidateEnrichment(offer: {
   termsClarityScore: number | null;
   shippingClarityScore: number | null;
   costCalculations: Array<{
+    unitPrice: { toNumber(): number };
+    currency: string;
+    incoterm: string;
     landedCostPerUnit: { toNumber(): number };
     grossMarginPercent: { toNumber(): number };
     calculationStatus: CalculationStatus;
@@ -89,12 +95,17 @@ function offerCandidateEnrichment(offer: {
     landedCostPerUnit: cost?.landedCostPerUnit.toNumber() ?? null,
     grossMarginPercent: cost?.grossMarginPercent.toNumber() ?? null,
     landedCostStatus: landedCostStatus(cost?.calculationStatus),
+    landedCostUnitPrice: cost?.unitPrice.toNumber() ?? null,
+    landedCostCurrency: cost?.currency ?? null,
+    landedCostIncoterm: cost?.incoterm ?? null,
   };
 }
 
 async function findCandidateEnrichment(
   projectId: string,
   organizationId: string,
+  targetCountry: string,
+  quantity: number,
 ): Promise<Map<string, TajaCandidateEnrichment>> {
   const offers = await prisma.supplierOffer.findMany({
     where: {
@@ -104,7 +115,11 @@ async function findCandidateEnrichment(
     },
     orderBy: { updatedAt: "desc" },
     include: {
-      costCalculations: { orderBy: { createdAt: "desc" }, take: 1 },
+      costCalculations: {
+        where: { targetCountry, quantity },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+      },
     },
   });
 
@@ -113,10 +128,12 @@ async function findCandidateEnrichment(
     const productUrl = sourceMetadataProductUrl(offer.sourceMetadata);
     if (!productUrl) continue;
     const key = canonicalSupplierProductUrl(productUrl);
-    const candidate = offerCandidateEnrichment(offer);
     enrichment.set(
       key,
-      selectPreferredTajaCandidateEnrichment(enrichment.get(key), candidate),
+      mergeTajaCandidateEnrichment(
+        enrichment.get(key),
+        offerCandidateEnrichment(offer),
+      ),
     );
   }
   return enrichment;
@@ -173,11 +190,19 @@ export async function searchProjectSupplierOffers(
   const outcome = await searchSupplierOffersWithPersistentFallback(providerInput, activeProvider);
   const fetchedAt = new Date().toISOString();
   const constrainedResults = applyLunaSearchConstraints(outcome.results, effectiveRequest);
-  const enrichment = await findCandidateEnrichment(projectId, organizationId);
+  const enrichment = await findCandidateEnrichment(
+    projectId,
+    organizationId,
+    effectiveRequest.targetCountry,
+    effectiveRequest.quantity,
+  );
   const tajaAnalysis = analyzeAndRankTajaCandidates(
     constrainedResults.map((result) => ({
       result,
-      enrichment: enrichment.get(canonicalSupplierProductUrl(result.productUrl)),
+      enrichment: useMatchingTajaLandedCost(
+        enrichment.get(canonicalSupplierProductUrl(result.productUrl)),
+        result,
+      ),
     })),
     {
       quantity: effectiveRequest.quantity,
