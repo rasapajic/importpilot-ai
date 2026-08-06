@@ -5,12 +5,13 @@ import { createSearchProviderApp } from "./app.js";
 import { createAlibabaSupplierSearchSource } from "./alibaba-source.js";
 import { createDevelopmentLogger } from "./development-log.js";
 import { createMadeInChinaSupplierSearchSource } from "./made-in-china-provider.js";
+import { createOpenAI1688SearchSource } from "./openai-1688-search-source.js";
 import {
   openAIReasoningEffort,
   openAISearchContextSize,
 } from "./openai-search-config.js";
 import { createOpenAIWebSearchSource } from "./openai-web-search-source.js";
-import { createFallbackSupplierSearchSource } from "./provider.js";
+import { createAggregatingSupplierSearchSource } from "./provider.js";
 
 function nonnegativeNumber(value: string | undefined, fallback: number) {
   const parsed = Number(value);
@@ -39,16 +40,23 @@ const openAiPricing = {
     DEFAULT_OPENAI_PRICING.webSearchPricePerCallUsd,
   ),
 };
-const source = createFallbackSupplierSearchSource([
+const openAiSourceOptions = {
+  apiKey: process.env.OPENAI_API_KEY,
+  model: process.env.OPENAI_SEARCH_MODEL ?? "gpt-5-mini",
+  requestTimeoutMs: Number(process.env.OPENAI_SEARCH_TIMEOUT_MS ?? 45_000),
+  searchContextSize: openAISearchContextSize(process.env.OPENAI_SEARCH_CONTEXT_SIZE),
+  reasoningEffort: openAIReasoningEffort(process.env.OPENAI_REASONING_EFFORT),
+  pricing: openAiPricing,
+  logger,
+};
+const source = createAggregatingSupplierSearchSource([
   createOpenAIWebSearchSource({
-    apiKey: process.env.OPENAI_API_KEY,
-    model: process.env.OPENAI_SEARCH_MODEL ?? "gpt-5-mini",
-    maxResults: Number(process.env.OPENAI_SEARCH_MAX_RESULTS ?? 3),
-    requestTimeoutMs: Number(process.env.OPENAI_SEARCH_TIMEOUT_MS ?? 45_000),
-    searchContextSize: openAISearchContextSize(process.env.OPENAI_SEARCH_CONTEXT_SIZE),
-    reasoningEffort: openAIReasoningEffort(process.env.OPENAI_REASONING_EFFORT),
-    pricing: openAiPricing,
-    logger,
+    ...openAiSourceOptions,
+    maxResults: Number(process.env.OPENAI_SEARCH_MAX_RESULTS ?? 10),
+  }),
+  createOpenAI1688SearchSource({
+    ...openAiSourceOptions,
+    maxResults: Number(process.env.OPENAI_1688_MAX_RESULTS ?? 10),
   }),
   createAlibabaSupplierSearchSource({
     userAgent: process.env.ALIBABA_USER_AGENT,
@@ -61,7 +69,10 @@ const source = createFallbackSupplierSearchSource([
     requestTimeoutMs: Number(process.env.MADE_IN_CHINA_TIMEOUT_MS ?? 5_000),
     logger,
   }),
-], logger);
+], {
+  maxResults: Number(process.env.TAJA_DEEP_SEARCH_MAX_RESULTS ?? 30),
+  maxResultsPerSource: Number(process.env.TAJA_DEEP_SEARCH_MAX_PER_SOURCE ?? 15),
+}, logger);
 
 const server = createServer(createSearchProviderApp({
   token,
