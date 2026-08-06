@@ -11,7 +11,6 @@ import {
   type SupplierOfferSearchInput,
   type SupplierOfferSearchProvider,
   type SupplierOfferSearchProviderOutcome,
-  type SupplierOfferSearchResult,
 } from "../domain/search";
 
 export const SUPPLIER_SEARCH_TIMEOUT_MS = 35_000;
