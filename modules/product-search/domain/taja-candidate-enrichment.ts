@@ -1,3 +1,4 @@
+import type { SupplierOfferSearchResult } from "./search";
 import {
   TajaLandedCostStatuses,
   type TajaCandidateEnrichment,
@@ -38,18 +39,78 @@ export function tajaCandidateEnrichmentEvidenceScore(
 
 /**
  * Legacy projects may contain the same supplier page more than once because
- * marketplace tracking parameters changed between searches. Prefer the record
- * with the strongest landed-cost and supplier evidence. When evidence is tied,
- * keep the current value; callers can order records newest-first for a stable
- * recency tie-breaker.
+ * marketplace tracking parameters changed between searches. Records are read
+ * newest-first. Keep the newest known supplier value, fill its gaps from older
+ * copies and retain the strongest landed-cost calculation.
  */
-export function selectPreferredTajaCandidateEnrichment(
+export function mergeTajaCandidateEnrichment(
   current: TajaCandidateEnrichment | undefined,
   candidate: TajaCandidateEnrichment,
-) {
+): TajaCandidateEnrichment {
   if (!current) return candidate;
-  return tajaCandidateEnrichmentEvidenceScore(candidate) >
-      tajaCandidateEnrichmentEvidenceScore(current)
+  const preferredCost = landedCostEvidenceWeight(candidate) >
+      landedCostEvidenceWeight(current)
     ? candidate
     : current;
+
+  return {
+    supplierVerified: current.supplierVerified ?? candidate.supplierVerified ?? null,
+    yearsOnPlatform: current.yearsOnPlatform ?? candidate.yearsOnPlatform ?? null,
+    responseRatePercent: current.responseRatePercent ?? candidate.responseRatePercent ?? null,
+    transactionCount: current.transactionCount ?? candidate.transactionCount ?? null,
+    employeeCount: current.employeeCount ?? candidate.employeeCount ?? null,
+    profileCompletenessScore: current.profileCompletenessScore ??
+      candidate.profileCompletenessScore ?? null,
+    deliveryTimeDays: current.deliveryTimeDays ?? candidate.deliveryTimeDays ?? null,
+    sampleAvailable: current.sampleAvailable ?? candidate.sampleAvailable ?? null,
+    termsClarityScore: current.termsClarityScore ?? candidate.termsClarityScore ?? null,
+    shippingClarityScore: current.shippingClarityScore ??
+      candidate.shippingClarityScore ?? null,
+    landedCostPerUnit: preferredCost.landedCostPerUnit ?? null,
+    grossMarginPercent: preferredCost.grossMarginPercent ?? null,
+    landedCostStatus: preferredCost.landedCostStatus ??
+      TajaLandedCostStatuses.UNAVAILABLE,
+    landedCostUnitPrice: preferredCost.landedCostUnitPrice ?? null,
+    landedCostCurrency: preferredCost.landedCostCurrency ?? null,
+    landedCostIncoterm: preferredCost.landedCostIncoterm ?? null,
+  };
+}
+
+function samePrice(left: number | null | undefined, right: number | null) {
+  return left !== null && left !== undefined && right !== null &&
+    Math.abs(left - right) <= 0.0001;
+}
+
+/**
+ * A stored landed cost is valid only for the same unit price, currency and
+ * Incoterm that are currently shown by the supplier. Quantity and destination
+ * are filtered by the database query before this check. Changed commercial
+ * terms invalidate the old calculation but preserve supplier-risk evidence.
+ */
+export function useMatchingTajaLandedCost(
+  enrichment: TajaCandidateEnrichment | undefined,
+  result: SupplierOfferSearchResult,
+) {
+  if (!enrichment) return undefined;
+  if (
+    enrichment.landedCostStatus === undefined ||
+    enrichment.landedCostStatus === TajaLandedCostStatuses.UNAVAILABLE
+  ) {
+    return enrichment;
+  }
+
+  const matches = samePrice(enrichment.landedCostUnitPrice, result.price) &&
+    enrichment.landedCostCurrency === result.currency &&
+    enrichment.landedCostIncoterm === result.incoterm;
+  if (matches) return enrichment;
+
+  return {
+    ...enrichment,
+    landedCostPerUnit: null,
+    grossMarginPercent: null,
+    landedCostStatus: TajaLandedCostStatuses.UNAVAILABLE,
+    landedCostUnitPrice: null,
+    landedCostCurrency: null,
+    landedCostIncoterm: null,
+  } satisfies TajaCandidateEnrichment;
 }
