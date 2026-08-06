@@ -71,7 +71,9 @@ describe("HTTP supplier search provider", () => {
     const recorded: unknown[] = [];
     const provider = createHttpSupplierOfferSearchProvider({
       endpoint: "https://search-provider.example/offers",
-      onAiUsage: async (events) => recorded.push(...events),
+      onAiUsage: async (events) => {
+        recorded.push(...events);
+      },
       fetcher: async () => Response.json({ results: [result], aiUsage: [aiUsage] }),
     });
 
@@ -84,7 +86,9 @@ describe("HTTP supplier search provider", () => {
     const provider = createHttpSupplierOfferSearchProvider({
       endpoint: "https://search-provider.example/offers",
       maxAttempts: 1,
-      onAiUsage: async (events) => recorded.push(...events),
+      onAiUsage: async (events) => {
+        recorded.push(...events);
+      },
       fetcher: async () => Response.json({
         results: [],
         reason: "No verified direct supplier pages were found.",
