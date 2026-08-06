@@ -188,6 +188,8 @@ function finalEligibility(
 ) {
   return coreOfferDataKnown(candidate.result) &&
     landedCostStatus === TajaLandedCostStatuses.CONFIRMED &&
+    candidate.enrichment?.supplierVerified !== null &&
+    candidate.enrichment?.supplierVerified !== undefined &&
     candidate.enrichment?.landedCostPerUnit !== null &&
     candidate.enrichment?.landedCostPerUnit !== undefined &&
     candidate.enrichment?.grossMarginPercent !== null &&
