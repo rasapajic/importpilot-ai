@@ -19,12 +19,14 @@ import {
   buildLunaProviderSearchInput,
   createLunaSearchPlan,
 } from "../domain/luna-search-plan";
+import { rankPreliminarySupplierOffers } from "../domain/preliminary-supplier-ranking";
 import {
   analyzeAndRankTajaCandidates,
   TajaLandedCostStatuses,
   type TajaCandidateEnrichment,
 } from "../domain/taja-candidate-analysis";
 import { mergeTajaCandidateEnrichment } from "../domain/taja-candidate-enrichment";
+import { estimateTajaPreliminaryLandedCost } from "../domain/taja-preliminary-cost-estimate";
 import { canonicalSupplierProductUrl } from "../domain/supplier-product-url";
 import {
   createBrowserAssisted1688Preview,
@@ -33,6 +35,7 @@ import {
 import { getSupplierOfferSearchProvider } from "../infrastructure/provider";
 import { getSupplierOfferUrlImportProvider } from "../infrastructure/url-import-provider";
 import { recordProjectActivity } from "../../timeline/application/timeline-service";
+import { autoEnrichTajaCandidates } from "./taja-auto-enrichment";
 import { searchSupplierOffersWithPersistentFallback } from "./search-fallback";
 
 export class ProductSearchProjectNotFoundError extends Error {}
@@ -163,6 +166,7 @@ export async function searchProjectSupplierOffers(
   organizationId: string,
   searchInput: unknown,
   provider?: SupplierOfferSearchProvider,
+  urlImportProvider: SupplierOfferUrlImportProvider = getSupplierOfferUrlImportProvider(),
 ) {
   const project = await prisma.importProject.findFirst({
     where: { id: projectId, organizationId },
@@ -187,6 +191,14 @@ export async function searchProjectSupplierOffers(
   const outcome = await searchSupplierOffersWithPersistentFallback(providerInput, activeProvider);
   const fetchedAt = new Date().toISOString();
   const constrainedResults = applyLunaSearchConstraints(outcome.results, effectiveRequest);
+  const preliminaryResults = rankPreliminarySupplierOffers(constrainedResults, {
+    quantity: effectiveRequest.quantity,
+  });
+  const autoEnrichment = await autoEnrichTajaCandidates(
+    preliminaryResults,
+    urlImportProvider,
+    { maxCandidates: 10, concurrency: 4 },
+  );
   const enrichment = await findCandidateEnrichment(
     projectId,
     organizationId,
@@ -194,9 +206,15 @@ export async function searchProjectSupplierOffers(
     effectiveRequest.quantity,
   );
   const tajaAnalysis = analyzeAndRankTajaCandidates(
-    constrainedResults.map((result) => ({
+    autoEnrichment.results.map((result) => ({
       result,
       enrichment: enrichment.get(canonicalSupplierProductUrl(result.productUrl)),
+      preliminaryCostEstimate: estimateTajaPreliminaryLandedCost({
+        result,
+        quantity: effectiveRequest.quantity,
+        targetCountry: effectiveRequest.targetCountry,
+        targetMarginPercent: effectiveRequest.targetMarginPercent,
+      }),
     })),
     {
       quantity: effectiveRequest.quantity,
@@ -220,6 +238,7 @@ export async function searchProjectSupplierOffers(
     ...outcome,
     results,
     candidateAnalyses: tajaAnalysis.analyses,
+    autoEnrichmentSummary: autoEnrichment.summary,
     unfilteredResultCount: outcome.results.length,
     lunaPlan,
     fetchedAt,

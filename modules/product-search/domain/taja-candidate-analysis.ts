@@ -8,6 +8,7 @@ import { RecommendationStatuses } from "../../intelligence/domain/recommendation
 import { SupplierRiskLevels } from "../../intelligence/domain/supplier-risk-v2";
 import { rankPreliminarySupplierOffers } from "./preliminary-supplier-ranking";
 import type { SupplierOfferSearchResult } from "./search";
+import type { TajaPreliminaryCostEstimate } from "./taja-preliminary-cost-estimate";
 
 export const TajaCandidateAnalysisStatuses = {
   PRELIMINARY: "PRELIMINARY",
@@ -61,6 +62,7 @@ export type TajaCandidateAnalysis = {
   status: TajaCandidateAnalysisStatus;
   finalEligible: boolean;
   landedCostStatus: TajaLandedCostStatus;
+  preliminaryCostEstimate: TajaPreliminaryCostEstimate | null;
   overallScore: number;
   confidenceScore: number;
   supplierRiskScore: number;
@@ -78,6 +80,7 @@ export type TajaCandidateAnalysisContext = {
 type CandidateWithEnrichment = {
   result: SupplierOfferSearchResult;
   enrichment?: TajaCandidateEnrichment;
+  preliminaryCostEstimate?: TajaPreliminaryCostEstimate | null;
 };
 
 type InternalAnalysis = {
@@ -86,6 +89,7 @@ type InternalAnalysis = {
   status: TajaCandidateAnalysisStatus;
   finalEligible: boolean;
   landedCostStatus: TajaLandedCostStatus;
+  preliminaryCostEstimate: TajaPreliminaryCostEstimate | null;
   missingData: TajaMissingDataKey[];
   preliminaryIndex: number;
 };
@@ -253,11 +257,15 @@ function compactExplanation(
   assessment: OfferAssessmentResult,
   status: TajaCandidateAnalysisStatus,
   missing: TajaMissingDataKey[],
+  estimate: TajaPreliminaryCostEstimate | null,
 ) {
   if (status === TajaCandidateAnalysisStatuses.FINAL) return assessment.explanation;
+  const estimateText = estimate
+    ? `Preliminarni ukupni trošak je ${estimate.lowPerUnitEur.toFixed(2)}–${estimate.highPerUnitEur.toFixed(2)} EUR po komadu; osnovni scenario je ${estimate.basePerUnitEur.toFixed(2)} EUR (${estimate.transportMode}, pouzdanost ${estimate.confidence}). `
+    : "";
   return missing.length > 0
-    ? `Preporuka je preliminarna jer nedostaju potvrđeni podaci: ${missing.join(", ")}.`
-    : "Preporuka je preliminarna dok se ne završi detaljna provera finalista.";
+    ? `${estimateText}Preporuka ostaje preliminarna jer nedostaju potvrđeni podaci: ${missing.join(", ")}.`
+    : `${estimateText}Preporuka je preliminarna dok se ne završi detaljna provera finalista.`;
 }
 
 function rankingBucket(item: InternalAnalysis) {
@@ -268,13 +276,18 @@ function rankingBucket(item: InternalAnalysis) {
   return 4;
 }
 
+function reliableEstimatedCost(item: InternalAnalysis) {
+  return item.preliminaryCostEstimate?.confidence === "LOW"
+    ? null
+    : item.preliminaryCostEstimate?.basePerUnitEur ?? null;
+}
+
 /**
  * Reuses ImportPilot's landed-cost-aware offer scoring and supplier-risk V2.
  * A candidate may be sorted highly while still remaining PRELIMINARY. It is
  * marked FINAL only after confirmed landed cost and sufficient supplier-risk
- * evidence are available. A completed but rejected analysis remains FINAL,
- * but ranks below viable preliminary candidates instead of appearing as a top
- * recommendation.
+ * evidence are available. Automatic cost ranges remain ESTIMATED and never
+ * unlock a final recommendation.
  */
 export function analyzeAndRankTajaCandidates(
   candidates: CandidateWithEnrichment[],
@@ -286,8 +299,13 @@ export function analyzeAndRankTajaCandidates(
   }));
   const preliminaryIndexes = preliminaryOrder(normalizedCandidates, context.quantity);
   const analyzed: InternalAnalysis[] = normalizedCandidates.map((candidate) => {
-    const landedCostStatus = candidate.enrichment?.landedCostStatus ??
+    const persistedLandedCostStatus = candidate.enrichment?.landedCostStatus ??
       TajaLandedCostStatuses.UNAVAILABLE;
+    const preliminaryCostEstimate = candidate.preliminaryCostEstimate ?? null;
+    const landedCostStatus =
+      persistedLandedCostStatus === TajaLandedCostStatuses.UNAVAILABLE && preliminaryCostEstimate
+        ? TajaLandedCostStatuses.ESTIMATED
+        : persistedLandedCostStatus;
     const assessment = assessOffer(
       assessmentInput(candidate, context),
       comparisonForCandidate(candidate.result, normalizedCandidates),
@@ -301,6 +319,7 @@ export function analyzeAndRankTajaCandidates(
         ? TajaCandidateAnalysisStatuses.FINAL
         : TajaCandidateAnalysisStatuses.PRELIMINARY,
       landedCostStatus,
+      preliminaryCostEstimate,
       missingData: missingData(candidate, assessment, landedCostStatus),
       preliminaryIndex: preliminaryIndexes.get(candidate.result.productUrl) ?? Number.MAX_SAFE_INTEGER,
     };
@@ -315,6 +334,15 @@ export function analyzeAndRankTajaCandidates(
         left.assessment.supplierRiskScore - right.assessment.supplierRiskScore ||
         left.preliminaryIndex - right.preliminaryIndex;
     }
+    if (!left.finalEligible && !right.finalEligible) {
+      const leftEstimate = reliableEstimatedCost(left);
+      const rightEstimate = reliableEstimatedCost(right);
+      if (leftEstimate !== null && rightEstimate !== null && leftEstimate !== rightEstimate) {
+        return leftEstimate - rightEstimate;
+      }
+      if (leftEstimate !== null && rightEstimate === null) return -1;
+      if (leftEstimate === null && rightEstimate !== null) return 1;
+    }
     return left.preliminaryIndex - right.preliminaryIndex;
   });
 
@@ -326,13 +354,19 @@ export function analyzeAndRankTajaCandidates(
       status: item.status,
       finalEligible: item.finalEligible,
       landedCostStatus: item.landedCostStatus,
+      preliminaryCostEstimate: item.preliminaryCostEstimate,
       overallScore: item.assessment.overallScore,
       confidenceScore: item.assessment.confidenceScore,
       supplierRiskScore: item.assessment.supplierRiskScore,
       supplierRiskLevel: item.assessment.scoreBreakdown.supplierRiskV2.riskLevel,
       recommendationStatus: item.assessment.recommendationStatus,
       missingData: item.missingData,
-      explanation: compactExplanation(item.assessment, item.status, item.missingData),
+      explanation: compactExplanation(
+        item.assessment,
+        item.status,
+        item.missingData,
+        item.preliminaryCostEstimate,
+      ),
     })),
   };
 }

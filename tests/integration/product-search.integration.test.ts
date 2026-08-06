@@ -128,7 +128,13 @@ describeWithDatabase("supplier search result import and tenant isolation", () =>
         rank: 1,
         status: "PRELIMINARY",
         finalEligible: false,
-        landedCostStatus: "UNAVAILABLE",
+        landedCostStatus: "ESTIMATED",
+        preliminaryCostEstimate: expect.objectContaining({
+          currency: "EUR",
+          lowPerUnitEur: expect.any(Number),
+          basePerUnitEur: expect.any(Number),
+          highPerUnitEur: expect.any(Number),
+        }),
         missingData: expect.arrayContaining([
           "LANDED_COST",
           "SUPPLIER_VERIFICATION",
@@ -219,7 +225,8 @@ describeWithDatabase("supplier search result import and tenant isolation", () =>
         productUrl: result.productUrl,
         status: "PRELIMINARY",
         finalEligible: false,
-        landedCostStatus: "UNAVAILABLE",
+        landedCostStatus: "ESTIMATED",
+        preliminaryCostEstimate: expect.objectContaining({ currency: "EUR" }),
         missingData: expect.arrayContaining(["LANDED_COST"]),
       }),
     ]);
