@@ -57,6 +57,9 @@ describeWithDatabase("supplier search result import and tenant isolation", () =>
 
   afterAll(async () => {
     if (!prisma || !userId) return;
+    await prisma.supplierSearchCache.deleteMany({
+      where: { query: "fan", targetCountry: "AT", quantity: 275 },
+    });
     await prisma.organization.delete({ where: { id: organizationId } });
     await prisma.organization.delete({ where: { id: otherOrganizationId } });
     await prisma.user.delete({ where: { id: userId } });
@@ -75,14 +78,16 @@ describeWithDatabase("supplier search result import and tenant isolation", () =>
   });
 
   it("stores manual corrections made before URL import", async () => {
+    const correctedUrl = "https://provider.example/products/industrial-fan-corrected";
     const corrected = await service.importSearchResult(projectId, organizationId, {
       ...result,
+      productUrl: correctedUrl,
       supplierName: "Corrected Supplier Name",
       minimumOrderQuantity: 250,
     });
     expect(corrected.supplierName).toBe("Corrected Supplier Name");
     expect(corrected.moq).toBe(250);
-    expect(corrected.sourceMetadata).toMatchObject({ productUrl: result.productUrl });
+    expect(corrected.sourceMetadata).toMatchObject({ productUrl: correctedUrl });
   });
 
   it("passes validated manual comparison values to the provider and returns candidate analysis", async () => {
