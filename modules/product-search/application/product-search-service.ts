@@ -24,6 +24,7 @@ import {
   TajaLandedCostStatuses,
   type TajaCandidateEnrichment,
 } from "../domain/taja-candidate-analysis";
+import { selectPreferredTajaCandidateEnrichment } from "../domain/taja-candidate-enrichment";
 import { canonicalSupplierProductUrl } from "../domain/supplier-product-url";
 import {
   createBrowserAssisted1688Preview,
@@ -56,6 +57,41 @@ function landedCostStatus(status: CalculationStatus | undefined) {
   return TajaLandedCostStatuses.UNAVAILABLE;
 }
 
+function offerCandidateEnrichment(offer: {
+  supplierVerified: boolean | null;
+  yearsOnPlatform: number | null;
+  responseRatePercent: { toNumber(): number } | null;
+  transactionCount: number | null;
+  employeeCount: number | null;
+  profileCompletenessScore: number | null;
+  deliveryTimeDays: number | null;
+  sampleAvailable: boolean | null;
+  termsClarityScore: number | null;
+  shippingClarityScore: number | null;
+  costCalculations: Array<{
+    landedCostPerUnit: { toNumber(): number };
+    grossMarginPercent: { toNumber(): number };
+    calculationStatus: CalculationStatus;
+  }>;
+}): TajaCandidateEnrichment {
+  const cost = offer.costCalculations[0];
+  return {
+    supplierVerified: offer.supplierVerified,
+    yearsOnPlatform: offer.yearsOnPlatform,
+    responseRatePercent: offer.responseRatePercent?.toNumber() ?? null,
+    transactionCount: offer.transactionCount,
+    employeeCount: offer.employeeCount,
+    profileCompletenessScore: offer.profileCompletenessScore,
+    deliveryTimeDays: offer.deliveryTimeDays,
+    sampleAvailable: offer.sampleAvailable,
+    termsClarityScore: offer.termsClarityScore,
+    shippingClarityScore: offer.shippingClarityScore,
+    landedCostPerUnit: cost?.landedCostPerUnit.toNumber() ?? null,
+    grossMarginPercent: cost?.grossMarginPercent.toNumber() ?? null,
+    landedCostStatus: landedCostStatus(cost?.calculationStatus),
+  };
+}
+
 async function findCandidateEnrichment(
   projectId: string,
   organizationId: string,
@@ -66,6 +102,7 @@ async function findCandidateEnrichment(
       organizationId,
       source: SupplierOfferSource.SEARCH_RESULT,
     },
+    orderBy: { updatedAt: "desc" },
     include: {
       costCalculations: { orderBy: { createdAt: "desc" }, take: 1 },
     },
@@ -75,24 +112,36 @@ async function findCandidateEnrichment(
   for (const offer of offers) {
     const productUrl = sourceMetadataProductUrl(offer.sourceMetadata);
     if (!productUrl) continue;
-    const cost = offer.costCalculations[0];
-    enrichment.set(canonicalSupplierProductUrl(productUrl), {
-      supplierVerified: offer.supplierVerified,
-      yearsOnPlatform: offer.yearsOnPlatform,
-      responseRatePercent: offer.responseRatePercent?.toNumber() ?? null,
-      transactionCount: offer.transactionCount,
-      employeeCount: offer.employeeCount,
-      profileCompletenessScore: offer.profileCompletenessScore,
-      deliveryTimeDays: offer.deliveryTimeDays,
-      sampleAvailable: offer.sampleAvailable,
-      termsClarityScore: offer.termsClarityScore,
-      shippingClarityScore: offer.shippingClarityScore,
-      landedCostPerUnit: cost?.landedCostPerUnit.toNumber() ?? null,
-      grossMarginPercent: cost?.grossMarginPercent.toNumber() ?? null,
-      landedCostStatus: landedCostStatus(cost?.calculationStatus),
-    });
+    const key = canonicalSupplierProductUrl(productUrl);
+    const candidate = offerCandidateEnrichment(offer);
+    enrichment.set(
+      key,
+      selectPreferredTajaCandidateEnrichment(enrichment.get(key), candidate),
+    );
   }
   return enrichment;
+}
+
+async function findExistingSearchResultOffer(
+  projectId: string,
+  organizationId: string,
+  productUrl: string,
+) {
+  const canonicalUrl = canonicalSupplierProductUrl(productUrl);
+  const offers = await prisma.supplierOffer.findMany({
+    where: {
+      organizationId,
+      projectId,
+      source: SupplierOfferSource.SEARCH_RESULT,
+    },
+    select: { id: true, sourceMetadata: true },
+  });
+
+  return offers.find((offer) => {
+    const existingUrl = sourceMetadataProductUrl(offer.sourceMetadata);
+    return existingUrl !== null &&
+      canonicalSupplierProductUrl(existingUrl) === canonicalUrl;
+  }) ?? null;
 }
 
 export async function searchProjectSupplierOffers(
@@ -170,18 +219,11 @@ export async function importSearchResult(
   });
   if (!project) throw new ProductSearchProjectNotFoundError();
 
-  const existingOffer = await prisma.supplierOffer.findFirst({
-    where: {
-      organizationId,
-      projectId,
-      source: SupplierOfferSource.SEARCH_RESULT,
-      sourceMetadata: {
-        path: ["productUrl"],
-        equals: result.productUrl,
-      },
-    },
-    select: { id: true },
-  });
+  const existingOffer = await findExistingSearchResultOffer(
+    projectId,
+    organizationId,
+    result.productUrl,
+  );
   if (existingOffer) throw new DuplicateSupplierOfferUrlError(existingOffer.id);
 
   const sourceMetadata = createSupplierOfferSourceMetadata(result);
