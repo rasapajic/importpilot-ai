@@ -63,6 +63,10 @@ function sanitizeProviderErrorMessage(error: unknown) {
     .slice(0, 500);
 }
 
+function usageLogDetails(events: AiUsageReport[]) {
+  return events.length > 0 ? { ai_usage_events: events.length } : {};
+}
+
 export function createFallbackSupplierSearchSource(
   sources: SupplierSearchSource[],
   logger: DevelopmentLogger = createDevelopmentLogger(),
@@ -110,7 +114,7 @@ export function createFallbackSupplierSearchSource(
               final_provider_used: source.name,
               final_result_count: relevantResults.length,
               final_reason: null,
-              ai_usage_events: accumulatedAiUsage.length,
+              ...usageLogDetails(accumulatedAiUsage),
             });
             return {
               results: relevantResults,
@@ -141,7 +145,7 @@ export function createFallbackSupplierSearchSource(
         final_provider_used: null,
         final_result_count: 0,
         final_reason: FALLBACK_UNAVAILABLE_REASON,
-        ai_usage_events: accumulatedAiUsage.length,
+        ...usageLogDetails(accumulatedAiUsage),
       });
       return {
         results: [],
