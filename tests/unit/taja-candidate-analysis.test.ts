@@ -87,6 +87,22 @@ describe("TAJA candidate final-ranking gate", () => {
     expect(analyzed.analyses[0]?.supplierRiskLevel).not.toBe("UNKNOWN");
   });
 
+  it("keeps the recommendation preliminary when supplier verification is unknown", () => {
+    const candidate = result("Unverified-status", 6);
+    const analyzed = analyzeAndRankTajaCandidates([
+      {
+        result: candidate,
+        enrichment: confirmedEnrichment({ supplierVerified: null }),
+      },
+    ], context);
+
+    expect(analyzed.analyses[0]).toMatchObject({
+      status: TajaCandidateAnalysisStatuses.PRELIMINARY,
+      finalEligible: false,
+      missingData: expect.arrayContaining(["SUPPLIER_VERIFICATION"]),
+    });
+  });
+
   it("does not treat an estimated landed cost as a final recommendation", () => {
     const candidate = result("Estimated", 6);
     const analyzed = analyzeAndRankTajaCandidates([
