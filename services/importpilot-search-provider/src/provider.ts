@@ -1,8 +1,10 @@
 import {
   aiUsageReportsSchema,
+  searchSummarySchema,
   supplierSearchResultsSchema,
   type AiUsageReport,
   type SearchRequest,
+  type SearchSummary,
   type SupplierSearchResult,
 } from "./contract.js";
 import {
@@ -16,6 +18,7 @@ export type SupplierSearchOutcome =
   | {
       results: SupplierSearchResult[];
       reason?: string;
+      summary?: SearchSummary;
       aiUsage?: AiUsageReport[];
     };
 
@@ -51,7 +54,7 @@ export const unconfiguredSupplierSearchSource: SupplierSearchSource = {
 
 function outcomeParts(outcome: SupplierSearchOutcome) {
   return Array.isArray(outcome)
-    ? { results: outcome, reason: undefined, aiUsage: undefined }
+    ? { results: outcome, reason: undefined, summary: undefined, aiUsage: undefined }
     : outcome;
 }
 
@@ -247,22 +250,38 @@ export function createAggregatingSupplierSearchSource(
 
       const aiUsage = attempts.flatMap((attempt) => attempt.aiUsage);
       const merge = mergeSourceResultsRoundRobin(attempts, maxResults);
-      const candidateCount = attempts.reduce(
+      const parsedResults = attempts.reduce(
+        (total, attempt) => total + attempt.parsedResultCount,
+        0,
+      );
+      const relevantCandidates = attempts.reduce(
         (total, attempt) => total + attempt.relevantResults.length,
         0,
       );
+      const sourceResultCounts = Object.fromEntries(
+        attempts.map((attempt) => [attempt.source.name, attempt.relevantResults.length]),
+      );
+      const summary: SearchSummary = {
+        mode: "deep-search-phase1",
+        configuredSources: implementedSources.length,
+        successfulSources: attempts.filter((attempt) => attempt.relevantResults.length > 0).length,
+        parsedResults,
+        relevantCandidates,
+        duplicateResultsRemoved: merge.duplicateResultsRemoved,
+        unprocessedCandidates: merge.unprocessedCandidates,
+        returnedResults: merge.results.length,
+        sourceResultCounts,
+      };
 
       logger("provider_aggregation_complete", {
-        configured_sources: implementedSources.length,
-        successful_sources: attempts.filter((attempt) => attempt.relevantResults.length > 0).length,
-        parsed_results: attempts.reduce((total, attempt) => total + attempt.parsedResultCount, 0),
-        relevant_candidates: candidateCount,
-        duplicate_results_removed: merge.duplicateResultsRemoved,
-        unprocessed_candidates: merge.unprocessedCandidates,
-        final_result_count: merge.results.length,
-        source_result_counts: Object.fromEntries(
-          attempts.map((attempt) => [attempt.source.name, attempt.relevantResults.length]),
-        ),
+        configured_sources: summary.configuredSources,
+        successful_sources: summary.successfulSources,
+        parsed_results: summary.parsedResults,
+        relevant_candidates: summary.relevantCandidates,
+        duplicate_results_removed: summary.duplicateResultsRemoved,
+        unprocessed_candidates: summary.unprocessedCandidates,
+        final_result_count: summary.returnedResults,
+        source_result_counts: summary.sourceResultCounts,
         ...usageLogDetails(aiUsage),
       });
 
@@ -275,6 +294,7 @@ export function createAggregatingSupplierSearchSource(
         });
         return {
           results: merge.results,
+          summary,
           ...(aiUsage.length > 0 ? { aiUsage } : {}),
         };
       }
@@ -288,6 +308,7 @@ export function createAggregatingSupplierSearchSource(
       return {
         results: [],
         reason: FALLBACK_UNAVAILABLE_REASON,
+        summary,
         ...(aiUsage.length > 0 ? { aiUsage } : {}),
       };
     },
@@ -389,10 +410,11 @@ export async function runValidatedSearch(
   signal: AbortSignal,
 ) {
   const outcome = await source.search(input, signal);
-  const { results, reason, aiUsage } = outcomeParts(outcome);
+  const { results, reason, summary, aiUsage } = outcomeParts(outcome);
   return {
     results: supplierSearchResultsSchema.parse(results),
     reason,
+    ...(summary ? { summary: searchSummarySchema.parse(summary) } : {}),
     ...(aiUsage?.length ? { aiUsage: aiUsageReportsSchema.parse(aiUsage) } : {}),
   };
 }
