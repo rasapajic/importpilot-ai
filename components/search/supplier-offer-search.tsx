@@ -19,6 +19,10 @@ import {
   type RecoverySearchCriteria,
 } from "@/modules/product-search/domain/recovery-search";
 import type { SupplierOfferSearchResult } from "@/modules/product-search/domain/search";
+import type {
+  TajaCandidateAnalysis,
+  TajaMissingDataKey,
+} from "@/modules/product-search/domain/taja-candidate-analysis";
 
 type ProviderStatus = "connected" | "not_configured" | "error";
 type ResultOrigin = "live" | "cache";
@@ -62,31 +66,118 @@ const comparisonCopy = {
 
 const recommendationCopy = {
   sr: {
-    title: "Tajine preliminarne preporuke",
-    description: "Do tri ponude su izdvojene prema trenutno dostupnoj ceni, MOQ-u i kompletnosti podataka. Konačni izbor sledi posle landed-cost obračuna i provere rizika.",
-    rank: (rank: number) => `#${rank} preliminarna preporuka`,
+    preliminaryTitle: "Tajine preliminarne preporuke",
+    preliminaryDescription: "Do tri ponude su izdvojene prema trenutno dostupnoj ceni, MOQ-u i kompletnosti podataka. Konačni izbor sledi posle landed-cost obračuna i provere rizika.",
+    analyzedTitle: "Tajine najbolje analizirane ponude",
+    analyzedDescription: "Ponude sa potvrđenim landed cost-om i dovoljnim podacima imaju konačan status. Ostale su jasno označene kao preliminarne.",
+    rankPreliminary: (rank: number) => `#${rank} preliminarna preporuka`,
     otherTitle: "Ostale pronađene ponude",
     otherDescription: (count: number) => `Taja je pronašla još ${count} upotrebljivih ponuda koje možete pregledati i dodati za poređenje.`,
     showAll: (count: number) => `Prikaži svih ${count} ostalih ponuda`,
     showLess: "Prikaži manje",
   },
   de: {
-    title: "Tajas vorläufige Empfehlungen",
-    description: "Bis zu drei Angebote werden anhand des derzeit verfügbaren Preises, der MOQ und der Datenvollständigkeit hervorgehoben. Die endgültige Auswahl folgt nach Landed-Cost- und Risikoprüfung.",
-    rank: (rank: number) => `#${rank} vorläufige Empfehlung`,
+    preliminaryTitle: "Tajas vorläufige Empfehlungen",
+    preliminaryDescription: "Bis zu drei Angebote werden anhand des derzeit verfügbaren Preises, der MOQ und der Datenvollständigkeit hervorgehoben. Die endgültige Auswahl folgt nach Landed-Cost- und Risikoprüfung.",
+    analyzedTitle: "Tajas bestbewertete analysierte Angebote",
+    analyzedDescription: "Angebote mit bestätigten Landed Costs und ausreichenden Lieferantendaten erhalten einen endgültigen Status. Alle anderen bleiben klar als vorläufig gekennzeichnet.",
+    rankPreliminary: (rank: number) => `#${rank} vorläufige Empfehlung`,
     otherTitle: "Weitere gefundene Angebote",
     otherDescription: (count: number) => `Taja hat ${count} weitere brauchbare Angebote gefunden, die Sie prüfen und zum Vergleich hinzufügen können.`,
     showAll: (count: number) => `Alle ${count} weiteren Angebote anzeigen`,
     showLess: "Weniger anzeigen",
   },
   en: {
-    title: "Taja's preliminary recommendations",
-    description: "Up to three offers are highlighted using the currently available price, MOQ and data completeness. Final selection follows landed-cost and risk verification.",
-    rank: (rank: number) => `#${rank} preliminary recommendation`,
+    preliminaryTitle: "Taja's preliminary recommendations",
+    preliminaryDescription: "Up to three offers are highlighted using the currently available price, MOQ and data completeness. Final selection follows landed-cost and risk verification.",
+    analyzedTitle: "Taja's best analyzed offers",
+    analyzedDescription: "Offers with confirmed landed cost and sufficient supplier evidence receive a final status. All others remain clearly marked as preliminary.",
+    rankPreliminary: (rank: number) => `#${rank} preliminary recommendation`,
     otherTitle: "Other offers found",
     otherDescription: (count: number) => `Taja found ${count} more usable offers that you can review and add for comparison.`,
     showAll: (count: number) => `Show all ${count} other offers`,
     showLess: "Show fewer",
+  },
+} as const;
+
+const analysisCopy = {
+  sr: {
+    recommendation: {
+      RECOMMENDED: "konačna preporuka",
+      OK_WITH_RISK: "preporuka uz rizik",
+      NEEDS_NEGOTIATION: "potrebno pregovaranje",
+      NOT_RECOMMENDED: "ne preporučuje se",
+    },
+    risk: { LOW: "nizak", MEDIUM: "srednji", HIGH: "visok", UNKNOWN: "nepoznat" },
+    landedCost: { UNAVAILABLE: "nije obračunat", ESTIMATED: "procena", CONFIRMED: "potvrđen" },
+    missing: {
+      LANDED_COST: "potvrđen landed cost",
+      SUPPLIER_VERIFICATION: "verifikacija dobavljača",
+      SUPPLIER_RISK_DATA: "dovoljno podataka o riziku",
+      DELIVERY_TIME: "rok isporuke",
+      SAMPLE_AVAILABILITY: "dostupnost uzorka",
+      COMMERCIAL_TERMS: "komercijalni uslovi",
+      TRANSPORT_DETAILS: "detalji transporta",
+      CORE_OFFER_DATA: "osnovni podaci ponude",
+    },
+    score: "Taja rezultat",
+    confidence: "Pouzdanost podataka",
+    riskLabel: "Rizik dobavljača",
+    landedCostLabel: "Landed cost",
+    missingLabel: "Nedostaje za konačnu odluku",
+    preliminary: "preliminarna analiza",
+  },
+  de: {
+    recommendation: {
+      RECOMMENDED: "endgültige Empfehlung",
+      OK_WITH_RISK: "Empfehlung mit Risiko",
+      NEEDS_NEGOTIATION: "Verhandlung erforderlich",
+      NOT_RECOMMENDED: "nicht empfohlen",
+    },
+    risk: { LOW: "niedrig", MEDIUM: "mittel", HIGH: "hoch", UNKNOWN: "unbekannt" },
+    landedCost: { UNAVAILABLE: "nicht berechnet", ESTIMATED: "Schätzung", CONFIRMED: "bestätigt" },
+    missing: {
+      LANDED_COST: "bestätigte Landed Costs",
+      SUPPLIER_VERIFICATION: "Lieferantenverifizierung",
+      SUPPLIER_RISK_DATA: "ausreichende Risikodaten",
+      DELIVERY_TIME: "Lieferzeit",
+      SAMPLE_AVAILABILITY: "Musterverfügbarkeit",
+      COMMERCIAL_TERMS: "Geschäftsbedingungen",
+      TRANSPORT_DETAILS: "Transportdetails",
+      CORE_OFFER_DATA: "Kerndaten des Angebots",
+    },
+    score: "Taja-Bewertung",
+    confidence: "Datenzuverlässigkeit",
+    riskLabel: "Lieferantenrisiko",
+    landedCostLabel: "Landed Cost",
+    missingLabel: "Fehlt für die endgültige Entscheidung",
+    preliminary: "vorläufige Analyse",
+  },
+  en: {
+    recommendation: {
+      RECOMMENDED: "final recommendation",
+      OK_WITH_RISK: "recommendation with risk",
+      NEEDS_NEGOTIATION: "negotiation required",
+      NOT_RECOMMENDED: "not recommended",
+    },
+    risk: { LOW: "low", MEDIUM: "medium", HIGH: "high", UNKNOWN: "unknown" },
+    landedCost: { UNAVAILABLE: "not calculated", ESTIMATED: "estimated", CONFIRMED: "confirmed" },
+    missing: {
+      LANDED_COST: "confirmed landed cost",
+      SUPPLIER_VERIFICATION: "supplier verification",
+      SUPPLIER_RISK_DATA: "sufficient risk evidence",
+      DELIVERY_TIME: "delivery time",
+      SAMPLE_AVAILABILITY: "sample availability",
+      COMMERCIAL_TERMS: "commercial terms",
+      TRANSPORT_DETAILS: "transport details",
+      CORE_OFFER_DATA: "core offer data",
+    },
+    score: "Taja score",
+    confidence: "Data confidence",
+    riskLabel: "Supplier risk",
+    landedCostLabel: "Landed cost",
+    missingLabel: "Missing for a final decision",
+    preliminary: "preliminary analysis",
   },
 } as const;
 
@@ -116,6 +207,7 @@ export function SupplierOfferSearch({
   const recoveryCopy = getRecoverySearchCopy(locale);
   const comparisonText = comparisonCopy[locale];
   const recommendationText = recommendationCopy[locale];
+  const analysisText = analysisCopy[locale];
   const router = useRouter();
   const [query, setQuery] = useState(productName);
   const hasProjectValues = quantity !== null && Boolean(targetCountry);
@@ -131,6 +223,7 @@ export function SupplierOfferSearch({
   const [avoidComplexCompliance, setAvoidComplexCompliance] = useState(true);
   const [privateLabel, setPrivateLabel] = useState(false);
   const [results, setResults] = useState<SupplierOfferSearchResult[] | null>(null);
+  const [candidateAnalyses, setCandidateAnalyses] = useState<TajaCandidateAnalysis[]>([]);
   const [showAllResults, setShowAllResults] = useState(false);
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState<number | null>(null);
@@ -156,6 +249,7 @@ export function SupplierOfferSearch({
     setLoading(true);
     setError("");
     setImported([]);
+    setCandidateAnalyses([]);
     setShowAllResults(false);
     try {
       const effectiveMaxUnitPrice = overrides.maxUnitPrice ?? maxUnitPrice;
@@ -184,6 +278,7 @@ export function SupplierOfferSearch({
       });
       const payload = (await response.json()) as {
         results?: SupplierOfferSearchResult[];
+        candidateAnalyses?: TajaCandidateAnalysis[];
         error?: string;
         providerStatus?: ProviderStatus;
         reason?: string;
@@ -196,6 +291,7 @@ export function SupplierOfferSearch({
       setProviderStatus(payload.providerStatus ?? null);
       setResultOrigin(payload.resultOrigin ?? null);
       setResults(payload.results ?? []);
+      setCandidateAnalyses(payload.candidateAnalyses ?? []);
       setLunaPlan(payload.lunaPlan ?? null);
       setFetchedAt(payload.fetchedAt ?? null);
       setUnfilteredResultCount(payload.unfilteredResultCount ?? null);
@@ -205,6 +301,7 @@ export function SupplierOfferSearch({
         : t("Pretraga trenutno nije dostupna. Pokušajte ponovo."));
       setProviderStatus("error");
       setResults([]);
+      setCandidateAnalyses([]);
       setLunaPlan(null);
       setFetchedAt(null);
       setUnfilteredResultCount(null);
@@ -312,12 +409,27 @@ export function SupplierOfferSearch({
   const visibleOtherResults = showAllResults
     ? otherResults
     : otherResults.slice(0, INITIAL_OTHER_RESULTS);
+  const candidateAnalysisByUrl = new Map(
+    candidateAnalyses.map((analysis) => [analysis.productUrl, analysis]),
+  );
+  const hasFinalTopAnalysis = recommendedResults.some(
+    (result) => candidateAnalysisByUrl.get(result.productUrl)?.status === "FINAL",
+  );
+
+  function missingDataText(keys: TajaMissingDataKey[]) {
+    return keys.map((key) => analysisText.missing[key]).join(", ");
+  }
 
   function renderResultCard(
     result: SupplierOfferSearchResult,
     index: number,
     recommendationRank?: number,
   ) {
+    const analysis = candidateAnalysisByUrl.get(result.productUrl);
+    const recommendationLabel = analysis?.status === "FINAL"
+      ? analysisText.recommendation[analysis.recommendationStatus]
+      : analysisText.preliminary;
+
     return (
       <article className="search-result-card" key={`${result.source}-${result.productUrl}`}>
         {result.imageUrl && (
@@ -327,9 +439,11 @@ export function SupplierOfferSearch({
         )}
         <div>
           <p className="eyebrow">{result.source}</p>
-          {recommendationRank !== undefined && (
-            <span className="provider-status provider-status-connected">
-              {recommendationText.rank(recommendationRank)}
+          {(recommendationRank !== undefined || analysis?.status === "FINAL") && (
+            <span className={`provider-status ${analysis?.recommendationStatus === "NOT_RECOMMENDED" ? "provider-status-error" : "provider-status-connected"}`}>
+              {recommendationRank !== undefined
+                ? `#${recommendationRank} ${analysis?.status === "FINAL" ? recommendationLabel : recommendationText.rankPreliminary(recommendationRank).replace(/^#\d+\s*/, "")}`
+                : recommendationLabel}
             </span>
           )}
           {resultOrigin && (
@@ -353,6 +467,26 @@ export function SupplierOfferSearch({
               : t("Minimalna količina (MOQ) nije navedena")}
             {result.incoterm ? ` · ${result.incoterm}` : ""}
           </p>
+          {analysis && (
+            <div>
+              <p>
+                <strong>{analysisText.score}:</strong> {analysis.overallScore}/100
+                {" · "}
+                <strong>{analysisText.confidence}:</strong> {analysis.confidenceScore}%
+                {" · "}
+                <strong>{analysisText.riskLabel}:</strong> {analysisText.risk[analysis.supplierRiskLevel]}
+                {" · "}
+                <strong>{analysisText.landedCostLabel}:</strong> {analysisText.landedCost[analysis.landedCostStatus]}
+              </p>
+              <p className="muted-text">{analysis.explanation}</p>
+              {analysis.missingData.length > 0 && (
+                <p className="muted-text">
+                  <strong>{analysisText.missingLabel}:</strong>{" "}
+                  {missingDataText(analysis.missingData)}
+                </p>
+              )}
+            </div>
+          )}
           <a href={result.productUrl} rel="noreferrer" target="_blank">{t("Otvori izvornu ponudu")}</a>
         </div>
         <button
@@ -591,8 +725,16 @@ export function SupplierOfferSearch({
       {hasSupplierSearchResultCards(results) && results && (
         <div className="search-result-list">
           <div className="empty-state">
-            <h3>{recommendationText.title}</h3>
-            <p>{recommendationText.description}</p>
+            <h3>
+              {hasFinalTopAnalysis
+                ? recommendationText.analyzedTitle
+                : recommendationText.preliminaryTitle}
+            </h3>
+            <p>
+              {hasFinalTopAnalysis
+                ? recommendationText.analyzedDescription
+                : recommendationText.preliminaryDescription}
+            </p>
           </div>
           {recommendedResults.map((result, index) =>
             renderResultCard(result, index, index + 1),
