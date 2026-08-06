@@ -4,21 +4,12 @@ import { createSearchProviderApp } from "./app.js";
 import { createAlibabaSupplierSearchSource } from "./alibaba-source.js";
 import { createDevelopmentLogger } from "./development-log.js";
 import { createMadeInChinaSupplierSearchSource } from "./made-in-china-provider.js";
+import {
+  openAIReasoningEffort,
+  openAISearchContextSize,
+} from "./openai-search-config.js";
 import { createOpenAIWebSearchSource } from "./openai-web-search-source.js";
 import { createFallbackSupplierSearchSource } from "./provider.js";
-
-function openAISearchContextSize(value: string | undefined): "low" | "medium" | "high" {
-  return value === "medium" || value === "high" ? value : "low";
-}
-
-export function openAIReasoningEffort(
-  value: string | undefined,
-): "low" | "medium" | "high" {
-  // The Responses web_search tool rejects `minimal` for the current
-  // gpt-5-mini integration. Unknown, empty and legacy `minimal` values
-  // therefore fall back to the lowest compatible effort: `low`.
-  return value === "medium" || value === "high" ? value : "low";
-}
 
 const port = Number(process.env.PORT ?? 4000);
 const token = process.env.SEARCH_PROVIDER_TOKEN ?? "";
