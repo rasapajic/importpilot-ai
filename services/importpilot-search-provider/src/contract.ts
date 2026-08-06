@@ -84,6 +84,23 @@ export const supplierSearchResultSchema = z
 
 export const supplierSearchResultsSchema = z.array(supplierSearchResultSchema).max(100);
 
+export const searchSummarySchema = z
+  .object({
+    mode: z.literal("deep-search-phase1"),
+    configuredSources: nonnegativeInteger,
+    successfulSources: nonnegativeInteger,
+    parsedResults: nonnegativeInteger,
+    relevantCandidates: nonnegativeInteger,
+    duplicateResultsRemoved: nonnegativeInteger,
+    unprocessedCandidates: nonnegativeInteger,
+    returnedResults: nonnegativeInteger,
+    sourceResultCounts: z.record(
+      z.string().trim().min(1).max(100),
+      nonnegativeInteger,
+    ),
+  })
+  .strict();
+
 export const aiUsageReportSchema = z
   .object({
     provider: z.literal("openai"),
@@ -117,10 +134,12 @@ export const aiUsageReportsSchema = z.array(aiUsageReportSchema).max(20);
 
 export type SearchRequest = z.infer<typeof searchRequestSchema>;
 export type SupplierSearchResult = z.infer<typeof supplierSearchResultSchema>;
+export type SearchSummary = z.infer<typeof searchSummarySchema>;
 export type AiUsageReport = z.infer<typeof aiUsageReportSchema>;
 
 export type SearchResponse = {
   results: SupplierSearchResult[];
   reason?: string;
+  summary?: SearchSummary;
   aiUsage?: AiUsageReport[];
 };
