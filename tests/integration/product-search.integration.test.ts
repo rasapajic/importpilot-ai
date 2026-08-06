@@ -83,6 +83,13 @@ describeWithDatabase("supplier search result import and tenant isolation", () =>
     });
   });
 
+  it("rejects the same supplier page when only tracking parameters changed", async () => {
+    await expect(service.importSearchResult(projectId, organizationId, {
+      ...result,
+      productUrl: `${result.productUrl}?utm_source=repeat&spm=tracking#details`,
+    })).rejects.toMatchObject({ existingOfferId: importedOfferId });
+  });
+
   it("stores manual corrections made before URL import", async () => {
     const correctedUrl = "https://provider.example/products/industrial-fan-corrected";
     const corrected = await service.importSearchResult(projectId, organizationId, {
