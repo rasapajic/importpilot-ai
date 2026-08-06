@@ -18,7 +18,7 @@ describe("multi-offer comparison flow", () => {
   it("uses comparison language in all supported locales", () => {
     expect(getLunaSearchCopy("sr").addToComparison).toBe("Dodaj za poređenje");
     expect(getLunaSearchCopy("de").addToComparison).toBe("Zum Vergleich hinzufügen");
-    expect(getLunaSearchCopy("en").addToComparison).toBe("Add for comparison");
+    expect(getLunaSearchCopy("en").addToComparison).toBe("Add to comparison");
     expect(getLunaSearchCopy("sr").continueWithSelected(3))
       .toBe("Nastavite sa izabranim ponudama (3)");
   });
