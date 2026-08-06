@@ -21,7 +21,7 @@ describe("unified dashboard product intake", () => {
     expect(intakeSource).toContain("Opišite proizvod");
     expect(intakeSource).toContain("Dodajte sliku");
     expect(intakeSource).toContain("Nalepite link");
-    expect(intakeSource).toContain("Nastavite");
+    expect(intakeSource).toContain("Podesite pretragu");
     expect(intakeSource).toContain('type="file"');
     expect(intakeSource).toContain('type="url"');
   });
