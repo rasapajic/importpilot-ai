@@ -28,6 +28,8 @@ type SearchOverrides = {
   strictPriceLimit?: boolean;
 };
 
+const INITIAL_OTHER_RESULTS = 7;
+
 const comparisonCopy = {
   sr: {
     add: "Dodaj za poređenje",
@@ -58,6 +60,36 @@ const comparisonCopy = {
   },
 } as const;
 
+const recommendationCopy = {
+  sr: {
+    title: "Tajine preliminarne preporuke",
+    description: "Do tri ponude su izdvojene prema trenutno dostupnoj ceni, MOQ-u i kompletnosti podataka. Konačni izbor sledi posle landed-cost obračuna i provere rizika.",
+    rank: (rank: number) => `#${rank} preliminarna preporuka`,
+    otherTitle: "Ostale pronađene ponude",
+    otherDescription: (count: number) => `Taja je pronašla još ${count} upotrebljivih ponuda koje možete pregledati i dodati za poređenje.`,
+    showAll: (count: number) => `Prikaži svih ${count} ostalih ponuda`,
+    showLess: "Prikaži manje",
+  },
+  de: {
+    title: "Tajas vorläufige Empfehlungen",
+    description: "Bis zu drei Angebote werden anhand des derzeit verfügbaren Preises, der MOQ und der Datenvollständigkeit hervorgehoben. Die endgültige Auswahl folgt nach Landed-Cost- und Risikoprüfung.",
+    rank: (rank: number) => `#${rank} vorläufige Empfehlung`,
+    otherTitle: "Weitere gefundene Angebote",
+    otherDescription: (count: number) => `Taja hat ${count} weitere brauchbare Angebote gefunden, die Sie prüfen und zum Vergleich hinzufügen können.`,
+    showAll: (count: number) => `Alle ${count} weiteren Angebote anzeigen`,
+    showLess: "Weniger anzeigen",
+  },
+  en: {
+    title: "Taja's preliminary recommendations",
+    description: "Up to three offers are highlighted using the currently available price, MOQ and data completeness. Final selection follows landed-cost and risk verification.",
+    rank: (rank: number) => `#${rank} preliminary recommendation`,
+    otherTitle: "Other offers found",
+    otherDescription: (count: number) => `Taja found ${count} more usable offers that you can review and add for comparison.`,
+    showAll: (count: number) => `Show all ${count} other offers`,
+    showLess: "Show fewer",
+  },
+} as const;
+
 function optionalNumber(value: string) {
   if (!value.trim()) return undefined;
   const parsed = Number(value);
@@ -83,6 +115,7 @@ export function SupplierOfferSearch({
   const lunaCopy = getLunaSearchCopy(locale);
   const recoveryCopy = getRecoverySearchCopy(locale);
   const comparisonText = comparisonCopy[locale];
+  const recommendationText = recommendationCopy[locale];
   const router = useRouter();
   const [query, setQuery] = useState(productName);
   const hasProjectValues = quantity !== null && Boolean(targetCountry);
@@ -98,6 +131,7 @@ export function SupplierOfferSearch({
   const [avoidComplexCompliance, setAvoidComplexCompliance] = useState(true);
   const [privateLabel, setPrivateLabel] = useState(false);
   const [results, setResults] = useState<SupplierOfferSearchResult[] | null>(null);
+  const [showAllResults, setShowAllResults] = useState(false);
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState<number | null>(null);
   const [imported, setImported] = useState<number[]>([]);
@@ -122,6 +156,7 @@ export function SupplierOfferSearch({
     setLoading(true);
     setError("");
     setImported([]);
+    setShowAllResults(false);
     try {
       const effectiveMaxUnitPrice = overrides.maxUnitPrice ?? maxUnitPrice;
       const effectiveMaxUnitPriceCurrency =
@@ -272,6 +307,69 @@ export function SupplierOfferSearch({
     unfilteredResultCount !== null &&
     unfilteredResultCount > 0,
   );
+  const recommendedResults = results?.slice(0, 3) ?? [];
+  const otherResults = results?.slice(3) ?? [];
+  const visibleOtherResults = showAllResults
+    ? otherResults
+    : otherResults.slice(0, INITIAL_OTHER_RESULTS);
+
+  function renderResultCard(
+    result: SupplierOfferSearchResult,
+    index: number,
+    recommendationRank?: number,
+  ) {
+    return (
+      <article className="search-result-card" key={`${result.source}-${result.productUrl}`}>
+        {result.imageUrl && (
+          // Provider URLs are validated and rendered without proxying or persisting image bytes.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img alt="" className="search-result-image" loading="lazy" src={result.imageUrl} />
+        )}
+        <div>
+          <p className="eyebrow">{result.source}</p>
+          {recommendationRank !== undefined && (
+            <span className="provider-status provider-status-connected">
+              {recommendationText.rank(recommendationRank)}
+            </span>
+          )}
+          {resultOrigin && (
+            <span
+              className={`provider-status provider-status-${resultOrigin}`}
+              title={resultOrigin === "cache" ? t("Keširani rezultat") : t("Uživo")}
+            >
+              {resultOrigin === "live" ? "LIVE" : "CACHED"}
+            </span>
+          )}
+          {isPartialLunaSearchResult(result) && (
+            <span className="provider-status provider-status-not_configured">PARTIAL</span>
+          )}
+          <h3>{result.title}</h3>
+          <p><strong>{result.supplierName}</strong>{result.supplierCountry ? ` · ${result.supplierCountry}` : ""}</p>
+          <p>
+            {result.price !== null ? `${result.price} ${result.currency}` : t("Cena nije navedena")}
+            {" · "}
+            {result.minimumOrderQuantity !== null
+              ? `${t("Minimalna količina (MOQ)")}: ${result.minimumOrderQuantity}`
+              : t("Minimalna količina (MOQ) nije navedena")}
+            {result.incoterm ? ` · ${result.incoterm}` : ""}
+          </p>
+          <a href={result.productUrl} rel="noreferrer" target="_blank">{t("Otvori izvornu ponudu")}</a>
+        </div>
+        <button
+          className="secondary-button"
+          disabled={importing === index || imported.includes(index)}
+          onClick={() => addResult(result, index)}
+          type="button"
+        >
+          {imported.includes(index)
+            ? comparisonText.added
+            : importing === index
+              ? comparisonText.adding
+              : comparisonText.add}
+        </button>
+      </article>
+    );
+  }
 
   return (
     <section className="dashboard-card supplier-search">
@@ -492,52 +590,35 @@ export function SupplierOfferSearch({
       )}
       {hasSupplierSearchResultCards(results) && results && (
         <div className="search-result-list">
-          {results.map((result, index) => (
-            <article className="search-result-card" key={`${result.source}-${result.productUrl}`}>
-              {result.imageUrl && (
-                // Provider URLs are validated and rendered without proxying or persisting image bytes.
-                // eslint-disable-next-line @next/next/no-img-element
-                <img alt="" className="search-result-image" loading="lazy" src={result.imageUrl} />
-              )}
-              <div>
-                <p className="eyebrow">{result.source}</p>
-                {resultOrigin && (
-                  <span
-                    className={`provider-status provider-status-${resultOrigin}`}
-                    title={resultOrigin === "cache" ? t("Keširani rezultat") : t("Uživo")}
-                  >
-                    {resultOrigin === "live" ? "LIVE" : "CACHED"}
-                  </span>
-                )}
-                {isPartialLunaSearchResult(result) && (
-                  <span className="provider-status provider-status-not_configured">PARTIAL</span>
-                )}
-                <h3>{result.title}</h3>
-                <p><strong>{result.supplierName}</strong>{result.supplierCountry ? ` · ${result.supplierCountry}` : ""}</p>
-                <p>
-                  {result.price !== null ? `${result.price} ${result.currency}` : t("Cena nije navedena")}
-                  {" · "}
-                  {result.minimumOrderQuantity !== null
-                    ? `${t("Minimalna količina (MOQ)")}: ${result.minimumOrderQuantity}`
-                    : t("Minimalna količina (MOQ) nije navedena")}
-                  {result.incoterm ? ` · ${result.incoterm}` : ""}
-                </p>
-                <a href={result.productUrl} rel="noreferrer" target="_blank">{t("Otvori izvornu ponudu")}</a>
+          <div className="empty-state">
+            <h3>{recommendationText.title}</h3>
+            <p>{recommendationText.description}</p>
+          </div>
+          {recommendedResults.map((result, index) =>
+            renderResultCard(result, index, index + 1),
+          )}
+          {otherResults.length > 0 && (
+            <>
+              <div className="empty-state">
+                <h3>{recommendationText.otherTitle}</h3>
+                <p>{recommendationText.otherDescription(otherResults.length)}</p>
               </div>
-              <button
-                className="secondary-button"
-                disabled={importing === index || imported.includes(index)}
-                onClick={() => addResult(result, index)}
-                type="button"
-              >
-                {imported.includes(index)
-                  ? comparisonText.added
-                  : importing === index
-                    ? comparisonText.adding
-                    : comparisonText.add}
-              </button>
-            </article>
-          ))}
+              {visibleOtherResults.map((result, index) =>
+                renderResultCard(result, index + 3),
+              )}
+              {otherResults.length > INITIAL_OTHER_RESULTS && (
+                <button
+                  className="secondary-button"
+                  onClick={() => setShowAllResults((current) => !current)}
+                  type="button"
+                >
+                  {showAllResults
+                    ? recommendationText.showLess
+                    : recommendationText.showAll(otherResults.length)}
+                </button>
+              )}
+            </>
+          )}
           {imported.length > 0 && (
             <div className="empty-state search-comparison-actions" role="status">
               <h3>{comparisonText.selected(imported.length)}</h3>
