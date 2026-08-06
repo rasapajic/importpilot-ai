@@ -85,19 +85,35 @@ describeWithDatabase("supplier search result import and tenant isolation", () =>
     expect(corrected.sourceMetadata).toMatchObject({ productUrl: result.productUrl });
   });
 
-  it("passes validated manual comparison values to the provider", async () => {
+  it("passes validated manual comparison values to the provider and returns candidate analysis", async () => {
     let received: unknown;
-    await service.searchProjectSupplierOffers(projectId, organizationId, {
+    const outcome = await service.searchProjectSupplierOffers(projectId, organizationId, {
       query: "fan",
       quantity: 275,
       targetCountry: "AT",
     }, {
       async searchSupplierOffers(input) {
         received = input;
-        return [];
+        return [result];
       },
     });
+
     expect(received).toEqual({ query: "fan", quantity: 275, targetCountry: "AT" });
+    expect(outcome.results).toHaveLength(1);
+    expect(outcome.candidateAnalyses).toEqual([
+      expect.objectContaining({
+        productUrl: result.productUrl,
+        rank: 1,
+        status: "PRELIMINARY",
+        finalEligible: false,
+        landedCostStatus: "UNAVAILABLE",
+        missingData: expect.arrayContaining([
+          "LANDED_COST",
+          "SUPPLIER_VERIFICATION",
+          "SUPPLIER_RISK_DATA",
+        ]),
+      }),
+    ]);
   });
 
   it("does not import or search a project from another tenant", async () => {
