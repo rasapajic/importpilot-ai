@@ -1,5 +1,6 @@
 import { OfferExtractionStatus, ProjectActivityType, SupplierOfferSource } from "@prisma/client";
 import { prisma } from "../../../lib/database/prisma";
+import { recordAiUsageEvents } from "../../ai-usage/application/ai-usage-service";
 import {
   projectSupplierSearchRequestSchema,
   supplierOfferSearchInputSchema,
@@ -34,7 +35,7 @@ export async function searchProjectSupplierOffers(
   projectId: string,
   organizationId: string,
   searchInput: unknown,
-  provider: SupplierOfferSearchProvider = getSupplierOfferSearchProvider(),
+  provider?: SupplierOfferSearchProvider,
 ) {
   const project = await prisma.importProject.findFirst({
     where: { id: projectId, organizationId },
@@ -42,6 +43,11 @@ export async function searchProjectSupplierOffers(
   });
   if (!project) throw new ProductSearchProjectNotFoundError();
 
+  const activeProvider = provider ?? getSupplierOfferSearchProvider({
+    onAiUsage: async (events) => {
+      await recordAiUsageEvents({ organizationId, projectId: project.id, events });
+    },
+  });
   const request = projectSupplierSearchRequestSchema.parse(searchInput);
   const effectiveRequest = {
     ...request,
@@ -51,7 +57,7 @@ export async function searchProjectSupplierOffers(
   const providerInput = supplierOfferSearchInputSchema.parse(
     buildLunaProviderSearchInput(lunaPlan, effectiveRequest),
   );
-  const outcome = await searchSupplierOffersWithPersistentFallback(providerInput, provider);
+  const outcome = await searchSupplierOffersWithPersistentFallback(providerInput, activeProvider);
   const fetchedAt = new Date().toISOString();
   const results = applyLunaSearchConstraints(outcome.results, effectiveRequest).map((result) => ({
     ...result,
