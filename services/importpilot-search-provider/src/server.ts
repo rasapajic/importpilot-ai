@@ -57,6 +57,8 @@ const source = createAggregatingSupplierSearchSource([
   createOpenAI1688SearchSource({
     ...openAiSourceOptions,
     maxResults: Number(process.env.OPENAI_1688_MAX_RESULTS ?? 10),
+    enrichmentMaxResults: Number(process.env.OPENAI_1688_ENRICH_MAX_RESULTS ?? 5),
+    enrichmentTimeoutMs: Number(process.env.OPENAI_1688_ENRICH_TIMEOUT_MS ?? 30_000),
   }),
   createAlibabaSupplierSearchSource({
     userAgent: process.env.ALIBABA_USER_AGENT,

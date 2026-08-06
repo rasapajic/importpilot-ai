@@ -263,9 +263,20 @@ function compactExplanation(
   const estimateText = estimate
     ? `Preliminarni ukupni trošak je ${estimate.lowPerUnitEur.toFixed(2)}–${estimate.highPerUnitEur.toFixed(2)} EUR po komadu; osnovni scenario je ${estimate.basePerUnitEur.toFixed(2)} EUR (${estimate.transportMode}, pouzdanost ${estimate.confidence}). `
     : "";
+  const basisText = estimate?.pricingBasisAssumed
+    ? `Za računicu je privremeno korišćen ${estimate.pricingBasisIncoterm} osnov jer ponuda nema izričit Incoterm. `
+    : "";
+  const chinaPlanningText = estimate && (
+    estimate.chinaDomesticTransportEur > 0 || estimate.sourcingAgentFeeEur > 0
+  )
+    ? `U osnovni scenario uračunati su planski troškovi u Kini: domaći prevoz ${estimate.chinaDomesticTransportEur.toFixed(2)} EUR i agent/konsolidacija ${estimate.sourcingAgentFeeEur.toFixed(2)} EUR; to još nisu potvrđene ponude. `
+    : "";
+  const originText = estimate?.warnings.includes("SUPPLIER_ORIGIN_ASSUMED_CHINA")
+    ? "Kinesko poreklo još nije potvrđeno i pretpostavljeno je samo na osnovu marketplace-a. "
+    : "";
   return missing.length > 0
-    ? `${estimateText}Preporuka ostaje preliminarna jer nedostaju potvrđeni podaci: ${missing.join(", ")}.`
-    : `${estimateText}Preporuka je preliminarna dok se ne završi detaljna provera finalista.`;
+    ? `${estimateText}${basisText}${chinaPlanningText}${originText}Preporuka ostaje preliminarna jer nedostaju potvrđeni podaci: ${missing.join(", ")}.`
+    : `${estimateText}${basisText}${chinaPlanningText}${originText}Preporuka je preliminarna dok se ne završi detaljna provera finalista.`;
 }
 
 function rankingBucket(item: InternalAnalysis) {

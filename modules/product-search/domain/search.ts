@@ -30,6 +30,21 @@ const isoDateTime = z.string().trim().refine((value) => {
 }, "Invalid ISO date-time.");
 
 const nonnegativeInteger = z.number().int().nonnegative();
+const positiveLogisticsNumber = z.number().positive().finite().max(1_000_000);
+
+export const supplierOfferLogisticsSchema = z
+  .object({
+    grossWeightKg: optionalNumber(positiveLogisticsNumber),
+    netWeightKg: optionalNumber(positiveLogisticsNumber),
+    cartonLengthCm: optionalNumber(positiveLogisticsNumber),
+    cartonWidthCm: optionalNumber(positiveLogisticsNumber),
+    cartonHeightCm: optionalNumber(positiveLogisticsNumber),
+    piecesPerCarton: optionalNumber(z.number().int().positive().max(2_147_483_647)),
+    unitWeightKg: optionalNumber(positiveLogisticsNumber),
+    unitVolumeCbm: optionalNumber(positiveLogisticsNumber),
+    evidence: z.enum(["PRODUCT_PAGE", "SEARCH_SNIPPET"]),
+  })
+  .strict();
 
 export const supplierOfferSearchInputSchema = z
   .object({
@@ -79,6 +94,7 @@ export const supplierOfferSearchResultSchema = z
       "Image URL must be valid.",
     ),
     source: z.string().trim().min(1).max(100),
+    supplierLogistics: supplierOfferLogisticsSchema.nullable().optional(),
     provenance: supplierOfferSearchProvenanceSchema.optional(),
   })
   .strict()
@@ -183,6 +199,7 @@ export const supplierOfferUrlPreviewSchema = z
 export type SupplierOfferSearchInput = z.infer<typeof supplierOfferSearchInputSchema>;
 export type ProjectSupplierSearchRequest = z.infer<typeof projectSupplierSearchRequestSchema>;
 export type SupplierOfferSearchProvenance = z.infer<typeof supplierOfferSearchProvenanceSchema>;
+export type SupplierOfferLogistics = z.infer<typeof supplierOfferLogisticsSchema>;
 export type SupplierOfferSearchResult = z.infer<typeof supplierOfferSearchResultSchema>;
 export type SupplierOfferSearchSummary = z.infer<typeof supplierOfferSearchSummarySchema>;
 export type SupplierOfferUrlPreview = z.infer<typeof supplierOfferUrlPreviewSchema>;

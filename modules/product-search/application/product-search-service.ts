@@ -8,8 +8,10 @@ import { prisma } from "../../../lib/database/prisma";
 import { recordAiUsageEvents } from "../../ai-usage/application/ai-usage-service";
 import {
   projectSupplierSearchRequestSchema,
+  supplierOfferLogisticsSchema,
   supplierOfferSearchInputSchema,
   supplierOfferSearchResultsSchema,
+  type SupplierOfferLogistics,
   type SupplierOfferSearchProvider,
   type SupplierOfferSearchResult,
   type SupplierOfferUrlImportProvider,
@@ -35,6 +37,7 @@ import {
 import { getSupplierOfferSearchProvider } from "../infrastructure/provider";
 import { getSupplierOfferUrlImportProvider } from "../infrastructure/url-import-provider";
 import { recordProjectActivity } from "../../timeline/application/timeline-service";
+import { extractSupplierLogisticsData } from "../../transport/domain/transport-estimator";
 import { autoEnrichTajaCandidates } from "./taja-auto-enrichment";
 import { searchSupplierOffersWithPersistentFallback } from "./search-fallback";
 
@@ -50,6 +53,15 @@ function sourceMetadataProductUrl(metadata: unknown) {
   if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
   const productUrl = (metadata as Record<string, unknown>).productUrl;
   return typeof productUrl === "string" && productUrl.trim() ? productUrl : null;
+}
+
+function sourceMetadataSupplierLogistics(
+  metadata: unknown,
+): SupplierOfferLogistics | undefined {
+  const extracted = extractSupplierLogisticsData(metadata);
+  if (!extracted) return undefined;
+  const parsed = supplierOfferLogisticsSchema.safeParse(extracted);
+  return parsed.success ? parsed.data : undefined;
 }
 
 function landedCostStatus(status: CalculationStatus | undefined) {
@@ -101,12 +113,17 @@ function offerCandidateEnrichment(offer: {
   };
 }
 
-async function findCandidateEnrichment(
+type StoredCandidateContext = {
+  enrichment: TajaCandidateEnrichment;
+  supplierLogistics?: SupplierOfferLogistics;
+};
+
+async function findCandidateContext(
   projectId: string,
   organizationId: string,
   targetCountry: string,
   quantity: number,
-): Promise<Map<string, TajaCandidateEnrichment>> {
+): Promise<Map<string, StoredCandidateContext>> {
   const offers = await prisma.supplierOffer.findMany({
     where: {
       projectId,
@@ -123,20 +140,23 @@ async function findCandidateEnrichment(
     },
   });
 
-  const enrichment = new Map<string, TajaCandidateEnrichment>();
+  const contexts = new Map<string, StoredCandidateContext>();
   for (const offer of offers) {
     const productUrl = sourceMetadataProductUrl(offer.sourceMetadata);
     if (!productUrl) continue;
     const key = canonicalSupplierProductUrl(productUrl);
-    enrichment.set(
-      key,
-      mergeTajaCandidateEnrichment(
-        enrichment.get(key),
+    const existing = contexts.get(key);
+    const supplierLogistics = existing?.supplierLogistics ??
+      sourceMetadataSupplierLogistics(offer.sourceMetadata);
+    contexts.set(key, {
+      enrichment: mergeTajaCandidateEnrichment(
+        existing?.enrichment,
         offerCandidateEnrichment(offer),
       ),
-    );
+      ...(supplierLogistics ? { supplierLogistics } : {}),
+    });
   }
-  return enrichment;
+  return contexts;
 }
 
 async function findExistingSearchResultOffer(
@@ -199,23 +219,32 @@ export async function searchProjectSupplierOffers(
     urlImportProvider,
     { maxCandidates: 10, concurrency: 4 },
   );
-  const enrichment = await findCandidateEnrichment(
+  const candidateContext = await findCandidateContext(
     projectId,
     organizationId,
     effectiveRequest.targetCountry,
     effectiveRequest.quantity,
   );
   const tajaAnalysis = analyzeAndRankTajaCandidates(
-    autoEnrichment.results.map((result) => ({
-      result,
-      enrichment: enrichment.get(canonicalSupplierProductUrl(result.productUrl)),
-      preliminaryCostEstimate: estimateTajaPreliminaryLandedCost({
-        result,
-        quantity: effectiveRequest.quantity,
-        targetCountry: effectiveRequest.targetCountry,
-        targetMarginPercent: effectiveRequest.targetMarginPercent,
-      }),
-    })),
+    autoEnrichment.results.map((result) => {
+      const stored = candidateContext.get(
+        canonicalSupplierProductUrl(result.productUrl),
+      );
+      const resultWithStoredLogistics = result.supplierLogistics ||
+          !stored?.supplierLogistics
+        ? result
+        : { ...result, supplierLogistics: stored.supplierLogistics };
+      return {
+        result: resultWithStoredLogistics,
+        enrichment: stored?.enrichment,
+        preliminaryCostEstimate: estimateTajaPreliminaryLandedCost({
+          result: resultWithStoredLogistics,
+          quantity: effectiveRequest.quantity,
+          targetCountry: effectiveRequest.targetCountry,
+          targetMarginPercent: effectiveRequest.targetMarginPercent,
+        }),
+      };
+    }),
     {
       quantity: effectiveRequest.quantity,
       targetMarginPercent: effectiveRequest.targetMarginPercent,

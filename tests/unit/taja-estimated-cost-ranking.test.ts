@@ -26,7 +26,7 @@ function result(name: string, price: number): SupplierOfferSearchResult {
 
 function estimate(basePerUnitEur: number): TajaPreliminaryCostEstimate {
   return {
-    version: "TAJA_PRELIMINARY_LANDED_COST_V1",
+    version: "TAJA_PRELIMINARY_LANDED_COST_V3",
     currency: "EUR",
     lowPerUnitEur: basePerUnitEur - 0.5,
     basePerUnitEur,
@@ -35,8 +35,12 @@ function estimate(basePerUnitEur: number): TajaPreliminaryCostEstimate {
     goodsCostEur: 500,
     transportMode: "RAIL",
     transportCostEur: 100,
+    chinaDomesticTransportEur: 0,
+    sourcingAgentFeeEur: 0,
     deliveryTimeDays: "20-30",
     confidence: "MEDIUM",
+    pricingBasisIncoterm: "FOB",
+    pricingBasisAssumed: false,
     vatRatePercent: 20,
     customsDutyRateScenarios: [0, 5, 10],
     fxSource: "test",
@@ -96,6 +100,42 @@ describe("TAJA estimated-cost ranking", () => {
       estimated.productUrl,
       unestimated.productUrl,
     ]);
+  });
+
+  it("discloses assumed 1688 EXW, China origin and domestic planning costs", () => {
+    const candidate = {
+      ...result("1688", 3),
+      supplierCountry: null,
+      incoterm: null,
+      productUrl: "https://detail.1688.com/offer/123456789.html",
+    };
+    const assumedEstimate: TajaPreliminaryCostEstimate = {
+      ...estimate(6),
+      chinaDomesticTransportEur: 30,
+      sourcingAgentFeeEur: 35,
+      pricingBasisIncoterm: "EXW",
+      pricingBasisAssumed: true,
+      warnings: [
+        "CUSTOMS_CLASSIFICATION_REQUIRED",
+        "SUPPLIER_ORIGIN_ASSUMED_CHINA",
+        "INCOTERM_ASSUMED_EXW_FOR_1688",
+        "CHINA_DOMESTIC_TRANSPORT_ASSUMED",
+        "SOURCING_AGENT_FEE_ASSUMED",
+      ],
+    };
+    const analyzed = analyzeAndRankTajaCandidates([
+      { result: candidate, preliminaryCostEstimate: assumedEstimate },
+    ], context);
+
+    expect(analyzed.analyses[0]?.explanation).toContain("privremeno korišćen EXW");
+    expect(analyzed.analyses[0]?.explanation).toContain("domaći prevoz 30.00 EUR");
+    expect(analyzed.analyses[0]?.explanation).toContain("agent/konsolidacija 35.00 EUR");
+    expect(analyzed.analyses[0]?.explanation).toContain("Kinesko poreklo još nije potvrđeno");
+    expect(analyzed.analyses[0]).toMatchObject({
+      status: TajaCandidateAnalysisStatuses.PRELIMINARY,
+      landedCostStatus: TajaLandedCostStatuses.ESTIMATED,
+      finalEligible: false,
+    });
   });
 
   it("does not let a low-confidence fallback estimate override preliminary ordering", () => {
