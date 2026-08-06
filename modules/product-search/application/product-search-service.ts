@@ -1,4 +1,9 @@
-import { OfferExtractionStatus, ProjectActivityType, SupplierOfferSource } from "@prisma/client";
+import {
+  CalculationStatus,
+  OfferExtractionStatus,
+  ProjectActivityType,
+  SupplierOfferSource,
+} from "@prisma/client";
 import { prisma } from "../../../lib/database/prisma";
 import { recordAiUsageEvents } from "../../ai-usage/application/ai-usage-service";
 import {
@@ -14,7 +19,11 @@ import {
   buildLunaProviderSearchInput,
   createLunaSearchPlan,
 } from "../domain/luna-search-plan";
-import { analyzeAndRankTajaCandidates } from "../domain/taja-candidate-analysis";
+import {
+  analyzeAndRankTajaCandidates,
+  TajaLandedCostStatuses,
+  type TajaCandidateEnrichment,
+} from "../domain/taja-candidate-analysis";
 import {
   createBrowserAssisted1688Preview,
   createSupplierOfferSourceMetadata,
@@ -30,6 +39,59 @@ export class DuplicateSupplierOfferUrlError extends Error {
   constructor(readonly existingOfferId: string) {
     super("Ponuda sa istim izvornim linkom je već dodata u projekat.");
   }
+}
+
+function sourceMetadataProductUrl(metadata: unknown) {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  const productUrl = (metadata as Record<string, unknown>).productUrl;
+  return typeof productUrl === "string" && productUrl.trim() ? productUrl : null;
+}
+
+function landedCostStatus(status: CalculationStatus | undefined) {
+  if (status === CalculationStatus.CALCULATED) return TajaLandedCostStatuses.CONFIRMED;
+  if (status === CalculationStatus.DRAFT || status === CalculationStatus.NEEDS_REVIEW) {
+    return TajaLandedCostStatuses.ESTIMATED;
+  }
+  return TajaLandedCostStatuses.UNAVAILABLE;
+}
+
+async function findCandidateEnrichment(
+  projectId: string,
+  organizationId: string,
+): Promise<Map<string, TajaCandidateEnrichment>> {
+  const offers = await prisma.supplierOffer.findMany({
+    where: {
+      projectId,
+      organizationId,
+      source: SupplierOfferSource.SEARCH_RESULT,
+    },
+    include: {
+      costCalculations: { orderBy: { createdAt: "desc" }, take: 1 },
+    },
+  });
+
+  const enrichment = new Map<string, TajaCandidateEnrichment>();
+  for (const offer of offers) {
+    const productUrl = sourceMetadataProductUrl(offer.sourceMetadata);
+    if (!productUrl) continue;
+    const cost = offer.costCalculations[0];
+    enrichment.set(productUrl, {
+      supplierVerified: offer.supplierVerified,
+      yearsOnPlatform: offer.yearsOnPlatform,
+      responseRatePercent: offer.responseRatePercent?.toNumber() ?? null,
+      transactionCount: offer.transactionCount,
+      employeeCount: offer.employeeCount,
+      profileCompletenessScore: offer.profileCompletenessScore,
+      deliveryTimeDays: offer.deliveryTimeDays,
+      sampleAvailable: offer.sampleAvailable,
+      termsClarityScore: offer.termsClarityScore,
+      shippingClarityScore: offer.shippingClarityScore,
+      landedCostPerUnit: cost?.landedCostPerUnit.toNumber() ?? null,
+      grossMarginPercent: cost?.grossMarginPercent.toNumber() ?? null,
+      landedCostStatus: landedCostStatus(cost?.calculationStatus),
+    });
+  }
+  return enrichment;
 }
 
 export async function searchProjectSupplierOffers(
@@ -61,8 +123,12 @@ export async function searchProjectSupplierOffers(
   const outcome = await searchSupplierOffersWithPersistentFallback(providerInput, activeProvider);
   const fetchedAt = new Date().toISOString();
   const constrainedResults = applyLunaSearchConstraints(outcome.results, effectiveRequest);
+  const enrichment = await findCandidateEnrichment(projectId, organizationId);
   const tajaAnalysis = analyzeAndRankTajaCandidates(
-    constrainedResults.map((result) => ({ result })),
+    constrainedResults.map((result) => ({
+      result,
+      enrichment: enrichment.get(result.productUrl),
+    })),
     {
       quantity: effectiveRequest.quantity,
       targetMarginPercent: effectiveRequest.targetMarginPercent,
