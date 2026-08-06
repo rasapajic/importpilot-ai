@@ -4,6 +4,7 @@ import {
   type OfferAssessmentResult,
   type PriceComparison,
 } from "../../intelligence/domain/scoring";
+import { RecommendationStatuses } from "../../intelligence/domain/recommendation";
 import { SupplierRiskLevels } from "../../intelligence/domain/supplier-risk-v2";
 import { rankPreliminarySupplierOffers } from "./preliminary-supplier-ranking";
 import type { SupplierOfferSearchResult } from "./search";
@@ -217,11 +218,21 @@ function compactExplanation(
     : "Preporuka je preliminarna dok se ne završi detaljna provera finalista.";
 }
 
+function rankingBucket(item: InternalAnalysis) {
+  if (!item.finalEligible) return 3;
+  if (item.assessment.recommendationStatus === RecommendationStatuses.RECOMMENDED) return 0;
+  if (item.assessment.recommendationStatus === RecommendationStatuses.OK_WITH_RISK) return 1;
+  if (item.assessment.recommendationStatus === RecommendationStatuses.NEEDS_NEGOTIATION) return 2;
+  return 4;
+}
+
 /**
  * Reuses ImportPilot's landed-cost-aware offer scoring and supplier-risk V2.
  * A candidate may be sorted highly while still remaining PRELIMINARY. It is
  * marked FINAL only after confirmed landed cost and sufficient supplier-risk
- * evidence are available.
+ * evidence are available. A completed but rejected analysis remains FINAL,
+ * but ranks below viable preliminary candidates instead of appearing as a top
+ * recommendation.
  */
 export function analyzeAndRankTajaCandidates(
   candidates: CandidateWithEnrichment[],
@@ -250,7 +261,8 @@ export function analyzeAndRankTajaCandidates(
   });
 
   analyzed.sort((left, right) => {
-    if (left.finalEligible !== right.finalEligible) return left.finalEligible ? -1 : 1;
+    const bucketDifference = rankingBucket(left) - rankingBucket(right);
+    if (bucketDifference !== 0) return bucketDifference;
     if (left.finalEligible && right.finalEligible) {
       return right.assessment.overallScore - left.assessment.overallScore ||
         right.assessment.confidenceScore - left.assessment.confidenceScore ||
