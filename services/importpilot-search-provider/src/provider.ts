@@ -67,6 +67,11 @@ function usageLogDetails(events: AiUsageReport[]) {
   return events.length > 0 ? { ai_usage_events: events.length } : {};
 }
 
+function positiveInteger(value: number | undefined, fallback: number, maximum: number) {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(1, Math.min(maximum, Math.trunc(value!)));
+}
+
 function normalizedFingerprintPart(value: string) {
   return value
     .normalize("NFKD")
@@ -111,32 +116,48 @@ type SourceAttempt = {
   parsedResultCount: number;
   relevantResults: SupplierSearchResult[];
   aiUsage: AiUsageReport[];
-  reason?: string;
 };
 
-function mergeSourceResultsRoundRobin(attempts: SourceAttempt[], maxResults: number) {
+type MergeOutcome = {
+  results: SupplierSearchResult[];
+  duplicateResultsRemoved: number;
+  unprocessedCandidates: number;
+};
+
+function mergeSourceResultsRoundRobin(
+  attempts: SourceAttempt[],
+  maxResults: number,
+): MergeOutcome {
   const queues = attempts.map((attempt) => [...attempt.relevantResults]);
   const seenUrls = new Set<string>();
   const seenFingerprints = new Set<string>();
-  const merged: SupplierSearchResult[] = [];
+  const results: SupplierSearchResult[] = [];
+  let duplicateResultsRemoved = 0;
 
-  while (merged.length < maxResults && queues.some((queue) => queue.length > 0)) {
+  while (results.length < maxResults && queues.some((queue) => queue.length > 0)) {
     for (const queue of queues) {
       const result = queue.shift();
       if (!result) continue;
 
       const urlKey = canonicalProductUrl(result.productUrl);
       const fingerprint = resultFingerprint(result);
-      if (seenUrls.has(urlKey) || seenFingerprints.has(fingerprint)) continue;
+      if (seenUrls.has(urlKey) || seenFingerprints.has(fingerprint)) {
+        duplicateResultsRemoved += 1;
+        continue;
+      }
 
       seenUrls.add(urlKey);
       seenFingerprints.add(fingerprint);
-      merged.push(result);
-      if (merged.length >= maxResults) break;
+      results.push(result);
+      if (results.length >= maxResults) break;
     }
   }
 
-  return merged;
+  return {
+    results,
+    duplicateResultsRemoved,
+    unprocessedCandidates: queues.reduce((total, queue) => total + queue.length, 0),
+  };
 }
 
 /**
@@ -152,10 +173,11 @@ export function createAggregatingSupplierSearchSource(
   options: AggregatingSourceOptions = {},
   logger: DevelopmentLogger = createDevelopmentLogger(),
 ): SupplierSearchSource {
-  const maxResults = Math.max(1, Math.min(100, Math.trunc(options.maxResults ?? 30)));
-  const maxResultsPerSource = Math.max(
-    1,
-    Math.min(maxResults, Math.trunc(options.maxResultsPerSource ?? 15)),
+  const maxResults = positiveInteger(options.maxResults, 30, 100);
+  const maxResultsPerSource = positiveInteger(
+    options.maxResultsPerSource,
+    Math.min(15, maxResults),
+    maxResults,
   );
 
   return {
@@ -205,7 +227,6 @@ export function createAggregatingSupplierSearchSource(
               parsedResultCount: outcome.results.length,
               relevantResults,
               aiUsage: outcome.aiUsage ?? [],
-              reason: outcome.reason,
             };
           } catch (error) {
             logger("provider_attempt_failed", {
@@ -219,14 +240,13 @@ export function createAggregatingSupplierSearchSource(
               parsedResultCount: 0,
               relevantResults: [],
               aiUsage: [],
-              reason: error instanceof Error ? error.message : "Unknown provider error.",
             };
           }
         }),
       );
 
       const aiUsage = attempts.flatMap((attempt) => attempt.aiUsage);
-      const results = mergeSourceResultsRoundRobin(attempts, maxResults);
+      const merge = mergeSourceResultsRoundRobin(attempts, maxResults);
       const candidateCount = attempts.reduce(
         (total, attempt) => total + attempt.relevantResults.length,
         0,
@@ -237,23 +257,24 @@ export function createAggregatingSupplierSearchSource(
         successful_sources: attempts.filter((attempt) => attempt.relevantResults.length > 0).length,
         parsed_results: attempts.reduce((total, attempt) => total + attempt.parsedResultCount, 0),
         relevant_candidates: candidateCount,
-        duplicate_results_removed: Math.max(0, candidateCount - results.length),
-        final_result_count: results.length,
+        duplicate_results_removed: merge.duplicateResultsRemoved,
+        unprocessed_candidates: merge.unprocessedCandidates,
+        final_result_count: merge.results.length,
         source_result_counts: Object.fromEntries(
           attempts.map((attempt) => [attempt.source.name, attempt.relevantResults.length]),
         ),
         ...usageLogDetails(aiUsage),
       });
 
-      if (results.length > 0) {
+      if (merge.results.length > 0) {
         logger("provider_final_result", {
           final_provider_used: "multi-source-aggregation",
-          final_result_count: results.length,
+          final_result_count: merge.results.length,
           final_reason: null,
           ...usageLogDetails(aiUsage),
         });
         return {
-          results,
+          results: merge.results,
           ...(aiUsage.length > 0 ? { aiUsage } : {}),
         };
       }
