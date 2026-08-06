@@ -29,6 +29,7 @@ function result(
 }
 
 function confirmedEnrichment(
+  unitPrice: number,
   overrides: Partial<TajaCandidateEnrichment> = {},
 ): TajaCandidateEnrichment {
   return {
@@ -45,12 +46,15 @@ function confirmedEnrichment(
     landedCostPerUnit: 8,
     grossMarginPercent: 40,
     landedCostStatus: TajaLandedCostStatuses.CONFIRMED,
+    landedCostUnitPrice: unitPrice,
+    landedCostCurrency: "USD",
+    landedCostIncoterm: "FOB",
     ...overrides,
   };
 }
 
-function riskyEnrichment(): TajaCandidateEnrichment {
-  return confirmedEnrichment({
+function riskyEnrichment(unitPrice: number): TajaCandidateEnrichment {
+  return confirmedEnrichment(unitPrice, {
     supplierVerified: false,
     yearsOnPlatform: 0,
     responseRatePercent: 20,
@@ -84,10 +88,10 @@ describe("TAJA candidate final-ranking gate", () => {
     });
   });
 
-  it("marks a candidate final only with confirmed landed cost and sufficient risk data", () => {
+  it("marks a candidate final only with matching confirmed landed cost and sufficient risk data", () => {
     const candidate = result("Verified", 6);
     const analyzed = analyzeAndRankTajaCandidates([
-      { result: candidate, enrichment: confirmedEnrichment() },
+      { result: candidate, enrichment: confirmedEnrichment(6) },
     ], context);
 
     expect(analyzed.analyses[0]).toMatchObject({
@@ -101,12 +105,26 @@ describe("TAJA candidate final-ranking gate", () => {
     expect(analyzed.analyses[0]?.supplierRiskLevel).not.toBe("UNKNOWN");
   });
 
+  it("invalidates a confirmed landed cost when the supplier price changed", () => {
+    const candidate = result("Price-changed", 7);
+    const analyzed = analyzeAndRankTajaCandidates([
+      { result: candidate, enrichment: confirmedEnrichment(6) },
+    ], context);
+
+    expect(analyzed.analyses[0]).toMatchObject({
+      status: TajaCandidateAnalysisStatuses.PRELIMINARY,
+      finalEligible: false,
+      landedCostStatus: TajaLandedCostStatuses.UNAVAILABLE,
+      missingData: expect.arrayContaining(["LANDED_COST"]),
+    });
+  });
+
   it("keeps the recommendation preliminary when supplier verification is unknown", () => {
     const candidate = result("Unverified-status", 6);
     const analyzed = analyzeAndRankTajaCandidates([
       {
         result: candidate,
-        enrichment: confirmedEnrichment({ supplierVerified: null }),
+        enrichment: confirmedEnrichment(6, { supplierVerified: null }),
       },
     ], context);
 
@@ -122,7 +140,7 @@ describe("TAJA candidate final-ranking gate", () => {
     const analyzed = analyzeAndRankTajaCandidates([
       {
         result: candidate,
-        enrichment: confirmedEnrichment({
+        enrichment: confirmedEnrichment(6, {
           landedCostStatus: TajaLandedCostStatuses.ESTIMATED,
         }),
       },
@@ -142,7 +160,7 @@ describe("TAJA candidate final-ranking gate", () => {
     const other = result("Other", 7);
     const analyzed = analyzeAndRankTajaCandidates([
       { result: cheapButUnknown },
-      { result: verified, enrichment: confirmedEnrichment() },
+      { result: verified, enrichment: confirmedEnrichment(6) },
       { result: other },
     ], context);
 
@@ -163,7 +181,7 @@ describe("TAJA candidate final-ranking gate", () => {
     const preliminary = result("Promising", 5);
     const rejected = result("Rejected", 1);
     const analyzed = analyzeAndRankTajaCandidates([
-      { result: rejected, enrichment: riskyEnrichment() },
+      { result: rejected, enrichment: riskyEnrichment(1) },
       { result: preliminary },
     ], context);
 
@@ -181,7 +199,7 @@ describe("TAJA candidate final-ranking gate", () => {
   it("can finish a high-risk analysis without presenting it as a safe offer", () => {
     const risky = result("Risky", 1);
     const analyzed = analyzeAndRankTajaCandidates([
-      { result: risky, enrichment: riskyEnrichment() },
+      { result: risky, enrichment: riskyEnrichment(1) },
     ], context);
 
     expect(analyzed.analyses[0]).toMatchObject({
