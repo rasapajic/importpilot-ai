@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import { useI18n } from "@/components/i18n/i18n-provider";
@@ -28,6 +28,36 @@ type SearchOverrides = {
   strictPriceLimit?: boolean;
 };
 
+const comparisonCopy = {
+  sr: {
+    add: "Dodaj za poređenje",
+    added: "Dodato za poređenje",
+    adding: "Dodavanje...",
+    selected: (count: number) => `Odabrano za poređenje: ${count}`,
+    instructions: "Dodajte sve ponude koje želite, pa tek onda nastavite.",
+    continue: "Nastavi sa odabranim ponudama",
+    continuing: "Otvaranje sledećeg koraka...",
+  },
+  de: {
+    add: "Zum Vergleich hinzufügen",
+    added: "Für den Vergleich hinzugefügt",
+    adding: "Wird hinzugefügt...",
+    selected: (count: number) => `Für den Vergleich ausgewählt: ${count}`,
+    instructions: "Fügen Sie alle gewünschten Angebote hinzu und fahren Sie erst danach fort.",
+    continue: "Mit ausgewählten Angeboten fortfahren",
+    continuing: "Nächster Schritt wird geöffnet...",
+  },
+  en: {
+    add: "Add for comparison",
+    added: "Added for comparison",
+    adding: "Adding...",
+    selected: (count: number) => `Selected for comparison: ${count}`,
+    instructions: "Add every offer you want to compare, then continue when your selection is complete.",
+    continue: "Continue with selected offers",
+    continuing: "Opening the next step...",
+  },
+} as const;
+
 function optionalNumber(value: string) {
   if (!value.trim()) return undefined;
   const parsed = Number(value);
@@ -52,6 +82,7 @@ export function SupplierOfferSearch({
   const { t, locale } = useI18n();
   const lunaCopy = getLunaSearchCopy(locale);
   const recoveryCopy = getRecoverySearchCopy(locale);
+  const comparisonText = comparisonCopy[locale];
   const router = useRouter();
   const [query, setQuery] = useState(productName);
   const hasProjectValues = quantity !== null && Boolean(targetCountry);
@@ -70,6 +101,7 @@ export function SupplierOfferSearch({
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState<number | null>(null);
   const [imported, setImported] = useState<number[]>([]);
+  const [isAdvancing, startAdvancing] = useTransition();
   const [error, setError] = useState("");
   const [reviewingUrl, setReviewingUrl] = useState(false);
   const [urlImportOpen, setUrlImportOpen] = useState(openUrlImport);
@@ -89,6 +121,7 @@ export function SupplierOfferSearch({
   const runSearch = useCallback(async (overrides: SearchOverrides = {}) => {
     setLoading(true);
     setError("");
+    setImported([]);
     try {
       const effectiveMaxUnitPrice = overrides.maxUnitPrice ?? maxUnitPrice;
       const effectiveMaxUnitPriceCurrency =
@@ -197,6 +230,10 @@ export function SupplierOfferSearch({
     return () => window.removeEventListener(RECOVERY_SEARCH_EVENT, handleRecoverySearch);
   }, [runSearch]);
 
+  function markImported(index: number) {
+    setImported((current) => current.includes(index) ? current : [...current, index]);
+  }
+
   async function addResult(result: SupplierOfferSearchResult, index: number) {
     setImporting(index);
     setError("");
@@ -208,13 +245,11 @@ export function SupplierOfferSearch({
       });
       const payload = (await response.json()) as { error?: string; existingOfferId?: string };
       if (response.status === 409 && payload.existingOfferId) {
-        setImported((current) => current.includes(index) ? current : [...current, index]);
-        router.refresh();
+        markImported(index);
         return;
       }
       if (!response.ok) throw new Error(payload.error);
-      setImported((current) => [...current, index]);
-      router.refresh();
+      markImported(index);
     } catch (importError) {
       setError(importError instanceof Error && importError.message
         ? importError.message
@@ -222,6 +257,13 @@ export function SupplierOfferSearch({
     } finally {
       setImporting(null);
     }
+  }
+
+  function continueWithSelectedOffers() {
+    if (imported.length === 0) return;
+    startAdvancing(() => {
+      router.refresh();
+    });
   }
 
   const strictFilterRemovedAll = Boolean(
@@ -489,13 +531,27 @@ export function SupplierOfferSearch({
                 type="button"
               >
                 {imported.includes(index)
-                  ? t("Dodato u projekat")
+                  ? comparisonText.added
                   : importing === index
-                    ? t("Dodavanje...")
-                    : t("Dodaj u kupovinu")}
+                    ? comparisonText.adding
+                    : comparisonText.add}
               </button>
             </article>
           ))}
+          {imported.length > 0 && (
+            <div className="empty-state search-comparison-actions" role="status">
+              <h3>{comparisonText.selected(imported.length)}</h3>
+              <p>{comparisonText.instructions}</p>
+              <button
+                className="primary-button"
+                disabled={isAdvancing}
+                onClick={continueWithSelectedOffers}
+                type="button"
+              >
+                {isAdvancing ? comparisonText.continuing : comparisonText.continue}
+              </button>
+            </div>
+          )}
         </div>
       )}
       </>}
