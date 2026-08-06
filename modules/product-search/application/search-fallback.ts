@@ -1,8 +1,11 @@
 import {
   supplierOfferSearchResultsSchema,
+  supplierOfferSearchSummarySchema,
   type SupplierOfferSearchInput,
   type SupplierOfferSearchProvider,
+  type SupplierOfferSearchProviderOutcome,
   type SupplierOfferSearchResult,
+  type SupplierOfferSearchSummary,
 } from "../domain/search";
 import {
   findLastSuccessfulSupplierSearch,
@@ -11,6 +14,7 @@ import {
 
 export type ProjectSupplierSearchOutcome = {
   results: SupplierOfferSearchResult[];
+  summary?: SupplierOfferSearchSummary;
   resultOrigin: "live" | "cache" | null;
   liveProviderFailed: boolean;
   cacheHit: boolean;
@@ -21,6 +25,12 @@ type SupplierSearchCacheAccess = {
   store: typeof storeSuccessfulSupplierSearch;
   find: typeof findLastSuccessfulSupplierSearch;
 };
+
+function providerOutcomeParts(outcome: SupplierOfferSearchProviderOutcome) {
+  return Array.isArray(outcome)
+    ? { results: outcome, summary: undefined }
+    : outcome;
+}
 
 function developmentLog(event: string, details: Record<string, unknown>) {
   if (process.env.NODE_ENV !== "development") return;
@@ -40,9 +50,13 @@ export async function searchSupplierOffersWithPersistentFallback(
   },
 ) {
   try {
-    const results = supplierOfferSearchResultsSchema.parse(
+    const providerOutcome = providerOutcomeParts(
       await provider.searchSupplierOffers(input),
     );
+    const results = supplierOfferSearchResultsSchema.parse(providerOutcome.results);
+    const summary = providerOutcome.summary
+      ? supplierOfferSearchSummarySchema.parse(providerOutcome.summary)
+      : undefined;
     if (results.length > 0) {
       await cache.store(input, results).catch((error: unknown) => {
         developmentLog("supplier_search_cache_write_failed", {
@@ -54,9 +68,11 @@ export async function searchSupplierOffersWithPersistentFallback(
         cache_hit: false,
         returned_from_cache: false,
         result_count: results.length,
+        deep_search_summary: Boolean(summary),
       });
       return {
         results,
+        ...(summary ? { summary } : {}),
         resultOrigin: "live",
         liveProviderFailed: false,
         cacheHit: false,

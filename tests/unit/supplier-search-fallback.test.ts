@@ -21,6 +21,23 @@ const result = {
   source: "Made-in-China",
 };
 
+const summary = {
+  mode: "deep-search-phase1" as const,
+  configuredSources: 4,
+  successfulSources: 3,
+  parsedResults: 42,
+  relevantCandidates: 30,
+  duplicateResultsRemoved: 7,
+  unprocessedCandidates: 0,
+  returnedResults: 23,
+  sourceResultCounts: {
+    "openai-web-search-v1": 10,
+    "openai-1688-web-v1": 8,
+    "alibaba-v1": 5,
+    "made-in-china-v1": 7,
+  },
+};
+
 describe("supplier search persistent fallback", () => {
   it("returns live results and stores successful searches", async () => {
     const store = vi.fn().mockResolvedValue({});
@@ -38,6 +55,26 @@ describe("supplier search persistent fallback", () => {
       returnedFromCache: false,
     });
     expect(store).toHaveBeenCalledWith(input, [result]);
+  });
+
+  it("passes a validated deep-search summary with live results", async () => {
+    const outcome = await searchSupplierOffersWithPersistentFallback(
+      input,
+      {
+        searchSupplierOffers: vi.fn().mockResolvedValue({
+          results: [result],
+          summary,
+        }),
+      },
+      { store: vi.fn().mockResolvedValue({}), find: vi.fn() },
+    );
+
+    expect(outcome).toMatchObject({
+      results: [result],
+      summary,
+      resultOrigin: "live",
+      liveProviderFailed: false,
+    });
   });
 
   it("returns cached results without exposing a live provider error", async () => {
@@ -62,6 +99,7 @@ describe("supplier search persistent fallback", () => {
       cacheHit: true,
       returnedFromCache: true,
     });
+    expect(outcome).not.toHaveProperty("summary");
   });
 
   it("keeps the provider error when no cached result exists", async () => {

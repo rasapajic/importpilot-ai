@@ -21,9 +21,25 @@ const result = {
   imageUrl: "https://supplier.example/ptz-camera.jpg",
   source: "supplier-provider",
 };
+const summary = {
+  mode: "deep-search-phase1" as const,
+  configuredSources: 4,
+  successfulSources: 3,
+  parsedResults: 42,
+  relevantCandidates: 30,
+  duplicateResultsRemoved: 7,
+  unprocessedCandidates: 0,
+  returnedResults: 23,
+  sourceResultCounts: {
+    "openai-web-search-v1": 10,
+    "openai-1688-web-v1": 8,
+    "alibaba-v1": 5,
+    "made-in-china-v1": 7,
+  },
+};
 const aiUsage = {
   provider: "openai" as const,
-  operation: "supplier_search",
+  operation: "supplier_search" as const,
   model: "gpt-5-mini",
   responseId: "resp_usage_1",
   status: "completed" as const,
@@ -65,6 +81,22 @@ describe("HTTP supplier search provider", () => {
     await expect(provider.searchSupplierOffers(input)).resolves.toEqual([result]);
     expect(JSON.parse(receivedBody)).toEqual(input);
     expect(authorization).toBe("Bearer secret");
+  });
+
+  it("parses and caches a deep-search summary with the candidate results", async () => {
+    let calls = 0;
+    const provider = createHttpSupplierOfferSearchProvider({
+      endpoint: "https://search-provider.example/offers",
+      fetcher: async () => {
+        calls += 1;
+        return Response.json({ results: [result], summary });
+      },
+    });
+
+    const expected = { results: [result], summary };
+    await expect(provider.searchSupplierOffers(input)).resolves.toEqual(expected);
+    await expect(provider.searchSupplierOffers(input)).resolves.toEqual(expected);
+    expect(calls).toBe(1);
   });
 
   it("records validated AI usage returned with live results", async () => {

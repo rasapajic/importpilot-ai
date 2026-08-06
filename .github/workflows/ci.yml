@@ -5,7 +5,8 @@ on:
   push:
     branches:
       - main
-      - feature/luna-search-mvp
+      - "feature/**"
+  workflow_dispatch:
 
 jobs:
   validate:

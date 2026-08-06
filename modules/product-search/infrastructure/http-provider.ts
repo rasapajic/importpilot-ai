@@ -7,9 +7,10 @@ import {
 import {
   supplierOfferSearchInputSchema,
   supplierOfferSearchResultsSchema,
+  supplierOfferSearchSummarySchema,
   type SupplierOfferSearchInput,
   type SupplierOfferSearchProvider,
-  type SupplierOfferSearchResult,
+  type SupplierOfferSearchProviderOutcome,
 } from "../domain/search";
 
 export const SUPPLIER_SEARCH_TIMEOUT_MS = 35_000;
@@ -27,7 +28,10 @@ export class SupplierSearchProviderUnavailableError extends SupplierSearchProvid
   }
 }
 
-type CacheEntry = { expiresAt: number; results: SupplierOfferSearchResult[] };
+type CacheEntry = {
+  expiresAt: number;
+  outcome: SupplierOfferSearchProviderOutcome;
+};
 type SearchCache = Map<string, CacheEntry>;
 
 const sharedSearchCache: SearchCache = new Map();
@@ -147,7 +151,7 @@ export function createHttpSupplierOfferSearchProvider({
       const input = supplierOfferSearchInputSchema.parse(rawInput);
       const key = requestKey(providerUrl, input);
       const cached = cache.get(key);
-      if (cached && cached.expiresAt > now()) return cached.results;
+      if (cached && cached.expiresAt > now()) return cached.outcome;
       if (cached) cache.delete(key);
 
       for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
@@ -190,6 +194,9 @@ export function createHttpSupplierOfferSearchProvider({
             const reason = payloadObject && "reason" in payloadObject
               ? payloadObject.reason
               : undefined;
+            const summary = payloadObject && "summary" in payloadObject
+              ? supplierOfferSearchSummarySchema.parse(payloadObject.summary)
+              : undefined;
             const aiUsage = aiUsageEventsSchema.parse(
               payloadObject && "aiUsage" in payloadObject ? payloadObject.aiUsage : [],
             );
@@ -197,8 +204,11 @@ export function createHttpSupplierOfferSearchProvider({
             if (parsed.length === 0 && typeof reason === "string") {
               throw new SupplierSearchProviderUnavailableError(reason);
             }
-            cache.set(key, { expiresAt: now() + cacheTtlMs, results: parsed });
-            return parsed;
+            const outcome: SupplierOfferSearchProviderOutcome = summary
+              ? { results: parsed, summary }
+              : parsed;
+            cache.set(key, { expiresAt: now() + cacheTtlMs, outcome });
+            return outcome;
           } catch (error) {
             if (error instanceof SupplierSearchProviderUnavailableError) throw error;
             throw new SupplierSearchProviderInvalidResponseError();
