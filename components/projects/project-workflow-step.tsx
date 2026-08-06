@@ -4,6 +4,10 @@ import type { ReactNode } from "react";
 import { useEffect, useRef } from "react";
 
 import type { ProjectWorkflowStepStatus } from "@/modules/projects/domain/project-workflow";
+import {
+  shouldAutoScrollWorkflowStep,
+  shouldOpenWorkflowStep,
+} from "@/modules/projects/domain/workflow-step-interaction";
 
 export function ProjectWorkflowStep({
   number,
@@ -29,10 +33,20 @@ export function ProjectWorkflowStep({
   id?: string;
 }) {
   const stepRef = useRef<HTMLDetailsElement>(null);
+  const hasMounted = useRef(false);
+  const shouldOpen = shouldOpenWorkflowStep({ status, forceOpen });
 
   useEffect(() => {
-    if (status === "ACTIVE" || forceOpen) stepRef.current?.scrollIntoView({ block: "start" });
-  }, [forceOpen, status]);
+    if (shouldOpen && stepRef.current) stepRef.current.open = true;
+    if (shouldAutoScrollWorkflowStep({
+      hasMounted: hasMounted.current,
+      status,
+      forceOpen,
+    })) {
+      stepRef.current?.scrollIntoView({ block: "start" });
+    }
+    hasMounted.current = true;
+  }, [forceOpen, shouldOpen, status]);
 
   if (status === "HIDDEN") return null;
 
@@ -51,7 +65,7 @@ export function ProjectWorkflowStep({
 
   if (status === "LOCKED") {
     return (
-      <section className="workflow-step workflow-step-locked">
+      <section className="workflow-step workflow-step-locked" id={id}>
         <div className="workflow-step-summary">{heading}</div>
         <p className="workflow-locked-text">{lockedText}</p>
       </section>
@@ -62,7 +76,6 @@ export function ProjectWorkflowStep({
     <details
       className={`workflow-step workflow-step-${status.toLowerCase()}`}
       id={id}
-      open={status === "ACTIVE" || forceOpen}
       ref={stepRef}
     >
       <summary className="workflow-step-summary">{heading}</summary>

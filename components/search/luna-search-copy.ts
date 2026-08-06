@@ -17,6 +17,12 @@ type LunaSearchCopy = {
   chineseConfirmationRequired: string;
   filteredResultsPrefix: string;
   fetchedAt: string;
+  addToComparison: string;
+  addingToComparison: string;
+  addedToComparison: string;
+  comparisonSelection: (count: number) => string;
+  addMoreBeforeContinue: string;
+  continueWithSelected: (count: number) => string;
   warnings: Record<LunaSearchWarning, string>;
 };
 
@@ -36,6 +42,12 @@ const copy: Record<Locale, LunaSearchCopy> = {
     chineseConfirmationRequired: "Kineski upit zahteva ručnu potvrdu.",
     filteredResultsPrefix: `${ASSISTANT_DISPLAY_NAME} kriterijumi su uklonili`,
     fetchedAt: "Preuzeto",
+    addToComparison: "Dodaj za poređenje",
+    addingToComparison: "Dodavanje za poređenje...",
+    addedToComparison: "Dodato za poređenje",
+    comparisonSelection: (count) => `Izabrano za poređenje: ${count}`,
+    addMoreBeforeContinue: "Možete dodati još ponuda pre nego što nastavite.",
+    continueWithSelected: (count) => `Nastavite sa izabranim ponudama (${count})`,
     warnings: {
       CHINESE_QUERY_UNCONFIRMED: "Kineski upit još nije potvrđen. Koristite originalni upit ili ručno unesite kineski izraz.",
       COMPLIANCE_NOT_VERIFIED: "Sertifikacioni rizik je zabeležen kao uslov, ali još nije automatski verifikovan.",
@@ -58,6 +70,12 @@ const copy: Record<Locale, LunaSearchCopy> = {
     chineseConfirmationRequired: "Die chinesische Suchanfrage muss manuell bestätigt werden.",
     filteredResultsPrefix: `Durch die ${ASSISTANT_DISPLAY_NAME}-Kriterien entfernt`,
     fetchedAt: "Abgerufen",
+    addToComparison: "Zum Vergleich hinzufügen",
+    addingToComparison: "Wird zum Vergleich hinzugefügt...",
+    addedToComparison: "Zum Vergleich hinzugefügt",
+    comparisonSelection: (count) => `Für den Vergleich ausgewählt: ${count}`,
+    addMoreBeforeContinue: "Sie können weitere Angebote hinzufügen, bevor Sie fortfahren.",
+    continueWithSelected: (count) => `Mit ausgewählten Angeboten fortfahren (${count})`,
     warnings: {
       CHINESE_QUERY_UNCONFIRMED: "Die chinesische Suchanfrage ist noch nicht bestätigt. Verwenden Sie die ursprüngliche Anfrage oder geben Sie den chinesischen Begriff manuell ein.",
       COMPLIANCE_NOT_VERIFIED: "Das Zertifizierungsrisiko ist als Bedingung erfasst, wird aber noch nicht automatisch geprüft.",
@@ -80,6 +98,12 @@ const copy: Record<Locale, LunaSearchCopy> = {
     chineseConfirmationRequired: "The Chinese query requires manual confirmation.",
     filteredResultsPrefix: `Removed by ${ASSISTANT_DISPLAY_NAME} criteria`,
     fetchedAt: "Fetched",
+    addToComparison: "Add to comparison",
+    addingToComparison: "Adding to comparison...",
+    addedToComparison: "Added to comparison",
+    comparisonSelection: (count) => `Selected for comparison: ${count}`,
+    addMoreBeforeContinue: "You can add more offers before continuing.",
+    continueWithSelected: (count) => `Continue with selected offers (${count})`,
     warnings: {
       CHINESE_QUERY_UNCONFIRMED: "The Chinese query has not been confirmed. Use the original query or enter the Chinese term manually.",
       COMPLIANCE_NOT_VERIFIED: "Certification risk is recorded as a condition, but it is not yet verified automatically.",

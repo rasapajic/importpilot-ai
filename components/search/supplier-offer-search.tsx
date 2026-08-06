@@ -89,6 +89,7 @@ export function SupplierOfferSearch({
   const runSearch = useCallback(async (overrides: SearchOverrides = {}) => {
     setLoading(true);
     setError("");
+    setImported([]);
     try {
       const effectiveMaxUnitPrice = overrides.maxUnitPrice ?? maxUnitPrice;
       const effectiveMaxUnitPriceCurrency =
@@ -213,7 +214,7 @@ export function SupplierOfferSearch({
         return;
       }
       if (!response.ok) throw new Error(payload.error);
-      setImported((current) => [...current, index]);
+      setImported((current) => current.includes(index) ? current : [...current, index]);
       router.refresh();
     } catch (importError) {
       setError(importError instanceof Error && importError.message
@@ -222,6 +223,22 @@ export function SupplierOfferSearch({
     } finally {
       setImporting(null);
     }
+  }
+
+  function continueToDecision() {
+    router.refresh();
+    let attempts = 0;
+    const scrollWhenReady = () => {
+      const target = document.getElementById("workflow-step-decision");
+      if (target instanceof HTMLDetailsElement) {
+        target.open = true;
+        target.scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+      }
+      attempts += 1;
+      if (attempts < 20) window.setTimeout(scrollWhenReady, 100);
+    };
+    window.setTimeout(scrollWhenReady, 0);
   }
 
   const strictFilterRemovedAll = Boolean(
@@ -449,54 +466,65 @@ export function SupplierOfferSearch({
         </div>
       )}
       {hasSupplierSearchResultCards(results) && results && (
-        <div className="search-result-list">
-          {results.map((result, index) => (
-            <article className="search-result-card" key={`${result.source}-${result.productUrl}`}>
-              {result.imageUrl && (
-                // Provider URLs are validated and rendered without proxying or persisting image bytes.
-                // eslint-disable-next-line @next/next/no-img-element
-                <img alt="" className="search-result-image" loading="lazy" src={result.imageUrl} />
-              )}
-              <div>
-                <p className="eyebrow">{result.source}</p>
-                {resultOrigin && (
-                  <span
-                    className={`provider-status provider-status-${resultOrigin}`}
-                    title={resultOrigin === "cache" ? t("Keširani rezultat") : t("Uživo")}
-                  >
-                    {resultOrigin === "live" ? "LIVE" : "CACHED"}
-                  </span>
+        <>
+          <div className="search-result-list">
+            {results.map((result, index) => (
+              <article className="search-result-card" key={`${result.source}-${result.productUrl}`}>
+                {result.imageUrl && (
+                  // Provider URLs are validated and rendered without proxying or persisting image bytes.
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img alt="" className="search-result-image" loading="lazy" src={result.imageUrl} />
                 )}
-                {isPartialLunaSearchResult(result) && (
-                  <span className="provider-status provider-status-not_configured">PARTIAL</span>
-                )}
-                <h3>{result.title}</h3>
-                <p><strong>{result.supplierName}</strong>{result.supplierCountry ? ` · ${result.supplierCountry}` : ""}</p>
-                <p>
-                  {result.price !== null ? `${result.price} ${result.currency}` : t("Cena nije navedena")}
-                  {" · "}
-                  {result.minimumOrderQuantity !== null
-                    ? `${t("Minimalna količina (MOQ)")}: ${result.minimumOrderQuantity}`
-                    : t("Minimalna količina (MOQ) nije navedena")}
-                  {result.incoterm ? ` · ${result.incoterm}` : ""}
-                </p>
-                <a href={result.productUrl} rel="noreferrer" target="_blank">{t("Otvori izvornu ponudu")}</a>
-              </div>
-              <button
-                className="secondary-button"
-                disabled={importing === index || imported.includes(index)}
-                onClick={() => addResult(result, index)}
-                type="button"
-              >
-                {imported.includes(index)
-                  ? t("Dodato u projekat")
-                  : importing === index
-                    ? t("Dodavanje...")
-                    : t("Dodaj u kupovinu")}
+                <div>
+                  <p className="eyebrow">{result.source}</p>
+                  {resultOrigin && (
+                    <span
+                      className={`provider-status provider-status-${resultOrigin}`}
+                      title={resultOrigin === "cache" ? t("Keširani rezultat") : t("Uživo")}
+                    >
+                      {resultOrigin === "live" ? "LIVE" : "CACHED"}
+                    </span>
+                  )}
+                  {isPartialLunaSearchResult(result) && (
+                    <span className="provider-status provider-status-not_configured">PARTIAL</span>
+                  )}
+                  <h3>{result.title}</h3>
+                  <p><strong>{result.supplierName}</strong>{result.supplierCountry ? ` · ${result.supplierCountry}` : ""}</p>
+                  <p>
+                    {result.price !== null ? `${result.price} ${result.currency}` : t("Cena nije navedena")}
+                    {" · "}
+                    {result.minimumOrderQuantity !== null
+                      ? `${t("Minimalna količina (MOQ)")}: ${result.minimumOrderQuantity}`
+                      : t("Minimalna količina (MOQ) nije navedena")}
+                    {result.incoterm ? ` · ${result.incoterm}` : ""}
+                  </p>
+                  <a href={result.productUrl} rel="noreferrer" target="_blank">{t("Otvori izvornu ponudu")}</a>
+                </div>
+                <button
+                  className="secondary-button"
+                  disabled={importing === index || imported.includes(index)}
+                  onClick={() => addResult(result, index)}
+                  type="button"
+                >
+                  {imported.includes(index)
+                    ? lunaCopy.addedToComparison
+                    : importing === index
+                      ? lunaCopy.addingToComparison
+                      : lunaCopy.addToComparison}
+                </button>
+              </article>
+            ))}
+          </div>
+          {imported.length > 0 && (
+            <div aria-live="polite" className="empty-state" role="status">
+              <strong>{lunaCopy.comparisonSelection(imported.length)}</strong>
+              <p>{lunaCopy.addMoreBeforeContinue}</p>
+              <button className="primary-button" onClick={continueToDecision} type="button">
+                {lunaCopy.continueWithSelected(imported.length)}
               </button>
-            </article>
-          ))}
-        </div>
+            </div>
+          )}
+        </>
       )}
       </>}
     </section>
