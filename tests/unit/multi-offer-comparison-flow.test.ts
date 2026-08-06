@@ -34,7 +34,8 @@ describe("multi-offer comparison flow", () => {
   it("keeps an open workflow step uncontrolled across server refreshes", () => {
     expect(workflowSource).toContain("shouldOpenWorkflowStep");
     expect(workflowSource).toContain("shouldAutoScrollWorkflowStep");
-    expect(workflowSource).toContain("defaultOpen={shouldOpen}");
-    expect(workflowSource).not.toContain("open={isOpen}");
+    expect(workflowSource).toContain("stepRef.current.open = true");
+    expect(workflowSource).not.toContain("defaultOpen=");
+    expect(workflowSource).not.toContain("open={");
   });
 });
