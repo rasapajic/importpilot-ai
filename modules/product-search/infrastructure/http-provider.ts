@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 
 import {
+  aiUsageEventsSchema,
+  type AiUsageEvent,
+} from "../../ai-usage/domain/ai-usage";
+import {
   supplierOfferSearchInputSchema,
   supplierOfferSearchResultsSchema,
   type SupplierOfferSearchInput,
@@ -42,6 +46,7 @@ type HttpProviderOptions = {
   now?: () => number;
   wait?: (milliseconds: number) => Promise<void>;
   allowInsecureLocalhost?: boolean;
+  onAiUsage?: (events: AiUsageEvent[]) => Promise<void> | void;
 };
 
 function secureUrl(value: string, label: string, allowInsecureLocalhost: boolean) {
@@ -68,6 +73,11 @@ function isRetryableStatus(status: number) {
   return status === 408 || status === 429 || status >= 500;
 }
 
+function developmentLog(event: string, details: Record<string, unknown>) {
+  if (process.env.NODE_ENV !== "development") return;
+  console.info(JSON.stringify({ service: "importpilot-app", event, ...details }));
+}
+
 export function createHttpSupplierOfferSearchProvider({
   endpoint,
   healthEndpoint,
@@ -82,6 +92,7 @@ export function createHttpSupplierOfferSearchProvider({
   now = Date.now,
   wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
   allowInsecureLocalhost = false,
+  onAiUsage,
 }: HttpProviderOptions): SupplierOfferSearchProvider {
   const providerUrl = secureUrl(endpoint, "Supplier search provider", allowInsecureLocalhost);
   const healthUrl = secureUrl(
@@ -106,6 +117,19 @@ export function createHttpSupplierOfferSearchProvider({
       throw new SupplierSearchProviderError("Supplier search provider request failed.");
     } finally {
       clearTimeout(timeout);
+    }
+  }
+
+  async function recordUsage(events: AiUsageEvent[]) {
+    if (!onAiUsage || events.length === 0) return;
+    try {
+      await onAiUsage(events);
+      developmentLog("ai_usage_recorded", { event_count: events.length });
+    } catch (error) {
+      developmentLog("ai_usage_record_failed", {
+        event_count: events.length,
+        reason: error instanceof Error ? error.message : "unknown",
+      });
     }
   }
 
@@ -156,14 +180,20 @@ export function createHttpSupplierOfferSearchProvider({
 
           try {
             const payload = JSON.parse(body) as unknown;
-            const results =
-              payload && typeof payload === "object" && "results" in payload
-                ? (payload as { results: unknown }).results
-                : payload;
+            const payloadObject = payload && typeof payload === "object"
+              ? payload as Record<string, unknown>
+              : null;
+            const results = payloadObject && "results" in payloadObject
+              ? payloadObject.results
+              : payload;
             const parsed = supplierOfferSearchResultsSchema.parse(results);
-            const reason = payload && typeof payload === "object" && "reason" in payload
-              ? (payload as { reason?: unknown }).reason
+            const reason = payloadObject && "reason" in payloadObject
+              ? payloadObject.reason
               : undefined;
+            const aiUsage = aiUsageEventsSchema.parse(
+              payloadObject && "aiUsage" in payloadObject ? payloadObject.aiUsage : [],
+            );
+            await recordUsage(aiUsage);
             if (parsed.length === 0 && typeof reason === "string") {
               throw new SupplierSearchProviderUnavailableError(reason);
             }
