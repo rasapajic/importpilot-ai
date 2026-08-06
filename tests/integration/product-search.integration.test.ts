@@ -63,7 +63,11 @@ describeWithDatabase("supplier search result import and tenant isolation", () =>
   afterAll(async () => {
     if (!prisma || !userId) return;
     await prisma.supplierSearchCache.deleteMany({
-      where: { query: "fan", targetCountry: "AT", quantity: 275 },
+      where: {
+        query: "fan",
+        targetCountry: "AT",
+        quantity: { in: [275, 300] },
+      },
     });
     await prisma.organization.delete({ where: { id: organizationId } });
     await prisma.organization.delete({ where: { id: otherOrganizationId } });
@@ -195,6 +199,28 @@ describeWithDatabase("supplier search result import and tenant isolation", () =>
         finalEligible: true,
         landedCostStatus: "CONFIRMED",
         supplierRiskLevel: expect.not.stringMatching(/^UNKNOWN$/),
+      }),
+    ]);
+  });
+
+  it("does not reuse a confirmed calculation for a different quantity", async () => {
+    const outcome = await service.searchProjectSupplierOffers(projectId, organizationId, {
+      query: "fan",
+      quantity: 300,
+      targetCountry: "AT",
+    }, {
+      async searchSupplierOffers() {
+        return [result];
+      },
+    });
+
+    expect(outcome.candidateAnalyses).toEqual([
+      expect.objectContaining({
+        productUrl: result.productUrl,
+        status: "PRELIMINARY",
+        finalEligible: false,
+        landedCostStatus: "UNAVAILABLE",
+        missingData: expect.arrayContaining(["LANDED_COST"]),
       }),
     ]);
   });
