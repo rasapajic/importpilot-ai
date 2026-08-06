@@ -1,23 +1,19 @@
 import type { ProjectWorkflowStepStatus } from "./project-workflow";
 
-type WorkflowStepOpenStateInput = {
-  currentOpen: boolean;
+type WorkflowStepStateInput = {
   status: ProjectWorkflowStepStatus;
   forceOpen: boolean;
 };
 
-type WorkflowStepScrollInput = {
+type WorkflowStepScrollInput = WorkflowStepStateInput & {
   hasMounted: boolean;
-  status: ProjectWorkflowStepStatus;
-  forceOpen: boolean;
 };
 
-export function resolveWorkflowStepOpenState({
-  currentOpen,
+export function shouldOpenWorkflowStep({
   status,
   forceOpen,
-}: WorkflowStepOpenStateInput) {
-  return forceOpen || status === "ACTIVE" ? true : currentOpen;
+}: WorkflowStepStateInput) {
+  return forceOpen || status === "ACTIVE";
 }
 
 export function shouldAutoScrollWorkflowStep({
