@@ -10,6 +10,12 @@ import { rankPreliminarySupplierOffers } from "./preliminary-supplier-ranking";
 import type { SupplierOfferSearchResult } from "./search";
 import type { TajaPreliminaryCostEstimate } from "./taja-preliminary-cost-estimate";
 import {
+  evaluateTajaPriceSignal,
+  TajaPriceSignalStatuses,
+  tajaPriceSignalRank,
+  type TajaPriceSignal,
+} from "./taja-price-signal";
+import {
   evaluateTajaRequirementMatch,
   TajaRequirementMatchStatuses,
   tajaRequirementMatchRank,
@@ -42,7 +48,8 @@ export type TajaMissingDataKey =
   | "COMMERCIAL_TERMS"
   | "TRANSPORT_DETAILS"
   | "CORE_OFFER_DATA"
-  | "PRODUCT_REQUIREMENTS";
+  | "PRODUCT_REQUIREMENTS"
+  | "PRICE_BASIS";
 
 export type TajaCandidateEnrichment = {
   supplierVerified?: boolean | null;
@@ -71,6 +78,7 @@ export type TajaCandidateAnalysis = {
   landedCostStatus: TajaLandedCostStatus;
   preliminaryCostEstimate: TajaPreliminaryCostEstimate | null;
   requirementMatch: TajaRequirementMatch;
+  priceSignal: TajaPriceSignal;
   overallScore: number;
   confidenceScore: number;
   supplierRiskScore: number;
@@ -100,6 +108,7 @@ type InternalAnalysis = {
   landedCostStatus: TajaLandedCostStatus;
   preliminaryCostEstimate: TajaPreliminaryCostEstimate | null;
   requirementMatch: TajaRequirementMatch;
+  priceSignal: TajaPriceSignal;
   overallScore: number;
   missingData: TajaMissingDataKey[];
   preliminaryIndex: number;
@@ -201,11 +210,17 @@ function coreOfferDataKnown(result: SupplierOfferSearchResult) {
     result.supplierCountry !== null;
 }
 
+function priceAllowsFinal(priceSignal: TajaPriceSignal) {
+  return priceSignal.status === TajaPriceSignalStatuses.NORMAL ||
+    priceSignal.status === TajaPriceSignalStatuses.UNAVAILABLE;
+}
+
 function missingData(
   candidate: CandidateWithEnrichment,
   assessment: OfferAssessmentResult,
   landedCostStatus: TajaLandedCostStatus,
   requirementMatch: TajaRequirementMatch,
+  priceSignal: TajaPriceSignal,
 ): TajaMissingDataKey[] {
   const { result, enrichment = {} } = candidate;
   const missing: TajaMissingDataKey[] = [];
@@ -246,6 +261,7 @@ function missingData(
   ) {
     missing.push("PRODUCT_REQUIREMENTS");
   }
+  if (!priceAllowsFinal(priceSignal)) missing.push("PRICE_BASIS");
 
   return missing;
 }
@@ -260,9 +276,11 @@ function finalEligibility(
   assessment: OfferAssessmentResult,
   landedCostStatus: TajaLandedCostStatus,
   requirementMatch: TajaRequirementMatch,
+  priceSignal: TajaPriceSignal,
 ) {
   return coreOfferDataKnown(candidate.result) &&
     requirementsAllowFinal(requirementMatch) &&
+    priceAllowsFinal(priceSignal) &&
     landedCostStatus === TajaLandedCostStatuses.CONFIRMED &&
     candidate.enrichment?.supplierVerified !== null &&
     candidate.enrichment?.supplierVerified !== undefined &&
@@ -329,9 +347,9 @@ function reliableEstimatedCost(item: InternalAnalysis) {
 /**
  * Reuses ImportPilot's landed-cost-aware offer scoring and supplier-risk V2.
  * A candidate may be sorted highly while still remaining PRELIMINARY. It is
- * marked FINAL only after confirmed landed cost, confirmed product requirements
- * and sufficient supplier-risk evidence are available. Automatic cost ranges
- * remain ESTIMATED and never unlock a final recommendation.
+ * marked FINAL only after confirmed landed cost, confirmed product requirements,
+ * verified price basis and sufficient supplier-risk evidence are available.
+ * Automatic cost ranges remain ESTIMATED and never unlock a final recommendation.
  */
 export function analyzeAndRankTajaCandidates(
   candidates: CandidateWithEnrichment[],
@@ -341,6 +359,7 @@ export function analyzeAndRankTajaCandidates(
     ...candidate,
     enrichment: useMatchingTajaLandedCost(candidate.enrichment, candidate.result),
   }));
+  const allResults = normalizedCandidates.map((candidate) => candidate.result);
   const preliminaryIndexes = preliminaryOrder(
     normalizedCandidates,
     context.quantity,
@@ -358,18 +377,22 @@ export function analyzeAndRankTajaCandidates(
       context.productQuery ?? "",
       candidate.result,
     );
+    const priceSignal = evaluateTajaPriceSignal(candidate.result, allResults);
     const assessment = assessOffer(
       assessmentInput(candidate, context),
       comparisonForCandidate(candidate.result, normalizedCandidates),
     );
     const overallScore = clampScore(
-      assessment.overallScore + requirementMatch.scoreAdjustment,
+      assessment.overallScore +
+      requirementMatch.scoreAdjustment +
+      priceSignal.scoreAdjustment,
     );
     const finalEligible = finalEligibility(
       candidate,
       assessment,
       landedCostStatus,
       requirementMatch,
+      priceSignal,
     );
     return {
       result: candidate.result,
@@ -381,12 +404,14 @@ export function analyzeAndRankTajaCandidates(
       landedCostStatus,
       preliminaryCostEstimate,
       requirementMatch,
+      priceSignal,
       overallScore,
       missingData: missingData(
         candidate,
         assessment,
         landedCostStatus,
         requirementMatch,
+        priceSignal,
       ),
       preliminaryIndex: preliminaryIndexes.get(candidate.result.productUrl) ?? Number.MAX_SAFE_INTEGER,
     };
@@ -406,6 +431,10 @@ export function analyzeAndRankTajaCandidates(
         tajaRequirementMatchRank(left.requirementMatch.status) -
         tajaRequirementMatchRank(right.requirementMatch.status);
       if (requirementRankDifference !== 0) return requirementRankDifference;
+      const priceSignalDifference =
+        tajaPriceSignalRank(left.priceSignal.status) -
+        tajaPriceSignalRank(right.priceSignal.status);
+      if (priceSignalDifference !== 0) return priceSignalDifference;
       if (
         left.requirementMatch.scoreAdjustment !== right.requirementMatch.scoreAdjustment
       ) {
@@ -432,6 +461,7 @@ export function analyzeAndRankTajaCandidates(
       landedCostStatus: item.landedCostStatus,
       preliminaryCostEstimate: item.preliminaryCostEstimate,
       requirementMatch: item.requirementMatch,
+      priceSignal: item.priceSignal,
       overallScore: item.overallScore,
       confidenceScore: item.assessment.confidenceScore,
       supplierRiskScore: item.assessment.supplierRiskScore,
