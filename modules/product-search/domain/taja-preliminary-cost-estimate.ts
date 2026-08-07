@@ -186,6 +186,8 @@ function estimateConfidence(
  * The estimate is limited to China-origin offers and the existing RS/AT/DE
  * profiles. A 1688 domestic quote without an explicit Incoterm may use an
  * explicitly disclosed EXW planning basis, but can never unlock FINAL status.
+ * A known MOQ above the requested quantity blocks the estimate because the
+ * displayed unit price is not proven to apply to the user's order quantity.
  */
 export function estimateTajaPreliminaryLandedCost(input: {
   result: SupplierOfferSearchResult;
@@ -198,6 +200,12 @@ export function estimateTajaPreliminaryLandedCost(input: {
   const originStatus = chinaOriginStatus(result);
   const basis = pricingBasis(result);
   if (!profile || quantity <= 0 || !Number.isInteger(quantity)) return null;
+  if (
+    result.minimumOrderQuantity !== null &&
+    result.minimumOrderQuantity > quantity
+  ) {
+    return null;
+  }
   if (originStatus === "UNSUPPORTED" || !basis) return null;
   if (result.price === null || result.currency === null || result.price <= 0) return null;
 
