@@ -264,7 +264,7 @@ describe("TAJA Deep Search phase 1", () => {
       usage: { input_tokens: 100, output_tokens: 50, total_tokens: 150 },
     }), { status: 200, headers: { "content-type": "application/json" } }));
     const enrich: Supplier1688Enricher["enrich"] = vi.fn(async ({ results }) => ({
-      results: results.map((candidate) => ({
+      results: results.map((candidate: ReturnType<typeof result>) => ({
         ...candidate,
         price: 18.5,
         currency: "CNY",
