@@ -24,6 +24,10 @@ const optionalRequestCurrency = z.preprocess(
   z.string().regex(/^[A-Z]{3}$/).optional(),
 );
 
+const searchQueryVariantsSchema = z.array(
+  z.string().trim().min(2).max(300),
+).max(5).optional();
+
 const isoDateTime = z.string().trim().refine((value) => {
   const timestamp = Date.parse(value);
   return Number.isFinite(timestamp) && value.includes("T");
@@ -48,7 +52,9 @@ export const supplierOfferLogisticsSchema = z
 
 export const supplierOfferSearchInputSchema = z
   .object({
-    query: z.string().trim().min(2).max(200),
+    query: z.string().trim().min(2).max(300),
+    queryVariants: searchQueryVariantsSchema,
+    chinese1688QueryVariants: searchQueryVariantsSchema,
     quantity: z.number().int().positive(),
     targetCountry: z.string().trim().toUpperCase().regex(/^[A-Z]{2}$/)
       .transform(normalizeTargetCountryCode),
@@ -128,6 +134,7 @@ export const supplierOfferSearchSummarySchema = z
   .strict();
 
 export const projectSupplierSearchRequestSchema = supplierOfferSearchInputSchema
+  .omit({ queryVariants: true, chinese1688QueryVariants: true })
   .extend({
     maxUnitPrice: optionalRequestNumber(z.number().positive().finite()),
     maxUnitPriceCurrency: optionalRequestCurrency,
@@ -137,6 +144,7 @@ export const projectSupplierSearchRequestSchema = supplierOfferSearchInputSchema
     avoidComplexCompliance: z.boolean().optional().default(false),
     privateLabel: z.boolean().optional().default(false),
   })
+  .strict()
   .superRefine((request, context) => {
     if ((request.maxUnitPrice === undefined) !== (request.maxUnitPriceCurrency === undefined)) {
       context.addIssue({
