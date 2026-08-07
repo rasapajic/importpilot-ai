@@ -80,7 +80,7 @@ describe("TAJA 1688 partial logistics handoff", () => {
       expect(results[0]?.supplierLogistics).toBeUndefined();
       return {
         enrichedCount: 1,
-        results: results.map((result) => ({
+        results: results.map((result: SupplierSearchResult) => ({
           ...result,
           supplierLogistics: {
             grossWeightKg: 12,
