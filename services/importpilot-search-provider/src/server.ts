@@ -12,6 +12,7 @@ import {
 } from "./openai-search-config.js";
 import { createOpenAIWebSearchSource } from "./openai-web-search-source.js";
 import { createAggregatingSupplierSearchSource } from "./provider.js";
+import { createQueryVariantExpandingSource } from "./query-variant-source.js";
 
 function nonnegativeNumber(value: string | undefined, fallback: number) {
   const parsed = Number(value);
@@ -49,6 +50,17 @@ const openAiSourceOptions = {
   pricing: openAiPricing,
   logger,
 };
+const alibabaSource = createAlibabaSupplierSearchSource({
+  userAgent: process.env.ALIBABA_USER_AGENT,
+  requestTimeoutMs: Number(process.env.ALIBABA_TIMEOUT_MS ?? 4_000),
+  logger,
+});
+const madeInChinaSource = createMadeInChinaSupplierSearchSource({
+  userAgent: process.env.MADE_IN_CHINA_USER_AGENT,
+  debugHtml: process.env.SEARCH_PROVIDER_DEBUG_HTML === "true",
+  requestTimeoutMs: Number(process.env.MADE_IN_CHINA_TIMEOUT_MS ?? 5_000),
+  logger,
+});
 const source = createAggregatingSupplierSearchSource([
   createOpenAIWebSearchSource({
     ...openAiSourceOptions,
@@ -60,15 +72,14 @@ const source = createAggregatingSupplierSearchSource([
     enrichmentMaxResults: Number(process.env.OPENAI_1688_ENRICH_MAX_RESULTS ?? 5),
     enrichmentTimeoutMs: Number(process.env.OPENAI_1688_ENRICH_TIMEOUT_MS ?? 30_000),
   }),
-  createAlibabaSupplierSearchSource({
-    userAgent: process.env.ALIBABA_USER_AGENT,
-    requestTimeoutMs: Number(process.env.ALIBABA_TIMEOUT_MS ?? 4_000),
+  createQueryVariantExpandingSource(alibabaSource, {
+    maxVariants: Number(process.env.ALIBABA_QUERY_VARIANT_LIMIT ?? 5),
+    maxResults: Number(process.env.TAJA_DEEP_SEARCH_MAX_PER_SOURCE ?? 15),
     logger,
   }),
-  createMadeInChinaSupplierSearchSource({
-    userAgent: process.env.MADE_IN_CHINA_USER_AGENT,
-    debugHtml: process.env.SEARCH_PROVIDER_DEBUG_HTML === "true",
-    requestTimeoutMs: Number(process.env.MADE_IN_CHINA_TIMEOUT_MS ?? 5_000),
+  createQueryVariantExpandingSource(madeInChinaSource, {
+    maxVariants: Number(process.env.MADE_IN_CHINA_QUERY_VARIANT_LIMIT ?? 5),
+    maxResults: Number(process.env.TAJA_DEEP_SEARCH_MAX_PER_SOURCE ?? 15),
     logger,
   }),
 ], {
