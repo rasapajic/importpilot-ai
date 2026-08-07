@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { useI18n } from "@/components/i18n/i18n-provider";
 
@@ -18,11 +18,8 @@ export function SearchResultImage({
   title: string;
 }) {
   const { locale } = useI18n();
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    setFailed(false);
-  }, [src]);
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const failed = src !== null && failedSrc === src;
 
   if (!src || failed) {
     return (
@@ -43,7 +40,7 @@ export function SearchResultImage({
       alt=""
       className="search-result-image"
       loading="lazy"
-      onError={() => setFailed(true)}
+      onError={() => setFailedSrc(src)}
       src={src}
     />
   );
