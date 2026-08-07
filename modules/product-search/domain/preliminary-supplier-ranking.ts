@@ -36,7 +36,10 @@ function preliminaryScore(
   if (result.price !== null && result.currency !== null) score += 20;
 
   if (result.minimumOrderQuantity !== null) {
-    score += result.minimumOrderQuantity <= context.quantity ? 25 : -10;
+    // A known MOQ above the requested quantity is a hard commercial mismatch,
+    // not a small data-quality disadvantage. It must not be hidden by a low
+    // displayed unit price or otherwise complete marketplace metadata.
+    score += result.minimumOrderQuantity <= context.quantity ? 25 : -100;
   }
 
   if (result.incoterm !== null) score += 15;
@@ -56,9 +59,11 @@ function preliminaryScore(
 /**
  * Produces a transparent first-pass ordering from fields already verified on
  * supplier pages. Product requirements from the user's query may adjust this
- * first pass, but unconfirmed details are never treated as false. This is not
- * the final TAJA ranking: landed cost, supplier-risk verification, compliance
- * and supplier replies belong to the later deep-analysis stage.
+ * first pass, but unconfirmed details are never treated as false. A known MOQ
+ * conflict is treated as blocking because the displayed price may not apply to
+ * the user's requested quantity. This is not the final TAJA ranking: landed
+ * cost, supplier-risk verification, compliance and supplier replies belong to
+ * the later deep-analysis stage.
  */
 export function rankPreliminarySupplierOffers(
   results: SupplierOfferSearchResult[],
