@@ -9,6 +9,7 @@ import type { SupplierOfferSearchResult } from "../../modules/product-search/dom
 function result(
   productUrl: string,
   title: string,
+  overrides: Partial<SupplierOfferSearchResult> = {},
 ): SupplierOfferSearchResult {
   return {
     title,
@@ -21,6 +22,7 @@ function result(
     productUrl,
     imageUrl: null,
     source: "TAJA test",
+    ...overrides,
   };
 }
 
@@ -57,6 +59,44 @@ describe("TAJA requirement-aware ranking", () => {
       requirementMatch: { status: "PARTIAL" },
       missingData: expect.arrayContaining(["PRODUCT_REQUIREMENTS"]),
     });
+  });
+
+  it("ranks an orderable partial match above an exact product whose MOQ is ten times too high", () => {
+    const exactButBlocked = result(
+      "https://supplier.example/exact-moq-1000",
+      "Patio Water Misting System with Pump and 20 Nozzles",
+      { minimumOrderQuantity: 1_000 },
+    );
+    const orderablePartial = result(
+      "https://supplier.example/orderable-moq-50",
+      "Patio Water Misting System with Pump Mist Nozzles",
+      { minimumOrderQuantity: 50 },
+    );
+
+    const analyzed = analyzeAndRankTajaCandidates([
+      { result: exactButBlocked },
+      { result: orderablePartial },
+    ], context);
+
+    expect(analyzed.rankedResults.map((candidate) => candidate.productUrl)).toEqual([
+      orderablePartial.productUrl,
+      exactButBlocked.productUrl,
+    ]);
+    const blockedAnalysis = analyzed.analyses.find(
+      (analysis) => analysis.productUrl === exactButBlocked.productUrl,
+    );
+    expect(blockedAnalysis).toMatchObject({
+      status: TajaCandidateAnalysisStatuses.PRELIMINARY,
+      finalEligible: false,
+    });
+    expect(blockedAnalysis?.overallScore).toBeLessThan(
+      analyzed.analyses.find(
+        (analysis) => analysis.productUrl === orderablePartial.productUrl,
+      )?.overallScore ?? 101,
+    );
+    expect(blockedAnalysis?.explanation).toContain(
+      "Tražena količina je 100 kom, a dobavljač navodi MOQ 1000 kom",
+    );
   });
 
   it("does not expose internal missing-data codes in the user explanation", () => {
