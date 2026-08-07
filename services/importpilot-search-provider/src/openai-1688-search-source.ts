@@ -92,21 +92,38 @@ function restorePartialLogistics(
   }));
 }
 
-function build1688Query(input: SearchRequest) {
-  return [
-    input.productQuery,
-    "1688 中国 批发 厂家 工厂 货源",
-    "site:1688.com",
-  ].join(" ");
+function uniqueQueries(queries: string[]) {
+  return [...new Set(
+    queries.map((query) => query.replace(/\s+/g, " ").trim()).filter(Boolean),
+  )].slice(0, 5);
+}
+
+function build1688SearchInput(input: SearchRequest): SearchRequest {
+  const suppliedChineseQueries = input.chinese1688QueryVariants;
+  const baseQueries = suppliedChineseQueries.length > 0
+    ? suppliedChineseQueries
+    : input.queryVariants.map((query) => `${query} 1688 中国 批发 厂家 工厂 货源`);
+  const queryVariants = uniqueQueries(
+    baseQueries.map((query) => `${query} site:1688.com`),
+  );
+
+  return {
+    ...input,
+    productQuery: queryVariants[0] ?? `${input.productQuery} site:1688.com`,
+    queryVariants: queryVariants.length > 0
+      ? queryVariants
+      : [`${input.productQuery} site:1688.com`],
+  };
 }
 
 /**
  * Dedicated 1688 discovery and enrichment pass for TAJA Deep Search.
  *
- * Discovery uses OpenAI live web search with a 1688-specific bilingual query.
- * A second bounded batch pass verifies missing commercial and logistics fields
- * against the exact direct URLs. Enrichment failure never discards a valid
- * discovery result and all automatic values remain preliminary evidence.
+ * Discovery uses OpenAI live web search with requirement-driven Chinese query
+ * variants. A second bounded batch pass verifies missing commercial and
+ * logistics fields against the exact direct URLs. Enrichment failure never
+ * discards a valid discovery result and all automatic values remain
+ * preliminary evidence.
  */
 export function createOpenAI1688SearchSource(
   options: OpenAI1688SearchOptions = {},
@@ -140,10 +157,10 @@ export function createOpenAI1688SearchSource(
     },
 
     async search(input, signal) {
-      const outcome = outcomeParts(await baseSource.search({
-        ...input,
-        productQuery: build1688Query(input),
-      }, signal));
+      const outcome = outcomeParts(await baseSource.search(
+        build1688SearchInput(input),
+        signal,
+      ));
       const discovered = outcome.results
         .filter((result) => is1688ProductUrl(result.productUrl))
         .map(normalize1688Result);
