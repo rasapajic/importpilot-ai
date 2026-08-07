@@ -1,0 +1,82 @@
+.taja-search-wait-note {
+  background: #eef6f2;
+  border-left: 4px solid #137752;
+  border-radius: 0.5rem;
+  color: #365448;
+  font-weight: 700;
+  margin: -0.35rem 0 1rem;
+  padding: 0.75rem 0.9rem;
+}
+
+.taja-requirement-match {
+  background: #f8fbf9;
+  border: 1px solid #dce7e1;
+  border-radius: 0.65rem;
+  margin: 0.65rem 0;
+  padding: 0.7rem 0.8rem;
+}
+
+.taja-requirement-match > p {
+  margin: 0 0 0.5rem;
+}
+
+.taja-requirement-match-full {
+  background: #eef8f2;
+  border-color: #b8dcca;
+}
+
+.taja-requirement-match-partial {
+  background: #fffaf0;
+  border-color: #ead59a;
+}
+
+.taja-requirement-match-unconfirmed {
+  background: #fff5f3;
+  border-color: #efc0b8;
+}
+
+.taja-requirement-match ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.taja-requirement-match li {
+  align-items: center;
+  background: white;
+  border: 1px solid #dce7e1;
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 0.82rem;
+  gap: 0.35rem;
+  padding: 0.32rem 0.55rem;
+}
+
+.taja-requirement-match li small {
+  color: #60766c;
+  font-size: 0.74rem;
+}
+
+.taja-requirement-match .requirement-confirmed > span:first-child {
+  color: #137752;
+  font-weight: 800;
+}
+
+.taja-requirement-match .requirement-unconfirmed > span:first-child {
+  color: #9a6700;
+  font-weight: 800;
+}
+
+@media (max-width: 760px) {
+  .taja-requirement-match ul {
+    display: grid;
+  }
+
+  .taja-requirement-match li {
+    border-radius: 0.55rem;
+    justify-content: flex-start;
+  }
+}
