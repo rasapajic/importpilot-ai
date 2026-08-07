@@ -226,16 +226,25 @@ function keepOnlyCitedResults(
 }
 
 function buildPrompt(input: SearchRequest, maxResults: number) {
+  const queryVariants = input.queryVariants.length > 0
+    ? input.queryVariants
+    : [input.productQuery];
+  const numberedVariants = queryVariants
+    .map((query, index) => `${index + 1}. ${query}`)
+    .join("\n");
+
   return [
     "You are TAJA, a rigorous international sourcing analyst.",
     "Use live web search. Do not answer from memory.",
-    "Perform one focused supplier-discovery pass and finish as soon as enough verified direct pages are found.",
-    `Translate the product into concise English sourcing keywords before searching, while preserving every required specification: ${input.productQuery}`,
+    `The required product specification is represented by these sourcing queries, ordered from most specific to broadest:\n${numberedVariants}`,
+    "Execute the query variants in order inside this one research pass.",
+    "Do not stop merely because the first query returned generic related products. Continue with the next variant when the direct-page titles do not explicitly confirm the required specifications from the most specific query.",
     `Find up to ${maxResults} current, directly openable supplier product pages. Requested quantity: ${input.quantity}. Import destination: ${input.targetCountry}.`,
+    "You may stop early only after the requested number of relevant direct pages is verified and at least one result explicitly confirms all material specifications present in the most specific query. Otherwise exhaust the supplied query variants within the available search budget.",
     "Prioritize manufacturers and B2B suppliers in China and India, including Alibaba, Made-in-China, Global Sources, 1688, IndiaMART, TradeIndia and direct manufacturer websites.",
+    "Prefer exact complete kits over generic related products. Keep partially matching pages only after exact variants have been attempted.",
     "Return only direct product-detail pages. Never return a homepage, category page, search-result page, blog post, marketplace editorial page or social-media page.",
     "Every productUrl must be a URL you actually opened or used as a web-search source during this response.",
-    "Stop searching when the requested number of relevant direct product pages is verified.",
     "Never invent a supplier, price, currency, MOQ, Incoterm, image URL or product URL.",
     "Commercial details are secondary. Do not perform extra searches solely to find price, MOQ, Incoterm or image data.",
     "Use price and currency only when an explicit numeric unit price is visible on an already opened cited page. Otherwise set both to null.",
@@ -357,7 +366,7 @@ export function createOpenAIWebSearchSource({
                 role: "developer",
                 content: [{
                   type: "input_text",
-                  text: "Use web search and produce only the requested structured supplier-page data. Prefer speed, direct-page verification and source traceability over optional commercial details.",
+                  text: "Use web search and produce only the requested structured supplier-page data. Prefer exact requirement matching, direct-page verification and source traceability over optional commercial details.",
                 }],
               },
               {
@@ -435,6 +444,7 @@ export function createOpenAIWebSearchSource({
         reasoning_effort: reasoningEffort,
         search_context_size: searchContextSize,
         request_timeout_ms: safeRequestTimeoutMs,
+        query_variants: input.queryVariants.length,
         response_id: payload.id ?? null,
         cited_sources: citedUrls.length,
         parsed_results: parsed.length,
