@@ -17,6 +17,14 @@ export type TajaRequirementKey =
   | "NOZZLES"
   | "NOZZLE_COUNT";
 
+export type TajaRequestedRequirements = {
+  misting: boolean;
+  patio: boolean;
+  pump: boolean;
+  nozzles: boolean;
+  nozzleCount: number | null;
+};
+
 export type TajaRequirementCheck = {
   key: TajaRequirementKey;
   confirmed: boolean;
@@ -105,6 +113,20 @@ function scoreAdjustment(confirmedWeight: number, totalWeight: number) {
   if (totalWeight <= 0) return 0;
   const ratio = confirmedWeight / totalWeight;
   return Math.round((ratio - 0.5) * 24);
+}
+
+export function extractTajaRequestedRequirements(
+  productQuery: string,
+): TajaRequestedRequirements {
+  const query = normalize(productQuery);
+  const nozzleCount = extractNumberNearAlias(query, NOZZLE_QUERY_ALIASES);
+  return {
+    misting: FEATURE_DEFINITIONS[0]!.queryPattern.test(query),
+    patio: FEATURE_DEFINITIONS[1]!.queryPattern.test(query),
+    pump: FEATURE_DEFINITIONS[2]!.queryPattern.test(query),
+    nozzles: FEATURE_DEFINITIONS[3]!.queryPattern.test(query) || nozzleCount !== null,
+    nozzleCount,
+  };
 }
 
 /**
