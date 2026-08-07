@@ -3,6 +3,7 @@ import type {
   SupplierOfferSearchInput,
   SupplierOfferSearchResult,
 } from "./search";
+import { extractTajaRequestedRequirements } from "./taja-requirement-match";
 
 type LunaCatalogEntry = {
   category: string;
@@ -87,6 +88,80 @@ function findCatalogEntry(query: string) {
   ) ?? null;
 }
 
+function uniqueQueries(queries: Array<string | null | undefined>) {
+  return [...new Set(
+    queries
+      .map((query) => query?.replace(/\s+/g, " ").trim())
+      .filter((query): query is string => Boolean(query && query.length >= 2)),
+  )].slice(0, 5);
+}
+
+function withEnglishCommercialTerms(query: string, privateLabel: boolean) {
+  return [query, privateLabel ? "OEM private label" : null]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function withChineseCommercialTerms(query: string, privateLabel: boolean) {
+  return [query, "厂家 批发", privateLabel ? "OEM 贴牌" : null]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function requirementDrivenMistingQueries(
+  originalQuery: string,
+  fallbackEnglishQuery: string,
+  fallbackChineseQuery: string,
+) {
+  const requirements = extractTajaRequestedRequirements(originalQuery);
+  const nozzleCountEnglish = requirements.nozzleCount !== null
+    ? `${requirements.nozzleCount} nozzles`
+    : requirements.nozzles
+      ? "spray nozzles"
+      : null;
+  const nozzleCountChinese = requirements.nozzleCount !== null
+    ? `${requirements.nozzleCount}个喷嘴`
+    : requirements.nozzles
+      ? "喷嘴"
+      : null;
+  const nozzleHeadChinese = requirements.nozzleCount !== null
+    ? `${requirements.nozzleCount}喷头`
+    : requirements.nozzles
+      ? "喷头"
+      : null;
+  const pumpEnglish = requirements.pump ? "pump" : null;
+  const pumpChinese = requirements.pump ? "水泵" : null;
+  const locationEnglish = requirements.patio ? "patio" : "outdoor";
+  const locationChinese = requirements.patio ? "露台" : "户外";
+
+  return {
+    english: uniqueQueries([
+      [locationEnglish, "misting system", requirements.pump ? "with pump" : null, nozzleCountEnglish]
+        .filter(Boolean)
+        .join(" "),
+      ["outdoor mist cooling kit", pumpEnglish, nozzleCountEnglish]
+        .filter(Boolean)
+        .join(" "),
+      ["terrace misting system", nozzleCountEnglish, pumpEnglish, "kit"]
+        .filter(Boolean)
+        .join(" "),
+      fallbackEnglishQuery,
+    ]),
+    chinese: uniqueQueries([
+      [locationChinese, "喷雾降温系统", pumpChinese, nozzleCountChinese]
+        .filter(Boolean)
+        .join(" "),
+      ["户外 喷雾套装", pumpChinese, nozzleHeadChinese]
+        .filter(Boolean)
+        .join(" "),
+      ["庭院 喷雾降温", nozzleCountChinese, pumpChinese]
+        .filter(Boolean)
+        .join(" "),
+      fallbackChineseQuery,
+    ]),
+  };
+}
+
 export type LunaSearchWarning =
   | "CHINESE_QUERY_UNCONFIRMED"
   | "COMPLIANCE_NOT_VERIFIED"
@@ -99,7 +174,9 @@ export type LunaSearchPlan = {
   originalQuery: string;
   englishQuery: string;
   providerQuery: string;
+  providerQueries: string[];
   chinese1688Query: string | null;
+  chinese1688Queries: string[];
   constraints: {
     quantity: number;
     targetCountry: string;
@@ -118,17 +195,26 @@ export function createLunaSearchPlan(input: ProjectSupplierSearchRequest): LunaS
   const catalogEntry = findCatalogEntry(input.query);
   const englishQuery = catalogEntry?.englishQuery ?? input.query.trim();
   const chineseBaseQuery = catalogEntry?.chineseQuery ?? null;
-  const providerQuery = [
-    englishQuery,
-    input.privateLabel ? "OEM private label" : null,
-  ].filter(Boolean).join(" ");
-  const chinese1688Query = chineseBaseQuery
-    ? [
-        chineseBaseQuery,
-        "厂家 批发",
-        input.privateLabel ? "OEM 贴牌" : null,
-      ].filter(Boolean).join(" ")
+  const requirementQueries = catalogEntry?.category === "misting-system" && chineseBaseQuery
+    ? requirementDrivenMistingQueries(input.query, englishQuery, chineseBaseQuery)
     : null;
+  const providerQueries = uniqueQueries(
+    (requirementQueries?.english ?? [englishQuery]).map((query) =>
+      withEnglishCommercialTerms(query, input.privateLabel),
+    ),
+  );
+  const chinese1688Queries = chineseBaseQuery
+    ? uniqueQueries(
+        (requirementQueries?.chinese ?? [chineseBaseQuery]).map((query) =>
+          withChineseCommercialTerms(query, input.privateLabel),
+        ),
+      )
+    : [];
+  const providerQuery = providerQueries[0] ?? withEnglishCommercialTerms(
+    englishQuery,
+    input.privateLabel,
+  );
+  const chinese1688Query = chinese1688Queries[0] ?? null;
   const warnings: LunaSearchWarning[] = [];
 
   if (!chinese1688Query) warnings.push("CHINESE_QUERY_UNCONFIRMED");
@@ -142,7 +228,9 @@ export function createLunaSearchPlan(input: ProjectSupplierSearchRequest): LunaS
     originalQuery: input.query.trim(),
     englishQuery,
     providerQuery,
+    providerQueries,
     chinese1688Query,
+    chinese1688Queries,
     constraints: {
       quantity: input.quantity,
       targetCountry: input.targetCountry,
@@ -164,6 +252,8 @@ export function buildLunaProviderSearchInput(
 ): SupplierOfferSearchInput {
   return {
     query: plan.providerQuery,
+    queryVariants: plan.providerQueries,
+    chinese1688QueryVariants: plan.chinese1688Queries,
     quantity: request.quantity,
     targetCountry: request.targetCountry,
   };
