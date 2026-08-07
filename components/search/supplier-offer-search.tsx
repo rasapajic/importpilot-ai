@@ -6,10 +6,12 @@ import { useRouter } from "next/navigation";
 import { useI18n } from "@/components/i18n/i18n-provider";
 import { DeleteEmptySearchButton } from "@/components/projects/delete-empty-search-button";
 import { getRecoverySearchCopy } from "@/components/search/recovery-search-copy";
+import { SearchResultImage } from "@/components/search/search-result-image";
 import { UrlImportReview } from "@/components/search/url-import-review";
 import { getLunaSearchCopy } from "@/components/search/luna-search-copy";
 import { hasSupplierSearchResultCards } from "@/components/search/search-result-display";
 import {
+  TajaPriceSignalWarning,
   TajaRequirementMatchPanel,
   TajaSearchLoadingNotice,
 } from "@/components/search/taja-search-feedback";
@@ -71,7 +73,7 @@ const comparisonCopy = {
 const recommendationCopy = {
   sr: {
     preliminaryTitle: "Tajine preliminarne preporuke",
-    preliminaryDescription: "Do tri ponude su izdvojene prema trenutno dostupnoj ceni, MOQ-u i kompletnosti podataka. Konačni izbor sledi posle landed-cost obračuna i provere rizika.",
+    preliminaryDescription: "Do tri ponude su izdvojene prema trenutno dostupnoj ceni, MOQ-u, usklađenosti sa zahtevom i kompletnosti podataka. Konačni izbor sledi posle landed-cost obračuna i provere rizika.",
     analyzedTitle: "Tajine najbolje analizirane ponude",
     analyzedDescription: "Ponude sa potvrđenim landed cost-om i dovoljnim podacima imaju konačan status. Ostale su jasno označene kao preliminarne.",
     rankPreliminary: (rank: number) => `#${rank} preliminarna preporuka`,
@@ -82,7 +84,7 @@ const recommendationCopy = {
   },
   de: {
     preliminaryTitle: "Tajas vorläufige Empfehlungen",
-    preliminaryDescription: "Bis zu drei Angebote werden anhand des derzeit verfügbaren Preises, der MOQ und der Datenvollständigkeit hervorgehoben. Die endgültige Auswahl folgt nach Landed-Cost- und Risikoprüfung.",
+    preliminaryDescription: "Bis zu drei Angebote werden anhand des derzeit verfügbaren Preises, der MOQ, der Anforderungsübereinstimmung und der Datenvollständigkeit hervorgehoben. Die endgültige Auswahl folgt nach Landed-Cost- und Risikoprüfung.",
     analyzedTitle: "Tajas bestbewertete analysierte Angebote",
     analyzedDescription: "Angebote mit bestätigten Landed Costs und ausreichenden Lieferantendaten erhalten einen endgültigen Status. Alle anderen bleiben klar als vorläufig gekennzeichnet.",
     rankPreliminary: (rank: number) => `#${rank} vorläufige Empfehlung`,
@@ -93,7 +95,7 @@ const recommendationCopy = {
   },
   en: {
     preliminaryTitle: "Taja's preliminary recommendations",
-    preliminaryDescription: "Up to three offers are highlighted using the currently available price, MOQ and data completeness. Final selection follows landed-cost and risk verification.",
+    preliminaryDescription: "Up to three offers are highlighted using the currently available price, MOQ, requirement match and data completeness. Final selection follows landed-cost and risk verification.",
     analyzedTitle: "Taja's best analyzed offers",
     analyzedDescription: "Offers with confirmed landed cost and sufficient supplier evidence receive a final status. All others remain clearly marked as preliminary.",
     rankPreliminary: (rank: number) => `#${rank} preliminary recommendation`,
@@ -124,6 +126,7 @@ const analysisCopy = {
       TRANSPORT_DETAILS: "detalji transporta",
       CORE_OFFER_DATA: "osnovni podaci ponude",
       PRODUCT_REQUIREMENTS: "potvrda traženih osobina proizvoda",
+      PRICE_BASIS: "potvrda cenovne jedinice",
     },
     score: "Taja rezultat",
     confidence: "Pouzdanost podataka",
@@ -131,6 +134,7 @@ const analysisCopy = {
     landedCostLabel: "Landed cost",
     missingLabel: "Nedostaje za konačnu odluku",
     preliminary: "preliminarna analiza",
+    incompleteData: "NEPOTPUNI PODACI",
   },
   de: {
     recommendation: {
@@ -151,6 +155,7 @@ const analysisCopy = {
       TRANSPORT_DETAILS: "Transportdetails",
       CORE_OFFER_DATA: "Kerndaten des Angebots",
       PRODUCT_REQUIREMENTS: "Bestätigung der gewünschten Produkteigenschaften",
+      PRICE_BASIS: "Bestätigung der Preiseinheit",
     },
     score: "Taja-Bewertung",
     confidence: "Datenzuverlässigkeit",
@@ -158,6 +163,7 @@ const analysisCopy = {
     landedCostLabel: "Landed Cost",
     missingLabel: "Fehlt für die endgültige Entscheidung",
     preliminary: "vorläufige Analyse",
+    incompleteData: "UNVOLLSTÄNDIGE DATEN",
   },
   en: {
     recommendation: {
@@ -178,6 +184,7 @@ const analysisCopy = {
       TRANSPORT_DETAILS: "transport details",
       CORE_OFFER_DATA: "core offer data",
       PRODUCT_REQUIREMENTS: "confirmation of requested product features",
+      PRICE_BASIS: "confirmation of the price unit",
     },
     score: "Taja score",
     confidence: "Data confidence",
@@ -185,6 +192,7 @@ const analysisCopy = {
     landedCostLabel: "Landed cost",
     missingLabel: "Missing for a final decision",
     preliminary: "preliminary analysis",
+    incompleteData: "INCOMPLETE DATA",
   },
 } as const;
 
@@ -439,11 +447,7 @@ export function SupplierOfferSearch({
 
     return (
       <article className="search-result-card" key={`${result.source}-${result.productUrl}`}>
-        {result.imageUrl && (
-          // Provider URLs are validated and rendered without proxying or persisting image bytes.
-          // eslint-disable-next-line @next/next/no-img-element
-          <img alt="" className="search-result-image" loading="lazy" src={result.imageUrl} />
-        )}
+        <SearchResultImage src={result.imageUrl} title={result.title} />
         <div>
           <p className="eyebrow">{result.source}</p>
           {(recommendationRank !== undefined || analysis?.status === "FINAL") && (
@@ -462,7 +466,9 @@ export function SupplierOfferSearch({
             </span>
           )}
           {isPartialLunaSearchResult(result) && (
-            <span className="provider-status provider-status-not_configured">PARTIAL</span>
+            <span className="provider-status provider-status-not_configured">
+              {analysisText.incompleteData}
+            </span>
           )}
           <h3>{result.title}</h3>
           <p><strong>{result.supplierName}</strong>{result.supplierCountry ? ` · ${result.supplierCountry}` : ""}</p>
@@ -475,6 +481,7 @@ export function SupplierOfferSearch({
             {result.incoterm ? ` · ${result.incoterm}` : ""}
           </p>
           {analysis && <TajaRequirementMatchPanel match={analysis.requirementMatch} />}
+          {analysis?.priceSignal && <TajaPriceSignalWarning signal={analysis.priceSignal} />}
           {analysis && (
             <div>
               <p>
@@ -676,11 +683,22 @@ export function SupplierOfferSearch({
       {lunaPlan && (
         <div className="empty-state">
           <h3>{lunaCopy.preparedQueries}</h3>
-          <p><strong>Alibaba / Made-in-China:</strong> {lunaPlan.providerQuery}</p>
-          <p>
-            <strong>1688:</strong>{" "}
-            {lunaPlan.chinese1688Query ?? lunaCopy.chineseConfirmationRequired}
-          </p>
+          <p><strong>Alibaba / Made-in-China:</strong></p>
+          <ol>
+            {lunaPlan.providerQueries.map((preparedQuery) => (
+              <li key={preparedQuery}>{preparedQuery}</li>
+            ))}
+          </ol>
+          <p><strong>1688:</strong></p>
+          {lunaPlan.chinese1688Queries.length > 0 ? (
+            <ol>
+              {lunaPlan.chinese1688Queries.map((preparedQuery) => (
+                <li key={preparedQuery}>{preparedQuery}</li>
+              ))}
+            </ol>
+          ) : (
+            <p>{lunaCopy.chineseConfirmationRequired}</p>
+          )}
           {unfilteredResultCount !== null && results && unfilteredResultCount !== results.length && (
             <p>{lunaCopy.filteredResultsPrefix}: {unfilteredResultCount - results.length}</p>
           )}
