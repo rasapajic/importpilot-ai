@@ -213,6 +213,7 @@ export async function searchProjectSupplierOffers(
   const constrainedResults = applyLunaSearchConstraints(outcome.results, effectiveRequest);
   const preliminaryResults = rankPreliminarySupplierOffers(constrainedResults, {
     quantity: effectiveRequest.quantity,
+    productQuery: effectiveRequest.query,
   });
   const autoEnrichment = await autoEnrichTajaCandidates(
     preliminaryResults,
@@ -248,6 +249,7 @@ export async function searchProjectSupplierOffers(
     {
       quantity: effectiveRequest.quantity,
       targetMarginPercent: effectiveRequest.targetMarginPercent,
+      productQuery: effectiveRequest.query,
     },
   );
   const results = tajaAnalysis.rankedResults.map((result) => ({
