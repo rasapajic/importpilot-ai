@@ -2,6 +2,10 @@
 
 import { useI18n } from "@/components/i18n/i18n-provider";
 import {
+  TajaPriceSignalStatuses,
+  type TajaPriceSignal,
+} from "@/modules/product-search/domain/taja-price-signal";
+import {
   TajaRequirementMatchStatuses,
   type TajaRequirementCheck,
   type TajaRequirementMatch,
@@ -19,6 +23,9 @@ const copy = {
     },
     confirmed: "potvrđeno",
     unconfirmed: "nije potvrđeno",
+    priceWarningTitle: "Cenovni ekstrem",
+    highPriceWarning: "Prikazana cena je višestruko viša od drugih ponuda u istoj valuti. Proverite da li je cena po komadu, za kompletan industrijski sistem ili za drugu količinsku jedinicu.",
+    lowPriceWarning: "Prikazana cena je neuobičajeno niska u odnosu na druge ponude u istoj valuti. Proverite da li je cena početna, za deo seta ili za drugu količinsku jedinicu.",
     requirement: {
       MISTING: "vodena magla / misting sistem",
       PATIO: "namena za terasu",
@@ -38,6 +45,9 @@ const copy = {
     },
     confirmed: "bestätigt",
     unconfirmed: "nicht bestätigt",
+    priceWarningTitle: "Preislicher Ausreißer",
+    highPriceWarning: "Der angezeigte Preis ist um ein Vielfaches höher als vergleichbare Angebote in derselben Währung. Prüfen Sie, ob er pro Stück, für ein komplettes Industriesystem oder für eine andere Mengeneinheit gilt.",
+    lowPriceWarning: "Der angezeigte Preis ist im Vergleich zu anderen Angeboten in derselben Währung ungewöhnlich niedrig. Prüfen Sie, ob es sich um einen Einstiegspreis, nur einen Teil des Sets oder eine andere Mengeneinheit handelt.",
     requirement: {
       MISTING: "Wassernebel-/Misting-System",
       PATIO: "für Terrasse geeignet",
@@ -57,6 +67,9 @@ const copy = {
     },
     confirmed: "confirmed",
     unconfirmed: "not confirmed",
+    priceWarningTitle: "Price outlier",
+    highPriceWarning: "The displayed price is several times higher than comparable offers in the same currency. Verify whether it is per unit, for a complete industrial system, or for a different quantity basis.",
+    lowPriceWarning: "The displayed price is unusually low compared with other offers in the same currency. Verify whether it is a starting price, only part of the kit, or based on a different quantity unit.",
     requirement: {
       MISTING: "water mist / misting system",
       PATIO: "patio use",
@@ -113,6 +126,26 @@ export function TajaRequirementMatchPanel({
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+export function TajaPriceSignalWarning({ signal }: { signal: TajaPriceSignal }) {
+  const { locale } = useI18n();
+  if (
+    signal.status !== TajaPriceSignalStatuses.HIGH_OUTLIER &&
+    signal.status !== TajaPriceSignalStatuses.LOW_OUTLIER
+  ) {
+    return null;
+  }
+  const localeCopy = copy[locale];
+  const message = signal.status === TajaPriceSignalStatuses.HIGH_OUTLIER
+    ? localeCopy.highPriceWarning
+    : localeCopy.lowPriceWarning;
+
+  return (
+    <div className="taja-price-warning" role="note">
+      <strong>{localeCopy.priceWarningTitle}:</strong> {message}
     </div>
   );
 }
