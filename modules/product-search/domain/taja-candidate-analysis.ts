@@ -6,6 +6,11 @@ import {
 } from "../../intelligence/domain/scoring";
 import { RecommendationStatuses } from "../../intelligence/domain/recommendation";
 import { SupplierRiskLevels } from "../../intelligence/domain/supplier-risk-v2";
+import {
+  getMoqStatus,
+  MoqStatuses,
+  type MoqStatusValue,
+} from "../../offers/domain/moq-status";
 import { rankPreliminarySupplierOffers } from "./preliminary-supplier-ranking";
 import type { SupplierOfferSearchResult } from "./search";
 import type { TajaPreliminaryCostEstimate } from "./taja-preliminary-cost-estimate";
@@ -109,6 +114,7 @@ type InternalAnalysis = {
   preliminaryCostEstimate: TajaPreliminaryCostEstimate | null;
   requirementMatch: TajaRequirementMatch;
   priceSignal: TajaPriceSignal;
+  moqStatus: MoqStatusValue;
   overallScore: number;
   missingData: TajaMissingDataKey[];
   preliminaryIndex: number;
@@ -121,6 +127,16 @@ function samePrice(left: number | null | undefined, right: number | null) {
 
 function clampScore(value: number) {
   return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function moqRank(status: MoqStatusValue) {
+  if (status === MoqStatuses.OK) return 0;
+  if (status === MoqStatuses.UNKNOWN) return 1;
+  return 2;
+}
+
+function moqScoreAdjustment(status: MoqStatusValue) {
+  return status === MoqStatuses.BLOCKING ? -25 : 0;
 }
 
 /**
@@ -277,8 +293,10 @@ function finalEligibility(
   landedCostStatus: TajaLandedCostStatus,
   requirementMatch: TajaRequirementMatch,
   priceSignal: TajaPriceSignal,
+  moqStatus: MoqStatusValue,
 ) {
   return coreOfferDataKnown(candidate.result) &&
+    moqStatus === MoqStatuses.OK &&
     requirementsAllowFinal(requirementMatch) &&
     priceAllowsFinal(priceSignal) &&
     landedCostStatus === TajaLandedCostStatuses.CONFIRMED &&
@@ -309,8 +327,15 @@ function compactExplanation(
   status: TajaCandidateAnalysisStatus,
   missing: TajaMissingDataKey[],
   estimate: TajaPreliminaryCostEstimate | null,
+  result: SupplierOfferSearchResult,
+  quantity: number,
+  moqStatus: MoqStatusValue,
 ) {
   if (status === TajaCandidateAnalysisStatuses.FINAL) return assessment.explanation;
+  const moqText =
+    moqStatus === MoqStatuses.BLOCKING && result.minimumOrderQuantity !== null
+      ? `Tražena količina je ${quantity} kom, a dobavljač navodi MOQ ${result.minimumOrderQuantity} kom; ponuda nije odgovarajuća bez potvrđenog izuzetka ili pregovora o MOQ-u. `
+      : "";
   const estimateText = estimate
     ? `Preliminarni ukupni trošak je ${estimate.lowPerUnitEur.toFixed(2)}–${estimate.highPerUnitEur.toFixed(2)} EUR po komadu; osnovni scenario je ${estimate.basePerUnitEur.toFixed(2)} EUR (${estimate.transportMode}, pouzdanost ${estimate.confidence}). `
     : "";
@@ -326,8 +351,8 @@ function compactExplanation(
     ? "Kinesko poreklo još nije potvrđeno i pretpostavljeno je samo na osnovu marketplace-a. "
     : "";
   return missing.length > 0
-    ? `${estimateText}${basisText}${chinaPlanningText}${originText}Preporuka ostaje preliminarna dok se ne potvrde nedostajući podaci.`
-    : `${estimateText}${basisText}${chinaPlanningText}${originText}Preporuka je preliminarna dok se ne završi detaljna provera finalista.`;
+    ? `${moqText}${estimateText}${basisText}${chinaPlanningText}${originText}Preporuka ostaje preliminarna dok se ne potvrde nedostajući podaci.`
+    : `${moqText}${estimateText}${basisText}${chinaPlanningText}${originText}Preporuka je preliminarna dok se ne završi detaljna provera finalista.`;
 }
 
 function rankingBucket(item: InternalAnalysis) {
@@ -339,6 +364,7 @@ function rankingBucket(item: InternalAnalysis) {
 }
 
 function reliableEstimatedCost(item: InternalAnalysis) {
+  if (item.moqStatus === MoqStatuses.BLOCKING) return null;
   return item.preliminaryCostEstimate?.confidence === "LOW"
     ? null
     : item.preliminaryCostEstimate?.basePerUnitEur ?? null;
@@ -347,9 +373,10 @@ function reliableEstimatedCost(item: InternalAnalysis) {
 /**
  * Reuses ImportPilot's landed-cost-aware offer scoring and supplier-risk V2.
  * A candidate may be sorted highly while still remaining PRELIMINARY. It is
- * marked FINAL only after confirmed landed cost, confirmed product requirements,
- * verified price basis and sufficient supplier-risk evidence are available.
- * Automatic cost ranges remain ESTIMATED and never unlock a final recommendation.
+ * marked FINAL only after compatible MOQ, confirmed landed cost, confirmed
+ * product requirements, verified price basis and sufficient supplier-risk
+ * evidence are available. Automatic cost ranges remain ESTIMATED and never
+ * unlock a final recommendation.
  */
 export function analyzeAndRankTajaCandidates(
   candidates: CandidateWithEnrichment[],
@@ -378,6 +405,10 @@ export function analyzeAndRankTajaCandidates(
       candidate.result,
     );
     const priceSignal = evaluateTajaPriceSignal(candidate.result, allResults);
+    const moqStatus = getMoqStatus({
+      projectQuantity: context.quantity,
+      moq: candidate.result.minimumOrderQuantity,
+    }).status;
     const assessment = assessOffer(
       assessmentInput(candidate, context),
       comparisonForCandidate(candidate.result, normalizedCandidates),
@@ -385,7 +416,8 @@ export function analyzeAndRankTajaCandidates(
     const overallScore = clampScore(
       assessment.overallScore +
       requirementMatch.scoreAdjustment +
-      priceSignal.scoreAdjustment,
+      priceSignal.scoreAdjustment +
+      moqScoreAdjustment(moqStatus),
     );
     const finalEligible = finalEligibility(
       candidate,
@@ -393,6 +425,7 @@ export function analyzeAndRankTajaCandidates(
       landedCostStatus,
       requirementMatch,
       priceSignal,
+      moqStatus,
     );
     return {
       result: candidate.result,
@@ -405,6 +438,7 @@ export function analyzeAndRankTajaCandidates(
       preliminaryCostEstimate,
       requirementMatch,
       priceSignal,
+      moqStatus,
       overallScore,
       missingData: missingData(
         candidate,
@@ -427,6 +461,8 @@ export function analyzeAndRankTajaCandidates(
         left.preliminaryIndex - right.preliminaryIndex;
     }
     if (!left.finalEligible && !right.finalEligible) {
+      const moqDifference = moqRank(left.moqStatus) - moqRank(right.moqStatus);
+      if (moqDifference !== 0) return moqDifference;
       const requirementRankDifference =
         tajaRequirementMatchRank(left.requirementMatch.status) -
         tajaRequirementMatchRank(right.requirementMatch.status);
@@ -473,6 +509,9 @@ export function analyzeAndRankTajaCandidates(
         item.status,
         item.missingData,
         item.preliminaryCostEstimate,
+        item.result,
+        context.quantity,
+        item.moqStatus,
       ),
     })),
   };
