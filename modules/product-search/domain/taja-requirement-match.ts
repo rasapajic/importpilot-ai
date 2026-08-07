@@ -70,12 +70,16 @@ const FEATURE_DEFINITIONS: FeatureDefinition[] = [
     key: "NOZZLES",
     weight: 2,
     queryPattern: /\b(?:mlaznic\w*|nozzl\w*|dus\w*)\b/,
-    offerPattern: /\b(?:nozzl\w*|sprayer\w*|mist\s*head\w*|dus\w*)\b/,
+    offerPattern: /\b(?:nozzl\w*|sprayer\w*|(?:mist|spray)\s*head\w*|dus\w*)\b/,
   },
 ];
 
 const NOZZLE_QUERY_ALIASES = "(?:mlaznic\\w*|nozzl\\w*|dus\\w*)";
-const NOZZLE_OFFER_ALIASES = "(?:nozzl\\w*|sprayer\\w*|mist\\s*head\\w*|dus\\w*)";
+const NOZZLE_OFFER_ALIASES =
+  "(?:nozzl\\w*|sprayer\\w*|(?:mist|spray)\\s*head\\w*|dus\\w*)";
+const OPTIONAL_PIECE_MARKER = "(?:(?:pcs?|pieces?)\\s+)?";
+const NOZZLE_DESCRIPTOR_WORDS =
+  "(?:(?!(?:and|with|plus|including|hose|pipe|tube|meter|metre)\\b)[a-z]+\\s+){0,4}";
 
 function normalize(value: string) {
   return value
@@ -88,8 +92,12 @@ function normalize(value: string) {
 }
 
 function extractNumberNearAlias(text: string, aliases: string) {
-  const afterNumber = new RegExp(`\\b(\\d{1,4})\\s*(?:pcs?\\s*)?${aliases}\\b`);
-  const beforeNumber = new RegExp(`\\b${aliases}\\s*(?:x\\s*)?(\\d{1,4})\\b`);
+  const afterNumber = new RegExp(
+    `\\b(\\d{1,4})\\s*${OPTIONAL_PIECE_MARKER}${NOZZLE_DESCRIPTOR_WORDS}${aliases}\\b`,
+  );
+  const beforeNumber = new RegExp(
+    `\\b${aliases}\\s*(?:(?:set|kit)\\s+of\\s+)?(?:x\\s*)?(\\d{1,4})(?:\\s*(?:pcs?|pieces?))?\\b`,
+  );
   const match = text.match(afterNumber) ?? text.match(beforeNumber);
   if (!match?.[1]) return null;
   const parsed = Number(match[1]);
@@ -97,8 +105,12 @@ function extractNumberNearAlias(text: string, aliases: string) {
 }
 
 function offerConfirmsCount(text: string, count: number, aliases: string) {
-  const afterNumber = new RegExp(`\\b${count}\\s*(?:pcs?\\s*)?${aliases}\\b`);
-  const beforeNumber = new RegExp(`\\b${aliases}\\s*(?:x\\s*)?${count}\\b`);
+  const afterNumber = new RegExp(
+    `\\b${count}\\s*${OPTIONAL_PIECE_MARKER}${NOZZLE_DESCRIPTOR_WORDS}${aliases}\\b`,
+  );
+  const beforeNumber = new RegExp(
+    `\\b${aliases}\\s*(?:(?:set|kit)\\s+of\\s+)?(?:x\\s*)?${count}(?:\\s*(?:pcs?|pieces?))?\\b`,
+  );
   return afterNumber.test(text) || beforeNumber.test(text);
 }
 
