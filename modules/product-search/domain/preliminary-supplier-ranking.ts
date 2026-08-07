@@ -1,8 +1,10 @@
 import type { SupplierOfferSearchResult } from "./search";
 import { isPartialLunaSearchResult } from "./luna-search-plan";
+import { evaluateTajaRequirementMatch } from "./taja-requirement-match";
 
 type PreliminaryRankingContext = {
   quantity: number;
+  productQuery?: string;
 };
 
 function priceCompetitiveness(
@@ -41,15 +43,22 @@ function preliminaryScore(
   if (result.supplierCountry !== null) score += 5;
   if (result.imageUrl !== null) score += 5;
   if (!isPartialLunaSearchResult(result)) score += 10;
+  if (context.productQuery) {
+    score += evaluateTajaRequirementMatch(
+      context.productQuery,
+      result,
+    ).scoreAdjustment;
+  }
 
   return score;
 }
 
 /**
  * Produces a transparent first-pass ordering from fields already verified on
- * supplier pages. It is intentionally not the final TAJA ranking: landed cost,
- * supplier-risk verification, compliance and supplier replies belong to the
- * later deep-analysis stage.
+ * supplier pages. Product requirements from the user's query may adjust this
+ * first pass, but unconfirmed details are never treated as false. This is not
+ * the final TAJA ranking: landed cost, supplier-risk verification, compliance
+ * and supplier replies belong to the later deep-analysis stage.
  */
 export function rankPreliminarySupplierOffers(
   results: SupplierOfferSearchResult[],
