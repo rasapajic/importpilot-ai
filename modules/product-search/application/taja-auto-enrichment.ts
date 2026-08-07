@@ -66,26 +66,36 @@ function sameProductUrl(left: string, right: string) {
   return canonicalSupplierProductUrl(left) === canonicalSupplierProductUrl(right);
 }
 
-function isAuthoritativePreview(
-  result: SupplierOfferSearchResult,
-  preview: SupplierOfferUrlPreview,
-) {
-  return !preview.isPartial &&
-    !preview.titleFromSlug &&
-    sameProductUrl(result.productUrl, preview.productUrl);
+function isAuthoritativePreview(preview: SupplierOfferUrlPreview) {
+  return !preview.isPartial && !preview.titleFromSlug;
 }
 
 function changedNumber(left: number | null, right: number | null) {
   return left !== null && right !== null && Math.abs(left - right) > 0.0001;
 }
 
+function unchangedMerge(result: SupplierOfferSearchResult) {
+  return {
+    result,
+    fieldsFilled: [] as TajaAutoEnrichmentField[],
+    fieldsCorrected: [] as TajaAutoEnrichmentField[],
+  };
+}
+
 function mergePreview(
   result: SupplierOfferSearchResult,
   preview: SupplierOfferUrlPreview,
 ) {
+  // Never accept commercial data from a redirect or parser result that points
+  // to a different canonical product. This applies to both corrections and
+  // fill-only enrichment.
+  if (!sameProductUrl(result.productUrl, preview.productUrl)) {
+    return unchangedMerge(result);
+  }
+
   const fieldsFilled: TajaAutoEnrichmentField[] = [];
   const fieldsCorrected: TajaAutoEnrichmentField[] = [];
-  const authoritative = isAuthoritativePreview(result, preview);
+  const authoritative = isAuthoritativePreview(preview);
 
   let price = result.price;
   let currency = result.currency;
