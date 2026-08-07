@@ -202,7 +202,7 @@ describe("TAJA finalist auto-enrichment", () => {
     });
   });
 
-  it("does not apply corrections from a preview tied to a different product URL", async () => {
+  it("rejects both fills and corrections from a different product URL", async () => {
     const productUrl = "https://www.alibaba.com/product-detail/fan_123456.html";
     const provider = previewProvider(async () => ({
       title: "Other product",
@@ -219,19 +219,13 @@ describe("TAJA finalist auto-enrichment", () => {
       titleFromSlug: false,
     }));
 
-    const original = result(productUrl, {
-      supplierCountry: "CN",
-      price: 20,
-      currency: "EUR",
-      minimumOrderQuantity: 250,
-      incoterm: "FOB",
-      imageUrl: "https://example.com/fan.jpg",
-    });
+    const original = result(productUrl);
     const outcome = await autoEnrichTajaCandidates([original], provider);
 
     expect(outcome.results[0]).toEqual(original);
     expect(outcome.summary.reports[0]).toMatchObject({
       status: TajaAutoEnrichmentStatuses.UNCHANGED,
+      fieldsFilled: [],
       fieldsCorrected: [],
     });
   });
