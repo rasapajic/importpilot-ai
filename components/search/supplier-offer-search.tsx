@@ -10,6 +10,10 @@ import { UrlImportReview } from "@/components/search/url-import-review";
 import { getLunaSearchCopy } from "@/components/search/luna-search-copy";
 import { hasSupplierSearchResultCards } from "@/components/search/search-result-display";
 import {
+  TajaRequirementMatchPanel,
+  TajaSearchLoadingNotice,
+} from "@/components/search/taja-search-feedback";
+import {
   isPartialLunaSearchResult,
   type LunaSearchPlan,
 } from "@/modules/product-search/domain/luna-search-plan";
@@ -119,6 +123,7 @@ const analysisCopy = {
       COMMERCIAL_TERMS: "komercijalni uslovi",
       TRANSPORT_DETAILS: "detalji transporta",
       CORE_OFFER_DATA: "osnovni podaci ponude",
+      PRODUCT_REQUIREMENTS: "potvrda traženih osobina proizvoda",
     },
     score: "Taja rezultat",
     confidence: "Pouzdanost podataka",
@@ -145,6 +150,7 @@ const analysisCopy = {
       COMMERCIAL_TERMS: "Geschäftsbedingungen",
       TRANSPORT_DETAILS: "Transportdetails",
       CORE_OFFER_DATA: "Kerndaten des Angebots",
+      PRODUCT_REQUIREMENTS: "Bestätigung der gewünschten Produkteigenschaften",
     },
     score: "Taja-Bewertung",
     confidence: "Datenzuverlässigkeit",
@@ -171,6 +177,7 @@ const analysisCopy = {
       COMMERCIAL_TERMS: "commercial terms",
       TRANSPORT_DETAILS: "transport details",
       CORE_OFFER_DATA: "core offer data",
+      PRODUCT_REQUIREMENTS: "confirmation of requested product features",
     },
     score: "Taja score",
     confidence: "Data confidence",
@@ -467,6 +474,7 @@ export function SupplierOfferSearch({
               : t("Minimalna količina (MOQ) nije navedena")}
             {result.incoterm ? ` · ${result.incoterm}` : ""}
           </p>
+          {analysis && <TajaRequirementMatchPanel match={analysis.requirementMatch} />}
           {analysis && (
             <div>
               <p>
@@ -663,6 +671,7 @@ export function SupplierOfferSearch({
           {loading ? lunaCopy.searching : lunaCopy.startSearch}
         </button>
       </form>
+      {loading && <TajaSearchLoadingNotice />}
       {error && <p className="form-error" role="alert">{t(error)}</p>}
       {lunaPlan && (
         <div className="empty-state">
@@ -681,7 +690,7 @@ export function SupplierOfferSearch({
           ))}
         </div>
       )}
-      {results === null && <p className="muted-text">{t("Unesite proizvod da biste pronašli ponude.")}</p>}
+      {results === null && !loading && <p className="muted-text">{t("Unesite proizvod da biste pronašli ponude.")}</p>}
       {results?.length === 0 && (
         <div className="empty-state">
           <h3>
