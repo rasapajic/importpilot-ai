@@ -21,9 +21,17 @@ const nullableNumber = (schema: z.ZodNumber) =>
     schema.nullable(),
   );
 
+const queryVariantsSchema = z.array(
+  z.string().trim().min(2).max(300),
+).max(5).optional();
+
 const nonnegativeInteger = z.number().int().nonnegative();
 const nonnegativeFinite = z.number().nonnegative().finite();
 const positiveLogisticsNumber = z.number().positive().finite().max(1_000_000);
+
+function uniqueQueries(values: string[]) {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))].slice(0, 5);
+}
 
 export const supplierLogisticsEvidenceSchema = z.enum([
   "PRODUCT_PAGE",
@@ -46,8 +54,10 @@ export const supplierLogisticsSchema = z
 
 export const searchRequestSchema = z
   .object({
-    productQuery: z.string().trim().min(2).max(200).optional(),
-    query: z.string().trim().min(2).max(200).optional(),
+    productQuery: z.string().trim().min(2).max(300).optional(),
+    query: z.string().trim().min(2).max(300).optional(),
+    queryVariants: queryVariantsSchema,
+    chinese1688QueryVariants: queryVariantsSchema,
     quantity: z.number().int().positive().max(2_147_483_647),
     targetCountry: z.string().trim().toUpperCase().regex(/^[A-Z]{2}$/),
     language: z.enum(["en", "de", "sr"]).default("en"),
@@ -62,12 +72,17 @@ export const searchRequestSchema = z
       });
     }
   })
-  .transform((input) => ({
-    productQuery: input.productQuery ?? input.query ?? "",
-    quantity: input.quantity,
-    targetCountry: input.targetCountry,
-    language: input.language,
-  }));
+  .transform((input) => {
+    const productQuery = input.productQuery ?? input.query ?? "";
+    return {
+      productQuery,
+      queryVariants: uniqueQueries([productQuery, ...(input.queryVariants ?? [])]),
+      chinese1688QueryVariants: uniqueQueries(input.chinese1688QueryVariants ?? []),
+      quantity: input.quantity,
+      targetCountry: input.targetCountry,
+      language: input.language,
+    };
+  });
 
 export const supplierSearchResultSchema = z
   .object({
