@@ -57,6 +57,15 @@ describe("TAJA preliminary landed-cost estimate", () => {
     expect(estimate!.warnings).not.toContain("SOURCING_AGENT_FEE_ASSUMED");
   });
 
+  it("does not calculate a 100-unit landed cost from a price whose MOQ is 1000", () => {
+    expect(estimateTajaPreliminaryLandedCost({
+      result: offer({ minimumOrderQuantity: 1_000 }),
+      quantity: 100,
+      targetCountry: "AT",
+      targetMarginPercent: 30,
+    })).toBeNull();
+  });
+
   it("does not estimate unsupported destination, currency or delivery-inclusive Incoterm", () => {
     expect(estimateTajaPreliminaryLandedCost({
       result: offer(),
