@@ -70,6 +70,17 @@
   font-weight: 800;
 }
 
+.taja-price-warning {
+  background: #fff2dc;
+  border: 1px solid #d99b2b;
+  border-left-width: 4px;
+  border-radius: 0.55rem;
+  color: #694407;
+  line-height: 1.45;
+  margin: 0.65rem 0;
+  padding: 0.65rem 0.75rem;
+}
+
 @media (max-width: 760px) {
   .taja-requirement-match ul {
     display: grid;
