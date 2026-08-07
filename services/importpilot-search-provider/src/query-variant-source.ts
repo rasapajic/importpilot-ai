@@ -66,7 +66,7 @@ function resultFingerprint(result: SupplierSearchResult) {
 
 function uniqueQueries(input: SearchRequest, maxVariants: number) {
   return [...new Set(
-    [input.productQuery, ...input.queryVariants]
+    [input.productQuery, ...(input.queryVariants ?? [])]
       .map((query) => query.replace(/\s+/g, " ").trim())
       .filter((query) => query.length >= 2),
   )].slice(0, maxVariants);
