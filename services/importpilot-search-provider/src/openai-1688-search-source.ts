@@ -99,10 +99,13 @@ function uniqueQueries(queries: string[]) {
 }
 
 function build1688SearchInput(input: SearchRequest): SearchRequest {
-  const suppliedChineseQueries = input.chinese1688QueryVariants;
+  const suppliedChineseQueries = input.chinese1688QueryVariants ?? [];
+  const sourceQueries = input.queryVariants?.length
+    ? input.queryVariants
+    : [input.productQuery];
   const baseQueries = suppliedChineseQueries.length > 0
     ? suppliedChineseQueries
-    : input.queryVariants.map((query) => `${query} 1688 中国 批发 厂家 工厂 货源`);
+    : sourceQueries.map((query) => `${query} 1688 中国 批发 厂家 工厂 货源`);
   const queryVariants = uniqueQueries(
     baseQueries.map((query) => `${query} site:1688.com`),
   );
