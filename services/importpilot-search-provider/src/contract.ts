@@ -203,7 +203,14 @@ export const aiUsageReportSchema = z
 
 export const aiUsageReportsSchema = z.array(aiUsageReportSchema).max(20);
 
-export type SearchRequest = z.infer<typeof searchRequestSchema>;
+type ParsedSearchRequest = z.infer<typeof searchRequestSchema>;
+export type SearchRequest = Omit<
+  ParsedSearchRequest,
+  "queryVariants" | "chinese1688QueryVariants"
+> & {
+  queryVariants?: string[];
+  chinese1688QueryVariants?: string[];
+};
 export type SupplierLogistics = z.infer<typeof supplierLogisticsSchema>;
 export type SupplierSearchResult = z.infer<typeof supplierSearchResultSchema>;
 export type SupplierSearchEnrichmentRecord = z.infer<
