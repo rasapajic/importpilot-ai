@@ -225,10 +225,13 @@ function keepOnlyCitedResults(
   return accepted;
 }
 
+function normalizedQueryVariants(input: SearchRequest) {
+  const variants = input.queryVariants ?? [];
+  return variants.length > 0 ? variants : [input.productQuery];
+}
+
 function buildPrompt(input: SearchRequest, maxResults: number) {
-  const queryVariants = input.queryVariants.length > 0
-    ? input.queryVariants
-    : [input.productQuery];
+  const queryVariants = normalizedQueryVariants(input);
   const numberedVariants = queryVariants
     .map((query, index) => `${index + 1}. ${query}`)
     .join("\n");
@@ -438,13 +441,14 @@ export function createOpenAIWebSearchSource({
 
       const citedUrls = collectCitedUrls(payload);
       const accepted = keepOnlyCitedResults(parsed, citedUrls, safeMaxResults);
+      const queryVariantCount = normalizedQueryVariants(input).length;
 
       logger("openai_web_search", {
         model,
         reasoning_effort: reasoningEffort,
         search_context_size: searchContextSize,
         request_timeout_ms: safeRequestTimeoutMs,
-        query_variants: input.queryVariants.length,
+        query_variants: queryVariantCount,
         response_id: payload.id ?? null,
         cited_sources: citedUrls.length,
         parsed_results: parsed.length,
