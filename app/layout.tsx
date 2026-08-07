@@ -9,6 +9,7 @@ import { LOCALE_COOKIE, resolveLocale } from "@/modules/i18n/translations";
 import "./globals.css";
 import "./taja-search-progress.css";
 import "./search-result-actions.css";
+import "./taja-requirement-match.css";
 
 export const metadata: Metadata = {
   title: "ImportPilot AI",
