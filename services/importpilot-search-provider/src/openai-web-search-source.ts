@@ -26,7 +26,7 @@ const DEFAULT_REASONING_EFFORT = "minimal";
 type Fetcher = typeof fetch;
 type SearchContextSize = "low" | "medium" | "high";
 type ReasoningEffort = "minimal" | "low" | "medium" | "high";
-type SearchProfile = "general" | "1688_only";
+type SearchProfile = "general" | "alibaba_only" | "1688_only";
 type ResultUrlPolicy = (productUrl: string) => boolean;
 
 type OpenAIWebSearchOptions = {
@@ -215,6 +215,17 @@ function isDirectPage(value: string) {
   }
 }
 
+function citedSourceDiagnostics(
+  citedUrls: string[],
+  resultUrlPolicy?: ResultUrlPolicy,
+) {
+  return citedUrls.slice(0, 10).map((url) => ({
+    url: diagnosticUrl(url),
+    direct_page: isDirectPage(url),
+    source_policy_accepted: resultUrlPolicy ? resultUrlPolicy(url) : null,
+  }));
+}
+
 function normalizeResult(result: SupplierSearchResult): SupplierSearchResult {
   const url = new URL(result.productUrl);
   return {
@@ -301,6 +312,30 @@ function buildGeneralPrompt(input: SearchRequest, maxResults: number) {
   ].join("\n");
 }
 
+function buildAlibabaOnlyPrompt(input: SearchRequest, maxResults: number) {
+  return [
+    "You are TAJA's dedicated Alibaba.com sourcing researcher.",
+    "Use live web search. Do not answer from memory.",
+    "Search Alibaba.com only. Do not return Made-in-China, 1688, Global Sources, IndiaMART, TradeIndia, retail stores, manufacturer websites or any other domain.",
+    `Execute these Alibaba product queries in order, from most specific to broadest:\n${numberedQueryVariants(input)}`,
+    `Find up to ${maxResults} current Alibaba supplier offers for the requested specification. Requested quantity: ${input.quantity}. Import destination: ${input.targetCountry}.`,
+    "Do not stop after a generic result. Exhaust the supplied variants unless the requested number of exact direct Alibaba product pages has been verified.",
+    "Every result must be a directly openable HTTPS Alibaba product-detail page on alibaba.com or one of its subdomains.",
+    "The productUrl path must start with /product-detail/ and must identify one concrete product offer.",
+    "Never return an Alibaba homepage, trade search page, category page, RFQ page, article, supplier storefront, login page, shortened redirect or tracking-only URL.",
+    "Every productUrl must be a URL you actually opened or used as a web-search source during this response.",
+    "Do not discard a verified direct product page merely because price, MOQ, Incoterm, image or supplier details are unavailable.",
+    "When the supplier name is not visible on a verified direct product page, use the exact placeholder Supplier not confirmed. Do not guess or infer a company name.",
+    "Never invent a supplier, price, currency, MOQ, Incoterm, image URL or product URL.",
+    "Use price and currency only when an explicit numeric unit price is visible on the cited product page. Otherwise set both to null.",
+    "Use MOQ only when explicitly visible as an integer on the cited product page. Otherwise set it to null.",
+    "Use Incoterm only when explicitly visible on the cited product page. Otherwise set it to null.",
+    "Use a two-letter supplier-country code only when confirmed; otherwise null.",
+    "Keep the original product title from the cited product page.",
+    "Return an empty results array only when no verified direct Alibaba product-detail page is found.",
+  ].join("\n");
+}
+
 function build1688OnlyPrompt(input: SearchRequest, maxResults: number) {
   return [
     "You are TAJA's dedicated 1688 sourcing researcher.",
@@ -314,13 +349,15 @@ function build1688OnlyPrompt(input: SearchRequest, maxResults: number) {
     "Never return a 1688 homepage, category page, search-result page, mobile share landing page, login page, shortened redirect, article or supplier storefront.",
     "Every productUrl must be a URL you actually opened or used as a web-search source during this response.",
     "Return the canonical direct offer URL, not a search, share or tracking URL.",
+    "Do not discard a verified direct offer merely because price, MOQ, Incoterm, image or supplier details are unavailable.",
+    "When the supplier name is not visible on a verified direct offer, use the exact placeholder Supplier not confirmed. Do not guess or infer a company name.",
     "Never invent a supplier, price, currency, MOQ, Incoterm, image URL or product URL.",
     "Use price and currency only when an explicit numeric unit price is visible on the cited offer page. Use CNY only when the page explicitly shows yuan/RMB/人民币/¥. Otherwise set both to null.",
     "Use MOQ only when explicitly visible as an integer on the cited offer page. Otherwise set it to null.",
     "Do not treat domestic Chinese delivery terms as an Incoterm. Use Incoterm only when EXW, FCA, FAS, FOB, CFR, CIF, CPT, CIP, DAP, DPU or DDP is explicit.",
     "Use supplier country CN only when the offer page or linked supplier profile confirms China; otherwise null.",
-    "Keep the original product title and supplier name from the cited offer page.",
-    "Return an empty results array when no verified direct 1688 offer-detail page is found.",
+    "Keep the original product title from the cited offer page.",
+    "Return an empty results array only when no verified direct 1688 offer-detail page is found.",
   ].join("\n");
 }
 
@@ -329,14 +366,20 @@ function buildPrompt(
   maxResults: number,
   searchProfile: SearchProfile,
 ) {
+  if (searchProfile === "alibaba_only") {
+    return buildAlibabaOnlyPrompt(input, maxResults);
+  }
   return searchProfile === "1688_only"
     ? build1688OnlyPrompt(input, maxResults)
     : buildGeneralPrompt(input, maxResults);
 }
 
 function developerInstruction(searchProfile: SearchProfile) {
+  if (searchProfile === "alibaba_only") {
+    return "Use web search only for exact Alibaba.com product-detail pages. Produce source-grounded structured data, preserve unknown commercial fields as null, and return an empty result rather than another marketplace or a non-product Alibaba URL.";
+  }
   return searchProfile === "1688_only"
-    ? "Use web search only for exact 1688.com offer-detail pages. Produce source-grounded structured data and return an empty result rather than another marketplace or a non-offer 1688 URL."
+    ? "Use web search only for exact 1688.com offer-detail pages. Produce source-grounded structured data, preserve unknown commercial fields as null, and return an empty result rather than another marketplace or a non-offer 1688 URL."
     : "Use web search and produce only the requested structured supplier-page data. Prefer exact requirement matching, direct-page verification and source traceability over optional commercial details.";
 }
 
@@ -541,6 +584,7 @@ export function createOpenAIWebSearchSource({
         query_variants: queryVariantCount,
         response_id: payload.id ?? null,
         cited_sources: citedUrls.length,
+        cited_source_samples: citedSourceDiagnostics(citedUrls, resultUrlPolicy),
         parsed_results: parsed.length,
         accepted_results: filtered.accepted.length,
         rejected_results: filtered.rejected.length,
@@ -565,7 +609,9 @@ export function createOpenAIWebSearchSource({
               ? "TAJA web search returned no cited sources."
               : searchProfile === "1688_only"
                 ? "TAJA 1688 search returned no cited direct 1688 offer pages."
-                : "TAJA web search returned no cited direct supplier product pages.",
+                : searchProfile === "alibaba_only"
+                  ? "TAJA Alibaba search returned no cited direct Alibaba product pages."
+                  : "TAJA web search returned no cited direct supplier product pages.",
             ...(aiUsage.length > 0 ? { aiUsage } : {}),
           };
     },
