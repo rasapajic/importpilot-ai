@@ -65,9 +65,45 @@
   font-weight: 800;
 }
 
+.taja-requirement-match .requirement-likely {
+  border-color: #d7c27c;
+}
+
+.taja-requirement-match .requirement-likely > span:first-child {
+  color: #8a6400;
+  font-weight: 800;
+}
+
 .taja-requirement-match .requirement-unconfirmed > span:first-child {
   color: #9a6700;
   font-weight: 800;
+}
+
+.taja-product-form {
+  border: 1px solid #dce7e1;
+  border-left-width: 4px;
+  border-radius: 0.55rem;
+  line-height: 1.45;
+  margin: 0.65rem 0;
+  padding: 0.58rem 0.7rem;
+}
+
+.taja-product-form-match {
+  background: #eef8f2;
+  border-color: #74b897;
+  color: #285b43;
+}
+
+.taja-product-form-unclear {
+  background: #fffaf0;
+  border-color: #d7ad42;
+  color: #694d0b;
+}
+
+.taja-product-form-mismatch {
+  background: #fff5f3;
+  border-color: #d56f60;
+  color: #762e25;
 }
 
 .taja-price-warning {
