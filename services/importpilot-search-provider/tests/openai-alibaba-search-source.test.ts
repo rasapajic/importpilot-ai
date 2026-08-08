@@ -47,10 +47,11 @@ describe("OpenAI Alibaba fallback source", () => {
     )).toBe(false);
   });
 
-  it("uses Alibaba-specific site queries and rejects other cited marketplaces", async () => {
+  it("uses an Alibaba-only profile and rejects other cited marketplaces", async () => {
     const alibabaUrl = "https://www.alibaba.com/product-detail/Patio-Misting-System_1600000000001.html";
     const madeInChinaUrl = "https://example.en.made-in-china.com/product/example.html";
     let requestBody: Record<string, unknown> | null = null;
+    const events: Array<{ event: string; details?: Record<string, unknown> }> = [];
     const fetcher = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
       return new Response(JSON.stringify({
@@ -84,6 +85,7 @@ describe("OpenAI Alibaba fallback source", () => {
     const source = createOpenAIAlibabaSearchSource({
       apiKey: "sk-test",
       fetcher: fetcher as typeof fetch,
+      logger: (event, details) => events.push({ event, details }),
     });
 
     const outcome = await source.search(input, new AbortController().signal);
@@ -95,7 +97,30 @@ describe("OpenAI Alibaba fallback source", () => {
         source: "TAJA Alibaba",
       }),
     ]);
-    expect(JSON.stringify(requestBody)).toContain("site:alibaba.com/product-detail");
+    const serializedRequest = JSON.stringify(requestBody);
+    expect(serializedRequest).toContain("site:alibaba.com inurl:product-detail");
+    expect(serializedRequest).toContain("Search Alibaba.com only");
+    expect(serializedRequest).toContain("Supplier not confirmed");
     expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(events).toContainEqual({
+      event: "openai_web_search",
+      details: expect.objectContaining({
+        search_profile: "alibaba_only",
+        cited_sources: 2,
+        accepted_results: 1,
+        cited_source_samples: expect.arrayContaining([
+          expect.objectContaining({
+            url: "www.alibaba.com/product-detail/Patio-Misting-System_1600000000001.html",
+            direct_page: true,
+            source_policy_accepted: true,
+          }),
+          expect.objectContaining({
+            url: "example.en.made-in-china.com/product/example.html",
+            direct_page: true,
+            source_policy_accepted: false,
+          }),
+        ]),
+      }),
+    });
   });
 });
