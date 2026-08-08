@@ -73,5 +73,8 @@ describe("TAJA product-form policy", () => {
     expect(completeSystems.every((analysis) =>
       !analysis.missingData.includes("PRICE_BASIS")
     )).toBe(true);
+    expect(applied.analyses.every((analysis) =>
+      analysis.status === "PRELIMINARY"
+    )).toBe(true);
   });
 });
