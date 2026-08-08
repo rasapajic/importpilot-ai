@@ -117,7 +117,8 @@ describe("requirement-driven supplier query variants", () => {
     }, new AbortController().signal);
 
     expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(requestBody).toContain("露台 喷雾降温系统 水泵 20个喷嘴 厂家 批发 site:detail.1688.com inurl:offer");
+    expect(requestBody).toContain("户外 喷雾套装 水泵 20喷头 厂家 批发 site:detail.1688.com inurl:offer");
     expect(requestBody).toContain("露台 喷雾降温系统 水泵 20个喷嘴 厂家 批发 site:1688.com");
-    expect(requestBody).toContain("户外 喷雾套装 水泵 20喷头 厂家 批发 site:1688.com");
   });
 });
