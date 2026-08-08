@@ -5,11 +5,7 @@ import {
   TajaPriceSignalStatuses,
   type TajaPriceSignal,
 } from "@/modules/product-search/domain/taja-price-signal";
-import {
-  TajaOfferProductForms,
-  TajaProductFormMatchStatuses,
-  type TajaProductFormAssessment,
-} from "@/modules/product-search/domain/taja-product-form";
+import type { TajaProductFormAssessment } from "@/modules/product-search/domain/taja-product-form";
 import {
   TajaRequirementEvidenceStatuses,
   TajaRequirementMatchStatuses,
