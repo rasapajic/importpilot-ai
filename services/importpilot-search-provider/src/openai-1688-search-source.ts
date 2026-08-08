@@ -122,11 +122,12 @@ function build1688SearchInput(input: SearchRequest): SearchRequest {
 /**
  * Dedicated 1688 discovery and enrichment pass for TAJA Deep Search.
  *
- * Discovery uses OpenAI live web search with requirement-driven Chinese query
- * variants. A second bounded batch pass verifies missing commercial and
- * logistics fields against the exact direct URLs. Enrichment failure never
- * discards a valid discovery result and all automatic values remain
- * preliminary evidence.
+ * Discovery uses a strict 1688-only live-search profile with requirement-driven
+ * Chinese query variants. Non-1688 domains and non-offer 1688 URLs are rejected
+ * before they enter this source. A second bounded batch pass verifies missing
+ * commercial and logistics fields against the exact direct URLs. Enrichment
+ * failure never discards a valid discovery result and all automatic values
+ * remain preliminary evidence.
  */
 export function createOpenAI1688SearchSource(
   options: OpenAI1688SearchOptions = {},
@@ -140,6 +141,8 @@ export function createOpenAI1688SearchSource(
   const baseSource = createOpenAIWebSearchSource({
     ...sharedOptions,
     maxResults: sharedOptions.maxResults ?? 10,
+    searchProfile: "1688_only",
+    resultUrlPolicy: is1688ProductUrl,
   });
   const enricher = injectedEnricher ?? createOpenAI1688Enricher({
     ...sharedOptions,
