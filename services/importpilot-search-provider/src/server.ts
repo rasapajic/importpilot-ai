@@ -94,6 +94,7 @@ const server = createServer(createSearchProviderApp({
   timeoutMs: Number(process.env.UPSTREAM_TIMEOUT_MS ?? 90_000),
   rateLimitMax: Number(process.env.SEARCH_RATE_LIMIT_MAX ?? 30),
   rateLimitWindowMs: Number(process.env.SEARCH_RATE_LIMIT_WINDOW_MS ?? 60_000),
+  idempotencyTtlMs: Number(process.env.SEARCH_IDEMPOTENCY_TTL_MS ?? 120_000),
 }));
 
 server.listen(port, () => {
