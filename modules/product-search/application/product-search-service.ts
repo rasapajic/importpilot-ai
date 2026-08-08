@@ -30,6 +30,7 @@ import {
 } from "../domain/taja-candidate-analysis";
 import { mergeTajaCandidateEnrichment } from "../domain/taja-candidate-enrichment";
 import { estimateTajaPreliminaryLandedCost } from "../domain/taja-preliminary-cost-estimate";
+import { applyTajaProductFormPolicy } from "../domain/taja-product-form-policy";
 import { canonicalSupplierProductUrl } from "../domain/supplier-product-url";
 import {
   createBrowserAssisted1688Preview,
@@ -291,7 +292,12 @@ async function buildSearchPresentation(input: SearchPresentationInput) {
       productQuery: effectiveRequest.query,
     },
   );
-  const results = tajaAnalysis.rankedResults.map((result) => ({
+  const productFormAnalysis = applyTajaProductFormPolicy({
+    rankedResults: tajaAnalysis.rankedResults,
+    analyses: tajaAnalysis.analyses,
+    productQuery: effectiveRequest.query,
+  });
+  const results = productFormAnalysis.rankedResults.map((result) => ({
     ...result,
     provenance: {
       fetchedAt,
@@ -306,7 +312,7 @@ async function buildSearchPresentation(input: SearchPresentationInput) {
 
   return {
     results,
-    candidateAnalyses: tajaAnalysis.analyses,
+    candidateAnalyses: productFormAnalysis.analyses,
     ...(autoEnrichmentSummary ? { autoEnrichmentSummary } : {}),
     unfilteredResultCount: sourceResults.length,
     lunaPlan,
