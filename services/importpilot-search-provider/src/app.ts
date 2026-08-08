@@ -1,7 +1,11 @@
-import { timingSafeEqual } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-import { searchRequestSchema, type SearchResponse } from "./contract.js";
+import {
+  searchRequestSchema,
+  type SearchRequest,
+  type SearchResponse,
+} from "./contract.js";
 import {
   createDevelopmentLogger,
   type DevelopmentLogger,
@@ -13,6 +17,10 @@ import {
 } from "./provider.js";
 import { createRateLimiter } from "./rate-limit.js";
 
+const DEFAULT_IDEMPOTENCY_TTL_MS = 2 * 60 * 1_000;
+const MIN_IDEMPOTENCY_TTL_MS = 5_000;
+const MAX_IDEMPOTENCY_TTL_MS = 15 * 60 * 1_000;
+
 type AppOptions = {
   token: string;
   source?: SupplierSearchSource;
@@ -20,10 +28,26 @@ type AppOptions = {
   maxRequestBytes?: number;
   rateLimitMax?: number;
   rateLimitWindowMs?: number;
+  idempotencyTtlMs?: number;
   logger?: DevelopmentLogger;
+  now?: () => number;
 };
 
-function sendJson(response: ServerResponse, status: number, body: unknown, headers = {}) {
+type SearchExecution = {
+  status: number;
+  body: SearchResponse | { error: string };
+};
+
+type CachedSearchExecution = SearchExecution & {
+  expiresAt: number;
+};
+
+function sendJson(
+  response: ServerResponse,
+  status: number,
+  body: unknown,
+  headers: Record<string, string> = {},
+) {
   response.writeHead(status, { "content-type": "application/json; charset=utf-8", ...headers });
   response.end(JSON.stringify(body));
 }
@@ -49,6 +73,30 @@ async function readJson(request: IncomingMessage, maxBytes: number) {
 
 function clientKey(request: IncomingMessage) {
   return request.socket.remoteAddress ?? "unknown";
+}
+
+function boundedTtl(value: number | undefined) {
+  if (!Number.isFinite(value)) return DEFAULT_IDEMPOTENCY_TTL_MS;
+  return Math.max(
+    MIN_IDEMPOTENCY_TTL_MS,
+    Math.min(MAX_IDEMPOTENCY_TTL_MS, Math.trunc(value!)),
+  );
+}
+
+function idempotencyHeader(request: IncomingMessage) {
+  const value = request.headers["idempotency-key"];
+  const candidate = Array.isArray(value) ? value[0] : value;
+  if (!candidate) return null;
+  const normalized = candidate.trim();
+  return /^[A-Za-z0-9._:-]{8,200}$/.test(normalized) ? normalized : null;
+}
+
+function searchFingerprint(input: SearchRequest) {
+  return createHash("sha256").update(JSON.stringify(input)).digest("hex");
+}
+
+function idempotencyScope(key: string, input: SearchRequest) {
+  return `${key}:${searchFingerprint(input)}`;
 }
 
 async function withTimeout<T>(
@@ -79,10 +127,51 @@ export function createSearchProviderApp({
   maxRequestBytes = 100_000,
   rateLimitMax = 30,
   rateLimitWindowMs = 60_000,
+  idempotencyTtlMs,
   logger = createDevelopmentLogger(),
+  now = Date.now,
 }: AppOptions) {
   if (!token) throw new Error("SEARCH_PROVIDER_TOKEN is required.");
   const rateLimiter = createRateLimiter(rateLimitMax, rateLimitWindowMs);
+  const safeIdempotencyTtlMs = boundedTtl(idempotencyTtlMs);
+  const inFlightSearches = new Map<string, Promise<SearchExecution>>();
+  const completedSearches = new Map<string, CachedSearchExecution>();
+
+  function pruneCompletedSearches(timestamp: number) {
+    for (const [key, cached] of completedSearches.entries()) {
+      if (cached.expiresAt <= timestamp) completedSearches.delete(key);
+    }
+  }
+
+  async function executeSearch(input: SearchRequest): Promise<SearchExecution> {
+    try {
+      const outcome = await withTimeout(
+        timeoutMs,
+        (signal) => runValidatedSearch(source, input, signal),
+      );
+      logger("search_results", {
+        resultCount: outcome.results.length,
+        ...(outcome.results.length === 0 ? { reason: outcome.reason } : {}),
+      });
+      return {
+        status: 200,
+        body: outcome satisfies SearchResponse,
+      };
+    } catch (error) {
+      const timedOut = error instanceof Error && error.message === "UPSTREAM_TIMEOUT";
+      const message = timedOut
+        ? "Supplier search source timed out."
+        : "Supplier search source returned an invalid or unavailable response.";
+      logger("search_results", {
+        resultCount: 0,
+        reason: message,
+      });
+      return {
+        status: timedOut ? 504 : 502,
+        body: { error: message },
+      };
+    }
+  }
 
   return async function handler(request: IncomingMessage, response: ServerResponse) {
     if (!authorized(request.headers.authorization, token)) {
@@ -146,30 +235,59 @@ export function createSearchProviderApp({
           return sendJson(response, 200, body);
         }
 
+        const suppliedIdempotencyKey = idempotencyHeader(request);
+        const scope = suppliedIdempotencyKey
+          ? idempotencyScope(suppliedIdempotencyKey, parsed.data)
+          : null;
+        const timestamp = now();
+        pruneCompletedSearches(timestamp);
+
+        if (scope) {
+          const cached = completedSearches.get(scope);
+          if (cached && cached.expiresAt > timestamp) {
+            logger("search_idempotency_replay", {
+              state: "completed",
+              productQuery: parsed.data.productQuery,
+              resultStatus: cached.status,
+            });
+            return sendJson(response, cached.status, cached.body, {
+              "x-importpilot-idempotency": "completed-replay",
+            });
+          }
+
+          const inFlight = inFlightSearches.get(scope);
+          if (inFlight) {
+            logger("search_idempotency_replay", {
+              state: "in_flight",
+              productQuery: parsed.data.productQuery,
+            });
+            const execution = await inFlight;
+            return sendJson(response, execution.status, execution.body, {
+              "x-importpilot-idempotency": "in-flight-coalesced",
+            });
+          }
+        }
+
+        const executionPromise = executeSearch(parsed.data);
+        if (scope) inFlightSearches.set(scope, executionPromise);
+
+        let execution: SearchExecution;
         try {
-          const outcome = await withTimeout(
-            timeoutMs,
-            (signal) => runValidatedSearch(source, parsed.data, signal),
-          );
-          logger("search_results", {
-            resultCount: outcome.results.length,
-            ...(outcome.results.length === 0 ? { reason: outcome.reason } : {}),
-          });
-          return sendJson(response, 200, outcome satisfies SearchResponse);
-        } catch (error) {
-          const timedOut = error instanceof Error && error.message === "UPSTREAM_TIMEOUT";
-          logger("search_results", {
-            resultCount: 0,
-            reason: timedOut
-              ? "Supplier search source timed out."
-              : "Supplier search source returned an invalid or unavailable response.",
-          });
-          return sendJson(response, timedOut ? 504 : 502, {
-            error: timedOut
-              ? "Supplier search source timed out."
-              : "Supplier search source returned an invalid or unavailable response.",
+          execution = await executionPromise;
+        } finally {
+          if (scope) inFlightSearches.delete(scope);
+        }
+
+        if (scope && execution.status === 200) {
+          completedSearches.set(scope, {
+            ...execution,
+            expiresAt: now() + safeIdempotencyTtlMs,
           });
         }
+
+        return sendJson(response, execution.status, execution.body, scope
+          ? { "x-importpilot-idempotency": "new" }
+          : {});
       } catch (error) {
         return sendJson(
           response,
