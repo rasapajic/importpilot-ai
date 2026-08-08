@@ -6,6 +6,12 @@ import {
   type TajaPriceSignal,
 } from "@/modules/product-search/domain/taja-price-signal";
 import {
+  TajaOfferProductForms,
+  TajaProductFormMatchStatuses,
+  type TajaProductFormAssessment,
+} from "@/modules/product-search/domain/taja-product-form";
+import {
+  TajaRequirementEvidenceStatuses,
   TajaRequirementMatchStatuses,
   type TajaRequirementCheck,
   type TajaRequirementMatch,
@@ -22,7 +28,21 @@ const copy = {
       NOT_EVALUATED: "nije procenjena",
     },
     confirmed: "potvrđeno",
+    likely: "verovatno relevantno",
     unconfirmed: "nije potvrđeno",
+    productFormTitle: "Vrsta ponude",
+    productForm: {
+      COMPLETE_SYSTEM: "kompletan sistem / kit",
+      PUMP_ONLY: "samo pumpa",
+      NOZZLES_ONLY: "samo mlaznice",
+      COMPONENT: "komponenta ili rezervni deo",
+      UNCLEAR: "nije jasno da li je kompletan sistem",
+    },
+    productFormMatch: {
+      MATCH: "odgovara traženoj vrsti proizvoda",
+      UNCLEAR: "potrebna je potvrda sadržaja kompleta",
+      MISMATCH: "nije ista jedinica proizvoda kao traženi sistem",
+    },
     priceWarningTitle: "Cenovni ekstrem",
     highPriceWarning: "Prikazana cena je višestruko viša od drugih ponuda u istoj valuti. Proverite da li je cena po komadu, za kompletan industrijski sistem ili za drugu količinsku jedinicu.",
     lowPriceWarning: "Prikazana cena je neuobičajeno niska u odnosu na druge ponude u istoj valuti. Proverite da li je cena početna, za deo seta ili za drugu količinsku jedinicu.",
@@ -44,7 +64,21 @@ const copy = {
       NOT_EVALUATED: "nicht bewertet",
     },
     confirmed: "bestätigt",
+    likely: "wahrscheinlich relevant",
     unconfirmed: "nicht bestätigt",
+    productFormTitle: "Art des Angebots",
+    productForm: {
+      COMPLETE_SYSTEM: "komplettes System / Kit",
+      PUMP_ONLY: "nur Pumpe",
+      NOZZLES_ONLY: "nur Düsen",
+      COMPONENT: "Komponente oder Ersatzteil",
+      UNCLEAR: "unklar, ob es ein komplettes System ist",
+    },
+    productFormMatch: {
+      MATCH: "entspricht der gesuchten Produktart",
+      UNCLEAR: "Inhalt des Kits muss bestätigt werden",
+      MISMATCH: "nicht dieselbe Produkteinheit wie das gesuchte System",
+    },
     priceWarningTitle: "Preislicher Ausreißer",
     highPriceWarning: "Der angezeigte Preis ist um ein Vielfaches höher als vergleichbare Angebote in derselben Währung. Prüfen Sie, ob er pro Stück, für ein komplettes Industriesystem oder für eine andere Mengeneinheit gilt.",
     lowPriceWarning: "Der angezeigte Preis ist im Vergleich zu anderen Angeboten in derselben Währung ungewöhnlich niedrig. Prüfen Sie, ob es sich um einen Einstiegspreis, nur einen Teil des Sets oder eine andere Mengeneinheit handelt.",
@@ -66,7 +100,21 @@ const copy = {
       NOT_EVALUATED: "not evaluated",
     },
     confirmed: "confirmed",
+    likely: "probably relevant",
     unconfirmed: "not confirmed",
+    productFormTitle: "Offer type",
+    productForm: {
+      COMPLETE_SYSTEM: "complete system / kit",
+      PUMP_ONLY: "pump only",
+      NOZZLES_ONLY: "nozzles only",
+      COMPONENT: "component or spare part",
+      UNCLEAR: "unclear whether this is a complete system",
+    },
+    productFormMatch: {
+      MATCH: "matches the requested product unit",
+      UNCLEAR: "kit contents require confirmation",
+      MISMATCH: "not the same product unit as the requested system",
+    },
     priceWarningTitle: "Price outlier",
     highPriceWarning: "The displayed price is several times higher than comparable offers in the same currency. Verify whether it is per unit, for a complete industrial system, or for a different quantity basis.",
     lowPriceWarning: "The displayed price is unusually low compared with other offers in the same currency. Verify whether it is a starting price, only part of the kit, or based on a different quantity unit.",
@@ -88,6 +136,19 @@ function requirementLabel(
     return localeCopy.requirement.NOZZLE_COUNT(check.expectedNumber ?? 0);
   }
   return localeCopy.requirement[check.key];
+}
+
+function evidenceDisplay(
+  localeCopy: (typeof copy)[keyof typeof copy],
+  check: TajaRequirementCheck,
+) {
+  if (check.evidenceStatus === TajaRequirementEvidenceStatuses.CONFIRMED) {
+    return { className: "requirement-confirmed", symbol: "✓", text: localeCopy.confirmed };
+  }
+  if (check.evidenceStatus === TajaRequirementEvidenceStatuses.LIKELY) {
+    return { className: "requirement-likely", symbol: "~", text: localeCopy.likely };
+  }
+  return { className: "requirement-unconfirmed", symbol: "○", text: localeCopy.unconfirmed };
 }
 
 export function TajaSearchLoadingNotice() {
@@ -115,17 +176,39 @@ export function TajaRequirementMatchPanel({
         {localeCopy.status[match.status]}
       </p>
       <ul>
-        {match.checks.map((check) => (
-          <li
-            className={check.confirmed ? "requirement-confirmed" : "requirement-unconfirmed"}
-            key={`${check.key}-${check.expectedNumber ?? "feature"}`}
-          >
-            <span aria-hidden="true">{check.confirmed ? "✓" : "○"}</span>
-            <span>{requirementLabel(localeCopy, check)}</span>
-            <small>{check.confirmed ? localeCopy.confirmed : localeCopy.unconfirmed}</small>
-          </li>
-        ))}
+        {match.checks.map((check) => {
+          const display = evidenceDisplay(localeCopy, check);
+          return (
+            <li
+              className={display.className}
+              key={`${check.key}-${check.expectedNumber ?? "feature"}`}
+            >
+              <span aria-hidden="true">{display.symbol}</span>
+              <span>{requirementLabel(localeCopy, check)}</span>
+              <small>{display.text}</small>
+            </li>
+          );
+        })}
       </ul>
+    </div>
+  );
+}
+
+export function TajaProductFormPanel({
+  assessment,
+}: {
+  assessment: TajaProductFormAssessment;
+}) {
+  const { locale } = useI18n();
+  if (!assessment.requestedCompleteSystem) return null;
+  const localeCopy = copy[locale];
+  const statusClass = assessment.matchStatus.toLowerCase();
+
+  return (
+    <div className={`taja-product-form taja-product-form-${statusClass}`} role="note">
+      <strong>{localeCopy.productFormTitle}:</strong>{" "}
+      {localeCopy.productForm[assessment.form]} —{" "}
+      {localeCopy.productFormMatch[assessment.matchStatus]}
     </div>
   );
 }
