@@ -45,9 +45,9 @@ function buildAlibabaSearchInput(input: SearchRequest): SearchRequest {
     ? input.queryVariants
     : [input.productQuery];
   const queryVariants = uniqueQueries(
-    sourceQueries.map((query) => `${query} site:alibaba.com/product-detail`),
+    sourceQueries.map((query) => `${query} site:alibaba.com inurl:product-detail`),
   );
-  const fallback = `${input.productQuery} site:alibaba.com/product-detail`;
+  const fallback = `${input.productQuery} site:alibaba.com inurl:product-detail`;
   return {
     ...input,
     productQuery: queryVariants[0] ?? fallback,
@@ -64,9 +64,11 @@ function normalizeAlibabaResult(result: SupplierSearchResult): SupplierSearchRes
 
 /**
  * AI-assisted Alibaba fallback used only after the direct Alibaba adapter
- * returns no usable cards. Search queries are constrained to product-detail
- * pages and every accepted URL must be both cited and pass the strict Alibaba
- * product URL policy enforced by the shared web-search source.
+ * returns no usable cards. Search queries and the model prompt are constrained
+ * to product-detail pages, and every accepted URL must be both cited and pass
+ * the strict Alibaba product URL policy enforced by the shared web-search
+ * source. Unknown commercial fields remain null instead of causing an otherwise
+ * verified product page to be discarded.
  */
 export function createOpenAIAlibabaSearchSource(
   options: OpenAIAlibabaSearchOptions = {},
@@ -74,6 +76,7 @@ export function createOpenAIAlibabaSearchSource(
   const baseSource = createOpenAIWebSearchSource({
     ...options,
     maxResults: options.maxResults ?? 5,
+    searchProfile: "alibaba_only",
     resultUrlPolicy: isAlibabaProductUrl,
   });
 
