@@ -1,5 +1,10 @@
 import type { SupplierOfferSearchResult } from "./search";
 import { isPartialLunaSearchResult } from "./luna-search-plan";
+import {
+  evaluateTajaProductForm,
+  sameTajaPriceComparisonGroup,
+  tajaProductFormRank,
+} from "./taja-product-form";
 import { evaluateTajaRequirementMatch } from "./taja-requirement-match";
 
 type PreliminaryRankingContext = {
@@ -7,13 +12,29 @@ type PreliminaryRankingContext = {
   productQuery?: string;
 };
 
+function comparableResults(
+  result: SupplierOfferSearchResult,
+  results: SupplierOfferSearchResult[],
+  productQuery?: string,
+) {
+  if (!productQuery) return results;
+  const form = evaluateTajaProductForm(productQuery, result);
+  return results.filter((candidate) =>
+    sameTajaPriceComparisonGroup(
+      form,
+      evaluateTajaProductForm(productQuery, candidate),
+    ),
+  );
+}
+
 function priceCompetitiveness(
   result: SupplierOfferSearchResult,
   results: SupplierOfferSearchResult[],
+  productQuery?: string,
 ) {
   if (result.price === null || result.currency === null) return 0;
 
-  const comparablePrices = results
+  const comparablePrices = comparableResults(result, results, productQuery)
     .filter((candidate) =>
       candidate.price !== null && candidate.currency === result.currency,
     )
@@ -31,7 +52,7 @@ function preliminaryScore(
   results: SupplierOfferSearchResult[],
   context: PreliminaryRankingContext,
 ) {
-  let score = priceCompetitiveness(result, results);
+  let score = priceCompetitiveness(result, results, context.productQuery);
 
   if (result.price !== null && result.currency !== null) score += 20;
 
@@ -51,6 +72,10 @@ function preliminaryScore(
       context.productQuery,
       result,
     ).scoreAdjustment;
+    score += evaluateTajaProductForm(
+      context.productQuery,
+      result,
+    ).scoreAdjustment;
   }
 
   return score;
@@ -58,25 +83,34 @@ function preliminaryScore(
 
 /**
  * Produces a transparent first-pass ordering from fields already verified on
- * supplier pages. Product requirements from the user's query may adjust this
- * first pass, but unconfirmed details are never treated as false. A known MOQ
- * conflict is treated as blocking because the displayed price may not apply to
- * the user's requested quantity. This is not the final TAJA ranking: landed
- * cost, supplier-risk verification, compliance and supplier replies belong to
- * the later deep-analysis stage.
+ * supplier pages. When the user requests a complete system, compatible systems
+ * are ordered before unclear offers, while pumps, nozzles and other components
+ * are kept out of the finalist enrichment budget. Prices are compared only
+ * inside compatible product-form groups. A known MOQ conflict remains blocking.
+ * Final landed-cost, supplier-risk and compliance verification happen later.
  */
 export function rankPreliminarySupplierOffers(
   results: SupplierOfferSearchResult[],
   context: PreliminaryRankingContext,
 ) {
   return results
-    .map((result, originalIndex) => ({
-      result,
-      originalIndex,
-      score: preliminaryScore(result, results, context),
-    }))
+    .map((result, originalIndex) => {
+      const productForm = context.productQuery
+        ? evaluateTajaProductForm(context.productQuery, result)
+        : null;
+      return {
+        result,
+        originalIndex,
+        productFormRank: productForm
+          ? tajaProductFormRank(productForm.matchStatus)
+          : 0,
+        score: preliminaryScore(result, results, context),
+      };
+    })
     .sort((left, right) =>
-      right.score - left.score || left.originalIndex - right.originalIndex,
+      left.productFormRank - right.productFormRank ||
+      right.score - left.score ||
+      left.originalIndex - right.originalIndex,
     )
     .map(({ result }) => result);
 }
