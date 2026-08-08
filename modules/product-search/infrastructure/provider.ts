@@ -1,6 +1,9 @@
 import type { AiUsageEvent } from "../../ai-usage/domain/ai-usage";
 import type { SupplierOfferSearchProvider } from "../domain/search";
-import { createHttpSupplierOfferSearchProvider } from "./http-provider";
+import {
+  createHttpSupplierOfferSearchProvider,
+  SUPPLIER_SEARCH_TIMEOUT_MS,
+} from "./http-provider";
 import { unconfiguredSupplierOfferSearchProvider } from "./unconfigured-provider";
 
 type SupplierProviderOptions = {
@@ -17,7 +20,9 @@ export function getSupplierOfferSearchProvider(
     endpoint,
     healthEndpoint: process.env.SUPPLIER_SEARCH_PROVIDER_HEALTH_URL,
     token: process.env.SUPPLIER_SEARCH_PROVIDER_TOKEN,
-    timeoutMs: Number(process.env.SUPPLIER_SEARCH_PROVIDER_TIMEOUT_MS ?? 100_000),
+    timeoutMs: Number(
+      process.env.SUPPLIER_SEARCH_PROVIDER_TIMEOUT_MS ?? SUPPLIER_SEARCH_TIMEOUT_MS,
+    ),
     maxAttempts: Number(process.env.SUPPLIER_SEARCH_PROVIDER_MAX_ATTEMPTS ?? 1),
     allowInsecureLocalhost: process.env.NODE_ENV === "development",
     onAiUsage: options.onAiUsage,

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
+import type { Supplier1688Enricher } from "../src/openai-1688-enrichment.js";
 import { createOpenAI1688SearchSource } from "../src/openai-1688-search-source.js";
 import {
   createAggregatingSupplierSearchSource,
@@ -28,8 +29,19 @@ function result(
     minimumOrderQuantity: 100,
     incoterm: "FOB",
     productUrl,
-    imageUrl: null,
+    imageUrl: "https://example.com/product.jpg",
     source,
+    supplierLogistics: {
+      grossWeightKg: null,
+      netWeightKg: null,
+      cartonLengthCm: null,
+      cartonWidthCm: null,
+      cartonHeightCm: null,
+      piecesPerCarton: null,
+      unitWeightKg: 0.7,
+      unitVolumeCbm: 0.004,
+      evidence: "PRODUCT_PAGE" as const,
+    },
   };
 }
 
@@ -218,7 +230,67 @@ describe("TAJA Deep Search phase 1", () => {
         source: "TAJA 1688",
       }),
     ]);
+    expect(fetcher).toHaveBeenCalledTimes(1);
     expect(requestBody).toContain("site:1688.com");
     expect(requestBody).toContain("中国");
+  });
+
+  it("uses one bounded enrichment outcome without losing discovery order", async () => {
+    const direct1688Url = "https://detail.1688.com/offer/444444.html";
+    const discovered = {
+      ...result("1688 organizer", "1688 Factory", direct1688Url, "model"),
+      supplierCountry: null,
+      price: null,
+      currency: null,
+      minimumOrderQuantity: null,
+      incoterm: null,
+      imageUrl: null,
+      supplierLogistics: undefined,
+    };
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({
+      id: "resp_1688_discovery",
+      status: "completed",
+      output: [{
+        type: "web_search_call",
+        action: { type: "search", sources: [{ type: "url", url: direct1688Url }] },
+      }, {
+        type: "message",
+        content: [{
+          type: "output_text",
+          text: JSON.stringify({ results: [discovered] }),
+          annotations: [{ type: "url_citation", url: direct1688Url }],
+        }],
+      }],
+      usage: { input_tokens: 100, output_tokens: 50, total_tokens: 150 },
+    }), { status: 200, headers: { "content-type": "application/json" } }));
+    const enrich: Supplier1688Enricher["enrich"] = vi.fn(async ({ results }) => ({
+      results: results.map((candidate: ReturnType<typeof result>) => ({
+        ...candidate,
+        price: 18.5,
+        currency: "CNY",
+        minimumOrderQuantity: 20,
+      })),
+      enrichedCount: 1,
+    }));
+    const source = createOpenAI1688SearchSource({
+      apiKey: "sk-test",
+      fetcher: fetcher as typeof fetch,
+      enricher: { implemented: true, enrich },
+    });
+
+    const outcome = await source.search(input, new AbortController().signal);
+    expect(Array.isArray(outcome)).toBe(false);
+    if (Array.isArray(outcome)) throw new Error("Expected structured outcome.");
+
+    expect(enrich).toHaveBeenCalledTimes(1);
+    expect(outcome.results).toEqual([
+      expect.objectContaining({
+        productUrl: direct1688Url,
+        price: 18.5,
+        currency: "CNY",
+        minimumOrderQuantity: 20,
+        source: "TAJA 1688",
+      }),
+    ]);
   });
 });

@@ -6,9 +6,26 @@ import {
 } from "../../intelligence/domain/scoring";
 import { RecommendationStatuses } from "../../intelligence/domain/recommendation";
 import { SupplierRiskLevels } from "../../intelligence/domain/supplier-risk-v2";
+import {
+  getMoqStatus,
+  MoqStatuses,
+  type MoqStatusValue,
+} from "../../offers/domain/moq-status";
 import { rankPreliminarySupplierOffers } from "./preliminary-supplier-ranking";
 import type { SupplierOfferSearchResult } from "./search";
 import type { TajaPreliminaryCostEstimate } from "./taja-preliminary-cost-estimate";
+import {
+  evaluateTajaPriceSignal,
+  TajaPriceSignalStatuses,
+  tajaPriceSignalRank,
+  type TajaPriceSignal,
+} from "./taja-price-signal";
+import {
+  evaluateTajaRequirementMatch,
+  TajaRequirementMatchStatuses,
+  tajaRequirementMatchRank,
+  type TajaRequirementMatch,
+} from "./taja-requirement-match";
 
 export const TajaCandidateAnalysisStatuses = {
   PRELIMINARY: "PRELIMINARY",
@@ -35,7 +52,9 @@ export type TajaMissingDataKey =
   | "SAMPLE_AVAILABILITY"
   | "COMMERCIAL_TERMS"
   | "TRANSPORT_DETAILS"
-  | "CORE_OFFER_DATA";
+  | "CORE_OFFER_DATA"
+  | "PRODUCT_REQUIREMENTS"
+  | "PRICE_BASIS";
 
 export type TajaCandidateEnrichment = {
   supplierVerified?: boolean | null;
@@ -63,6 +82,8 @@ export type TajaCandidateAnalysis = {
   finalEligible: boolean;
   landedCostStatus: TajaLandedCostStatus;
   preliminaryCostEstimate: TajaPreliminaryCostEstimate | null;
+  requirementMatch: TajaRequirementMatch;
+  priceSignal: TajaPriceSignal;
   overallScore: number;
   confidenceScore: number;
   supplierRiskScore: number;
@@ -75,6 +96,7 @@ export type TajaCandidateAnalysis = {
 export type TajaCandidateAnalysisContext = {
   quantity: number;
   targetMarginPercent: number;
+  productQuery?: string;
 };
 
 type CandidateWithEnrichment = {
@@ -90,6 +112,10 @@ type InternalAnalysis = {
   finalEligible: boolean;
   landedCostStatus: TajaLandedCostStatus;
   preliminaryCostEstimate: TajaPreliminaryCostEstimate | null;
+  requirementMatch: TajaRequirementMatch;
+  priceSignal: TajaPriceSignal;
+  moqStatus: MoqStatusValue;
+  overallScore: number;
   missingData: TajaMissingDataKey[];
   preliminaryIndex: number;
 };
@@ -97,6 +123,20 @@ type InternalAnalysis = {
 function samePrice(left: number | null | undefined, right: number | null) {
   return left !== null && left !== undefined && right !== null &&
     Math.abs(left - right) <= 0.0001;
+}
+
+function clampScore(value: number) {
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function moqRank(status: MoqStatusValue) {
+  if (status === MoqStatuses.OK) return 0;
+  if (status === MoqStatuses.UNKNOWN) return 1;
+  return 2;
+}
+
+function moqScoreAdjustment(status: MoqStatusValue) {
+  return status === MoqStatuses.BLOCKING ? -25 : 0;
 }
 
 /**
@@ -186,10 +226,17 @@ function coreOfferDataKnown(result: SupplierOfferSearchResult) {
     result.supplierCountry !== null;
 }
 
+function priceAllowsFinal(priceSignal: TajaPriceSignal) {
+  return priceSignal.status === TajaPriceSignalStatuses.NORMAL ||
+    priceSignal.status === TajaPriceSignalStatuses.UNAVAILABLE;
+}
+
 function missingData(
   candidate: CandidateWithEnrichment,
   assessment: OfferAssessmentResult,
   landedCostStatus: TajaLandedCostStatus,
+  requirementMatch: TajaRequirementMatch,
+  priceSignal: TajaPriceSignal,
 ): TajaMissingDataKey[] {
   const { result, enrichment = {} } = candidate;
   const missing: TajaMissingDataKey[] = [];
@@ -224,16 +271,34 @@ function missingData(
   if (enrichment.shippingClarityScore === null || enrichment.shippingClarityScore === undefined) {
     missing.push("TRANSPORT_DETAILS");
   }
+  if (
+    requirementMatch.status === TajaRequirementMatchStatuses.PARTIAL ||
+    requirementMatch.status === TajaRequirementMatchStatuses.UNCONFIRMED
+  ) {
+    missing.push("PRODUCT_REQUIREMENTS");
+  }
+  if (!priceAllowsFinal(priceSignal)) missing.push("PRICE_BASIS");
 
   return missing;
+}
+
+function requirementsAllowFinal(requirementMatch: TajaRequirementMatch) {
+  return requirementMatch.status === TajaRequirementMatchStatuses.FULL ||
+    requirementMatch.status === TajaRequirementMatchStatuses.NOT_EVALUATED;
 }
 
 function finalEligibility(
   candidate: CandidateWithEnrichment,
   assessment: OfferAssessmentResult,
   landedCostStatus: TajaLandedCostStatus,
+  requirementMatch: TajaRequirementMatch,
+  priceSignal: TajaPriceSignal,
+  moqStatus: MoqStatusValue,
 ) {
   return coreOfferDataKnown(candidate.result) &&
+    moqStatus === MoqStatuses.OK &&
+    requirementsAllowFinal(requirementMatch) &&
+    priceAllowsFinal(priceSignal) &&
     landedCostStatus === TajaLandedCostStatuses.CONFIRMED &&
     candidate.enrichment?.supplierVerified !== null &&
     candidate.enrichment?.supplierVerified !== undefined &&
@@ -245,10 +310,14 @@ function finalEligibility(
     assessment.confidenceScore >= 60;
 }
 
-function preliminaryOrder(candidates: CandidateWithEnrichment[], quantity: number) {
+function preliminaryOrder(
+  candidates: CandidateWithEnrichment[],
+  quantity: number,
+  productQuery?: string,
+) {
   const ordered = rankPreliminarySupplierOffers(
     candidates.map((candidate) => candidate.result),
-    { quantity },
+    { quantity, productQuery },
   );
   return new Map(ordered.map((result, index) => [result.productUrl, index]));
 }
@@ -258,14 +327,32 @@ function compactExplanation(
   status: TajaCandidateAnalysisStatus,
   missing: TajaMissingDataKey[],
   estimate: TajaPreliminaryCostEstimate | null,
+  result: SupplierOfferSearchResult,
+  quantity: number,
+  moqStatus: MoqStatusValue,
 ) {
   if (status === TajaCandidateAnalysisStatuses.FINAL) return assessment.explanation;
+  const moqText =
+    moqStatus === MoqStatuses.BLOCKING && result.minimumOrderQuantity !== null
+      ? `Tražena količina je ${quantity} kom, a dobavljač navodi MOQ ${result.minimumOrderQuantity} kom; ponuda nije odgovarajuća bez potvrđenog izuzetka ili pregovora o MOQ-u. `
+      : "";
   const estimateText = estimate
     ? `Preliminarni ukupni trošak je ${estimate.lowPerUnitEur.toFixed(2)}–${estimate.highPerUnitEur.toFixed(2)} EUR po komadu; osnovni scenario je ${estimate.basePerUnitEur.toFixed(2)} EUR (${estimate.transportMode}, pouzdanost ${estimate.confidence}). `
     : "";
+  const basisText = estimate?.pricingBasisAssumed
+    ? `Za računicu je privremeno korišćen ${estimate.pricingBasisIncoterm} osnov jer ponuda nema izričit Incoterm. `
+    : "";
+  const chinaPlanningText = estimate && (
+    estimate.chinaDomesticTransportEur > 0 || estimate.sourcingAgentFeeEur > 0
+  )
+    ? `U osnovni scenario uračunati su planski troškovi u Kini: domaći prevoz ${estimate.chinaDomesticTransportEur.toFixed(2)} EUR i agent/konsolidacija ${estimate.sourcingAgentFeeEur.toFixed(2)} EUR; to još nisu potvrđene ponude. `
+    : "";
+  const originText = estimate?.warnings.includes("SUPPLIER_ORIGIN_ASSUMED_CHINA")
+    ? "Kinesko poreklo još nije potvrđeno i pretpostavljeno je samo na osnovu marketplace-a. "
+    : "";
   return missing.length > 0
-    ? `${estimateText}Preporuka ostaje preliminarna jer nedostaju potvrđeni podaci: ${missing.join(", ")}.`
-    : `${estimateText}Preporuka je preliminarna dok se ne završi detaljna provera finalista.`;
+    ? `${moqText}${estimateText}${basisText}${chinaPlanningText}${originText}Preporuka ostaje preliminarna dok se ne potvrde nedostajući podaci.`
+    : `${moqText}${estimateText}${basisText}${chinaPlanningText}${originText}Preporuka je preliminarna dok se ne završi detaljna provera finalista.`;
 }
 
 function rankingBucket(item: InternalAnalysis) {
@@ -277,6 +364,7 @@ function rankingBucket(item: InternalAnalysis) {
 }
 
 function reliableEstimatedCost(item: InternalAnalysis) {
+  if (item.moqStatus === MoqStatuses.BLOCKING) return null;
   return item.preliminaryCostEstimate?.confidence === "LOW"
     ? null
     : item.preliminaryCostEstimate?.basePerUnitEur ?? null;
@@ -285,7 +373,8 @@ function reliableEstimatedCost(item: InternalAnalysis) {
 /**
  * Reuses ImportPilot's landed-cost-aware offer scoring and supplier-risk V2.
  * A candidate may be sorted highly while still remaining PRELIMINARY. It is
- * marked FINAL only after confirmed landed cost and sufficient supplier-risk
+ * marked FINAL only after compatible MOQ, confirmed landed cost, confirmed
+ * product requirements, verified price basis and sufficient supplier-risk
  * evidence are available. Automatic cost ranges remain ESTIMATED and never
  * unlock a final recommendation.
  */
@@ -297,7 +386,12 @@ export function analyzeAndRankTajaCandidates(
     ...candidate,
     enrichment: useMatchingTajaLandedCost(candidate.enrichment, candidate.result),
   }));
-  const preliminaryIndexes = preliminaryOrder(normalizedCandidates, context.quantity);
+  const allResults = normalizedCandidates.map((candidate) => candidate.result);
+  const preliminaryIndexes = preliminaryOrder(
+    normalizedCandidates,
+    context.quantity,
+    context.productQuery,
+  );
   const analyzed: InternalAnalysis[] = normalizedCandidates.map((candidate) => {
     const persistedLandedCostStatus = candidate.enrichment?.landedCostStatus ??
       TajaLandedCostStatuses.UNAVAILABLE;
@@ -306,11 +400,33 @@ export function analyzeAndRankTajaCandidates(
       persistedLandedCostStatus === TajaLandedCostStatuses.UNAVAILABLE && preliminaryCostEstimate
         ? TajaLandedCostStatuses.ESTIMATED
         : persistedLandedCostStatus;
+    const requirementMatch = evaluateTajaRequirementMatch(
+      context.productQuery ?? "",
+      candidate.result,
+    );
+    const priceSignal = evaluateTajaPriceSignal(candidate.result, allResults);
+    const moqStatus = getMoqStatus({
+      projectQuantity: context.quantity,
+      moq: candidate.result.minimumOrderQuantity,
+    }).status;
     const assessment = assessOffer(
       assessmentInput(candidate, context),
       comparisonForCandidate(candidate.result, normalizedCandidates),
     );
-    const finalEligible = finalEligibility(candidate, assessment, landedCostStatus);
+    const overallScore = clampScore(
+      assessment.overallScore +
+      requirementMatch.scoreAdjustment +
+      priceSignal.scoreAdjustment +
+      moqScoreAdjustment(moqStatus),
+    );
+    const finalEligible = finalEligibility(
+      candidate,
+      assessment,
+      landedCostStatus,
+      requirementMatch,
+      priceSignal,
+      moqStatus,
+    );
     return {
       result: candidate.result,
       assessment,
@@ -320,7 +436,17 @@ export function analyzeAndRankTajaCandidates(
         : TajaCandidateAnalysisStatuses.PRELIMINARY,
       landedCostStatus,
       preliminaryCostEstimate,
-      missingData: missingData(candidate, assessment, landedCostStatus),
+      requirementMatch,
+      priceSignal,
+      moqStatus,
+      overallScore,
+      missingData: missingData(
+        candidate,
+        assessment,
+        landedCostStatus,
+        requirementMatch,
+        priceSignal,
+      ),
       preliminaryIndex: preliminaryIndexes.get(candidate.result.productUrl) ?? Number.MAX_SAFE_INTEGER,
     };
   });
@@ -329,12 +455,27 @@ export function analyzeAndRankTajaCandidates(
     const bucketDifference = rankingBucket(left) - rankingBucket(right);
     if (bucketDifference !== 0) return bucketDifference;
     if (left.finalEligible && right.finalEligible) {
-      return right.assessment.overallScore - left.assessment.overallScore ||
+      return right.overallScore - left.overallScore ||
         right.assessment.confidenceScore - left.assessment.confidenceScore ||
         left.assessment.supplierRiskScore - right.assessment.supplierRiskScore ||
         left.preliminaryIndex - right.preliminaryIndex;
     }
     if (!left.finalEligible && !right.finalEligible) {
+      const moqDifference = moqRank(left.moqStatus) - moqRank(right.moqStatus);
+      if (moqDifference !== 0) return moqDifference;
+      const requirementRankDifference =
+        tajaRequirementMatchRank(left.requirementMatch.status) -
+        tajaRequirementMatchRank(right.requirementMatch.status);
+      if (requirementRankDifference !== 0) return requirementRankDifference;
+      const priceSignalDifference =
+        tajaPriceSignalRank(left.priceSignal.status) -
+        tajaPriceSignalRank(right.priceSignal.status);
+      if (priceSignalDifference !== 0) return priceSignalDifference;
+      if (
+        left.requirementMatch.scoreAdjustment !== right.requirementMatch.scoreAdjustment
+      ) {
+        return right.requirementMatch.scoreAdjustment - left.requirementMatch.scoreAdjustment;
+      }
       const leftEstimate = reliableEstimatedCost(left);
       const rightEstimate = reliableEstimatedCost(right);
       if (leftEstimate !== null && rightEstimate !== null && leftEstimate !== rightEstimate) {
@@ -355,7 +496,9 @@ export function analyzeAndRankTajaCandidates(
       finalEligible: item.finalEligible,
       landedCostStatus: item.landedCostStatus,
       preliminaryCostEstimate: item.preliminaryCostEstimate,
-      overallScore: item.assessment.overallScore,
+      requirementMatch: item.requirementMatch,
+      priceSignal: item.priceSignal,
+      overallScore: item.overallScore,
       confidenceScore: item.assessment.confidenceScore,
       supplierRiskScore: item.assessment.supplierRiskScore,
       supplierRiskLevel: item.assessment.scoreBreakdown.supplierRiskV2.riskLevel,
@@ -366,6 +509,9 @@ export function analyzeAndRankTajaCandidates(
         item.status,
         item.missingData,
         item.preliminaryCostEstimate,
+        item.result,
+        context.quantity,
+        item.moqStatus,
       ),
     })),
   };

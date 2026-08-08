@@ -14,4 +14,13 @@ describe("supplier search query variants", () => {
   it("keeps an English query as a single variant", () => {
     expect(createSupplierSearchQueryVariants("USB C charger")).toEqual(["USB C charger"]);
   });
+
+  it("preserves terrace intent instead of collapsing it into the patio query", () => {
+    expect(createSupplierSearchQueryVariants(
+      "terrace misting system 20 nozzles pump kit",
+    )).toEqual([
+      "terrace misting system with pump 20 nozzles",
+      "terrace misting system 20 nozzles pump kit",
+    ]);
+  });
 });

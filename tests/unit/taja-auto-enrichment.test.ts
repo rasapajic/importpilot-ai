@@ -35,7 +35,7 @@ function previewProvider(
 }
 
 describe("TAJA finalist auto-enrichment", () => {
-  it("fills only missing fields from supported direct supplier pages", async () => {
+  it("fills missing fields from supported direct supplier pages", async () => {
     const productUrl = "https://www.alibaba.com/product-detail/fan_123456.html";
     const provider = previewProvider(vi.fn(async () => ({
       title: "Parsed fan",
@@ -67,6 +67,7 @@ describe("TAJA finalist auto-enrichment", () => {
     expect(outcome.summary).toMatchObject({
       attemptedCandidates: 1,
       enrichedCandidates: 1,
+      correctedCandidates: 0,
       failedCandidates: 0,
     });
     expect(outcome.summary.reports[0]).toMatchObject({
@@ -78,6 +79,7 @@ describe("TAJA finalist auto-enrichment", () => {
         "incoterm",
         "imageUrl",
       ]),
+      fieldsCorrected: [],
     });
   });
 
@@ -111,7 +113,7 @@ describe("TAJA finalist auto-enrichment", () => {
     expect(JSON.stringify(outcome.summary)).not.toContain("upstream secret details");
   });
 
-  it("preserves already known commercial fields", async () => {
+  it("keeps partial previews fill-only and preserves known commercial fields", async () => {
     const productUrl = "https://www.alibaba.com/product-detail/fan_123456.html";
     const provider = previewProvider(async () => ({
       title: "Parsed fan",
@@ -144,15 +146,106 @@ describe("TAJA finalist auto-enrichment", () => {
       minimumOrderQuantity: 250,
       incoterm: "FOB",
     });
-    expect(outcome.summary.reports[0]?.status)
-      .toBe(TajaAutoEnrichmentStatuses.UNCHANGED);
+    expect(outcome.summary.reports[0]).toMatchObject({
+      status: TajaAutoEnrichmentStatuses.UNCHANGED,
+      fieldsCorrected: [],
+    });
   });
 
-  it("does not fetch a candidate whose enrichable fields are already complete", async () => {
-    const productUrl = "https://www.alibaba.com/product-detail/fan_123456.html";
-    const preview = vi.fn(async () => {
-      throw new Error("must not be called");
+  it("corrects stale cached discovery fields from the exact product page", async () => {
+    const productUrl = "https://njsskj.en.made-in-china.com/product/xrcRCpXJqhVn/China-10m-Misting-Cooling-System-with-Pump-Mist-Nozzles-for-Cooling-Humidification-Dusting.html";
+    const provider = previewProvider(async () => ({
+      title: "China 10m Misting Cooling System With Pump Mist Nozzles for Cooling Humidification Dusting",
+      supplierName: null,
+      supplierCountry: null,
+      price: 10.16,
+      currency: "USD",
+      minimumOrderQuantity: 1,
+      incoterm: null,
+      productUrl,
+      imageUrl: "https://image.made-in-china.com/2f0j00LsevMDzICPor/misting.jpg",
+      source: "made-in-china.com",
+      isPartial: false,
+      titleFromSlug: false,
+    }));
+
+    const outcome = await autoEnrichTajaCandidates([
+      result(productUrl, {
+        supplierCountry: "CN",
+        price: 10.159,
+        currency: "USD",
+        minimumOrderQuantity: 1_000,
+        incoterm: "FOB",
+        imageUrl: "https://example.com/stale.jpg",
+      }),
+    ], provider);
+
+    expect(outcome.results[0]).toMatchObject({
+      price: 10.16,
+      currency: "USD",
+      minimumOrderQuantity: 1,
+      incoterm: "FOB",
+      imageUrl: "https://image.made-in-china.com/2f0j00LsevMDzICPor/misting.jpg",
     });
+    expect(outcome.summary).toMatchObject({
+      attemptedCandidates: 1,
+      enrichedCandidates: 1,
+      correctedCandidates: 1,
+    });
+    expect(outcome.summary.reports[0]).toMatchObject({
+      fieldsFilled: [],
+      fieldsCorrected: expect.arrayContaining([
+        "price",
+        "minimumOrderQuantity",
+        "imageUrl",
+      ]),
+    });
+  });
+
+  it("rejects both fills and corrections from a different product URL", async () => {
+    const productUrl = "https://www.alibaba.com/product-detail/fan_123456.html";
+    const provider = previewProvider(async () => ({
+      title: "Other product",
+      supplierName: "Other Supplier",
+      supplierCountry: "CN",
+      price: 1,
+      currency: "USD",
+      minimumOrderQuantity: 1,
+      incoterm: "EXW",
+      productUrl: "https://www.alibaba.com/product-detail/other_999999.html",
+      imageUrl: "https://example.com/other.jpg",
+      source: "alibaba.com",
+      isPartial: false,
+      titleFromSlug: false,
+    }));
+
+    const original = result(productUrl);
+    const outcome = await autoEnrichTajaCandidates([original], provider);
+
+    expect(outcome.results[0]).toEqual(original);
+    expect(outcome.summary.reports[0]).toMatchObject({
+      status: TajaAutoEnrichmentStatuses.UNCHANGED,
+      fieldsFilled: [],
+      fieldsCorrected: [],
+    });
+  });
+
+  it("verifies a complete supported candidate instead of trusting stale discovery data", async () => {
+    const productUrl = "https://www.alibaba.com/product-detail/fan_123456.html";
+    const preview = vi.fn(async () => ({
+      title: "Industrial fan",
+      supplierName: "Search Supplier",
+      supplierCountry: "CN",
+      price: 20,
+      currency: "EUR",
+      minimumOrderQuantity: 250,
+      incoterm: "FOB",
+      productUrl,
+      imageUrl: "https://example.com/fan.jpg",
+      source: "alibaba.com",
+      isPartial: false,
+      titleFromSlug: false,
+    }));
     const provider = previewProvider(preview);
 
     const outcome = await autoEnrichTajaCandidates([
@@ -166,10 +259,11 @@ describe("TAJA finalist auto-enrichment", () => {
       }),
     ], provider);
 
-    expect(preview).not.toHaveBeenCalled();
+    expect(preview).toHaveBeenCalledTimes(1);
     expect(outcome.summary).toMatchObject({
-      attemptedCandidates: 0,
+      attemptedCandidates: 1,
       unchangedCandidates: 1,
+      correctedCandidates: 0,
     });
     expect(outcome.summary.reports[0]?.status)
       .toBe(TajaAutoEnrichmentStatuses.UNCHANGED);

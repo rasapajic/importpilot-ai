@@ -49,6 +49,45 @@ describe("supplier offer search provider contract", () => {
     expect(result.minimumOrderQuantity).toBeNull();
     expect(result.incoterm).toBeNull();
     expect(result.imageUrl).toBeNull();
+    expect(result.supplierLogistics).toBeUndefined();
+  });
+
+  it("accepts normalized 1688 logistics with explicit evidence", () => {
+    const result = supplierOfferSearchResultSchema.parse({
+      title: "Foldable organizer",
+      supplierName: "1688 Factory",
+      supplierCountry: "CN",
+      price: 18.5,
+      currency: "CNY",
+      minimumOrderQuantity: 20,
+      incoterm: null,
+      productUrl: "https://detail.1688.com/offer/123456789.html",
+      imageUrl: null,
+      source: "TAJA 1688",
+      supplierLogistics: {
+        grossWeightKg: null,
+        netWeightKg: null,
+        cartonLengthCm: null,
+        cartonWidthCm: null,
+        cartonHeightCm: null,
+        piecesPerCarton: null,
+        unitWeightKg: "0.7",
+        unitVolumeCbm: "0.004",
+        evidence: "SEARCH_SNIPPET",
+      },
+    });
+
+    expect(result.supplierLogistics).toEqual({
+      grossWeightKg: null,
+      netWeightKg: null,
+      cartonLengthCm: null,
+      cartonWidthCm: null,
+      cartonHeightCm: null,
+      piecesPerCarton: null,
+      unitWeightKg: 0.7,
+      unitVolumeCbm: 0.004,
+      evidence: "SEARCH_SNIPPET",
+    });
   });
 
   it("rejects incomplete prices, invalid URLs and raw fields", () => {
@@ -65,6 +104,17 @@ describe("supplier offer search provider contract", () => {
       productUrl: "not-a-url",
       source: "provider-example",
       rawHtml: "<html />",
+    }).success).toBe(false);
+    expect(supplierOfferSearchResultSchema.safeParse({
+      title: "Industrial fan",
+      supplierName: "Example Supplier",
+      productUrl: "https://provider.example/product",
+      source: "provider-example",
+      supplierLogistics: {
+        unitWeightKg: -1,
+        unitVolumeCbm: 0.004,
+        evidence: "PRODUCT_PAGE",
+      },
     }).success).toBe(false);
   });
 

@@ -21,13 +21,43 @@ const nullableNumber = (schema: z.ZodNumber) =>
     schema.nullable(),
   );
 
+const queryVariantsSchema = z.array(
+  z.string().trim().min(2).max(300),
+).max(5).optional();
+
 const nonnegativeInteger = z.number().int().nonnegative();
 const nonnegativeFinite = z.number().nonnegative().finite();
+const positiveLogisticsNumber = z.number().positive().finite().max(1_000_000);
+
+function uniqueQueries(values: string[]) {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))].slice(0, 5);
+}
+
+export const supplierLogisticsEvidenceSchema = z.enum([
+  "PRODUCT_PAGE",
+  "SEARCH_SNIPPET",
+]);
+
+export const supplierLogisticsSchema = z
+  .object({
+    grossWeightKg: nullableNumber(positiveLogisticsNumber),
+    netWeightKg: nullableNumber(positiveLogisticsNumber),
+    cartonLengthCm: nullableNumber(positiveLogisticsNumber),
+    cartonWidthCm: nullableNumber(positiveLogisticsNumber),
+    cartonHeightCm: nullableNumber(positiveLogisticsNumber),
+    piecesPerCarton: nullableNumber(z.number().int().positive().max(2_147_483_647)),
+    unitWeightKg: nullableNumber(positiveLogisticsNumber),
+    unitVolumeCbm: nullableNumber(positiveLogisticsNumber),
+    evidence: supplierLogisticsEvidenceSchema,
+  })
+  .strict();
 
 export const searchRequestSchema = z
   .object({
-    productQuery: z.string().trim().min(2).max(200).optional(),
-    query: z.string().trim().min(2).max(200).optional(),
+    productQuery: z.string().trim().min(2).max(300).optional(),
+    query: z.string().trim().min(2).max(300).optional(),
+    queryVariants: queryVariantsSchema,
+    chinese1688QueryVariants: queryVariantsSchema,
     quantity: z.number().int().positive().max(2_147_483_647),
     targetCountry: z.string().trim().toUpperCase().regex(/^[A-Z]{2}$/),
     language: z.enum(["en", "de", "sr"]).default("en"),
@@ -42,12 +72,17 @@ export const searchRequestSchema = z
       });
     }
   })
-  .transform((input) => ({
-    productQuery: input.productQuery ?? input.query ?? "",
-    quantity: input.quantity,
-    targetCountry: input.targetCountry,
-    language: input.language,
-  }));
+  .transform((input) => {
+    const productQuery = input.productQuery ?? input.query ?? "";
+    return {
+      productQuery,
+      queryVariants: uniqueQueries([productQuery, ...(input.queryVariants ?? [])]),
+      chinese1688QueryVariants: uniqueQueries(input.chinese1688QueryVariants ?? []),
+      quantity: input.quantity,
+      targetCountry: input.targetCountry,
+      language: input.language,
+    };
+  });
 
 export const supplierSearchResultSchema = z
   .object({
@@ -70,6 +105,7 @@ export const supplierSearchResultSchema = z
       "imageUrl must be a valid URL.",
     ),
     source: z.string().trim().min(1).max(100),
+    supplierLogistics: supplierLogisticsSchema.nullable().optional(),
   })
   .strict()
   .superRefine((result, context) => {
@@ -83,6 +119,41 @@ export const supplierSearchResultSchema = z
   });
 
 export const supplierSearchResultsSchema = z.array(supplierSearchResultSchema).max(100);
+
+export const supplierSearchEnrichmentRecordSchema = z
+  .object({
+    productUrl: z.url().max(2_000),
+    supplierCountry: nullableCode(2).refine(
+      (value) => value === null || /^[A-Z]{2}$/.test(value),
+      "supplierCountry must be a two-letter code.",
+    ),
+    price: nullableNumber(z.number().positive().finite()),
+    currency: nullableCode(3).refine(
+      (value) => value === null || /^[A-Z]{3}$/.test(value),
+      "currency must be a three-letter code.",
+    ),
+    minimumOrderQuantity: nullableNumber(z.number().int().positive()),
+    incoterm: nullableCode(20),
+    imageUrl: nullableText(2_000).refine(
+      (value) => value === null || z.url().safeParse(value).success,
+      "imageUrl must be a valid URL.",
+    ),
+    supplierLogistics: supplierLogisticsSchema.nullable(),
+  })
+  .strict()
+  .superRefine((result, context) => {
+    if ((result.price === null) !== (result.currency === null)) {
+      context.addIssue({
+        code: "custom",
+        path: ["currency"],
+        message: "price and currency must be provided together.",
+      });
+    }
+  });
+
+export const supplierSearchEnrichmentRecordsSchema = z
+  .array(supplierSearchEnrichmentRecordSchema)
+  .max(10);
 
 export const searchSummarySchema = z
   .object({
@@ -104,7 +175,7 @@ export const searchSummarySchema = z
 export const aiUsageReportSchema = z
   .object({
     provider: z.literal("openai"),
-    operation: z.literal("supplier_search"),
+    operation: z.enum(["supplier_search", "supplier_enrichment"]),
     model: z.string().trim().min(1).max(120),
     responseId: z.string().trim().min(1).max(200),
     status: z.literal("completed"),
@@ -132,8 +203,19 @@ export const aiUsageReportSchema = z
 
 export const aiUsageReportsSchema = z.array(aiUsageReportSchema).max(20);
 
-export type SearchRequest = z.infer<typeof searchRequestSchema>;
+type ParsedSearchRequest = z.infer<typeof searchRequestSchema>;
+export type SearchRequest = Omit<
+  ParsedSearchRequest,
+  "queryVariants" | "chinese1688QueryVariants"
+> & {
+  queryVariants?: string[];
+  chinese1688QueryVariants?: string[];
+};
+export type SupplierLogistics = z.infer<typeof supplierLogisticsSchema>;
 export type SupplierSearchResult = z.infer<typeof supplierSearchResultSchema>;
+export type SupplierSearchEnrichmentRecord = z.infer<
+  typeof supplierSearchEnrichmentRecordSchema
+>;
 export type SearchSummary = z.infer<typeof searchSummarySchema>;
 export type AiUsageReport = z.infer<typeof aiUsageReportSchema>;
 
