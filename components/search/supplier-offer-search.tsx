@@ -38,6 +38,15 @@ type SearchOverrides = {
   strictPriceLimit?: boolean;
 };
 
+export type SupplierSearchInitialOutcome = {
+  results: SupplierOfferSearchResult[];
+  candidateAnalyses: TajaCandidateAnalysis[];
+  resultOrigin: ResultOrigin;
+  lunaPlan: LunaSearchPlan;
+  fetchedAt: string;
+  unfilteredResultCount: number;
+};
+
 const INITIAL_OTHER_RESULTS = 7;
 
 const comparisonCopy = {
@@ -202,6 +211,18 @@ function optionalNumber(value: string) {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+function consumeAutomaticSearchFlag() {
+  if (typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  if (url.searchParams.get("autoSearch") !== "1") return;
+  url.searchParams.delete("autoSearch");
+  window.history.replaceState(
+    window.history.state,
+    "",
+    `${url.pathname}${url.search}${url.hash}`,
+  );
+}
+
 export function SupplierOfferSearch({
   projectId,
   productName,
@@ -209,6 +230,8 @@ export function SupplierOfferSearch({
   targetCountry,
   openUrlImport = false,
   canDeleteSearch = false,
+  autoStart = false,
+  initialOutcome = null,
 }: {
   projectId: string;
   productName: string;
@@ -216,6 +239,8 @@ export function SupplierOfferSearch({
   targetCountry: string | null;
   openUrlImport?: boolean;
   canDeleteSearch?: boolean;
+  autoStart?: boolean;
+  initialOutcome?: SupplierSearchInitialOutcome | null;
 }) {
   const { t, locale } = useI18n();
   const lunaCopy = getLunaSearchCopy(locale);
@@ -237,8 +262,12 @@ export function SupplierOfferSearch({
   const [targetMarginPercent, setTargetMarginPercent] = useState("");
   const [avoidComplexCompliance, setAvoidComplexCompliance] = useState(true);
   const [privateLabel, setPrivateLabel] = useState(false);
-  const [results, setResults] = useState<SupplierOfferSearchResult[] | null>(null);
-  const [candidateAnalyses, setCandidateAnalyses] = useState<TajaCandidateAnalysis[]>([]);
+  const [results, setResults] = useState<SupplierOfferSearchResult[] | null>(
+    initialOutcome?.results ?? null,
+  );
+  const [candidateAnalyses, setCandidateAnalyses] = useState<TajaCandidateAnalysis[]>(
+    initialOutcome?.candidateAnalyses ?? [],
+  );
   const [showAllResults, setShowAllResults] = useState(false);
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState<number | null>(null);
@@ -248,10 +277,18 @@ export function SupplierOfferSearch({
   const [reviewingUrl, setReviewingUrl] = useState(false);
   const [urlImportOpen, setUrlImportOpen] = useState(openUrlImport);
   const [providerStatus, setProviderStatus] = useState<ProviderStatus | null>(null);
-  const [resultOrigin, setResultOrigin] = useState<ResultOrigin | null>(null);
-  const [lunaPlan, setLunaPlan] = useState<LunaSearchPlan | null>(null);
-  const [fetchedAt, setFetchedAt] = useState<string | null>(null);
-  const [unfilteredResultCount, setUnfilteredResultCount] = useState<number | null>(null);
+  const [resultOrigin, setResultOrigin] = useState<ResultOrigin | null>(
+    initialOutcome?.resultOrigin ?? null,
+  );
+  const [lunaPlan, setLunaPlan] = useState<LunaSearchPlan | null>(
+    initialOutcome?.lunaPlan ?? null,
+  );
+  const [fetchedAt, setFetchedAt] = useState<string | null>(
+    initialOutcome?.fetchedAt ?? null,
+  );
+  const [unfilteredResultCount, setUnfilteredResultCount] = useState<number | null>(
+    initialOutcome?.unfilteredResultCount ?? null,
+  );
   const automaticSearchStarted = useRef(false);
   const criteriaDetailsRef = useRef<HTMLDetailsElement>(null);
 
@@ -345,14 +382,16 @@ export function SupplierOfferSearch({
 
   useEffect(() => {
     if (
+      !autoStart ||
       automaticSearchStarted.current ||
       query.trim().length < 2 ||
       !searchQuantity ||
       searchCountry.length !== 2
     ) return;
     automaticSearchStarted.current = true;
+    consumeAutomaticSearchFlag();
     void runSearch();
-  }, [query, runSearch, searchCountry, searchQuantity]);
+  }, [autoStart, query, runSearch, searchCountry, searchQuantity]);
 
   useEffect(() => {
     function handleRecoverySearch(event: Event) {
@@ -675,10 +714,17 @@ export function SupplierOfferSearch({
           />
         </label>
         <button className="primary-button" disabled={loading} type="submit">
-          {loading ? lunaCopy.searching : lunaCopy.startSearch}
+          {loading
+            ? lunaCopy.searching
+            : results !== null
+              ? lunaCopy.repeatSearch
+              : lunaCopy.startSearch}
         </button>
       </form>
       {loading && <TajaSearchLoadingNotice />}
+      {resultOrigin === "cache" && results && results.length > 0 && !loading && (
+        <p className="muted-text" role="status">{lunaCopy.cachedResultsNotice}</p>
+      )}
       {error && <p className="form-error" role="alert">{t(error)}</p>}
       {lunaPlan && (
         <div className="empty-state">
@@ -708,7 +754,7 @@ export function SupplierOfferSearch({
           ))}
         </div>
       )}
-      {results === null && !loading && <p className="muted-text">{t("Unesite proizvod da biste pronašli ponude.")}</p>}
+      {results === null && !loading && <p className="muted-text">{lunaCopy.idlePrompt}</p>}
       {results?.length === 0 && (
         <div className="empty-state">
           <h3>
