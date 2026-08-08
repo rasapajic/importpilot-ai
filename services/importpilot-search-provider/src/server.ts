@@ -6,12 +6,16 @@ import { createAlibabaSupplierSearchSource } from "./alibaba-source.js";
 import { createDevelopmentLogger } from "./development-log.js";
 import { createMadeInChinaSupplierSearchSource } from "./made-in-china-provider.js";
 import { createOpenAI1688SearchSource } from "./openai-1688-search-source.js";
+import { createOpenAIAlibabaSearchSource } from "./openai-alibaba-search-source.js";
 import {
   openAIReasoningEffort,
   openAISearchContextSize,
 } from "./openai-search-config.js";
 import { createOpenAIWebSearchSource } from "./openai-web-search-source.js";
-import { createAggregatingSupplierSearchSource } from "./provider.js";
+import {
+  createAggregatingSupplierSearchSource,
+  createFallbackSupplierSearchSource,
+} from "./provider.js";
 import { createQueryVariantExpandingSource } from "./query-variant-source.js";
 
 function nonnegativeNumber(value: string | undefined, fallback: number) {
@@ -50,7 +54,7 @@ const openAiSourceOptions = {
   pricing: openAiPricing,
   logger,
 };
-const alibabaSource = createAlibabaSupplierSearchSource({
+const alibabaDirectAdapter = createAlibabaSupplierSearchSource({
   userAgent: process.env.ALIBABA_USER_AGENT,
   requestTimeoutMs: Number(process.env.ALIBABA_TIMEOUT_MS ?? 4_000),
   logger,
@@ -61,6 +65,17 @@ const madeInChinaSource = createMadeInChinaSupplierSearchSource({
   requestTimeoutMs: Number(process.env.MADE_IN_CHINA_TIMEOUT_MS ?? 5_000),
   logger,
 });
+const alibabaSource = createFallbackSupplierSearchSource([
+  createQueryVariantExpandingSource(alibabaDirectAdapter, {
+    maxVariants: Number(process.env.ALIBABA_QUERY_VARIANT_LIMIT ?? 5),
+    maxResults: Number(process.env.TAJA_DEEP_SEARCH_MAX_PER_SOURCE ?? 15),
+    logger,
+  }),
+  createOpenAIAlibabaSearchSource({
+    ...openAiSourceOptions,
+    maxResults: Number(process.env.OPENAI_ALIBABA_MAX_RESULTS ?? 5),
+  }),
+], logger);
 const source = createAggregatingSupplierSearchSource([
   createOpenAIWebSearchSource({
     ...openAiSourceOptions,
@@ -72,11 +87,7 @@ const source = createAggregatingSupplierSearchSource([
     enrichmentMaxResults: Number(process.env.OPENAI_1688_ENRICH_MAX_RESULTS ?? 5),
     enrichmentTimeoutMs: Number(process.env.OPENAI_1688_ENRICH_TIMEOUT_MS ?? 30_000),
   }),
-  createQueryVariantExpandingSource(alibabaSource, {
-    maxVariants: Number(process.env.ALIBABA_QUERY_VARIANT_LIMIT ?? 5),
-    maxResults: Number(process.env.TAJA_DEEP_SEARCH_MAX_PER_SOURCE ?? 15),
-    logger,
-  }),
+  alibabaSource,
   createQueryVariantExpandingSource(madeInChinaSource, {
     maxVariants: Number(process.env.MADE_IN_CHINA_QUERY_VARIANT_LIMIT ?? 5),
     maxResults: Number(process.env.TAJA_DEEP_SEARCH_MAX_PER_SOURCE ?? 15),

@@ -106,16 +106,22 @@ function build1688SearchInput(input: SearchRequest): SearchRequest {
   const baseQueries = suppliedChineseQueries.length > 0
     ? suppliedChineseQueries
     : sourceQueries.map((query) => `${query} 1688 中国 批发 厂家 工厂 货源`);
-  const queryVariants = uniqueQueries(
-    baseQueries.map((query) => `${query} site:1688.com`),
+  const detailQueries = baseQueries.map(
+    (query) => `${query} site:detail.1688.com inurl:offer`,
   );
+  const mobileFallback = baseQueries[0]
+    ? `${baseQueries[0]} site:m.1688.com inurl:offer`
+    : null;
+  const queryVariants = uniqueQueries([
+    ...detailQueries,
+    ...(mobileFallback ? [mobileFallback] : []),
+  ]);
+  const fallback = `${input.productQuery} site:detail.1688.com inurl:offer`;
 
   return {
     ...input,
-    productQuery: queryVariants[0] ?? `${input.productQuery} site:1688.com`,
-    queryVariants: queryVariants.length > 0
-      ? queryVariants
-      : [`${input.productQuery} site:1688.com`],
+    productQuery: queryVariants[0] ?? fallback,
+    queryVariants: queryVariants.length > 0 ? queryVariants : [fallback],
   };
 }
 
@@ -123,11 +129,11 @@ function build1688SearchInput(input: SearchRequest): SearchRequest {
  * Dedicated 1688 discovery and enrichment pass for TAJA Deep Search.
  *
  * Discovery uses a strict 1688-only live-search profile with requirement-driven
- * Chinese query variants. Non-1688 domains and non-offer 1688 URLs are rejected
- * before they enter this source. A second bounded batch pass verifies missing
- * commercial and logistics fields against the exact direct URLs. Enrichment
- * failure never discards a valid discovery result and all automatic values
- * remain preliminary evidence.
+ * Chinese query variants aimed directly at indexed detail/mobile offer hosts.
+ * Non-1688 domains and non-offer 1688 URLs are rejected before they enter this
+ * source. A second bounded batch pass verifies missing commercial and logistics
+ * fields against the exact direct URLs. Enrichment failure never discards a
+ * valid discovery result and all automatic values remain preliminary evidence.
  */
 export function createOpenAI1688SearchSource(
   options: OpenAI1688SearchOptions = {},

@@ -32,10 +32,13 @@ function focusedProductQuery(value: string) {
 
   const nozzleCount = normalized.match(/\b(\d{1,4})\s+nozzles?\b/)?.[1] ?? null;
   if (/\b(?:misting|mist cooling|fogging)\s+system\b/.test(normalized)) {
-    return [
-      /\b(?:patio|terrace)\b/.test(normalized)
+    const location = /\bterrace\b/.test(normalized)
+      ? "terrace misting system"
+      : /\bpatio\b/.test(normalized)
         ? "patio misting system"
-        : "outdoor misting system",
+        : "outdoor misting system";
+    return [
+      location,
       /\bpump\b/.test(normalized) ? "with pump" : null,
       nozzleCount ? `${nozzleCount} nozzles` : null,
     ].filter(Boolean).join(" ");
