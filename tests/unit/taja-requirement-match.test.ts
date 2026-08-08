@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   evaluateTajaRequirementMatch,
+  TajaRequirementEvidenceStatuses,
   TajaRequirementMatchStatuses,
 } from "../../modules/product-search/domain/taja-requirement-match";
 
@@ -31,6 +32,33 @@ describe("TAJA product requirement matching", () => {
     expect(match.status).toBe(TajaRequirementMatchStatuses.FULL);
     expect(match.checks.every((check) => check.confirmed)).toBe(true);
     expect(match.scoreAdjustment).toBeGreaterThan(0);
+  });
+
+  it("treats outdoor or garden as likely rather than confirmed patio use", () => {
+    const match = evaluateTajaRequirementMatch(query, {
+      title: "Outdoor Garden Misting System with Pump and 20 Nozzles",
+    });
+    const patio = match.checks.find((check) => check.key === "PATIO");
+
+    expect(match.status).toBe(TajaRequirementMatchStatuses.PARTIAL);
+    expect(patio).toMatchObject({
+      confirmed: false,
+      evidenceStatus: TajaRequirementEvidenceStatuses.LIKELY,
+    });
+  });
+
+  it("does not treat pool, zoo or racecourse context as proof of patio use", () => {
+    for (const title of [
+      "Outdoor Pool Misting System with Pump and 20 Nozzles",
+      "Zoo Aquarium Cooling Misting System with Pump and 20 Nozzles",
+      "Outdoor Racecourse Misting System with Pump and 20 Nozzles",
+    ]) {
+      const match = evaluateTajaRequirementMatch(query, { title });
+      expect(match.checks.find((check) => check.key === "PATIO")).toMatchObject({
+        confirmed: false,
+        evidenceStatus: TajaRequirementEvidenceStatuses.UNCONFIRMED,
+      });
+    }
   });
 
   it("recognizes the live-result phrase 20 Misting Nozzles", () => {
