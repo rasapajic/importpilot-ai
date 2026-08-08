@@ -10,6 +10,15 @@ export const TajaRequirementMatchStatuses = {
 export type TajaRequirementMatchStatus =
   (typeof TajaRequirementMatchStatuses)[keyof typeof TajaRequirementMatchStatuses];
 
+export const TajaRequirementEvidenceStatuses = {
+  CONFIRMED: "CONFIRMED",
+  LIKELY: "LIKELY",
+  UNCONFIRMED: "UNCONFIRMED",
+} as const;
+
+export type TajaRequirementEvidenceStatus =
+  (typeof TajaRequirementEvidenceStatuses)[keyof typeof TajaRequirementEvidenceStatuses];
+
 export type TajaRequirementKey =
   | "MISTING"
   | "PATIO"
@@ -27,6 +36,7 @@ export type TajaRequestedRequirements = {
 
 export type TajaRequirementCheck = {
   key: TajaRequirementKey;
+  evidenceStatus: TajaRequirementEvidenceStatus;
   confirmed: boolean;
   weight: number;
   expectedNumber?: number;
@@ -35,6 +45,7 @@ export type TajaRequirementCheck = {
 export type TajaRequirementMatch = {
   status: TajaRequirementMatchStatus;
   confirmedWeight: number;
+  likelyWeight: number;
   totalWeight: number;
   scoreAdjustment: number;
   checks: TajaRequirementCheck[];
@@ -44,7 +55,9 @@ type FeatureDefinition = {
   key: Exclude<TajaRequirementKey, "NOZZLE_COUNT">;
   weight: number;
   queryPattern: RegExp;
-  offerPattern: RegExp;
+  confirmedPattern: RegExp;
+  likelyPattern?: RegExp;
+  conflictingLikelyContextPattern?: RegExp;
 };
 
 const FEATURE_DEFINITIONS: FeatureDefinition[] = [
@@ -52,25 +65,27 @@ const FEATURE_DEFINITIONS: FeatureDefinition[] = [
     key: "MISTING",
     weight: 1,
     queryPattern: /\b(?:voden\w*\s+magl\w*|magl\w*|mist\w*|fog\w*)\b/,
-    offerPattern: /\b(?:mist\w*|fog\w*|humidif\w*|spray\s+cooling)\b/,
+    confirmedPattern: /\b(?:mist\w*|fog\w*|humidif\w*|spray\s+cooling)\b/,
   },
   {
     key: "PATIO",
     weight: 1,
     queryPattern: /\b(?:teras\w*|patio|terrace)\b/,
-    offerPattern: /\b(?:patio|terrace|outdoor|garden)\b/,
+    confirmedPattern: /\b(?:patio|terrace|deck|veranda|balcony)\b/,
+    likelyPattern: /\b(?:outdoor|garden)\b/,
+    conflictingLikelyContextPattern: /\b(?:pool|zoo|aquarium|racecourse|greenhouse|farm|livestock|warehouse|factory|industrial)\b/,
   },
   {
     key: "PUMP",
     weight: 2,
     queryPattern: /\b(?:pump\w*|pomp\w*)\b/,
-    offerPattern: /\b(?:pump\w*|pomp\w*)\b/,
+    confirmedPattern: /\b(?:pump\w*|pomp\w*)\b/,
   },
   {
     key: "NOZZLES",
     weight: 2,
     queryPattern: /\b(?:mlaznic\w*|nozzl\w*|dus\w*)\b/,
-    offerPattern: /\b(?:nozzl\w*|sprayer\w*|(?:mist|spray)\s*head\w*|dus\w*)\b/,
+    confirmedPattern: /\b(?:nozzl\w*|sprayer\w*|(?:mist|spray)\s*head\w*|dus\w*)\b/,
   },
 ];
 
@@ -114,16 +129,53 @@ function offerConfirmsCount(text: string, count: number, aliases: string) {
   return afterNumber.test(text) || beforeNumber.test(text);
 }
 
+function evidenceStatus(
+  definition: FeatureDefinition,
+  offer: string,
+): TajaRequirementEvidenceStatus {
+  if (definition.confirmedPattern.test(offer)) {
+    return TajaRequirementEvidenceStatuses.CONFIRMED;
+  }
+  if (
+    definition.likelyPattern?.test(offer) &&
+    !definition.conflictingLikelyContextPattern?.test(offer)
+  ) {
+    return TajaRequirementEvidenceStatuses.LIKELY;
+  }
+  return TajaRequirementEvidenceStatuses.UNCONFIRMED;
+}
+
+function createCheck(input: {
+  key: TajaRequirementKey;
+  evidenceStatus: TajaRequirementEvidenceStatus;
+  weight: number;
+  expectedNumber?: number;
+}): TajaRequirementCheck {
+  return {
+    ...input,
+    confirmed: input.evidenceStatus === TajaRequirementEvidenceStatuses.CONFIRMED,
+  };
+}
+
 function matchStatus(checks: TajaRequirementCheck[]) {
   if (checks.length === 0) return TajaRequirementMatchStatuses.NOT_EVALUATED;
   if (checks.every((check) => check.confirmed)) return TajaRequirementMatchStatuses.FULL;
-  if (checks.some((check) => check.confirmed)) return TajaRequirementMatchStatuses.PARTIAL;
+  if (checks.some((check) =>
+    check.evidenceStatus !== TajaRequirementEvidenceStatuses.UNCONFIRMED,
+  )) {
+    return TajaRequirementMatchStatuses.PARTIAL;
+  }
   return TajaRequirementMatchStatuses.UNCONFIRMED;
 }
 
-function scoreAdjustment(confirmedWeight: number, totalWeight: number) {
+function scoreAdjustment(
+  confirmedWeight: number,
+  likelyWeight: number,
+  totalWeight: number,
+) {
   if (totalWeight <= 0) return 0;
-  const ratio = confirmedWeight / totalWeight;
+  const effectiveWeight = confirmedWeight + likelyWeight * 0.5;
+  const ratio = effectiveWeight / totalWeight;
   return Math.round((ratio - 0.5) * 24);
 }
 
@@ -143,9 +195,11 @@ export function extractTajaRequestedRequirements(
 
 /**
  * Deterministic first-pass requirement verification from the user's product
- * description and the verified supplier-result title. It never treats a
- * missing title detail as false; the detail stays unconfirmed until the exact
- * page or supplier response proves it.
+ * description and the verified supplier-result title. Exact evidence is kept
+ * separate from broad contextual relevance: for example, patio/terrace is
+ * confirmed, outdoor/garden may be likely, while pool/zoo/racecourse context
+ * does not prove patio use. Missing title detail remains unconfirmed until the
+ * exact page or supplier response proves it.
  */
 export function evaluateTajaRequirementMatch(
   productQuery: string,
@@ -159,24 +213,38 @@ export function evaluateTajaRequirementMatch(
   for (const definition of FEATURE_DEFINITIONS) {
     if (!definition.queryPattern.test(query)) continue;
     if (definition.key === "NOZZLES" && requestedNozzleCount !== null) continue;
-    checks.push({
+    checks.push(createCheck({
       key: definition.key,
-      confirmed: definition.offerPattern.test(offer),
+      evidenceStatus: evidenceStatus(definition, offer),
       weight: definition.weight,
-    });
+    }));
   }
 
   if (requestedNozzleCount !== null) {
-    checks.push({
+    checks.push(createCheck({
       key: "NOZZLE_COUNT",
       expectedNumber: requestedNozzleCount,
-      confirmed: offerConfirmsCount(offer, requestedNozzleCount, NOZZLE_OFFER_ALIASES),
+      evidenceStatus: offerConfirmsCount(
+        offer,
+        requestedNozzleCount,
+        NOZZLE_OFFER_ALIASES,
+      )
+        ? TajaRequirementEvidenceStatuses.CONFIRMED
+        : TajaRequirementEvidenceStatuses.UNCONFIRMED,
       weight: 3,
-    });
+    }));
   }
 
   const confirmedWeight = checks.reduce(
     (sum, check) => sum + (check.confirmed ? check.weight : 0),
+    0,
+  );
+  const likelyWeight = checks.reduce(
+    (sum, check) => sum + (
+      check.evidenceStatus === TajaRequirementEvidenceStatuses.LIKELY
+        ? check.weight
+        : 0
+    ),
     0,
   );
   const totalWeight = checks.reduce((sum, check) => sum + check.weight, 0);
@@ -184,8 +252,9 @@ export function evaluateTajaRequirementMatch(
   return {
     status: matchStatus(checks),
     confirmedWeight,
+    likelyWeight,
     totalWeight,
-    scoreAdjustment: scoreAdjustment(confirmedWeight, totalWeight),
+    scoreAdjustment: scoreAdjustment(confirmedWeight, likelyWeight, totalWeight),
     checks,
   };
 }
