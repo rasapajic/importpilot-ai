@@ -61,6 +61,7 @@ describe("TAJA product-form policy", () => {
       },
       priceSignal: { status: TajaPriceSignalStatuses.UNAVAILABLE },
     });
+    expect(component?.missingData).not.toContain("PRICE_BASIS");
 
     const completeSystems = applied.analyses.filter((analysis) =>
       analysis.productForm.form === TajaOfferProductForms.COMPLETE_SYSTEM,
@@ -68,6 +69,9 @@ describe("TAJA product-form policy", () => {
     expect(completeSystems).toHaveLength(3);
     expect(completeSystems.every((analysis) =>
       analysis.priceSignal.status === TajaPriceSignalStatuses.NORMAL
+    )).toBe(true);
+    expect(completeSystems.every((analysis) =>
+      !analysis.missingData.includes("PRICE_BASIS")
     )).toBe(true);
   });
 });
