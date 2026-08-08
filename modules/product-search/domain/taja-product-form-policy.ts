@@ -2,9 +2,11 @@ import {
   TajaCandidateAnalysisStatuses,
   TajaLandedCostStatuses,
   type TajaCandidateAnalysis,
+  type TajaMissingDataKey,
 } from "./taja-candidate-analysis";
 import {
   evaluateTajaPriceSignal,
+  TajaPriceSignalStatuses,
   type TajaPriceSignal,
 } from "./taja-price-signal";
 import {
@@ -29,6 +31,21 @@ type AnalysisInput = {
 
 function clampScore(value: number) {
   return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function priceAllowsFinal(priceSignal: TajaPriceSignal) {
+  return priceSignal.status === TajaPriceSignalStatuses.NORMAL ||
+    priceSignal.status === TajaPriceSignalStatuses.UNAVAILABLE;
+}
+
+function adjustedMissingData(
+  missingData: TajaMissingDataKey[],
+  priceSignal: TajaPriceSignal,
+) {
+  const withoutPriceBasis = missingData.filter((key) => key !== "PRICE_BASIS");
+  return priceAllowsFinal(priceSignal)
+    ? withoutPriceBasis
+    : [...withoutPriceBasis, "PRICE_BASIS" as const];
 }
 
 function mismatchExplanation(form: TajaProductFormAssessment) {
@@ -68,6 +85,8 @@ function adjustedAnalysis(input: {
     productForm.matchStatus === TajaProductFormMatchStatuses.MATCH;
   const productFormMismatch =
     productForm.matchStatus === TajaProductFormMatchStatuses.MISMATCH;
+  const priceEligible = priceAllowsFinal(priceSignal);
+  const finalEligible = analysis.finalEligible && productFormMatches && priceEligible;
   const overallScore = clampScore(
     analysis.overallScore -
     analysis.priceSignal.scoreAdjustment +
@@ -80,8 +99,9 @@ function adjustedAnalysis(input: {
     productForm,
     priceSignal,
     overallScore,
-    finalEligible: analysis.finalEligible && productFormMatches,
-    status: analysis.status === TajaCandidateAnalysisStatuses.FINAL && productFormMatches
+    missingData: adjustedMissingData(analysis.missingData, priceSignal),
+    finalEligible,
+    status: analysis.status === TajaCandidateAnalysisStatuses.FINAL && finalEligible
       ? analysis.status
       : TajaCandidateAnalysisStatuses.PRELIMINARY,
     landedCostStatus: productFormMismatch
@@ -101,7 +121,8 @@ function adjustedAnalysis(input: {
  * bands. Price outliers are recalculated only against comparable product forms,
  * so a 0.65 USD nozzle cannot make a complete system look overpriced. Known
  * component offers never receive a complete-system landed-cost estimate or a
- * FINAL recommendation.
+ * FINAL recommendation. Grouped price signals also update PRICE_BASIS evidence
+ * and may block, but never unsafely restore, an earlier final recommendation.
  */
 export function applyTajaProductFormPolicy(input: AnalysisInput) {
   const analysisByUrl = new Map(
