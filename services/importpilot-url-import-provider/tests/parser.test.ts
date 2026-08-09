@@ -3,7 +3,11 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { inspectPreviewExtraction, parseProductPreview } from "../src/parser.js";
+import {
+  extractPriceTiers,
+  inspectPreviewExtraction,
+  parseProductPreview,
+} from "../src/parser.js";
 
 const fixturePath = (...parts: string[]) => join(import.meta.dirname, "fixtures", ...parts);
 const fixture = (name: string) => readFileSync(fixturePath(name), "utf8");
@@ -51,6 +55,38 @@ describe("URL import provider parser", () => {
       currency: "USD",
       minimumOrderQuantity: "200",
       imageUrl: "https://image.made-in-china.com/charger.jpg",
+    });
+  });
+
+  it("keeps each visible tier price paired with its own quantity range", () => {
+    const productUrl = "https://mistingsystem.en.made-in-china.com/product/example/China-Misting-Nozzles.html";
+    const html = `
+      <html>
+        <head>
+          <meta property="og:title" content="Misting System Mist Nozzles Outdoor Nozzles">
+          <meta property="og:image" content="https://image.made-in-china.com/misting-nozzle.jpg">
+          <script>{"price":"0.65","minimumOrderQuantity":"100"}</script>
+        </head>
+        <body>
+          <h1>Misting System Mist Nozzles Outdoor Nozzles</h1>
+          <div class="price-tier"><strong>US$0.85</strong><span>100-999 Pieces</span></div>
+          <div class="price-tier"><strong>US$0.70</strong><span>1,000-9,999 Pieces</span></div>
+          <div class="price-tier"><strong>US$0.65</strong><span>10,000+ Pieces</span></div>
+          <div>Min. Order: 100 Pieces</div>
+          <div>FOB</div>
+        </body>
+      </html>
+    `;
+
+    expect(extractPriceTiers(html)).toEqual([
+      { price: "0.85", currency: "USD", minQuantity: 100, maxQuantity: 999 },
+      { price: "0.70", currency: "USD", minQuantity: 1_000, maxQuantity: 9_999 },
+      { price: "0.65", currency: "USD", minQuantity: 10_000, maxQuantity: null },
+    ]);
+    expect(parseProductPreview(html, productUrl)).toMatchObject({
+      price: "0.85",
+      currency: "USD",
+      minimumOrderQuantity: "100",
     });
   });
 
