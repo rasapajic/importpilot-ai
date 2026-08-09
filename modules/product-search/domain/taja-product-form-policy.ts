@@ -83,8 +83,7 @@ function adjustedAnalysis(input: {
   const { analysis, productForm, priceSignal } = input;
   const productFormMatches =
     productForm.matchStatus === TajaProductFormMatchStatuses.MATCH;
-  const productFormMismatch =
-    productForm.matchStatus === TajaProductFormMatchStatuses.MISMATCH;
+  const productUnitUnverified = !productFormMatches;
   const priceEligible = priceAllowsFinal(priceSignal);
   const finalEligible = analysis.finalEligible && productFormMatches && priceEligible;
   const overallScore = clampScore(
@@ -104,10 +103,10 @@ function adjustedAnalysis(input: {
     status: analysis.status === TajaCandidateAnalysisStatuses.FINAL && finalEligible
       ? analysis.status
       : TajaCandidateAnalysisStatuses.PRELIMINARY,
-    landedCostStatus: productFormMismatch
+    landedCostStatus: productUnitUnverified
       ? TajaLandedCostStatuses.UNAVAILABLE
       : analysis.landedCostStatus,
-    preliminaryCostEstimate: productFormMismatch
+    preliminaryCostEstimate: productUnitUnverified
       ? null
       : analysis.preliminaryCostEstimate,
     explanation: productFormMatches
@@ -119,8 +118,9 @@ function adjustedAnalysis(input: {
 /**
  * Keeps complete systems, uncertain offers and components in separate ranking
  * bands. Price outliers are recalculated only against comparable product forms,
- * so a 0.65 USD nozzle cannot make a complete system look overpriced. Known
- * component offers never receive a complete-system landed-cost estimate or a
+ * so a low-cost nozzle cannot make a complete system look overpriced. Any
+ * offer whose product unit is not confirmed — including contradictory system/
+ * nozzle listings — cannot receive a complete-system landed-cost estimate or a
  * FINAL recommendation. Grouped price signals also update PRICE_BASIS evidence
  * and may block, but never unsafely restore, an earlier final recommendation.
  */
