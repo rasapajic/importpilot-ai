@@ -24,11 +24,24 @@ describe("TAJA product-form classification", () => {
     }
   });
 
-  it("separates nozzle-only offers from complete systems", () => {
+  it("keeps contradictory system-and-nozzle titles unclear until package contents are verified", () => {
     for (const title of [
       "Misting System Mist Nozzles Outdoor Nozzles for Outdoor Pool Cooling",
       "Misting System Mist Nozzles Outdoor Nozzles for Zoo Aquarium Cooling",
+      "Misting System Mist Nozzles Outdoor Nozzles for Racecourse Misting Cooling",
+    ]) {
+      const assessment = evaluateTajaProductForm(query, { title });
+      expect(assessment).toMatchObject({
+        form: TajaOfferProductForms.UNCLEAR,
+        matchStatus: TajaProductFormMatchStatuses.UNCLEAR,
+      });
+    }
+  });
+
+  it("separates explicit nozzle-only offers from complete systems", () => {
+    for (const title of [
       "20 Brass Misting Nozzles Pack",
+      "0.2mm Brass Mist Nozzle Set",
     ]) {
       const assessment = evaluateTajaProductForm(query, { title });
       expect(assessment).toMatchObject({
