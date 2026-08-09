@@ -74,7 +74,7 @@ function embeddedJsonNumber(html: string, keys: string[]) {
 function normalizeCurrency(value: string | null) {
   if (!value) return null;
   const normalized = value.trim().toUpperCase();
-  if (normalized === "$" || normalized.includes("US $") || normalized.includes("USD")) return "USD";
+  if (normalized === "$" || normalized.includes("US $") || normalized.includes("US$") || normalized.includes("USD")) return "USD";
   if (normalized === "€" || normalized.includes("EUR")) return "EUR";
   if (normalized.includes("GBP") || normalized.includes("£")) return "GBP";
   if (normalized.includes("CNY") || normalized.includes("¥")) return "CNY";
@@ -156,6 +156,13 @@ export type ParserCandidate = {
   value: string;
 };
 
+export type ExtractedPriceTier = {
+  price: string;
+  currency: string | null;
+  minQuantity: number;
+  maxQuantity: number | null;
+};
+
 export type PreviewExtractionSnapshot = {
   blocked: boolean;
   candidates: ParserCandidate[];
@@ -188,6 +195,73 @@ function extractIncoterm(bodyText: string) {
   return (preferred ?? matches[0])?.[1]?.toUpperCase() ?? null;
 }
 
+function quantityNumber(value: string | undefined) {
+  if (!value) return null;
+  const parsed = Number(value.replace(/[^0-9]/g, ""));
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function tierPrice(value: string | undefined) {
+  if (!value) return null;
+  const normalized = value.replace(",", ".");
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) && parsed >= 0 ? normalized : null;
+}
+
+/**
+ * Extracts visible marketplace quantity-price ladders while keeping every
+ * unit price attached to its own quantity interval. This prevents combining
+ * the cheapest 10,000+ price with the listing's minimum order of 100 pieces.
+ */
+export function extractPriceTiers(html: string): ExtractedPriceTier[] {
+  const bodyText = decodeHtml(
+    html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>|<[^>]+>/gi, " "),
+  ) ?? "";
+  const currencyMarker = "(?:US\\s*\\$|US\\$|USD|EUR|GBP|CNY|\\$|€|£|¥)";
+  const unitMarker = "(?:pieces?|pcs?|sets?|units?)";
+  const results: ExtractedPriceTier[] = [];
+
+  const forward = new RegExp(
+    `(${currencyMarker})\\s*([0-9]+(?:[.,][0-9]+)?)\\s*(?:\\/\\s*(?:piece|pc|set|unit))?\\s*([0-9][0-9,\\s]*)\\s*(?:(?:-|–|—)\\s*([0-9][0-9,\\s]*)|\\+)\\s*${unitMarker}`,
+    "gi",
+  );
+  for (const match of bodyText.matchAll(forward)) {
+    const price = tierPrice(match[2]);
+    const minQuantity = quantityNumber(match[3]);
+    const maxQuantity = quantityNumber(match[4]);
+    if (!price || !minQuantity) continue;
+    results.push({
+      price,
+      currency: normalizeCurrency(match[1] ?? null),
+      minQuantity,
+      maxQuantity,
+    });
+  }
+
+  const reverse = new RegExp(
+    `([0-9][0-9,\\s]*)\\s*(?:(?:-|–|—)\\s*([0-9][0-9,\\s]*)|\\+)\\s*${unitMarker}\\s*(${currencyMarker})\\s*([0-9]+(?:[.,][0-9]+)?)`,
+    "gi",
+  );
+  for (const match of bodyText.matchAll(reverse)) {
+    const minQuantity = quantityNumber(match[1]);
+    const maxQuantity = quantityNumber(match[2]);
+    const price = tierPrice(match[4]);
+    if (!price || !minQuantity) continue;
+    results.push({
+      price,
+      currency: normalizeCurrency(match[3] ?? null),
+      minQuantity,
+      maxQuantity,
+    });
+  }
+
+  const unique = new Map<string, ExtractedPriceTier>();
+  for (const tier of results) {
+    unique.set(`${tier.currency ?? ""}:${tier.minQuantity}:${tier.maxQuantity ?? "open"}`, tier);
+  }
+  return [...unique.values()].sort((left, right) => left.minQuantity - right.minQuantity);
+}
+
 export function inspectPreviewExtraction(html: string): PreviewExtractionSnapshot {
   const blocked = isBlockedHtml(html);
   const pageTitle = pageTitleFromHtml(html);
@@ -207,7 +281,9 @@ export function inspectPreviewExtraction(html: string): PreviewExtractionSnapsho
       /<[^>]+(?:class|id)=["'][^"']*(?:company|supplier|manufacturer)[^"']*["'][^>]*>\s*<a[^>]*>([\s\S]*?)<\/a>/i,
       /<a[^>]+href=["'][^"']*\.made-in-china\.com["'][^>]*>([\s\S]*?(?:Co\.|Ltd\.|Limited|Factory|Supplier)[\s\S]*?)<\/a>/i,
     ]));
-  const price = embeddedJsonNumber(html, ["price", "minPrice", "salePrice", "offerPrice", "fobPrice", "unitPrice"])
+  const priceTiers = extractPriceTiers(html);
+  const entryTier = priceTiers[0] ?? null;
+  const price = entryTier?.price ?? embeddedJsonNumber(html, ["price", "minPrice", "salePrice", "offerPrice", "fobPrice", "unitPrice"])
     ?? regexText(html, [
       /"priceRange"\s*:\s*"[^0-9"]*([0-9]+(?:[.,][0-9]+)?)/i,
       /"fobPrice"\s*:\s*"[^0-9"]*([0-9]+(?:[.,][0-9]+)?)/i,
@@ -217,12 +293,14 @@ export function inspectPreviewExtraction(html: string): PreviewExtractionSnapsho
       /(?:FOB\s+Price|Price|Unit\s+Price)[\s\S]{0,160}?USD\s*([0-9]+(?:[.,][0-9]+)?)/i,
       /\$\s*([0-9]+(?:[.,][0-9]+)?)/i,
     ])?.replace(",", ".") ?? null;
-  const currency = normalizeCurrency(embeddedJsonString(html, ["priceCurrency", "currency", "currencyCode", "priceUnit"])
+  const currency = entryTier?.currency ?? normalizeCurrency(embeddedJsonString(html, ["priceCurrency", "currency", "currencyCode", "priceUnit"])
     ?? (/US\s*\$|USD|\$\s*\d/i.test(html) ? "USD" : null));
-  const minimumOrderQuantity = embeddedJsonNumber(html, ["moq", "minOrderQuantity", "minimumOrderQuantity", "minOrder", "minOrderNum"])
-    ?? (bodyText.match(/(?:MOQ|minimum\s+order(?:\s+quantity)?|min\.\s*order)\s*[:\-]?\s*(\d+)/i)?.[1]
-      ?? bodyText.match(/(\d+)\s*(?:piece|pieces|pcs|set|sets|unit|units)\s*\(?(?:MOQ|Min\.\s*Order|Minimum\s+Order)\)?/i)?.[1]
-      ?? null);
+  const minimumOrderQuantity = entryTier
+    ? String(entryTier.minQuantity)
+    : embeddedJsonNumber(html, ["moq", "minOrderQuantity", "minimumOrderQuantity", "minOrder", "minOrderNum"])
+      ?? (bodyText.match(/(?:MOQ|minimum\s+order(?:\s+quantity)?|min\.\s*order)\s*[:\-]?\s*(\d+)/i)?.[1]
+        ?? bodyText.match(/(\d+)\s*(?:piece|pieces|pcs|set|sets|unit|units)\s*\(?(?:MOQ|Min\.\s*Order|Minimum\s+Order)\)?/i)?.[1]
+        ?? null);
   const incoterm = extractIncoterm(bodyText);
   const imageUrl = normalizeUrl(meta(html, "og:image")
     ?? meta(html, "twitter:image")
