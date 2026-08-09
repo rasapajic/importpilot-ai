@@ -66,9 +66,24 @@ export function classifyTajaOfferProductForm(
   const hasNozzle = NOZZLE_PATTERN.test(title);
   const hasComponent = COMPONENT_PATTERN.test(title);
 
+  // Marketplace titles such as "Misting System Mist Nozzles" mix a complete
+  // system label with a component label. Without an explicit pump, complete-kit
+  // marker or verified package contents, treating either interpretation as
+  // certain would be unsafe. Keep the listing commercially ambiguous.
+  if (
+    hasMisting &&
+    hasSystem &&
+    hasNozzle &&
+    !hasPump &&
+    !hasCompleteMarker
+  ) {
+    return TajaOfferProductForms.UNCLEAR;
+  }
+
   const explicitNozzleOnly = hasNozzle &&
     NOZZLE_ONLY_PATTERN.test(title) &&
     !hasPump &&
+    !hasSystem &&
     !/\b(?:system|kit|set|package|bundle)\s+with\b/.test(title);
   if (explicitNozzleOnly) return TajaOfferProductForms.NOZZLES_ONLY;
 
