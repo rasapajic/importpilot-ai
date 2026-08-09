@@ -218,11 +218,12 @@ export function extractPriceTiers(html: string): ExtractedPriceTier[] {
     html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>|<[^>]+>/gi, " "),
   ) ?? "";
   const currencyMarker = "(?:US\\s*\\$|US\\$|USD|EUR|GBP|CNY|\\$|€|£|¥)";
+  const quantityToken = "(?:[0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)";
   const unitMarker = "(?:pieces?|pcs?|sets?|units?)";
   const results: ExtractedPriceTier[] = [];
 
   const forward = new RegExp(
-    `(${currencyMarker})\\s*([0-9]+(?:[.,][0-9]+)?)\\s*(?:\\/\\s*(?:piece|pc|set|unit))?\\s*([0-9][0-9,\\s]*)\\s*(?:(?:-|–|—)\\s*([0-9][0-9,\\s]*)|\\+)\\s*${unitMarker}`,
+    `(${currencyMarker})\\s*([0-9]+(?:[.,][0-9]+)?)\\s*(?:\\/\\s*(?:piece|pc|set|unit))?\\s*(${quantityToken})\\s*(?:(?:-|–|—)\\s*(${quantityToken})|\\+)\\s*${unitMarker}`,
     "gi",
   );
   for (const match of bodyText.matchAll(forward)) {
@@ -233,23 +234,6 @@ export function extractPriceTiers(html: string): ExtractedPriceTier[] {
     results.push({
       price,
       currency: normalizeCurrency(match[1] ?? null),
-      minQuantity,
-      maxQuantity,
-    });
-  }
-
-  const reverse = new RegExp(
-    `([0-9][0-9,\\s]*)\\s*(?:(?:-|–|—)\\s*([0-9][0-9,\\s]*)|\\+)\\s*${unitMarker}\\s*(${currencyMarker})\\s*([0-9]+(?:[.,][0-9]+)?)`,
-    "gi",
-  );
-  for (const match of bodyText.matchAll(reverse)) {
-    const minQuantity = quantityNumber(match[1]);
-    const maxQuantity = quantityNumber(match[2]);
-    const price = tierPrice(match[4]);
-    if (!price || !minQuantity) continue;
-    results.push({
-      price,
-      currency: normalizeCurrency(match[3] ?? null),
       minQuantity,
       maxQuantity,
     });
