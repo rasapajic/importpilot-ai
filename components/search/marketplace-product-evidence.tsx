@@ -1,12 +1,38 @@
 "use client";
 
 import { useI18n } from "@/components/i18n/i18n-provider";
-import type { SupplierOfferUrlPreview } from "@/modules/product-search/domain/search";
+import type {
+  SupplierOfferProductAttribute,
+  SupplierOfferUrlPreview,
+} from "@/modules/product-search/domain/search";
 
 function tierQuantity(minQuantity: number, maxQuantity: number | null) {
   return maxQuantity === null
     ? `${minQuantity.toLocaleString()}+`
     : `${minQuantity.toLocaleString()}–${maxQuantity.toLocaleString()}`;
+}
+
+function AttributeSection({
+  title,
+  attributes,
+}: {
+  title: string;
+  attributes: SupplierOfferProductAttribute[];
+}) {
+  if (attributes.length === 0) return null;
+  return (
+    <section>
+      <h4>{title}</h4>
+      <dl className="marketplace-attribute-list">
+        {attributes.map((attribute) => (
+          <div key={`${attribute.name}-${attribute.value}`}>
+            <dt>{attribute.name}</dt>
+            <dd>{attribute.value}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  );
 }
 
 export function MarketplaceProductEvidence({
@@ -17,6 +43,19 @@ export function MarketplaceProductEvidence({
   const { t } = useI18n();
   const details = preview.details;
   if (!details) return null;
+
+  const productSpecifications = details.attributes.filter(
+    (attribute) => attribute.category === "PRODUCT_SPECIFICATION",
+  );
+  const supplierCommercial = details.attributes.filter(
+    (attribute) => attribute.category === "SUPPLIER_COMMERCIAL",
+  );
+  const marketplaceServices = details.attributes.filter(
+    (attribute) => attribute.category === "MARKETPLACE_SERVICE",
+  );
+  const otherSourceData = details.attributes.filter(
+    (attribute) => attribute.category === "OTHER",
+  );
 
   const packaging = details.packaging;
   const packagingValues = packaging
@@ -53,8 +92,8 @@ export function MarketplaceProductEvidence({
     <details className="marketplace-evidence" open>
       <summary>
         {t("Podaci potvrđeni sa stranice proizvoda")}
-        {details.attributes.length > 0
-          ? ` · ${details.attributes.length} ${t("specifikacija")}`
+        {productSpecifications.length > 0
+          ? ` · ${productSpecifications.length} ${t("specifikacija proizvoda")}`
           : ""}
         {details.variants.length > 0
           ? ` · ${details.variants.length} ${t("grupa varijanti")}`
@@ -97,26 +136,40 @@ export function MarketplaceProductEvidence({
         </section>
       )}
 
-      {details.attributes.length > 0 && (
-        <section>
-          <h4>{t("Specifikacije")}</h4>
-          <dl className="marketplace-attribute-list">
-            {details.attributes.map((attribute) => (
-              <div key={`${attribute.name}-${attribute.value}`}>
-                <dt>{attribute.name}</dt>
-                <dd>{attribute.value}</dd>
-              </div>
-            ))}
-          </dl>
-        </section>
-      )}
+      <AttributeSection
+        attributes={productSpecifications}
+        title={t("Specifikacije proizvoda")}
+      />
+      <AttributeSection
+        attributes={supplierCommercial}
+        title={t("Dobavljač i komercijalni uslovi")}
+      />
+      <AttributeSection
+        attributes={marketplaceServices}
+        title={t("Usluge i zaštita marketplace-a")}
+      />
+      <AttributeSection
+        attributes={otherSourceData}
+        title={t("Ostali podaci sa izvora")}
+      />
 
-      {packagingValues.length > 0 && (
+      {packagingValues.length > 0 && packaging && (
         <section>
           <h4>{t("Pakovanje i logistika")}</h4>
           <ul className="marketplace-evidence-list">
             {packagingValues.map((value) => <li key={value}>{value}</li>)}
           </ul>
+          {packaging.usableForLandedCost ? (
+            <p className="marketplace-logistics-status marketplace-logistics-status-usable">
+              ✓ {t("Podaci o pakovanju mogu se koristiti u obračunu landed cost-a.")}
+              {` ${t("Pouzdanost")}: ${packaging.confidence}.`}
+            </p>
+          ) : (
+            <p className="marketplace-logistics-status marketplace-logistics-status-review">
+              {t("Podaci o pakovanju nisu uključeni u landed cost dok se ne potvrdi jedinica pakovanja.")}
+              {packaging.validationNote ? ` ${packaging.validationNote}` : ""}
+            </p>
+          )}
         </section>
       )}
     </details>
