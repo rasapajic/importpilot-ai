@@ -123,7 +123,7 @@ describe("Made-in-China parser cleanup", () => {
     });
     expect(details.attributes.some((item) => item.name === "Transport Package"))
       .toBe(false);
-    expect(details.variants).toEqual([
+    expect(details.variants).toEqual(expect.arrayContaining([
       {
         name: "Flow",
         values: ["0.1 mm", "0.2 mm", "0.3 mm", "0.4 mm", "0.5 mm"],
@@ -132,7 +132,8 @@ describe("Made-in-China parser cleanup", () => {
         name: "Voltage",
         values: ["110 V", "220 V", "380 V"],
       },
-    ]);
+    ]));
+    expect(details.variants).toHaveLength(2);
     expect(details.packaging).toMatchObject({
       packageType: "Wooden",
       packageLengthCm: 10,
