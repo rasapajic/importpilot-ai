@@ -4,7 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { useI18n } from "@/components/i18n/i18n-provider";
-import type { SupplierOfferSearchResult, SupplierOfferUrlPreview } from "@/modules/product-search/domain/search";
+import {
+  marketplaceDetailsToSupplierLogistics,
+} from "@/modules/product-search/domain/marketplace-product-details";
+import type {
+  SupplierOfferSearchResult,
+  SupplierOfferUrlPreview,
+} from "@/modules/product-search/domain/search";
 
 const emptyPreview: SupplierOfferUrlPreview = {
   title: null,
@@ -17,9 +23,102 @@ const emptyPreview: SupplierOfferUrlPreview = {
   productUrl: "https://example.com",
   imageUrl: null,
   source: "example.com",
+  details: null,
   isPartial: false,
   titleFromSlug: false,
 };
+
+function tierQuantity(minQuantity: number, maxQuantity: number | null) {
+  return maxQuantity === null
+    ? `${minQuantity.toLocaleString()}+`
+    : `${minQuantity.toLocaleString()}–${maxQuantity.toLocaleString()}`;
+}
+
+function MarketplaceEvidence({ preview }: { preview: SupplierOfferUrlPreview }) {
+  const { t } = useI18n();
+  const details = preview.details;
+  if (!details) return null;
+  const packaging = details.packaging;
+  const packagingValues = packaging
+    ? [
+        packaging.sellingUnit ? `${t("Prodajna jedinica")}: ${packaging.sellingUnit}` : null,
+        packaging.packageType ? `${t("Vrsta pakovanja")}: ${packaging.packageType}` : null,
+        packaging.packageLengthCm !== null &&
+        packaging.packageWidthCm !== null &&
+        packaging.packageHeightCm !== null
+          ? `${t("Dimenzije pakovanja")}: ${packaging.packageLengthCm} × ${packaging.packageWidthCm} × ${packaging.packageHeightCm} cm`
+          : null,
+        packaging.grossWeightKg !== null
+          ? `${t("Bruto težina")}: ${packaging.grossWeightKg} kg`
+          : null,
+        packaging.piecesPerCarton !== null
+          ? `${t("Komada u kartonu")}: ${packaging.piecesPerCarton}`
+          : null,
+      ].filter((value): value is string => Boolean(value))
+    : [];
+
+  return (
+    <details className="marketplace-evidence" open>
+      <summary>
+        {t("Podaci potvrđeni sa stranice proizvoda")}
+        {` · ${details.attributes.length} ${t("specifikacija")}`}
+        {` · ${details.variants.length} ${t("grupa varijanti")}`}
+      </summary>
+      <p className="muted-text">
+        {t("Izvor dokaza")}: {details.evidence === "PRODUCT_PAGE"
+          ? t("stranica proizvoda")
+          : t("rezultat pretrage")}
+        {` · ${details.adapter}`}
+      </p>
+      {details.priceTiers.length > 0 && (
+        <section>
+          <h4>{t("Količinske cene")}</h4>
+          <ul>
+            {details.priceTiers.map((tier) => (
+              <li key={`${tier.currency ?? "currency"}-${tier.minQuantity}-${tier.maxQuantity ?? "open"}`}>
+                <strong>{tier.price} {tier.currency ?? preview.currency ?? ""}</strong>
+                {` · ${tierQuantity(tier.minQuantity, tier.maxQuantity)} ${t("komada")}`}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {details.variants.length > 0 && (
+        <section>
+          <h4>{t("Varijante proizvoda")}</h4>
+          <ul>
+            {details.variants.map((variant) => (
+              <li key={variant.name}>
+                <strong>{variant.name}:</strong> {variant.values.join(", ")}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {details.attributes.length > 0 && (
+        <section>
+          <h4>{t("Specifikacije")}</h4>
+          <dl className="marketplace-attribute-list">
+            {details.attributes.map((attribute) => (
+              <div key={`${attribute.name}-${attribute.value}`}>
+                <dt>{attribute.name}</dt>
+                <dd>{attribute.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      )}
+      {packagingValues.length > 0 && (
+        <section>
+          <h4>{t("Pakovanje i logistika")}</h4>
+          <ul>
+            {packagingValues.map((value) => <li key={value}>{value}</li>)}
+          </ul>
+        </section>
+      )}
+    </details>
+  );
+}
 
 export function UrlImportReview({
   projectId,
@@ -104,6 +203,8 @@ export function UrlImportReview({
       productUrl: preview.productUrl,
       imageUrl: preview.imageUrl,
       source: preview.source,
+      marketplaceDetails: preview.details ?? null,
+      supplierLogistics: marketplaceDetailsToSupplierLogistics(preview.details),
     };
     try {
       const response = await fetch(`/api/projects/${projectId}/supplier-search/import`, {
@@ -150,6 +251,7 @@ export function UrlImportReview({
           <label>{t("Minimalna količina (MOQ)")}<input min="1" onChange={(event) => update("minimumOrderQuantity", event.target.value)} placeholder={t("Nije navedeno")} type="number" value={preview.minimumOrderQuantity ?? ""} /></label>
           <label>{t("Incoterm")}<input onChange={(event) => update("incoterm", event.target.value.toUpperCase())} placeholder={t("Nije naveden")} value={preview.incoterm ?? ""} /></label>
           <label>{t("Link slike")}<input onChange={(event) => update("imageUrl", event.target.value)} placeholder={t("Nije prepoznato")} type="url" value={preview.imageUrl ?? ""} /></label>
+          <MarketplaceEvidence preview={preview} />
           <div className="url-review-actions">
             <button className="primary-button" disabled={saving || saved} type="submit">
               {saved ? t("Dodato u kupovinu") : saving ? t("Dodavanje...") : t("Potvrdi i dodaj u kupovinu")}
