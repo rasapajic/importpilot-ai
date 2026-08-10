@@ -1,14 +1,14 @@
 "use client";
 
 import { useI18n } from "@/components/i18n/i18n-provider";
+import type { Locale } from "@/modules/i18n/translations";
 import type {
   SupplierOfferProductAttribute,
   SupplierOfferUrlPreview,
 } from "@/modules/product-search/domain/search";
-import type { Locale } from "@/modules/i18n/translations";
 
 type EvidenceCopy = {
-  confirmedData: string;
+  showDetails: string;
   specificationCount: string;
   variantGroupCount: string;
   evidenceSource: string;
@@ -42,9 +42,9 @@ type EvidenceCopy = {
 
 const copyByLocale: Record<Locale, EvidenceCopy> = {
   sr: {
-    confirmedData: "Podaci potvrđeni sa stranice proizvoda",
-    specificationCount: "specifikacija proizvoda",
-    variantGroupCount: "grupa varijanti",
+    showDetails: "Prikaži detaljne podatke sa stranice proizvoda",
+    specificationCount: "specifikacija",
+    variantGroupCount: "grupe varijanti",
     evidenceSource: "Izvor dokaza",
     madeInChinaProductPage: "Made-in-China stranica proizvoda",
     productPage: "stranica proizvoda",
@@ -62,7 +62,7 @@ const copyByLocale: Record<Locale, EvidenceCopy> = {
     packageDimensions: "Dimenzije pakovanja",
     grossWeight: "Bruto težina",
     piecesPerCarton: "Komada u kartonu",
-    usableForLandedCost: "Podaci o pakovanju mogu se koristiti u obračunu ukupne nabavne cene.",
+    usableForLandedCost: "Podaci o pakovanju mogu se koristiti u preliminarnom obračunu ukupne nabavne cene.",
     notUsableForLandedCost: "Podaci o pakovanju nisu uključeni u obračun transporta dok se ne potvrde kod dobavljača.",
     confidence: "Pouzdanost",
     confidenceHigh: "visoka",
@@ -74,8 +74,8 @@ const copyByLocale: Record<Locale, EvidenceCopy> = {
     packagingRequiresReview: "Podaci o pakovanju zahtevaju dodatnu proveru.",
   },
   de: {
-    confirmedData: "Auf der Produktseite bestätigte Daten",
-    specificationCount: "Produktspezifikationen",
+    showDetails: "Detaillierte Daten der Produktseite anzeigen",
+    specificationCount: "Spezifikationen",
     variantGroupCount: "Variantengruppen",
     evidenceSource: "Nachweisquelle",
     madeInChinaProductPage: "Made-in-China-Produktseite",
@@ -94,7 +94,7 @@ const copyByLocale: Record<Locale, EvidenceCopy> = {
     packageDimensions: "Verpackungsmaße",
     grossWeight: "Bruttogewicht",
     piecesPerCarton: "Stück pro Karton",
-    usableForLandedCost: "Die Verpackungsdaten können für die Einstandskostenberechnung verwendet werden.",
+    usableForLandedCost: "Die Verpackungsdaten können für eine vorläufige Einstandskostenberechnung verwendet werden.",
     notUsableForLandedCost: "Die Verpackungsdaten werden erst nach Bestätigung durch den Lieferanten für den Transport verwendet.",
     confidence: "Zuverlässigkeit",
     confidenceHigh: "hoch",
@@ -106,8 +106,8 @@ const copyByLocale: Record<Locale, EvidenceCopy> = {
     packagingRequiresReview: "Die Verpackungsdaten müssen zusätzlich geprüft werden.",
   },
   en: {
-    confirmedData: "Data confirmed on the product page",
-    specificationCount: "product specifications",
+    showDetails: "Show detailed product-page data",
+    specificationCount: "specifications",
     variantGroupCount: "variant groups",
     evidenceSource: "Evidence source",
     madeInChinaProductPage: "Made-in-China product page",
@@ -126,7 +126,7 @@ const copyByLocale: Record<Locale, EvidenceCopy> = {
     packageDimensions: "Package dimensions",
     grossWeight: "Gross weight",
     piecesPerCarton: "Pieces per carton",
-    usableForLandedCost: "The packaging data can be used in the landed-cost calculation.",
+    usableForLandedCost: "The packaging data can be used in a preliminary landed-cost calculation.",
     notUsableForLandedCost: "The packaging data is excluded from transport calculations until the supplier confirms it.",
     confidence: "Confidence",
     confidenceHigh: "high",
@@ -212,6 +212,13 @@ function tierQuantity(
     : `${minQuantity.toLocaleString(numberLocale)}–${maxQuantity.toLocaleString(numberLocale)}`;
 }
 
+function visibleAttribute(attribute: SupplierOfferProductAttribute) {
+  const value = attribute.value.replace(/\s+/g, " ").trim();
+  return value.length > 0 &&
+    !/^\[?(?:email|null)\s+protected\]?$/i.test(value) &&
+    !/^email\s+protected$/i.test(value);
+}
+
 function AttributeSection({
   title,
   attributes,
@@ -221,12 +228,13 @@ function AttributeSection({
   attributes: SupplierOfferProductAttribute[];
   locale: Locale;
 }) {
-  if (attributes.length === 0) return null;
+  const visibleAttributes = attributes.filter(visibleAttribute);
+  if (visibleAttributes.length === 0) return null;
   return (
     <section>
       <h4>{title}</h4>
       <dl className="marketplace-attribute-list">
-        {attributes.map((attribute) => (
+        {visibleAttributes.map((attribute) => (
           <div key={`${attribute.name}-${attribute.value}`}>
             <dt>{localizedAttributeName(attribute.name, locale)}</dt>
             <dd>{attribute.value}</dd>
@@ -251,10 +259,7 @@ function confidenceLabel(
   return copy.confidenceLow;
 }
 
-function packagingValidationMessage(
-  note: string | null,
-  copy: EvidenceCopy,
-) {
+function packagingValidationMessage(note: string | null, copy: EvidenceCopy) {
   if (note === "Package dimensions and gross weight are incomplete.") {
     return copy.incompletePackaging;
   }
@@ -283,7 +288,8 @@ export function MarketplaceProductEvidence({
   const productSpecifications = details.attributes.filter(
     (attribute) =>
       attribute.category === "PRODUCT_SPECIFICATION" &&
-      !variantNames.has(normalizedLabel(attribute.name)),
+      !variantNames.has(normalizedLabel(attribute.name)) &&
+      visibleAttribute(attribute),
   );
   const supplierCommercial = details.attributes.filter(
     (attribute) => attribute.category === "SUPPLIER_COMMERCIAL",
@@ -298,12 +304,8 @@ export function MarketplaceProductEvidence({
   const packaging = details.packaging;
   const packagingValues = packaging
     ? [
-        packaging.sellingUnit
-          ? `${copy.sellingUnit}: ${packaging.sellingUnit}`
-          : null,
-        packaging.packageType
-          ? `${copy.packageType}: ${packaging.packageType}`
-          : null,
+        packaging.sellingUnit ? `${copy.sellingUnit}: ${packaging.sellingUnit}` : null,
+        packaging.packageType ? `${copy.packageType}: ${packaging.packageType}` : null,
         packaging.packageLengthCm !== null &&
         packaging.packageWidthCm !== null &&
         packaging.packageHeightCm !== null
@@ -321,15 +323,14 @@ export function MarketplaceProductEvidence({
   const hasVisibleEvidence =
     details.priceTiers.length > 0 ||
     details.variants.length > 0 ||
-    details.attributes.length > 0 ||
+    details.attributes.some(visibleAttribute) ||
     packagingValues.length > 0;
-
   if (!hasVisibleEvidence) return null;
 
   return (
-    <details className="marketplace-evidence" open>
+    <details className="marketplace-evidence">
       <summary>
-        {copy.confirmedData}
+        {copy.showDetails}
         {productSpecifications.length > 0
           ? ` · ${productSpecifications.length} ${copy.specificationCount}`
           : ""}
