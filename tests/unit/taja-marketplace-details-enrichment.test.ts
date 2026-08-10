@@ -41,13 +41,17 @@ describe("TAJA marketplace details enrichment", () => {
         imageUrl: "https://image.made-in-china.com/misting.jpg",
         source: "made-in-china.com",
         details: {
-          adapter: "made-in-china-product-page-v1",
+          adapter: "made-in-china-product-page-v2",
           evidence: "PRODUCT_PAGE",
           priceTiers: [
             { price: 0.85, currency: "USD", minQuantity: 100, maxQuantity: 999 },
           ],
           attributes: [
-            { name: "Kit Contents", value: "Pump with 20 brass misting nozzles" },
+            {
+              name: "Kit Contents",
+              value: "Pump with 20 brass misting nozzles",
+              category: "PRODUCT_SPECIFICATION",
+            },
           ],
           variants: [
             { name: "Nozzle Diameter", values: ["0.1 mm", "0.2 mm"] },
@@ -60,6 +64,10 @@ describe("TAJA marketplace details enrichment", () => {
             packageHeightCm: 20,
             grossWeightKg: 8,
             piecesPerCarton: 1,
+            scope: "CARTON",
+            confidence: "HIGH",
+            usableForLandedCost: true,
+            validationNote: null,
           },
         },
         isPartial: false,
@@ -74,7 +82,11 @@ describe("TAJA marketplace details enrichment", () => {
       imageUrl: "https://image.made-in-china.com/misting.jpg",
       marketplaceDetails: {
         attributes: [
-          { name: "Kit Contents", value: "Pump with 20 brass misting nozzles" },
+          {
+            name: "Kit Contents",
+            value: "Pump with 20 brass misting nozzles",
+            category: "PRODUCT_SPECIFICATION",
+          },
         ],
       },
       supplierLogistics: {
