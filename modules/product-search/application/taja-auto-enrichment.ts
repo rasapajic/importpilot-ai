@@ -1,3 +1,6 @@
+import {
+  marketplaceDetailsToSupplierLogistics,
+} from "../domain/marketplace-product-details";
 import type {
   SupplierOfferSearchResult,
   SupplierOfferUrlImportProvider,
@@ -22,7 +25,9 @@ export type TajaAutoEnrichmentField =
   | "price"
   | "minimumOrderQuantity"
   | "incoterm"
-  | "imageUrl";
+  | "imageUrl"
+  | "marketplaceDetails"
+  | "supplierLogistics";
 
 export type TajaAutoEnrichmentReport = {
   productUrl: string;
@@ -72,6 +77,10 @@ function isAuthoritativePreview(preview: SupplierOfferUrlPreview) {
 
 function changedNumber(left: number | null, right: number | null) {
   return left !== null && right !== null && Math.abs(left - right) > 0.0001;
+}
+
+function changedStructuredValue(left: unknown, right: unknown) {
+  return JSON.stringify(left ?? null) !== JSON.stringify(right ?? null);
 }
 
 function unchangedMerge(result: SupplierOfferSearchResult) {
@@ -164,6 +173,35 @@ function mergePreview(
     }
   }
 
+  let marketplaceDetails = result.marketplaceDetails ?? null;
+  if (preview.details) {
+    if (!marketplaceDetails) {
+      marketplaceDetails = preview.details;
+      fieldsFilled.push("marketplaceDetails");
+    } else if (
+      authoritative &&
+      changedStructuredValue(marketplaceDetails, preview.details)
+    ) {
+      marketplaceDetails = preview.details;
+      fieldsCorrected.push("marketplaceDetails");
+    }
+  }
+
+  const previewLogistics = marketplaceDetailsToSupplierLogistics(preview.details);
+  let supplierLogistics = result.supplierLogistics ?? null;
+  if (previewLogistics) {
+    if (!supplierLogistics) {
+      supplierLogistics = previewLogistics;
+      fieldsFilled.push("supplierLogistics");
+    } else if (
+      authoritative &&
+      changedStructuredValue(supplierLogistics, previewLogistics)
+    ) {
+      supplierLogistics = previewLogistics;
+      fieldsCorrected.push("supplierLogistics");
+    }
+  }
+
   return {
     result: {
       ...result,
@@ -173,6 +211,8 @@ function mergePreview(
       minimumOrderQuantity,
       incoterm,
       imageUrl,
+      marketplaceDetails,
+      supplierLogistics,
     } satisfies SupplierOfferSearchResult,
     fieldsFilled,
     fieldsCorrected,
@@ -188,9 +228,10 @@ function failureCode(error: unknown) {
  * Verifies a bounded set of finalists against their exact marketplace pages.
  * A non-partial preview tied to the same canonical product URL is stronger than
  * search snippets or cached discovery data and may correct conflicting price,
- * MOQ, country, Incoterm or image fields. Partial previews remain fill-only.
- * Failures are isolated per candidate and no raw upstream error text is sent
- * to the browser.
+ * MOQ, country, Incoterm, image or structured marketplace details. Exact-page
+ * packaging evidence is normalized into supplier logistics. Partial previews
+ * remain fill-only. Failures are isolated per candidate and no raw upstream
+ * error text is sent to the browser.
  */
 export async function autoEnrichTajaCandidates(
   results: SupplierOfferSearchResult[],
