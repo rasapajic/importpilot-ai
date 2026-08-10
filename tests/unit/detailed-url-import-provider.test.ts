@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { SupplierOfferUrlImportProvider } from "../../modules/product-search/domain/search";
 import {
   createDetailedSupplierOfferUrlImportProvider,
+  normalizeExternalSupplierName,
 } from "../../modules/product-search/infrastructure/detailed-url-import-provider";
 
 const productUrl = "https://mistingsystem.en.made-in-china.com/product/example/China-Misting-Nozzles.html";
@@ -62,6 +63,7 @@ describe("detailed URL import provider", () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(preview).toMatchObject({
       title: "Misting System Kit with Pump and 20 Nozzles",
+      supplierName: "Ningbo Misting Factory",
       price: 0.7,
       currency: "USD",
       minimumOrderQuantity: 100,
@@ -78,6 +80,33 @@ describe("detailed URL import provider", () => {
           piecesPerCarton: 1,
         },
       },
+    });
+  });
+
+  it("extracts only the legal company from supplier-profile prose", () => {
+    expect(normalizeExternalSupplierName(
+      "Located in Ningbo, a major port city in Zhejiang Province, Ningbo Lisen Spray Technology Equipment Co., Ltd. supplies misting systems worldwide.",
+    )).toBe("Ningbo Lisen Spray Technology Equipment Co., Ltd.");
+  });
+
+  it("drops descriptive supplier prose when no legal company is present", () => {
+    expect(normalizeExternalSupplierName(
+      "Located in Ningbo, a major port city in Zhejiang Province and specializing in outdoor cooling products.",
+    )).toBeNull();
+  });
+
+  it("sanitizes a supplier profile sentence before returning the preview", async () => {
+    const payload = externalPreview();
+    payload.preview.supplierName =
+      "Located in Ningbo, a major port city in Zhejiang Province, Ningbo Lisen Spray Technology Equipment Co., Ltd. supplies misting systems worldwide.";
+    const fetcher = vi.fn(async () => Response.json(payload));
+    const provider = createDetailedSupplierOfferUrlImportProvider({
+      endpoint: "https://url-import.example/preview",
+      fetcher: fetcher as typeof fetch,
+    });
+
+    await expect(provider.previewSupplierOfferUrl(productUrl)).resolves.toMatchObject({
+      supplierName: "Ningbo Lisen Spray Technology Equipment Co., Ltd.",
     });
   });
 
