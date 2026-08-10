@@ -17,13 +17,17 @@ describe("marketplace details provenance", () => {
       imageUrl: null,
       source: "made-in-china-v1",
       marketplaceDetails: {
-        adapter: "made-in-china-product-page-v1",
+        adapter: "made-in-china-product-page-v2",
         evidence: "PRODUCT_PAGE",
         priceTiers: [
           { price: 12, currency: "USD", minQuantity: 100, maxQuantity: 499 },
         ],
         attributes: [
-          { name: "Kit Contents", value: "Pump and 20 nozzles" },
+          {
+            name: "Kit Contents",
+            value: "Pump and 20 nozzles",
+            category: "PRODUCT_SPECIFICATION",
+          },
         ],
         variants: [],
         packaging: {
@@ -34,6 +38,10 @@ describe("marketplace details provenance", () => {
           packageHeightCm: 20,
           grossWeightKg: 8,
           piecesPerCarton: 1,
+          scope: "CARTON",
+          confidence: "HIGH",
+          usableForLandedCost: true,
+          validationNote: null,
         },
       },
       supplierLogistics: {
@@ -51,10 +59,14 @@ describe("marketplace details provenance", () => {
 
     expect(createSupplierOfferSourceMetadata(result)).toMatchObject({
       marketplaceDetails: {
-        adapter: "made-in-china-product-page-v1",
+        adapter: "made-in-china-product-page-v2",
         evidence: "PRODUCT_PAGE",
         attributes: [
-          { name: "Kit Contents", value: "Pump and 20 nozzles" },
+          {
+            name: "Kit Contents",
+            value: "Pump and 20 nozzles",
+            category: "PRODUCT_SPECIFICATION",
+          },
         ],
       },
       supplierLogistics: {
