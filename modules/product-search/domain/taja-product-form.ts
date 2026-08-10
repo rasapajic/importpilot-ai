@@ -1,3 +1,6 @@
+import {
+  marketplaceDetailsEvidenceText,
+} from "./marketplace-product-details";
 import type { SupplierOfferSearchResult } from "./search";
 import { extractTajaRequestedRequirements } from "./taja-requirement-match";
 
@@ -56,20 +59,33 @@ export function tajaRequestsCompleteSystem(productQuery: string) {
 }
 
 export function classifyTajaOfferProductForm(
-  result: Pick<SupplierOfferSearchResult, "title">,
+  result: Pick<SupplierOfferSearchResult, "title" | "marketplaceDetails">,
 ): TajaOfferProductForm {
   const title = normalize(result.title);
+  const exactPageEvidence = normalize(
+    marketplaceDetailsEvidenceText("", result.marketplaceDetails),
+  );
   const hasMisting = MISTING_PATTERN.test(title);
   const hasSystem = SYSTEM_PATTERN.test(title);
   const hasCompleteMarker = COMPLETE_MARKER_PATTERN.test(title);
   const hasPump = PUMP_PATTERN.test(title);
   const hasNozzle = NOZZLE_PATTERN.test(title);
   const hasComponent = COMPONENT_PATTERN.test(title);
+  const exactPageConfirmsPump = PUMP_PATTERN.test(exactPageEvidence);
+  const exactPageConfirmsNozzle = NOZZLE_PATTERN.test(exactPageEvidence);
+  const exactPageConfirmsCompleteUnit =
+    COMPLETE_MARKER_PATTERN.test(exactPageEvidence) ||
+    /\b(?:included|includes|configuration|contents|components)\b/.test(exactPageEvidence);
+  const exactPageResolvesCompleteSystem =
+    hasMisting &&
+    (hasSystem || hasCompleteMarker) &&
+    exactPageConfirmsPump &&
+    exactPageConfirmsNozzle &&
+    exactPageConfirmsCompleteUnit;
 
   // Marketplace titles such as "Misting System Mist Nozzles" mix a complete
-  // system label with a component label. Without an explicit pump, complete-kit
-  // marker or verified package contents, treating either interpretation as
-  // certain would be unsafe. Keep the listing commercially ambiguous.
+  // system label with a component label. Exact product-page kit contents may
+  // resolve the ambiguity, but compatibility text or an image alone cannot.
   if (
     hasMisting &&
     hasSystem &&
@@ -77,7 +93,9 @@ export function classifyTajaOfferProductForm(
     !hasPump &&
     !hasCompleteMarker
   ) {
-    return TajaOfferProductForms.UNCLEAR;
+    return exactPageResolvesCompleteSystem
+      ? TajaOfferProductForms.COMPLETE_SYSTEM
+      : TajaOfferProductForms.UNCLEAR;
   }
 
   const explicitNozzleOnly = hasNozzle &&
@@ -99,7 +117,8 @@ export function classifyTajaOfferProductForm(
     (
       (hasCompleteMarker && (hasPump || hasNozzle || hasSystem)) ||
       (hasSystem && (hasPump || hasNozzle)) ||
-      (hasPump && hasNozzle)
+      (hasPump && hasNozzle) ||
+      exactPageResolvesCompleteSystem
     )
   ) {
     return TajaOfferProductForms.COMPLETE_SYSTEM;
@@ -126,7 +145,7 @@ export function classifyTajaOfferProductForm(
 
 export function evaluateTajaProductForm(
   productQuery: string,
-  result: Pick<SupplierOfferSearchResult, "title">,
+  result: Pick<SupplierOfferSearchResult, "title" | "marketplaceDetails">,
 ): TajaProductFormAssessment {
   const requestedCompleteSystem = tajaRequestsCompleteSystem(productQuery);
   const form = classifyTajaOfferProductForm(result);
