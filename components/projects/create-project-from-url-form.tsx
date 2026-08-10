@@ -4,7 +4,14 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { useI18n } from "@/components/i18n/i18n-provider";
-import type { SupplierOfferSearchResult, SupplierOfferUrlPreview } from "@/modules/product-search/domain/search";
+import { MarketplaceProductEvidence } from "@/components/search/marketplace-product-evidence";
+import {
+  marketplaceDetailsToSupplierLogistics,
+} from "@/modules/product-search/domain/marketplace-product-details";
+import type {
+  SupplierOfferSearchResult,
+  SupplierOfferUrlPreview,
+} from "@/modules/product-search/domain/search";
 
 type FallbackOffer = {
   title: string;
@@ -39,9 +46,15 @@ function previewToFallbackOffer(
   return {
     title: preview?.title ?? initialTitle,
     supplierName: preview?.supplierName ?? "",
-    price: preview?.price === null || preview?.price === undefined ? "" : String(preview.price),
+    price: preview?.price === null || preview?.price === undefined
+      ? ""
+      : String(preview.price),
     currency: preview?.currency ?? "",
-    minimumOrderQuantity: preview?.minimumOrderQuantity === null || preview?.minimumOrderQuantity === undefined ? "" : String(preview.minimumOrderQuantity),
+    minimumOrderQuantity:
+      preview?.minimumOrderQuantity === null ||
+      preview?.minimumOrderQuantity === undefined
+        ? ""
+        : String(preview.minimumOrderQuantity),
     incoterm: preview?.incoterm ?? "",
     imageUrl: preview?.imageUrl ?? "",
   };
@@ -85,10 +98,16 @@ export function CreateProjectFromUrlForm({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ productUrl }),
       });
-      const payload = (await response.json()) as { preview?: SupplierOfferUrlPreview; fallbackPreview?: SupplierOfferUrlPreview; error?: string };
+      const payload = (await response.json()) as {
+        preview?: SupplierOfferUrlPreview;
+        fallbackPreview?: SupplierOfferUrlPreview;
+        error?: string;
+      };
       if (!response.ok || !payload.preview) {
         if (payload.fallbackPreview) {
-          setFallbackOffer(previewToFallbackOffer(payload.fallbackPreview, initialProductName));
+          setFallbackOffer(
+            previewToFallbackOffer(payload.fallbackPreview, initialProductName),
+          );
           setFallbackTitleFromSlug(Boolean(payload.fallbackPreview.titleFromSlug));
         } else {
           setFallbackOffer({ ...emptyFallbackOffer, title: initialProductName });
@@ -122,11 +141,16 @@ export function CreateProjectFromUrlForm({
   function updateFallback(field: keyof FallbackOffer, value: string) {
     setFallbackOffer((current) => ({
       ...current,
-      [field]: field === "currency" || field === "incoterm" ? value.toUpperCase() : value,
+      [field]: field === "currency" || field === "incoterm"
+        ? value.toUpperCase()
+        : value,
     }));
   }
 
-  async function createProjectAndImportOffer(form: FormData, result: SupplierOfferSearchResult) {
+  async function createProjectAndImportOffer(
+    form: FormData,
+    result: SupplierOfferSearchResult,
+  ) {
     const projectName = result.title || new URL(result.productUrl).hostname;
     const projectResponse = await fetch("/api/projects", {
       method: "POST",
@@ -141,11 +165,14 @@ export function CreateProjectFromUrlForm({
     const project = (await projectResponse.json()) as { id?: string; error?: string };
     if (!projectResponse.ok || !project.id) throw new Error(project.error);
 
-    const importResponse = await fetch(`/api/projects/${project.id}/supplier-search/import`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(result),
-    });
+    const importResponse = await fetch(
+      `/api/projects/${project.id}/supplier-search/import`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(result),
+      },
+    );
     const imported = (await importResponse.json()) as { error?: string };
     if (!importResponse.ok) throw new Error(imported.error);
 
@@ -159,7 +186,9 @@ export function CreateProjectFromUrlForm({
     setCreating(true);
     setError("");
     const form = new FormData(event.currentTarget);
-    const projectName = preview.title ?? initialProductName ?? new URL(preview.productUrl).hostname;
+    const projectName = preview.title ??
+      initialProductName ??
+      new URL(preview.productUrl).hostname;
     try {
       const result: SupplierOfferSearchResult = {
         title: preview.title ?? projectName,
@@ -172,12 +201,16 @@ export function CreateProjectFromUrlForm({
         productUrl: preview.productUrl,
         imageUrl: preview.imageUrl,
         source: preview.source,
+        marketplaceDetails: preview.details ?? null,
+        supplierLogistics: marketplaceDetailsToSupplierLogistics(preview.details),
       };
       await createProjectAndImportOffer(form, result);
     } catch (createError) {
-      setError(createError instanceof Error && createError.message
-        ? createError.message
-        : t("Pretraga nije kreirana. Pokušajte ponovo."));
+      setError(
+        createError instanceof Error && createError.message
+          ? createError.message
+          : t("Pretraga nije kreirana. Pokušajte ponovo."),
+      );
       setCreating(false);
     }
   }
@@ -194,17 +227,23 @@ export function CreateProjectFromUrlForm({
         supplierCountry: null,
         price: fallbackOffer.price === "" ? null : Number(fallbackOffer.price),
         currency: fallbackOffer.currency.trim() || null,
-        minimumOrderQuantity: fallbackOffer.minimumOrderQuantity === "" ? null : Number(fallbackOffer.minimumOrderQuantity),
+        minimumOrderQuantity: fallbackOffer.minimumOrderQuantity === ""
+          ? null
+          : Number(fallbackOffer.minimumOrderQuantity),
         incoterm: fallbackOffer.incoterm.trim() || null,
         productUrl,
         imageUrl: fallbackOffer.imageUrl.trim() || null,
         source: new URL(productUrl).hostname,
+        marketplaceDetails: null,
+        supplierLogistics: null,
       };
       await createProjectAndImportOffer(form, result);
     } catch (createError) {
-      setError(createError instanceof Error && createError.message
-        ? createError.message
-        : t("Pretraga nije kreirana. Pokušajte ponovo."));
+      setError(
+        createError instanceof Error && createError.message
+          ? createError.message
+          : t("Pretraga nije kreirana. Pokušajte ponovo."),
+      );
       setCreating(false);
     }
   }
@@ -214,7 +253,14 @@ export function CreateProjectFromUrlForm({
       <form className="url-import-form url-first-step" onSubmit={fetchPreview}>
         <label>
           {t("Link proizvoda")}
-          <input onChange={(event) => setProductUrl(event.target.value)} placeholder="https://..." ref={urlInputRef} required type="url" value={productUrl} />
+          <input
+            onChange={(event) => setProductUrl(event.target.value)}
+            placeholder="https://..."
+            ref={urlInputRef}
+            required
+            type="url"
+            value={productUrl}
+          />
         </label>
         <button className="primary-button" disabled={loadingPreview} type="submit">
           {loadingPreview ? t("Preuzimanje...") : t("Preuzmi podatke")}
@@ -224,21 +270,113 @@ export function CreateProjectFromUrlForm({
       {error && <p className="form-error" role="alert">{t(error)}</p>}
 
       {showManualFallback && (
-        <form className="url-review-form url-fallback-form" onSubmit={createManualFallbackSearch}>
-          <p className="url-fallback-heading">{t("Nastavite ručno bez ponovnog pokretanja.")}</p>
-          <p className="warning-text">{t("Link će ostati sačuvan kao izvor ponude.")}</p>
-          {fallbackTitleFromSlug && <p className="warning-text">{t("Naziv proizvoda procenjen iz linka")}</p>}
-          <label>{t("Naziv proizvoda")}<input onChange={(event) => updateFallback("title", event.target.value)} required value={fallbackOffer.title} /></label>
-          <label>{t("Dobavljač")}<input onChange={(event) => updateFallback("supplierName", event.target.value)} required value={fallbackOffer.supplierName} /></label>
-          <label>{t("Cena")}<input min="0" onChange={(event) => updateFallback("price", event.target.value)} required step="any" type="number" value={fallbackOffer.price} /></label>
-          <label>{t("Valuta")}<input maxLength={3} minLength={3} onChange={(event) => updateFallback("currency", event.target.value)} placeholder="USD" required value={fallbackOffer.currency} /></label>
-          <label>{t("Minimalna količina (MOQ)")}<input min="1" onChange={(event) => updateFallback("minimumOrderQuantity", event.target.value)} placeholder={t("Nije navedeno")} type="number" value={fallbackOffer.minimumOrderQuantity} /></label>
-          <label>{t("Incoterm")}<input maxLength={20} onChange={(event) => updateFallback("incoterm", event.target.value)} placeholder={t("Nije naveden")} value={fallbackOffer.incoterm} /></label>
-          <label>{t("Link slike")}<input onChange={(event) => updateFallback("imageUrl", event.target.value)} placeholder={t("Opcionalno")} type="url" value={fallbackOffer.imageUrl} /></label>
+        <form
+          className="url-review-form url-fallback-form"
+          onSubmit={createManualFallbackSearch}
+        >
+          <p className="url-fallback-heading">
+            {t("Nastavite ručno bez ponovnog pokretanja.")}
+          </p>
+          <p className="warning-text">
+            {t("Link će ostati sačuvan kao izvor ponude.")}
+          </p>
+          {fallbackTitleFromSlug && (
+            <p className="warning-text">{t("Naziv proizvoda procenjen iz linka")}</p>
+          )}
+          <label>
+            {t("Naziv proizvoda")}
+            <input
+              onChange={(event) => updateFallback("title", event.target.value)}
+              required
+              value={fallbackOffer.title}
+            />
+          </label>
+          <label>
+            {t("Dobavljač")}
+            <input
+              onChange={(event) => updateFallback("supplierName", event.target.value)}
+              required
+              value={fallbackOffer.supplierName}
+            />
+          </label>
+          <label>
+            {t("Cena")}
+            <input
+              min="0"
+              onChange={(event) => updateFallback("price", event.target.value)}
+              required
+              step="any"
+              type="number"
+              value={fallbackOffer.price}
+            />
+          </label>
+          <label>
+            {t("Valuta")}
+            <input
+              maxLength={3}
+              minLength={3}
+              onChange={(event) => updateFallback("currency", event.target.value)}
+              placeholder="USD"
+              required
+              value={fallbackOffer.currency}
+            />
+          </label>
+          <label>
+            {t("Minimalna količina (MOQ)")}
+            <input
+              min="1"
+              onChange={(event) =>
+                updateFallback("minimumOrderQuantity", event.target.value)
+              }
+              placeholder={t("Nije navedeno")}
+              type="number"
+              value={fallbackOffer.minimumOrderQuantity}
+            />
+          </label>
+          <label>
+            {t("Incoterm")}
+            <input
+              maxLength={20}
+              onChange={(event) => updateFallback("incoterm", event.target.value)}
+              placeholder={t("Nije naveden")}
+              value={fallbackOffer.incoterm}
+            />
+          </label>
+          <label>
+            {t("Link slike")}
+            <input
+              onChange={(event) => updateFallback("imageUrl", event.target.value)}
+              placeholder={t("Opcionalno")}
+              type="url"
+              value={fallbackOffer.imageUrl}
+            />
+          </label>
           <div className="url-first-project-fields">
-            <label>{t("Količina")}<input min="1" name="quantity" required type="number" /></label>
-            <label>{t("Ciljna zemlja")}<input maxLength={2} minLength={2} name="targetCountry" placeholder="DE" required /></label>
-            <label>{t("Ciljna marža (%)")}<input max={100} min={0} name="targetMargin" required step="0.01" type="number" /></label>
+            <label>
+              {t("Količina")}
+              <input min="1" name="quantity" required type="number" />
+            </label>
+            <label>
+              {t("Ciljna zemlja")}
+              <input
+                maxLength={2}
+                minLength={2}
+                name="targetCountry"
+                placeholder="DE"
+                required
+              />
+            </label>
+            <label>
+              {t("Ciljna marža (%)")}
+              <input
+                max={100}
+                min={0}
+                name="targetMargin"
+                required
+                step="0.01"
+                type="number"
+              />
+            </label>
           </div>
           <button className="primary-button" disabled={creating} type="submit">
             {creating ? t("Kreiranje...") : t("Nastavi ručno")}
@@ -249,18 +387,95 @@ export function CreateProjectFromUrlForm({
       {preview && (
         <form className="url-review-form" onSubmit={createSearch}>
           <p className={preview.isPartial ? "url-fallback-heading" : "url-import-success"}>
-            {preview.isPartial ? t("Delimično prepoznati podaci") : `✓ ${t("Podaci preuzeti")}`}
+            {preview.isPartial
+              ? t("Delimično prepoznati podaci")
+              : `✓ ${t("Podaci preuzeti")}`}
           </p>
-          <label>{t("Naziv proizvoda")}<input onChange={(event) => update("title", event.target.value)} placeholder={t("Nije prepoznato")} required value={preview.title ?? ""} /></label>
-          <label>{t("Dobavljač")}<input onChange={(event) => update("supplierName", event.target.value)} placeholder={t("Nije prepoznato")} value={preview.supplierName ?? ""} /></label>
-          <label>{t("Cena")}<input min="0" onChange={(event) => update("price", event.target.value)} placeholder={t("Nije prepoznato")} step="any" type="number" value={preview.price ?? ""} /></label>
-          <label>{t("Minimalna količina (MOQ)")}<input min="1" onChange={(event) => update("minimumOrderQuantity", event.target.value)} placeholder={t("Nije navedeno")} type="number" value={preview.minimumOrderQuantity ?? ""} /></label>
-          <label>{t("Valuta")}<input maxLength={3} onChange={(event) => update("currency", event.target.value.toUpperCase())} placeholder={t("Nije prepoznato")} value={preview.currency ?? ""} /></label>
-          <label>{t("Link slike")}<input onChange={(event) => update("imageUrl", event.target.value)} placeholder={t("Nije prepoznato")} type="url" value={preview.imageUrl ?? ""} /></label>
+          <label>
+            {t("Naziv proizvoda")}
+            <input
+              onChange={(event) => update("title", event.target.value)}
+              placeholder={t("Nije prepoznato")}
+              required
+              value={preview.title ?? ""}
+            />
+          </label>
+          <label>
+            {t("Dobavljač")}
+            <input
+              onChange={(event) => update("supplierName", event.target.value)}
+              placeholder={t("Nije prepoznato")}
+              value={preview.supplierName ?? ""}
+            />
+          </label>
+          <label>
+            {t("Cena")}
+            <input
+              min="0"
+              onChange={(event) => update("price", event.target.value)}
+              placeholder={t("Nije prepoznato")}
+              step="any"
+              type="number"
+              value={preview.price ?? ""}
+            />
+          </label>
+          <label>
+            {t("Minimalna količina (MOQ)")}
+            <input
+              min="1"
+              onChange={(event) => update("minimumOrderQuantity", event.target.value)}
+              placeholder={t("Nije navedeno")}
+              type="number"
+              value={preview.minimumOrderQuantity ?? ""}
+            />
+          </label>
+          <label>
+            {t("Valuta")}
+            <input
+              maxLength={3}
+              onChange={(event) => update("currency", event.target.value.toUpperCase())}
+              placeholder={t("Nije prepoznato")}
+              value={preview.currency ?? ""}
+            />
+          </label>
+          <label>
+            {t("Link slike")}
+            <input
+              onChange={(event) => update("imageUrl", event.target.value)}
+              placeholder={t("Nije prepoznato")}
+              type="url"
+              value={preview.imageUrl ?? ""}
+            />
+          </label>
+
+          <MarketplaceProductEvidence preview={preview} />
+
           <div className="url-first-project-fields">
-            <label>{t("Količina")}<input min="1" name="quantity" required type="number" /></label>
-            <label>{t("Ciljna zemlja")}<input maxLength={2} minLength={2} name="targetCountry" placeholder="DE" required /></label>
-            <label>{t("Ciljna marža (%)")}<input max={100} min={0} name="targetMargin" required step="0.01" type="number" /></label>
+            <label>
+              {t("Količina")}
+              <input min="1" name="quantity" required type="number" />
+            </label>
+            <label>
+              {t("Ciljna zemlja")}
+              <input
+                maxLength={2}
+                minLength={2}
+                name="targetCountry"
+                placeholder="DE"
+                required
+              />
+            </label>
+            <label>
+              {t("Ciljna marža (%)")}
+              <input
+                max={100}
+                min={0}
+                name="targetMargin"
+                required
+                step="0.01"
+                type="number"
+              />
+            </label>
           </div>
           <button className="primary-button" disabled={creating} type="submit">
             {creating ? t("Kreiranje...") : t("Kreiraj pretragu")}
