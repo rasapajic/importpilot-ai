@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useI18n } from "@/components/i18n/i18n-provider";
 import { MarketplaceProductEvidence } from "@/components/search/marketplace-product-evidence";
 import { TajaPreviewBusinessSummary } from "@/components/search/taja-preview-business-summary";
+import { readApiJson } from "@/lib/http/api-response";
 import {
   marketplaceDetailsToSupplierLogistics,
 } from "@/modules/product-search/domain/marketplace-product-details";
@@ -66,6 +67,10 @@ function positiveInteger(value: string) {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
+function uppercaseCountryInput(event: FormEvent<HTMLInputElement>) {
+  event.currentTarget.value = event.currentTarget.value.toUpperCase();
+}
+
 export function CreateProjectFromUrlForm({
   initialProductUrl = "",
   initialProductName = "",
@@ -105,11 +110,11 @@ export function CreateProjectFromUrlForm({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ productUrl }),
       });
-      const payload = (await response.json()) as {
+      const payload = await readApiJson<{
         preview?: SupplierOfferUrlPreview;
         fallbackPreview?: SupplierOfferUrlPreview;
         error?: string;
-      };
+      }>(response, t("Podaci iz linka nisu mogli biti preuzeti."));
       if (!response.ok || !payload.preview) {
         if (payload.fallbackPreview) {
           setFallbackOffer(
@@ -120,7 +125,9 @@ export function CreateProjectFromUrlForm({
           setFallbackOffer({ ...emptyFallbackOffer, title: initialProductName });
           setFallbackTitleFromSlug(false);
         }
-        throw new Error(payload.error);
+        throw new Error(
+          payload.error ?? t("Podaci iz linka nisu mogli biti preuzeti."),
+        );
       }
       setPreview(payload.preview);
     } catch (previewError) {
@@ -158,32 +165,31 @@ export function CreateProjectFromUrlForm({
     form: FormData,
     result: SupplierOfferSearchResult,
   ) {
+    const fallbackMessage = t("Pretraga nije kreirana. Pokušajte ponovo.");
     const projectName = result.title || new URL(result.productUrl).hostname;
-    const projectResponse = await fetch("/api/projects", {
+    const response = await fetch("/api/projects/from-url", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        name: projectName,
-        quantity: form.get("quantity"),
-        targetCountry: form.get("targetCountry"),
-        targetMargin: form.get("targetMargin"),
+        project: {
+          name: projectName,
+          quantity: form.get("quantity"),
+          targetCountry: form.get("targetCountry"),
+          targetMargin: form.get("targetMargin"),
+        },
+        offer: result,
       }),
     });
-    const project = (await projectResponse.json()) as { id?: string; error?: string };
-    if (!projectResponse.ok || !project.id) throw new Error(project.error);
+    const created = await readApiJson<{
+      projectId?: string;
+      offerId?: string;
+      error?: string;
+    }>(response, fallbackMessage);
+    if (!response.ok || !created.projectId) {
+      throw new Error(created.error ?? fallbackMessage);
+    }
 
-    const importResponse = await fetch(
-      `/api/projects/${project.id}/supplier-search/import`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(result),
-      },
-    );
-    const imported = (await importResponse.json()) as { error?: string };
-    if (!importResponse.ok) throw new Error(imported.error);
-
-    router.push(`/projects/${project.id}#workflow-step-offer`);
+    router.push(`/projects/${created.projectId}#workflow-step-offer`);
     router.refresh();
   }
 
@@ -376,6 +382,7 @@ export function CreateProjectFromUrlForm({
                 maxLength={2}
                 minLength={2}
                 name="targetCountry"
+                onInput={uppercaseCountryInput}
                 placeholder="DE"
                 required
               />
@@ -487,6 +494,7 @@ export function CreateProjectFromUrlForm({
                 maxLength={2}
                 minLength={2}
                 name="targetCountry"
+                onInput={uppercaseCountryInput}
                 placeholder="DE"
                 required
               />
