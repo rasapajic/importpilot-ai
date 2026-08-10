@@ -58,7 +58,7 @@ describe("URL import provider parser", () => {
 
     expect(preview).toMatchObject({
       productTitle: "20W Mobile Phone Charger",
-      supplierName: "Xiamen Charger Supplier",
+      supplierName: "Xiamen Charger Supplier Co., Ltd.",
       price: "3.45",
       currency: "USD",
       minimumOrderQuantity: "200",
@@ -123,7 +123,7 @@ describe("URL import provider parser", () => {
       ]),
       variants: expect.arrayContaining([
         { name: "Color", values: ["Black", "White"] },
-        { name: "Voltage", values: ["48V", "60V"] },
+        { name: "Voltage", values: ["48 V", "60 V"] },
       ]),
       packaging: {
         sellingUnit: "Single item",
