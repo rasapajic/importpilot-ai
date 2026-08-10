@@ -1,5 +1,13 @@
 import { z } from "zod";
 import { normalizeTargetCountryCode } from "../../i18n/country-names";
+import {
+  supplierOfferMarketplaceDetailsSchema,
+  type SupplierOfferMarketplaceDetails,
+  type SupplierOfferPackaging,
+  type SupplierOfferPriceTier,
+  type SupplierOfferProductAttribute,
+  type SupplierOfferProductVariantGroup,
+} from "./marketplace-product-details";
 
 const optionalText = (max: number) =>
   z.preprocess(
@@ -100,6 +108,7 @@ export const supplierOfferSearchResultSchema = z
       "Image URL must be valid.",
     ),
     source: z.string().trim().min(1).max(100),
+    marketplaceDetails: supplierOfferMarketplaceDetailsSchema.nullable().optional(),
     supplierLogistics: supplierOfferLogisticsSchema.nullable().optional(),
     provenance: supplierOfferSearchProvenanceSchema.optional(),
   })
@@ -199,6 +208,7 @@ export const supplierOfferUrlPreviewSchema = z
       "Image URL must be valid.",
     ),
     source: z.string().trim().min(1).max(100),
+    details: supplierOfferMarketplaceDetailsSchema.nullable().optional(),
     isPartial: z.boolean().default(false),
     titleFromSlug: z.boolean().default(false),
   })
@@ -211,6 +221,13 @@ export type SupplierOfferLogistics = z.infer<typeof supplierOfferLogisticsSchema
 export type SupplierOfferSearchResult = z.infer<typeof supplierOfferSearchResultSchema>;
 export type SupplierOfferSearchSummary = z.infer<typeof supplierOfferSearchSummarySchema>;
 export type SupplierOfferUrlPreview = z.infer<typeof supplierOfferUrlPreviewSchema>;
+export type {
+  SupplierOfferMarketplaceDetails,
+  SupplierOfferPackaging,
+  SupplierOfferPriceTier,
+  SupplierOfferProductAttribute,
+  SupplierOfferProductVariantGroup,
+};
 export type SupplierOfferSearchProviderOutcome =
   | SupplierOfferSearchResult[]
   | {
