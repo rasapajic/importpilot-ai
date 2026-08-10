@@ -37,6 +37,7 @@ export function createBrowserAssisted1688Preview(productUrl: string): SupplierOf
     productUrl: url.toString(),
     imageUrl: null,
     source: url.hostname.toLowerCase(),
+    details: null,
     isPartial: true,
     titleFromSlug: false,
   });
@@ -76,6 +77,7 @@ export function createSupplierOfferSourceMetadata(
     sourceHost: url.hostname.toLowerCase(),
     imageUrl: result.imageUrl,
     providerSource: result.source,
+    marketplaceDetails: result.marketplaceDetails ?? null,
     supplierLogistics: result.supplierLogistics ?? null,
     fetchedAt: provenance.fetchedAt,
     resultOrigin: provenance.resultOrigin,
