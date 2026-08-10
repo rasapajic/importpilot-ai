@@ -7,6 +7,9 @@ import {
 } from "@/modules/product-search/application/product-search-service";
 import { projectSupplierSearchRequestSchema } from "@/modules/product-search/domain/search";
 import {
+  getDetailedSupplierOfferUrlImportProvider,
+} from "@/modules/product-search/infrastructure/detailed-url-import-provider";
+import {
   SupplierSearchProviderError,
   SupplierSearchProviderUnavailableError,
 } from "@/modules/product-search/infrastructure/http-provider";
@@ -35,6 +38,10 @@ export async function POST(
       (await params).projectId,
       auth.membership.organizationId,
       parsed.data,
+      undefined,
+      getDetailedSupplierOfferUrlImportProvider({
+        requestedQuantity: parsed.data.quantity,
+      }),
     );
     return NextResponse.json({
       ...outcome,
