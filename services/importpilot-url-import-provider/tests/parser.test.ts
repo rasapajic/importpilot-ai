@@ -64,7 +64,7 @@ describe("URL import provider parser", () => {
       minimumOrderQuantity: "200",
       imageUrl: "https://image.made-in-china.com/charger.jpg",
       details: {
-        adapter: "made-in-china-product-page-v1",
+        adapter: "made-in-china-product-page-v2",
         evidence: "PRODUCT_PAGE",
       },
     });
@@ -109,21 +109,21 @@ describe("URL import provider parser", () => {
     });
   });
 
-  it("extracts Made-in-China attributes, variants and packaging evidence", () => {
+  it("extracts and classifies Made-in-China facts, variants and packaging", () => {
     const html = fixture("made-in-china-supplier-product.html");
     const details = extractMadeInChinaProductDetails(html);
 
     expect(details).toMatchObject({
-      adapter: "made-in-china-product-page-v1",
+      adapter: "made-in-china-product-page-v2",
       evidence: "PRODUCT_PAGE",
       attributes: expect.arrayContaining([
-        { name: "Model NO.", value: "ET-01" },
-        { name: "Voltage", value: "48V / 60V" },
-        { name: "Certification", value: "CE, EEC" },
+        { name: "Model NO.", value: "ET-01", category: "PRODUCT_SPECIFICATION" },
+        { name: "Voltage", value: "48V / 60V", category: "PRODUCT_SPECIFICATION" },
+        { name: "Certification", value: "CE, EEC", category: "PRODUCT_SPECIFICATION" },
       ]),
       variants: expect.arrayContaining([
         { name: "Color", values: ["Black", "White"] },
-        { name: "Battery", values: ["Lead Acid", "Lithium"] },
+        { name: "Voltage", values: ["48V", "60V"] },
       ]),
       packaging: {
         sellingUnit: "Single item",
@@ -133,8 +133,16 @@ describe("URL import provider parser", () => {
         packageHeightCm: 115,
         grossWeightKg: 135,
         piecesPerCarton: 1,
+        scope: "CARTON",
+        confidence: "HIGH",
+        usableForLandedCost: true,
+        validationNote: null,
       },
     });
+    expect(details.attributes.some((attribute) => attribute.name === "Package Size"))
+      .toBe(false);
+    expect(details.variants.some((variant) => variant.name === "Battery"))
+      .toBe(false);
   });
 
   it("maximizes extraction from Made-in-China supplier product HTML", () => {
@@ -153,7 +161,7 @@ describe("URL import provider parser", () => {
       imageUrl: "https://image.made-in-china.com/202f0j00scooter-main.jpg",
       productUrl,
       details: {
-        adapter: "made-in-china-product-page-v1",
+        adapter: "made-in-china-product-page-v2",
         evidence: "PRODUCT_PAGE",
       },
     });
@@ -163,9 +171,9 @@ describe("URL import provider parser", () => {
       pageTitle: "China Electric Scooter Hot Selling Made in China High Quality Popular Model and Cheaper CKD Price - Electric Scooter and E Scooter",
       detailCounts: {
         priceTiers: 0,
-        attributes: 8,
-        variants: 3,
-        packagingFields: 7,
+        attributes: 3,
+        variants: 2,
+        packagingFields: 10,
       },
     });
     expect(snapshot.fieldCount).toBeGreaterThanOrEqual(7);
