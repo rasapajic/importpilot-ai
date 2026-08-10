@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { useI18n } from "@/components/i18n/i18n-provider";
 import { MarketplaceProductEvidence } from "@/components/search/marketplace-product-evidence";
+import { TajaPreviewBusinessSummary } from "@/components/search/taja-preview-business-summary";
 import {
   marketplaceDetailsToSupplierLogistics,
 } from "@/modules/product-search/domain/marketplace-product-details";
@@ -60,6 +61,11 @@ function previewToFallbackOffer(
   };
 }
 
+function positiveInteger(value: string) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
 export function CreateProjectFromUrlForm({
   initialProductUrl = "",
   initialProductName = "",
@@ -81,6 +87,7 @@ export function CreateProjectFromUrlForm({
     title: initialProductName,
   }));
   const [fallbackTitleFromSlug, setFallbackTitleFromSlug] = useState(false);
+  const [requestedQuantity, setRequestedQuantity] = useState("");
 
   useEffect(() => {
     urlInputRef.current?.focus();
@@ -354,7 +361,14 @@ export function CreateProjectFromUrlForm({
           <div className="url-first-project-fields">
             <label>
               {t("Količina")}
-              <input min="1" name="quantity" required type="number" />
+              <input
+                min="1"
+                name="quantity"
+                onChange={(event) => setRequestedQuantity(event.target.value)}
+                required
+                type="number"
+                value={requestedQuantity}
+              />
             </label>
             <label>
               {t("Ciljna zemlja")}
@@ -448,12 +462,24 @@ export function CreateProjectFromUrlForm({
             />
           </label>
 
+          <TajaPreviewBusinessSummary
+            preview={preview}
+            productQuery={initialProductName.trim() || null}
+            requestedQuantity={positiveInteger(requestedQuantity)}
+          />
           <MarketplaceProductEvidence preview={preview} />
 
           <div className="url-first-project-fields">
             <label>
               {t("Količina")}
-              <input min="1" name="quantity" required type="number" />
+              <input
+                min="1"
+                name="quantity"
+                onChange={(event) => setRequestedQuantity(event.target.value)}
+                required
+                type="number"
+                value={requestedQuantity}
+              />
             </label>
             <label>
               {t("Ciljna zemlja")}
