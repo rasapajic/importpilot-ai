@@ -7,6 +7,10 @@ import {
   ProfitabilityProjectNotFoundError,
 } from "@/modules/projects/application/profitability-check-service";
 
+const PROFITABILITY_CHECK_TIMEOUT_MS = 15_000;
+
+class ProfitabilityCheckTimeoutError extends Error {}
+
 function acceptsHtml(request: NextRequest) {
   return request.headers.get("accept")?.includes("text/html") ?? false;
 }
@@ -16,6 +20,20 @@ function projectRedirect(request: NextRequest, projectId: string, error?: string
   if (error) url.searchParams.set("profitabilityError", error);
   url.hash = "workflow-step-decision";
   return NextResponse.redirect(url, 303);
+}
+
+function withProfitabilityTimeout<T>(operation: Promise<T>) {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_resolve, reject) => {
+    timeout = setTimeout(
+      () => reject(new ProfitabilityCheckTimeoutError()),
+      PROFITABILITY_CHECK_TIMEOUT_MS,
+    );
+  });
+
+  return Promise.race([operation, timeoutPromise]).finally(() => {
+    if (timeout) clearTimeout(timeout);
+  });
 }
 
 export async function POST(
@@ -34,9 +52,11 @@ export async function POST(
   }
 
   try {
-    const decision = await checkProjectProfitability(
-      projectId,
-      auth.membership.organizationId,
+    const decision = await withProfitabilityTimeout(
+      checkProjectProfitability(
+        projectId,
+        auth.membership.organizationId,
+      ),
     );
     return acceptsHtml(request)
       ? projectRedirect(request, projectId)
@@ -46,8 +66,14 @@ export async function POST(
       ? "NO_CALCULATED_OFFERS"
       : error instanceof ProfitabilityProjectNotFoundError
         ? "PROJECT_NOT_FOUND"
-        : "CHECK_FAILED";
-    const status = code === "PROJECT_NOT_FOUND" ? 404 : code === "CHECK_FAILED" ? 500 : 400;
+        : error instanceof ProfitabilityCheckTimeoutError
+          ? "CHECK_TIMEOUT"
+          : "CHECK_FAILED";
+    const status = code === "PROJECT_NOT_FOUND"
+      ? 404
+      : code === "CHECK_FAILED" || code === "CHECK_TIMEOUT"
+        ? 500
+        : 400;
     return acceptsHtml(request)
       ? projectRedirect(request, projectId, code)
       : NextResponse.json({ error: code }, { status });
