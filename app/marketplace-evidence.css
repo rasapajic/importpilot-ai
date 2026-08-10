@@ -78,6 +78,23 @@
   overflow-wrap: anywhere;
 }
 
+.marketplace-logistics-status {
+  border-radius: 0.55rem;
+  font-size: 0.85rem;
+  margin: 0.75rem 0 0;
+  padding: 0.7rem;
+}
+
+.marketplace-logistics-status-usable {
+  background: #e9f7ef;
+  color: #137752;
+}
+
+.marketplace-logistics-status-review {
+  background: #fff8df;
+  color: #6b5300;
+}
+
 @media (max-width: 767px) {
   .marketplace-attribute-list {
     grid-template-columns: 1fr;
