@@ -300,10 +300,8 @@ export function extractPriceTiers(html: string): ExtractedPriceTier[] {
 
   const unique = new Map<string, ExtractedPriceTier>();
   for (const tier of results) {
-    unique.set(
-      `${tier.currency ?? ""}:${tier.price}:${tier.minQuantity}:${tier.maxQuantity ?? "open"}`,
-      tier,
-    );
+    const key = `${tier.currency ?? ""}:${tier.minQuantity}:${tier.maxQuantity ?? "open"}`;
+    if (!unique.has(key)) unique.set(key, tier);
   }
   return [...unique.values()]
     .sort((left, right) => left.minQuantity - right.minQuantity)
