@@ -1,3 +1,6 @@
+import {
+  marketplaceDetailsEvidenceText,
+} from "./marketplace-product-details";
 import type { SupplierOfferSearchResult } from "./search";
 
 export const TajaRequirementMatchStatuses = {
@@ -194,19 +197,21 @@ export function extractTajaRequestedRequirements(
 }
 
 /**
- * Deterministic first-pass requirement verification from the user's product
- * description and the verified supplier-result title. Exact evidence is kept
- * separate from broad contextual relevance: for example, patio/terrace is
- * confirmed, outdoor/garden may be likely, while pool/zoo/racecourse context
- * does not prove patio use. Missing title detail remains unconfirmed until the
- * exact page or supplier response proves it.
+ * Deterministic requirement verification from the user's product description
+ * and source-grounded marketplace evidence. The exact title remains the first
+ * signal, while parsed product-page attributes and variants may confirm details
+ * omitted from the title. Exact evidence is kept separate from broad contextual
+ * relevance: patio/terrace is confirmed, outdoor/garden may be likely, and
+ * pool/zoo/racecourse context does not prove patio use.
  */
 export function evaluateTajaRequirementMatch(
   productQuery: string,
-  result: Pick<SupplierOfferSearchResult, "title">,
+  result: Pick<SupplierOfferSearchResult, "title" | "marketplaceDetails">,
 ): TajaRequirementMatch {
   const query = normalize(productQuery);
-  const offer = normalize(result.title);
+  const offer = normalize(
+    marketplaceDetailsEvidenceText(result.title, result.marketplaceDetails),
+  );
   const checks: TajaRequirementCheck[] = [];
   const requestedNozzleCount = extractNumberNearAlias(query, NOZZLE_QUERY_ALIASES);
 
