@@ -135,13 +135,113 @@ function cleanTitle(value: string | null) {
   return value;
 }
 
+const COMPANY_SUFFIX_SOURCE = "(?:Co\\.,?\\s*Ltd\\.?|Company\\s+Limited|Limited|Ltd\\.?|Factory|Manufacturer)";
+const COMPANY_SUFFIX_PATTERN = new RegExp(`\\b${COMPANY_SUFFIX_SOURCE}\\s*$`, "i");
+const PLATFORM_COMPANY_PATTERN = /\b(?:Made-in-China(?:\.com)?|Focus\s+Technology|Google|Facebook|Microsoft)\b/i;
+
 function cleanSupplierName(value: string | null) {
   if (!value) return null;
-  if (/[<>]/.test(value)) return null;
-  if (/class\s*=|button|chat|j-sr|supplier-chat/i.test(value)) return null;
-  const normalized = value.replace(/\s+/g, " ").trim();
-  if (!normalized || /^(supplier|company|manufacturer)$/i.test(normalized)) return null;
-  return normalized;
+  const decoded = decodeHtml(value.replace(/<[^>]+>/g, " "));
+  if (!decoded) return null;
+  if (/class\s*=|button|chat|j-sr|supplier-chat/i.test(decoded)) return null;
+  let normalized = decoded
+    .replace(/^(?:verified\s+supplier|secured\s+trading|supplier|manufacturer|company\s+name)\s*[:\-]?\s*/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const companyMatch = normalized.match(new RegExp(
+    `([A-Za-z0-9][A-Za-z0-9&.,'()\\-\\/\\s]{2,180}?${COMPANY_SUFFIX_SOURCE})`,
+    "i",
+  ));
+  if (companyMatch?.[1]) normalized = companyMatch[1].trim();
+  if (
+    !normalized ||
+    normalized.length < 3 ||
+    normalized.length > 200 ||
+    /^(?:supplier|company|manufacturer)$/i.test(normalized) ||
+    PLATFORM_COMPANY_PATTERN.test(normalized)
+  ) {
+    return null;
+  }
+  const words = normalized.match(/[A-Za-z0-9]+/g) ?? [];
+  return words.length >= 2 ? normalized : null;
+}
+
+type SupplierCandidate = {
+  value: string;
+  score: number;
+};
+
+function supplierScore(value: string, baseScore: number) {
+  return baseScore +
+    (COMPANY_SUFFIX_PATTERN.test(value) ? 30 : 0) +
+    Math.min(value.length, 100) / 10;
+}
+
+/**
+ * Finds the supplier from structured seller/manufacturer data first, then from
+ * supplier/company blocks and supplier-homepage links. A final visible-text
+ * fallback accepts only company-shaped names with a legal suffix. This covers
+ * Made-in-China's real `compnay-name` typo without mistaking marketplace copy
+ * or chat controls for a supplier.
+ */
+export function extractSupplierName(html: string) {
+  const candidates = new Map<string, SupplierCandidate>();
+  const add = (value: string | null | undefined, baseScore: number) => {
+    const cleaned = cleanSupplierName(value ?? null);
+    if (!cleaned) return;
+    const key = cleaned.toLowerCase();
+    const score = supplierScore(cleaned, baseScore);
+    const existing = candidates.get(key);
+    if (!existing || score > existing.score) {
+      candidates.set(key, { value: cleaned, score });
+    }
+  };
+
+  add(
+    embeddedJsonString(html, [
+      "companyName",
+      "supplierName",
+      "storeName",
+      "sellerName",
+      "shopName",
+      "manufacturerName",
+    ]),
+    120,
+  );
+
+  for (const match of html.matchAll(
+    /"(?:seller|manufacturer|supplier)"\s*:\s*\{[\s\S]{0,900}?"name"\s*:\s*"((?:\\.|[^"\\])*)"/gi,
+  )) {
+    add(match[1], 115);
+  }
+
+  add(meta(html, "author"), 105);
+
+  for (const match of html.matchAll(
+    /<[^>]+(?:class|id)=["'][^"']*(?:company|compnay|supplier|manufacturer|seller|store)[^"']*["'][^>]*>([\s\S]{0,700}?)<\/[^>]+>/gi,
+  )) {
+    add(plainText(match[1] ?? ""), 95);
+  }
+
+  for (const match of html.matchAll(
+    /<a[^>]+href=["'][^"']*(?:\.made-in-china\.com|\/showroom\/|\/company\/)[^"']*["'][^>]*>([\s\S]{0,600}?)<\/a>/gi,
+  )) {
+    add(plainText(match[1] ?? ""), 85);
+  }
+
+  const visibleText = plainText(
+    html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, " "),
+  );
+  const companyPattern = new RegExp(
+    `([A-Z][A-Za-z0-9&.,'()\\-\\/\\s]{2,180}?${COMPANY_SUFFIX_SOURCE})`,
+    "g",
+  );
+  for (const match of visibleText.matchAll(companyPattern)) {
+    add(match[1], 55);
+  }
+
+  return [...candidates.values()]
+    .sort((left, right) => right.score - left.score)[0]?.value ?? null;
 }
 
 function titleFromSlug(productUrl: string) {
@@ -360,7 +460,7 @@ export function extractProductAttributes(html: string) {
     if (!key || unique.has(key)) continue;
     unique.set(key, pair);
   }
-  return [...unique.values()].slice(0, 50);
+  return [...unique.values()].slice(0, 80);
 }
 
 function addVariantValue(
@@ -462,7 +562,11 @@ export function extractProductPackaging(
     /packing\s+quantity/i,
   ]) ?? bodyText.match(/(?:Pieces?|Pcs|Qty\.?)\s+(?:Per|\/)\s+Carton\s*:?\s*(\d+)/i)?.[1] ?? null;
   const sellingUnit = findAttribute(attributes, [/selling\s+units?/i]);
-  const packageType = findAttribute(attributes, [/package\s+type/i, /packing\s+type/i]);
+  const packageType = findAttribute(attributes, [
+    /transport\s+package/i,
+    /package\s+type/i,
+    /packing\s+type/i,
+  ]);
   const grossWeightKg = positiveNumber(grossWeightText);
   const piecesPerCarton = quantityNumber(piecesText ?? undefined);
 
@@ -520,16 +624,7 @@ export function inspectPreviewExtraction(html: string, productUrl?: string): Pre
     ]) ??
     pageTitle,
   );
-  const supplierName = cleanSupplierName(
-    embeddedJsonString(html, ["companyName", "supplierName", "storeName", "sellerName", "shopName"]) ??
-    meta(html, "author") ??
-    regexText(html, [
-      /(?:Company\s+Name|Supplier|Manufacturer)\s*:?<\/?[^>]*>\s*([^<\n]+)/i,
-      /(?:Company\s+Name|Supplier|Manufacturer)\s*[:\-]\s*([^<\n]+)/i,
-      /<[^>]+(?:class|id)=["'][^"']*(?:company|supplier|manufacturer)[^"']*["'][^>]*>\s*<a[^>]*>([\s\S]*?)<\/a>/i,
-      /<a[^>]+href=["'][^"']*\.made-in-china\.com["'][^>]*>([\s\S]*?(?:Co\.|Ltd\.|Limited|Factory|Supplier)[\s\S]*?)<\/a>/i,
-    ]),
-  );
+  const supplierName = extractSupplierName(html);
   let details: MarketplaceProductDetails | null = null;
   if (productUrl) {
     try {
