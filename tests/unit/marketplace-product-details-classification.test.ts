@@ -53,7 +53,7 @@ describe("marketplace product details normalization", () => {
 
     expect(details.variants).toEqual([
       { name: "Flow", values: ["0.1 mm", "0.2 mm", "0.3 mm"] },
-      { name: "Voltage", values: ["110V", "220V", "380V"] },
+      { name: "Voltage", values: ["110 V", "220 V", "380 V"] },
     ]);
   });
 
