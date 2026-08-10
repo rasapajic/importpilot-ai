@@ -46,9 +46,17 @@ export const productPriceTierSchema = z.object({
   }
 });
 
+export const productAttributeCategorySchema = z.enum([
+  "PRODUCT_SPECIFICATION",
+  "SUPPLIER_COMMERCIAL",
+  "MARKETPLACE_SERVICE",
+  "OTHER",
+]);
+
 export const productAttributeSchema = z.object({
   name: z.string().trim().min(1).max(120),
   value: z.string().trim().min(1).max(500),
+  category: productAttributeCategorySchema.default("OTHER"),
 }).strict();
 
 export const productVariantGroupSchema = z.object({
@@ -64,13 +72,20 @@ export const productPackagingSchema = z.object({
   packageHeightCm: optionalPositiveNumber,
   grossWeightKg: optionalPositiveNumber,
   piecesPerCarton: optionalPositiveInteger,
+  scope: z.enum(["SELLING_UNIT", "CARTON", "UNKNOWN"]).default("UNKNOWN"),
+  confidence: z.enum(["HIGH", "MEDIUM", "LOW"]).default("LOW"),
+  usableForLandedCost: z.boolean().default(false),
+  validationNote: optionalText(300),
 }).strict();
 
 export const marketplaceProductDetailsSchema = z.object({
-  adapter: z.literal("made-in-china-product-page-v1"),
+  adapter: z.enum([
+    "made-in-china-product-page-v1",
+    "made-in-china-product-page-v2",
+  ]),
   evidence: z.literal("PRODUCT_PAGE"),
   priceTiers: z.array(productPriceTierSchema).max(20),
-  attributes: z.array(productAttributeSchema).max(50),
+  attributes: z.array(productAttributeSchema).max(80),
   variants: z.array(productVariantGroupSchema).max(20),
   packaging: productPackagingSchema.nullable(),
 }).strict();
@@ -96,6 +111,7 @@ export const productPreviewSchema = z.object({
 export type PreviewRequest = z.infer<typeof previewRequestSchema>;
 export type ProductPreview = z.infer<typeof productPreviewSchema>;
 export type MarketplaceProductDetails = z.infer<typeof marketplaceProductDetailsSchema>;
+export type ProductAttributeCategory = z.infer<typeof productAttributeCategorySchema>;
 
 export type ErrorReason = "NETWORK_ERROR" | "BLOCKED" | "PARSING_FAILED" | "INVALID_URL" | "TIMEOUT";
 
