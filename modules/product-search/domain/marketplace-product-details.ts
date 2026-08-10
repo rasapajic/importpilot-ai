@@ -39,9 +39,17 @@ export const supplierOfferPriceTierSchema = z.object({
   }
 });
 
+export const supplierOfferProductAttributeCategorySchema = z.enum([
+  "PRODUCT_SPECIFICATION",
+  "SUPPLIER_COMMERCIAL",
+  "MARKETPLACE_SERVICE",
+  "OTHER",
+]);
+
 export const supplierOfferProductAttributeSchema = z.object({
   name: z.string().trim().min(1).max(120),
   value: z.string().trim().min(1).max(500),
+  category: supplierOfferProductAttributeCategorySchema.default("OTHER"),
 }).strict();
 
 export const supplierOfferProductVariantGroupSchema = z.object({
@@ -57,18 +65,25 @@ export const supplierOfferPackagingSchema = z.object({
   packageHeightCm: optionalPositiveNumber,
   grossWeightKg: optionalPositiveNumber,
   piecesPerCarton: optionalPositiveInteger,
+  scope: z.enum(["SELLING_UNIT", "CARTON", "UNKNOWN"]).default("UNKNOWN"),
+  confidence: z.enum(["HIGH", "MEDIUM", "LOW"]).default("LOW"),
+  usableForLandedCost: z.boolean().default(false),
+  validationNote: optionalText(300),
 }).strict();
 
 export const supplierOfferMarketplaceDetailsSchema = z.object({
   adapter: z.string().trim().min(1).max(100),
   evidence: z.enum(["PRODUCT_PAGE", "SEARCH_SNIPPET"]),
   priceTiers: z.array(supplierOfferPriceTierSchema).max(20),
-  attributes: z.array(supplierOfferProductAttributeSchema).max(50),
+  attributes: z.array(supplierOfferProductAttributeSchema).max(80),
   variants: z.array(supplierOfferProductVariantGroupSchema).max(20),
   packaging: supplierOfferPackagingSchema.nullable(),
 }).strict();
 
 export type SupplierOfferPriceTier = z.infer<typeof supplierOfferPriceTierSchema>;
+export type SupplierOfferProductAttributeCategory = z.infer<
+  typeof supplierOfferProductAttributeCategorySchema
+>;
 export type SupplierOfferProductAttribute = z.infer<typeof supplierOfferProductAttributeSchema>;
 export type SupplierOfferProductVariantGroup = z.infer<typeof supplierOfferProductVariantGroupSchema>;
 export type SupplierOfferPackaging = z.infer<typeof supplierOfferPackagingSchema>;
@@ -94,6 +109,7 @@ export function marketplaceDetailsEvidenceText(
 ) {
   if (!details) return title;
   const attributes = details.attributes
+    .filter((attribute) => attribute.category === "PRODUCT_SPECIFICATION")
     .map((attribute) => `${attribute.name}: ${attribute.value}`);
   const variants = details.variants
     .map((variant) => `${variant.name}: ${variant.values.join(", ")}`);
@@ -104,22 +120,28 @@ export function marketplaceDetailsToSupplierLogistics(
   details: SupplierOfferMarketplaceDetails | null | undefined,
 ) {
   const packaging = details?.packaging;
-  if (!packaging) return null;
-  const hasEvidence = [
-    packaging.grossWeightKg,
-    packaging.packageLengthCm,
-    packaging.packageWidthCm,
-    packaging.packageHeightCm,
-    packaging.piecesPerCarton,
-  ].some((value) => value !== null);
-  if (!hasEvidence) return null;
+  if (!packaging || !packaging.usableForLandedCost) return null;
+
+  const hasCompleteDimensions =
+    packaging.packageLengthCm !== null &&
+    packaging.packageWidthCm !== null &&
+    packaging.packageHeightCm !== null;
+  const hasVerifiedWeight = packaging.grossWeightKg !== null;
+  const scopeIsUsable =
+    packaging.scope === "SELLING_UNIT" ||
+    (packaging.scope === "CARTON" && packaging.piecesPerCarton !== null);
+
+  if (!hasCompleteDimensions || !hasVerifiedWeight || !scopeIsUsable) return null;
+
   return {
     grossWeightKg: packaging.grossWeightKg,
     netWeightKg: null,
     cartonLengthCm: packaging.packageLengthCm,
     cartonWidthCm: packaging.packageWidthCm,
     cartonHeightCm: packaging.packageHeightCm,
-    piecesPerCarton: packaging.piecesPerCarton,
+    piecesPerCarton: packaging.scope === "SELLING_UNIT"
+      ? packaging.piecesPerCarton ?? 1
+      : packaging.piecesPerCarton,
     unitWeightKg: null,
     unitVolumeCbm: null,
     evidence: details.evidence,
