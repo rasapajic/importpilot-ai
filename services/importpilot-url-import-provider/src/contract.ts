@@ -11,6 +11,16 @@ const optionalNumberText = z.preprocess(
   z.string().trim().regex(/^\d+(?:\.\d+)?$/).nullable(),
 );
 
+const optionalPositiveNumber = z.preprocess(
+  (value) => (value === "" || value === undefined || value === null ? null : Number(value)),
+  z.number().positive().finite().max(1_000_000).nullable(),
+);
+
+const optionalPositiveInteger = z.preprocess(
+  (value) => (value === "" || value === undefined || value === null ? null : Number(value)),
+  z.number().int().positive().max(2_147_483_647).nullable(),
+);
+
 export const previewRequestSchema = z.object({
   productUrl: z.string().trim().max(2_000).refine((value) => {
     try {
@@ -19,6 +29,50 @@ export const previewRequestSchema = z.object({
       return false;
     }
   }, "Only valid HTTPS URLs are allowed."),
+}).strict();
+
+export const productPriceTierSchema = z.object({
+  price: z.string().trim().regex(/^\d+(?:\.\d+)?$/),
+  currency: z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/).nullable(),
+  minQuantity: z.number().int().positive(),
+  maxQuantity: z.number().int().positive().nullable(),
+}).strict().superRefine((tier, context) => {
+  if (tier.maxQuantity !== null && tier.maxQuantity < tier.minQuantity) {
+    context.addIssue({
+      code: "custom",
+      path: ["maxQuantity"],
+      message: "Maximum tier quantity cannot be lower than minimum quantity.",
+    });
+  }
+});
+
+export const productAttributeSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  value: z.string().trim().min(1).max(500),
+}).strict();
+
+export const productVariantGroupSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  values: z.array(z.string().trim().min(1).max(200)).min(2).max(30),
+}).strict();
+
+export const productPackagingSchema = z.object({
+  sellingUnit: optionalText(120),
+  packageType: optionalText(120),
+  packageLengthCm: optionalPositiveNumber,
+  packageWidthCm: optionalPositiveNumber,
+  packageHeightCm: optionalPositiveNumber,
+  grossWeightKg: optionalPositiveNumber,
+  piecesPerCarton: optionalPositiveInteger,
+}).strict();
+
+export const marketplaceProductDetailsSchema = z.object({
+  adapter: z.literal("made-in-china-product-page-v1"),
+  evidence: z.literal("PRODUCT_PAGE"),
+  priceTiers: z.array(productPriceTierSchema).max(20),
+  attributes: z.array(productAttributeSchema).max(50),
+  variants: z.array(productVariantGroupSchema).max(20),
+  packaging: productPackagingSchema.nullable(),
 }).strict();
 
 export const productPreviewSchema = z.object({
@@ -36,10 +90,12 @@ export const productPreviewSchema = z.object({
   ),
   imageUrl: optionalText(2_000).refine((value) => value === null || z.url().safeParse(value).success),
   productUrl: previewRequestSchema.shape.productUrl,
+  details: marketplaceProductDetailsSchema.nullable().optional(),
 }).strict();
 
 export type PreviewRequest = z.infer<typeof previewRequestSchema>;
 export type ProductPreview = z.infer<typeof productPreviewSchema>;
+export type MarketplaceProductDetails = z.infer<typeof marketplaceProductDetailsSchema>;
 
 export type ErrorReason = "NETWORK_ERROR" | "BLOCKED" | "PARSING_FAILED" | "INVALID_URL" | "TIMEOUT";
 
