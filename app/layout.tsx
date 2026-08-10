@@ -10,6 +10,7 @@ import "./globals.css";
 import "./taja-search-progress.css";
 import "./search-result-actions.css";
 import "./taja-requirement-match.css";
+import "./marketplace-evidence.css";
 
 export const metadata: Metadata = {
   title: "ImportPilot AI",
