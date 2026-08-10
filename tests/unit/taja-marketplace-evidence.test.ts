@@ -9,15 +9,18 @@ import {
   evaluateTajaRequirementMatch,
   TajaRequirementMatchStatuses,
 } from "../../modules/product-search/domain/taja-requirement-match";
-import type { SupplierOfferMarketplaceDetails } from "../../modules/product-search/domain/search";
+import type {
+  SupplierOfferMarketplaceDetails,
+  SupplierOfferProductAttribute,
+} from "../../modules/product-search/domain/search";
 
 const query = "Vodena magla za terasu sa pumpom i 20 mlaznica";
 
 function details(
-  attributes: Array<{ name: string; value: string }>,
+  attributes: SupplierOfferProductAttribute[],
 ): SupplierOfferMarketplaceDetails {
   return {
-    adapter: "made-in-china-product-page-v1",
+    adapter: "made-in-china-product-page-v2",
     evidence: "PRODUCT_PAGE",
     priceTiers: [],
     attributes,
@@ -31,8 +34,16 @@ describe("TAJA exact-page marketplace evidence", () => {
     const result = {
       title: "Outdoor Misting Cooling System",
       marketplaceDetails: details([
-        { name: "Application", value: "Patio and terrace" },
-        { name: "Kit Contents", value: "High-pressure pump and 20 brass misting nozzles" },
+        {
+          name: "Application",
+          value: "Patio and terrace",
+          category: "PRODUCT_SPECIFICATION",
+        },
+        {
+          name: "Kit Contents",
+          value: "High-pressure pump and 20 brass misting nozzles",
+          category: "PRODUCT_SPECIFICATION",
+        },
       ]),
     };
 
@@ -49,8 +60,16 @@ describe("TAJA exact-page marketplace evidence", () => {
     const result = {
       title: "Misting System Mist Nozzles",
       marketplaceDetails: details([
-        { name: "Compatibility", value: "Suitable for high-pressure pump systems" },
-        { name: "Selling Unit", value: "Nozzle" },
+        {
+          name: "Compatibility",
+          value: "Suitable for high-pressure pump systems",
+          category: "PRODUCT_SPECIFICATION",
+        },
+        {
+          name: "Selling Unit",
+          value: "Nozzle",
+          category: "OTHER",
+        },
       ]),
     };
 
