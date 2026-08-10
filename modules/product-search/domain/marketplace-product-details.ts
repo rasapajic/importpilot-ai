@@ -71,7 +71,7 @@ export const supplierOfferPackagingSchema = z.object({
   validationNote: optionalText(300),
 }).strict();
 
-export const supplierOfferMarketplaceDetailsSchema = z.object({
+const rawSupplierOfferMarketplaceDetailsSchema = z.object({
   adapter: z.string().trim().min(1).max(100),
   evidence: z.enum(["PRODUCT_PAGE", "SEARCH_SNIPPET"]),
   priceTiers: z.array(supplierOfferPriceTierSchema).max(20),
@@ -79,6 +79,131 @@ export const supplierOfferMarketplaceDetailsSchema = z.object({
   variants: z.array(supplierOfferProductVariantGroupSchema).max(20),
   packaging: supplierOfferPackagingSchema.nullable(),
 }).strict();
+
+type RawProductAttribute = z.infer<typeof supplierOfferProductAttributeSchema>;
+type RawProductPackaging = z.infer<typeof supplierOfferPackagingSchema>;
+
+const PACKAGING_ATTRIBUTE_PATTERN = /\b(?:selling\s+units?|package\s+(?:type|size|dimension|gross\s+weight)|carton\s+(?:size|dimension)|pieces?\s+per\s+carton|qty\.?\s+per\s+carton|packing\s+(?:quantity|size|weight|type))\b/i;
+const MARKETPLACE_SERVICE_PATTERN = /\b(?:dispute\s+resolution|flexible\s+payment|payment\s+protection|platform\s+logistics|inspection\s+service|after[-\s]*sales.*dispute|secured\s+trading|trade\s+assurance|refund\s+support|platform[-\s]*protected|shopping\s+protection)\b/i;
+const SUPPLIER_COMMERCIAL_PATTERN = /\b(?:production\s+capacity|annual\s+(?:capacity|output)|payment\s+terms?|terms?\s+of\s+payment|average\s+lead\s+time|lead\s+time|main\s+markets?|export\s+markets?|main\s+port|nearest\s+port|international\s+commercial\s+terms?|incoterms?|factory\s+size|number\s+of\s+employees|year\s+established|export\s+year|responsible\s+person|address|customi[sz](?:ation|able)|shipping\s+cost|delivery\s+time|supply\s+ability)\b/i;
+const PRODUCT_SPECIFICATION_PATTERN = /\b(?:product\s+name|model|application|scenario|inlet\s+method|material|flow|pressure|certification|certificate|control|function|water\s+tank|humidification|installation|product\s+type|type|keyword|usage|power\s+source|pump|nozzle|voltage|specification|origin|brand|trademark|accessory|capacity|frequency|current|diameter|length|width|height|temperature|working\s+range|spray|fog|mist|cooling)\b/i;
+const SAFE_VARIANT_NAME_PATTERN = /^(?:color|colour|size|flow|nozzle\s+(?:diameter|size)|orifice\s+(?:diameter|size)|diameter|voltage|power|length|configuration|style)$/i;
+const UNSAFE_VARIANT_NAME_PATTERN = /\b(?:production|capacity|market|payment|address|certification|certificate|accessory|material|model|type|keyword|usage|shipping|lead\s+time|port|origin|brand|trademark)\b/i;
+const RELIABLE_SELLING_UNIT_PATTERN = /\b(?:single\s+item|single\s+unit|piece|pc|unit|set|kit|pair)\b/i;
+const MAX_PLAUSIBLE_PACKAGED_DENSITY_KG_PER_CBM = 5_000;
+
+function classifyAttribute(attribute: RawProductAttribute) {
+  if (attribute.category !== "OTHER") return attribute.category;
+  const combined = `${attribute.name} ${attribute.value}`;
+  if (MARKETPLACE_SERVICE_PATTERN.test(combined)) return "MARKETPLACE_SERVICE" as const;
+  if (SUPPLIER_COMMERCIAL_PATTERN.test(attribute.name)) return "SUPPLIER_COMMERCIAL" as const;
+  if (PRODUCT_SPECIFICATION_PATTERN.test(attribute.name)) return "PRODUCT_SPECIFICATION" as const;
+  return "OTHER" as const;
+}
+
+function normalizeAttributes(attributes: RawProductAttribute[]) {
+  return attributes
+    .filter((attribute) => !PACKAGING_ATTRIBUTE_PATTERN.test(attribute.name))
+    .map((attribute) => ({
+      ...attribute,
+      category: classifyAttribute(attribute),
+    }));
+}
+
+function credibleVariantName(name: string) {
+  const normalized = name.replace(/\s+/g, " ").trim();
+  return SAFE_VARIANT_NAME_PATTERN.test(normalized) &&
+    !UNSAFE_VARIANT_NAME_PATTERN.test(normalized);
+}
+
+function normalizeVariants(
+  variants: z.infer<typeof supplierOfferProductVariantGroupSchema>[],
+) {
+  return variants
+    .filter((variant) => credibleVariantName(variant.name))
+    .map((variant) => ({
+      ...variant,
+      values: [...new Set(variant.values.map((value) => value.trim()))]
+        .filter((value) => value.length > 0 && value.length <= 80),
+    }))
+    .filter((variant) => variant.values.length >= 2)
+    .slice(0, 20);
+}
+
+function packageDensity(packaging: RawProductPackaging) {
+  if (
+    packaging.packageLengthCm === null ||
+    packaging.packageWidthCm === null ||
+    packaging.packageHeightCm === null ||
+    packaging.grossWeightKg === null
+  ) {
+    return null;
+  }
+  const volumeCbm = (
+    packaging.packageLengthCm *
+    packaging.packageWidthCm *
+    packaging.packageHeightCm
+  ) / 1_000_000;
+  if (!Number.isFinite(volumeCbm) || volumeCbm <= 0) return null;
+  return packaging.grossWeightKg / volumeCbm;
+}
+
+function normalizePackaging(packaging: RawProductPackaging | null) {
+  if (!packaging) return null;
+  const completeDimensions =
+    packaging.packageLengthCm !== null &&
+    packaging.packageWidthCm !== null &&
+    packaging.packageHeightCm !== null;
+  const hasWeight = packaging.grossWeightKg !== null;
+  const density = packageDensity(packaging);
+  const physicallyPlausible = density === null ||
+    density <= MAX_PLAUSIBLE_PACKAGED_DENSITY_KG_PER_CBM;
+  const explicitCarton = packaging.piecesPerCarton !== null;
+  const explicitSellingUnit = Boolean(
+    packaging.sellingUnit && RELIABLE_SELLING_UNIT_PATTERN.test(packaging.sellingUnit),
+  );
+  const scope = explicitCarton
+    ? "CARTON" as const
+    : explicitSellingUnit
+      ? "SELLING_UNIT" as const
+      : "UNKNOWN" as const;
+  const scopeComplete = scope === "SELLING_UNIT" ||
+    (scope === "CARTON" && packaging.piecesPerCarton !== null);
+  const usableForLandedCost = Boolean(
+    completeDimensions &&
+    hasWeight &&
+    scopeComplete &&
+    physicallyPlausible,
+  );
+  const confidence = usableForLandedCost
+    ? scope === "CARTON"
+      ? "HIGH" as const
+      : "MEDIUM" as const
+    : "LOW" as const;
+  const validationNote = !completeDimensions || !hasWeight
+    ? "Package dimensions and gross weight are incomplete."
+    : !physicallyPlausible
+      ? "Package dimensions and weight produce an implausible packaged density."
+      : scope === "UNKNOWN"
+        ? "Package dimensions and weight are not tied to a confirmed selling unit or carton."
+        : null;
+
+  return {
+    ...packaging,
+    scope,
+    confidence,
+    usableForLandedCost,
+    validationNote,
+  };
+}
+
+export const supplierOfferMarketplaceDetailsSchema =
+  rawSupplierOfferMarketplaceDetailsSchema.transform((details) => ({
+    ...details,
+    attributes: normalizeAttributes(details.attributes),
+    variants: normalizeVariants(details.variants),
+    packaging: normalizePackaging(details.packaging),
+  }));
 
 export type SupplierOfferPriceTier = z.infer<typeof supplierOfferPriceTierSchema>;
 export type SupplierOfferProductAttributeCategory = z.infer<
