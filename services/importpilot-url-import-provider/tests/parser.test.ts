@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
+  extractMadeInChinaProductDetails,
   extractPriceTiers,
   inspectPreviewExtraction,
   parseProductPreview,
@@ -28,6 +29,7 @@ describe("URL import provider parser", () => {
       incoterm: "FOB",
       imageUrl: "https://sc04.alicdn.com/kf/charger-main.jpg",
       productUrl: "https://www.alibaba.com/product-detail/Factory-65W-USB-C-GaN-Charger_1600000000001.html",
+      details: null,
     });
   });
 
@@ -40,6 +42,12 @@ describe("URL import provider parser", () => {
       { field: "supplierName", value: "Shenzhen Reliable Power Co., Ltd." },
       { field: "price", value: "4.80" },
     ]);
+    expect(snapshot.detailCounts).toEqual({
+      priceTiers: 0,
+      attributes: 0,
+      variants: 0,
+      packagingFields: 0,
+    });
   });
 
   it("extracts normalized Made-in-China product fields", () => {
@@ -55,6 +63,10 @@ describe("URL import provider parser", () => {
       currency: "USD",
       minimumOrderQuantity: "200",
       imageUrl: "https://image.made-in-china.com/charger.jpg",
+      details: {
+        adapter: "made-in-china-product-page-v1",
+        evidence: "PRODUCT_PAGE",
+      },
     });
   });
 
@@ -87,6 +99,41 @@ describe("URL import provider parser", () => {
       price: "0.85",
       currency: "USD",
       minimumOrderQuantity: "100",
+      details: {
+        priceTiers: [
+          { price: "0.85", currency: "USD", minQuantity: 100, maxQuantity: 999 },
+          { price: "0.70", currency: "USD", minQuantity: 1_000, maxQuantity: 9_999 },
+          { price: "0.65", currency: "USD", minQuantity: 10_000, maxQuantity: null },
+        ],
+      },
+    });
+  });
+
+  it("extracts Made-in-China attributes, variants and packaging evidence", () => {
+    const html = fixture("made-in-china-supplier-product.html");
+    const details = extractMadeInChinaProductDetails(html);
+
+    expect(details).toMatchObject({
+      adapter: "made-in-china-product-page-v1",
+      evidence: "PRODUCT_PAGE",
+      attributes: expect.arrayContaining([
+        { name: "Model NO.", value: "ET-01" },
+        { name: "Voltage", value: "48V / 60V" },
+        { name: "Certification", value: "CE, EEC" },
+      ]),
+      variants: expect.arrayContaining([
+        { name: "Color", values: ["Black", "White"] },
+        { name: "Battery", values: ["Lead Acid", "Lithium"] },
+      ]),
+      packaging: {
+        sellingUnit: "Single item",
+        packageType: "Steel frame and carton",
+        packageLengthCm: 180,
+        packageWidthCm: 75,
+        packageHeightCm: 115,
+        grossWeightKg: 135,
+        piecesPerCarton: 1,
+      },
     });
   });
 
@@ -94,7 +141,7 @@ describe("URL import provider parser", () => {
     const productUrl = "https://engtianvehicle.en.made-in-china.com/product/dOfmlFDuEHcI/China-Electric-Scooter-Hot-Selling-Made-in-China-High-Quality-Popular-Model-and-Cheaper-CKD-Price.html";
     const html = fixture("made-in-china-supplier-product.html");
     const preview = parseProductPreview(html, productUrl);
-    const snapshot = inspectPreviewExtraction(html);
+    const snapshot = inspectPreviewExtraction(html, productUrl);
 
     expect(preview).toMatchObject({
       productTitle: "China Electric Scooter Hot Selling Made in China High Quality Popular Model and Cheaper CKD Price",
@@ -105,11 +152,21 @@ describe("URL import provider parser", () => {
       incoterm: "FOB",
       imageUrl: "https://image.made-in-china.com/202f0j00scooter-main.jpg",
       productUrl,
+      details: {
+        adapter: "made-in-china-product-page-v1",
+        evidence: "PRODUCT_PAGE",
+      },
     });
     expect(snapshot).toMatchObject({
       blocked: false,
       fieldCount: expect.any(Number),
       pageTitle: "China Electric Scooter Hot Selling Made in China High Quality Popular Model and Cheaper CKD Price - Electric Scooter and E Scooter",
+      detailCounts: {
+        priceTiers: 0,
+        attributes: 8,
+        variants: 3,
+        packagingFields: 7,
+      },
     });
     expect(snapshot.fieldCount).toBeGreaterThanOrEqual(7);
   });
@@ -134,7 +191,7 @@ describe("URL import provider parser", () => {
     `;
 
     const preview = parseProductPreview(html, productUrl);
-    const snapshot = inspectPreviewExtraction(html);
+    const snapshot = inspectPreviewExtraction(html, productUrl);
 
     expect(preview).toMatchObject({
       productTitle: "China Electric Scooter Hot Selling Made in China High Quality Popular Model and Cheaper CKD Price",
