@@ -7,6 +7,9 @@ import {
 } from "@/modules/product-search/application/product-search-service";
 import { supplierOfferUrlImportRequestSchema } from "@/modules/product-search/domain/search";
 import {
+  getDetailedSupplierOfferUrlImportProvider,
+} from "@/modules/product-search/infrastructure/detailed-url-import-provider";
+import {
   buildSlugFallbackPreview,
   getUrlImportRuntimeDiagnostics,
   UrlImportBlockedError,
@@ -27,6 +30,24 @@ function previewFieldCount(preview: { title?: unknown; supplierName?: unknown; p
     preview.minimumOrderQuantity,
     preview.imageUrl,
   ].filter((value) => value !== null && value !== undefined && value !== "").length;
+}
+
+function detailCounts(preview: {
+  details?: {
+    priceTiers?: unknown[];
+    attributes?: unknown[];
+    variants?: unknown[];
+    packaging?: Record<string, unknown> | null;
+  } | null;
+}) {
+  return {
+    priceTiers: preview.details?.priceTiers?.length ?? 0,
+    attributes: preview.details?.attributes?.length ?? 0,
+    variants: preview.details?.variants?.length ?? 0,
+    packagingFields: preview.details?.packaging
+      ? Object.values(preview.details.packaging).filter((value) => value !== null).length
+      : 0,
+  };
 }
 
 function logPreviewRoute(event: Record<string, unknown>) {
@@ -64,7 +85,9 @@ export async function POST(
       (await params).projectId,
       auth.membership.organizationId,
       parsed.data.productUrl,
+      getDetailedSupplierOfferUrlImportProvider(),
     );
+    const details = detailCounts(preview);
     logPreviewRoute({
       route: "/api/projects/[projectId]/supplier-search/url-preview",
       externalProviderConfigured: Boolean(process.env.URL_IMPORT_PROVIDER_URL),
@@ -73,6 +96,7 @@ export async function POST(
       previewPresent: true,
       errorPresent: false,
       previewFieldCount: previewFieldCount(preview),
+      detailCounts: details,
       title: preview.title,
       supplier: preview.supplierName,
       price: preview.price,
@@ -84,6 +108,7 @@ export async function POST(
       diagnostics: developmentDiagnostics({
         providerStatus: "success",
         previewFieldCount: previewFieldCount(preview),
+        detailCounts: details,
         title: preview.title,
         supplier: preview.supplierName,
         price: preview.price,
