@@ -11,6 +11,10 @@ const profitabilityRouteSource = readFileSync(
   join(process.cwd(), "app/api/projects/[projectId]/profitability-check/route.ts"),
   "utf8",
 );
+const profitabilityControlSource = readFileSync(
+  join(process.cwd(), "components/projects/profitability-check-control.tsx"),
+  "utf8",
+);
 
 describe("workflow navigation priority", () => {
   it("opens and focuses the step explicitly selected by the URL hash", () => {
@@ -27,10 +31,20 @@ describe("workflow navigation priority", () => {
 });
 
 describe("profitability check timeout", () => {
-  it("bounds a profitability request instead of leaving the browser waiting indefinitely", () => {
-    expect(profitabilityRouteSource).toContain("PROFITABILITY_CHECK_TIMEOUT_MS = 15_000");
+  it("bounds authentication and profitability work on the server", () => {
+    expect(profitabilityRouteSource).toContain("PROFITABILITY_CHECK_TIMEOUT_MS = 14_000");
     expect(profitabilityRouteSource).toContain("Promise.race");
+    expect(profitabilityRouteSource).toContain("runProfitabilityRequest(request, projectId)");
+    expect(profitabilityRouteSource).toContain("await authenticateRequest(request)");
     expect(profitabilityRouteSource).toContain("ProfitabilityCheckTimeoutError");
     expect(profitabilityRouteSource).toContain('"CHECK_TIMEOUT"');
+  });
+
+  it("stops the visible client lifecycle even if the server never responds", () => {
+    expect(profitabilityControlSource).toContain("PROFITABILITY_CLIENT_TIMEOUT_MS = 18_000");
+    expect(profitabilityControlSource).toContain("controller.abort");
+    expect(profitabilityControlSource).toContain("setPending(false)");
+    expect(profitabilityControlSource).toContain("pendingRef.current = false");
+    expect(profitabilityControlSource).toContain("aria-busy={pending}");
   });
 });
