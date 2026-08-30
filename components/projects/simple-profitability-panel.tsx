@@ -9,6 +9,7 @@ import Link from "next/link";
 
 import { CostCalculatorForm } from "@/components/costs/cost-calculator-form";
 import { useI18n } from "@/components/i18n/i18n-provider";
+import { ProfitabilityCheckControl } from "@/components/projects/profitability-check-control";
 import { formatDisplayedPercent } from "@/modules/cost-engine/application/calculation-summary";
 import type { LandedCostAssumptions } from "@/modules/cost-engine/domain/serbia-landed-cost";
 import { getClientDecisionSummary } from "@/modules/decisions/application/client-decision-summary";
@@ -268,11 +269,12 @@ export function SimpleProfitabilityPanel({
             ? getDecisionStepTitle(decision.status, locale)
             : text.question}</h2>
         </div>
-        <form action={`/api/projects/${projectId}/profitability-check`} method="post">
-          <button disabled={calculatedOffers.length === 0} type="submit">
-            {hasFinalDecision ? text.checkAgain : text.check}
-          </button>
-        </form>
+        <ProfitabilityCheckControl
+          disabled={calculatedOffers.length === 0}
+          idleLabel={hasFinalDecision ? text.checkAgain : text.check}
+          pendingLabel={text.checking}
+          projectId={projectId}
+        />
       </header>
 
       {profitabilityError && (
