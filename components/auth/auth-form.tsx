@@ -1,13 +1,21 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { useI18n } from "@/components/i18n/i18n-provider";
+import { readApiJson } from "@/lib/http/api-response";
 import type { Locale } from "@/modules/i18n/translations";
+
+const AUTH_REQUEST_TIMEOUT_MS = 15_000;
 
 type AuthFormProps = {
   mode: "login" | "register";
+};
+
+type AuthResponse = {
+  ok?: boolean;
+  error?: string;
 };
 
 const authCopy: Record<Locale, {
@@ -21,6 +29,7 @@ const authCopy: Record<Locale, {
   createAccount: string;
   signIn: string;
   genericError: string;
+  timeoutError: string;
 }> = {
   sr: {
     fullName: "Ime i prezime",
@@ -32,7 +41,8 @@ const authCopy: Record<Locale, {
     processing: "Obrada...",
     createAccount: "Kreiraj nalog",
     signIn: "Prijavi se",
-    genericError: "Došlo je do greške.",
+    genericError: "Registracija ili prijava trenutno nije završena. Pokušajte ponovo.",
+    timeoutError: "Zahtev je trajao predugo i prekinut je. Ako ste pravili nalog, pokušajte prvo da se prijavite.",
   },
   de: {
     fullName: "Vor- und Nachname",
@@ -44,7 +54,8 @@ const authCopy: Record<Locale, {
     processing: "Verarbeitung...",
     createAccount: "Konto erstellen",
     signIn: "Anmelden",
-    genericError: "Ein Fehler ist aufgetreten.",
+    genericError: "Registrierung oder Anmeldung konnte nicht abgeschlossen werden. Bitte versuchen Sie es erneut.",
+    timeoutError: "Die Anfrage dauerte zu lange und wurde beendet. Wenn Sie ein Konto erstellt haben, versuchen Sie zuerst, sich anzumelden.",
   },
   en: {
     fullName: "Full name",
@@ -56,7 +67,8 @@ const authCopy: Record<Locale, {
     processing: "Processing...",
     createAccount: "Create account",
     signIn: "Sign in",
-    genericError: "An error occurred.",
+    genericError: "Registration or sign-in could not be completed. Please try again.",
+    timeoutError: "The request took too long and was stopped. If you were creating an account, try signing in first.",
   },
 };
 
@@ -77,6 +89,7 @@ export function AuthForm({ mode }: AuthFormProps) {
   const router = useRouter();
   const { locale, t } = useI18n();
   const copy = authCopy[locale];
+  const pendingRef = useRef(false);
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -85,26 +98,50 @@ export function AuthForm({ mode }: AuthFormProps) {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (pendingRef.current) return;
+
+    pendingRef.current = true;
     setPending(true);
     setError("");
 
     const formData = new FormData(event.currentTarget);
     const payload = Object.fromEntries(formData.entries());
-    const response = await fetch(`/api/auth/${mode}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const data = (await response.json()) as { error?: string };
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), AUTH_REQUEST_TIMEOUT_MS);
 
-    if (!response.ok) {
-      setError(t(data.error ?? copy.genericError));
+    try {
+      const response = await fetch(`/api/auth/${mode}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          accept: "application/json",
+        },
+        credentials: "same-origin",
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+      const data = await readApiJson<AuthResponse>(response, copy.genericError);
+
+      if (!response.ok) {
+        setError(t(data.error ?? copy.genericError));
+        return;
+      }
+
+      router.push("/dashboard");
+      router.refresh();
+    } catch (requestError) {
+      if (controller.signal.aborted) {
+        setError(copy.timeoutError);
+      } else {
+        setError(requestError instanceof Error && requestError.message
+          ? requestError.message
+          : copy.genericError);
+      }
+    } finally {
+      window.clearTimeout(timeout);
+      pendingRef.current = false;
       setPending(false);
-      return;
     }
-
-    router.push("/dashboard");
-    router.refresh();
   }
 
   return (
