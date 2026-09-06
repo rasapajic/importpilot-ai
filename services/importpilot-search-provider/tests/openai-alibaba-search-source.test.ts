@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   createOpenAIAlibabaSearchSource,
+  isAlibabaIndexedProductUrl,
   isAlibabaProductUrl,
 } from "../src/openai-alibaba-search-source.js";
 
@@ -31,56 +32,59 @@ function result(productUrl: string) {
   };
 }
 
+function response(results: ReturnType<typeof result>[], citedUrls: string[], id: string) {
+  return {
+    id,
+    status: "completed",
+    output: [{
+      type: "web_search_call",
+      action: {
+        type: "search",
+        sources: citedUrls.map((url) => ({ type: "url", url })),
+      },
+    }, {
+      type: "message",
+      content: [{
+        type: "output_text",
+        text: JSON.stringify({ results }),
+        annotations: citedUrls.map((url) => ({ type: "url_citation", url })),
+      }],
+    }],
+    usage: { input_tokens: 100, output_tokens: 50, total_tokens: 150 },
+  };
+}
+
 describe("OpenAI Alibaba fallback source", () => {
-  it("accepts only direct HTTPS Alibaba product-detail URLs", () => {
-    expect(isAlibabaProductUrl(
-      "https://www.alibaba.com/product-detail/Patio-Misting-System_1600000000001.html",
-    )).toBe(true);
-    expect(isAlibabaProductUrl(
+  it("keeps canonical product-detail strict while recognizing indexed product pages", () => {
+    const detail = "https://www.alibaba.com/product-detail/Patio-Misting-System_1600000000001.html";
+    const introduction = "https://www.alibaba.com/product-introduction/Patio-Misting-System_1600000000002.html";
+    expect(isAlibabaProductUrl(detail)).toBe(true);
+    expect(isAlibabaProductUrl(introduction)).toBe(false);
+    expect(isAlibabaIndexedProductUrl(detail)).toBe(true);
+    expect(isAlibabaIndexedProductUrl(introduction)).toBe(true);
+    expect(isAlibabaIndexedProductUrl(
       "https://www.alibaba.com/trade/search?SearchText=misting",
     )).toBe(false);
-    expect(isAlibabaProductUrl(
-      "https://fakealibaba.com/product-detail/item_1600000000001.html",
+    expect(isAlibabaIndexedProductUrl(
+      "https://fakealibaba.com/product-introduction/item_1600000000001.html",
     )).toBe(false);
-    expect(isAlibabaProductUrl(
-      "http://www.alibaba.com/product-detail/item_1600000000001.html",
+    expect(isAlibabaIndexedProductUrl(
+      "http://www.alibaba.com/product-introduction/item_1600000000001.html",
     )).toBe(false);
   });
 
-  it("uses an Alibaba-only profile and rejects other cited marketplaces", async () => {
+  it("uses an Alibaba-only primary profile and rejects other cited marketplaces", async () => {
     const alibabaUrl = "https://www.alibaba.com/product-detail/Patio-Misting-System_1600000000001.html";
     const madeInChinaUrl = "https://example.en.made-in-china.com/product/example.html";
     let requestBody: Record<string, unknown> | null = null;
     const events: Array<{ event: string; details?: Record<string, unknown> }> = [];
     const fetcher = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
-      return new Response(JSON.stringify({
-        id: "resp_alibaba_fallback",
-        status: "completed",
-        output: [{
-          type: "web_search_call",
-          action: {
-            type: "search",
-            sources: [
-              { type: "url", url: alibabaUrl },
-              { type: "url", url: madeInChinaUrl },
-            ],
-          },
-        }, {
-          type: "message",
-          content: [{
-            type: "output_text",
-            text: JSON.stringify({
-              results: [result(alibabaUrl), result(madeInChinaUrl)],
-            }),
-            annotations: [
-              { type: "url_citation", url: alibabaUrl },
-              { type: "url_citation", url: madeInChinaUrl },
-            ],
-          }],
-        }],
-        usage: { input_tokens: 100, output_tokens: 50, total_tokens: 150 },
-      }), { status: 200, headers: { "content-type": "application/json" } });
+      return new Response(JSON.stringify(response(
+        [result(alibabaUrl), result(madeInChinaUrl)],
+        [alibabaUrl, madeInChinaUrl],
+        "resp_alibaba_fallback",
+      )), { status: 200, headers: { "content-type": "application/json" } });
     });
     const source = createOpenAIAlibabaSearchSource({
       apiKey: "sk-test",
@@ -100,7 +104,6 @@ describe("OpenAI Alibaba fallback source", () => {
     const serializedRequest = JSON.stringify(requestBody);
     expect(serializedRequest).toContain("site:alibaba.com inurl:product-detail");
     expect(serializedRequest).toContain("Search Alibaba.com only");
-    expect(serializedRequest).toContain("Supplier not confirmed");
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(events).toContainEqual({
       event: "openai_web_search",
@@ -122,5 +125,38 @@ describe("OpenAI Alibaba fallback source", () => {
         ]),
       }),
     });
+  });
+
+  it("falls back once to current indexed Alibaba product-introduction pages", async () => {
+    const indexedUrl = "https://www.alibaba.com/product-introduction/Mist-Cooling-System_1600120729579.html";
+    const requestBodies: Record<string, unknown>[] = [];
+    const fetcher = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      requestBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      const payload = requestBodies.length === 1
+        ? response([], [], "resp_alibaba_primary_empty")
+        : response([result(indexedUrl)], [indexedUrl], "resp_alibaba_indexed");
+      return new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    const source = createOpenAIAlibabaSearchSource({
+      apiKey: "sk-test",
+      fetcher: fetcher as typeof fetch,
+    });
+
+    const outcome = await source.search(input, new AbortController().signal);
+    if (Array.isArray(outcome)) throw new Error("Expected structured outcome.");
+
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(JSON.stringify(requestBodies[0])).toContain("inurl:product-detail");
+    expect(JSON.stringify(requestBodies[1])).toContain("inurl:product-introduction");
+    expect(outcome.results).toEqual([
+      expect.objectContaining({
+        productUrl: indexedUrl,
+        source: "TAJA Alibaba",
+      }),
+    ]);
+    expect(outcome.aiUsage).toHaveLength(2);
   });
 });
