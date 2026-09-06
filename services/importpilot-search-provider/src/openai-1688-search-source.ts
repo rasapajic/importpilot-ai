@@ -74,6 +74,10 @@ export function is1688MirrorProductUrl(productUrl: string) {
   return mirror1688OfferId(productUrl) !== null;
 }
 
+export function is1688DiscoveryUrl(productUrl: string) {
+  return is1688ProductUrl(productUrl) || is1688MirrorProductUrl(productUrl);
+}
+
 export function canonical1688UrlFromMirror(productUrl: string) {
   const offerId = mirror1688OfferId(productUrl);
   return offerId ? `https://detail.1688.com/offer/${offerId}.html` : null;
@@ -104,6 +108,12 @@ function normalizeMirrorResult(result: SupplierSearchResult) {
     source: "TAJA 1688 · indexed mirror",
     supplierLogistics: undefined,
   } satisfies SupplierSearchResult;
+}
+
+function normalizeDiscoveryResult(result: SupplierSearchResult) {
+  return is1688ProductUrl(result.productUrl)
+    ? normalize1688Result(result)
+    : normalizeMirrorResult(result);
 }
 
 function positive(value: number | null | undefined) {
@@ -162,33 +172,10 @@ function base1688Queries(input: SearchRequest) {
 }
 
 function build1688SearchInput(input: SearchRequest): SearchRequest {
-  const baseQueries = base1688Queries(input);
-  const detailQueries = baseQueries.map(
-    (query) => `${query} site:detail.1688.com inurl:offer`,
-  );
-  const broadFallback = baseQueries[0]
-    ? `${baseQueries[0]} site:1688.com`
-    : null;
-  const mobileFallback = baseQueries[0]
-    ? `${baseQueries[0]} site:m.1688.com inurl:offer`
-    : null;
-  const queryVariants = uniqueQueries([
-    ...detailQueries,
-    ...(broadFallback ? [broadFallback] : []),
-    ...(mobileFallback ? [mobileFallback] : []),
-  ]);
-  const fallback = `${input.productQuery} site:detail.1688.com inurl:offer`;
-
-  return {
-    ...input,
-    productQuery: queryVariants[0] ?? fallback,
-    queryVariants: queryVariants.length > 0 ? queryVariants : [fallback],
-  };
-}
-
-function build1688MirrorSearchInput(input: SearchRequest): SearchRequest {
   const base = base1688Queries(input)[0] ?? input.productQuery;
   const queryVariants = uniqueQueries([
+    `${base} site:detail.1688.com inurl:offer`,
+    `${base} site:m.1688.com inurl:offer`,
     `${base} site:1688wholesale.com china_alibaba_item`,
     `${base} site:buy2you.com 1688wholesale china_alibaba_item`,
     `${base} site:darabuying.com 1688wholesale china_alibaba_item`,
@@ -203,15 +190,14 @@ function build1688MirrorSearchInput(input: SearchRequest): SearchRequest {
 /**
  * Dedicated 1688 discovery and enrichment pass for TAJA Deep Search.
  *
- * The primary pass remains strict 1688-only discovery. Public search indexes
- * often do not expose detail.1688.com directly even when they index an agent
- * mirror that embeds the original numeric 1688 item identity. Therefore, only
- * after the strict pass returns zero, one bounded mirror-discovery pass searches
- * three allowlisted 1688 agent mirrors whose URL path itself contains the source
- * 1688 item id. The mirror URL is never returned to the client: it is converted
- * mechanically to detail.1688.com/offer/<id>.html. Mirror commercial values are
- * discarded before exact-URL enrichment, so converted USD prices or agent terms
- * can never masquerade as native 1688 evidence.
+ * Public search indexes often expose either the native detail.1688.com offer or
+ * an agent mirror whose URL path embeds the original numeric 1688 item id. One
+ * bounded web-search pass therefore targets both native 1688 offer hosts and
+ * three allowlisted indexed mirrors. The URL policy accepts nothing else.
+ * Mirror URLs are never returned to the client: the numeric identity is mapped
+ * mechanically to detail.1688.com/offer/<id>.html, while all mirror commercial
+ * values are discarded before exact-URL enrichment so converted prices or
+ * agent terms cannot masquerade as native 1688 evidence.
  */
 export function createOpenAI1688SearchSource(
   options: OpenAI1688SearchOptions = {},
@@ -222,17 +208,11 @@ export function createOpenAI1688SearchSource(
     enricher: injectedEnricher,
     ...sharedOptions
   } = options;
-  const directSource = createOpenAIWebSearchSource({
+  const discoverySource = createOpenAIWebSearchSource({
     ...sharedOptions,
     maxResults: sharedOptions.maxResults ?? 10,
-    searchProfile: "1688_only",
-    resultUrlPolicy: is1688ProductUrl,
-  });
-  const mirrorSource = createOpenAIWebSearchSource({
-    ...sharedOptions,
-    maxResults: Math.min(sharedOptions.maxResults ?? 5, 5),
     searchProfile: "general",
-    resultUrlPolicy: is1688MirrorProductUrl,
+    resultUrlPolicy: is1688DiscoveryUrl,
   });
   const enricher = injectedEnricher ?? createOpenAI1688Enricher({
     ...sharedOptions,
@@ -245,46 +225,33 @@ export function createOpenAI1688SearchSource(
 
   return {
     name: "openai-1688-web-v2",
-    implemented: directSource.implemented,
+    implemented: discoverySource.implemented,
     trustedRelevance: true,
 
     async healthCheck(signal) {
-      return directSource.healthCheck ? directSource.healthCheck(signal) : true;
+      return discoverySource.healthCheck ? discoverySource.healthCheck(signal) : true;
     },
 
     async search(input, signal) {
-      const direct = outcomeParts(await directSource.search(
+      const discovery = outcomeParts(await discoverySource.search(
         build1688SearchInput(input),
         signal,
       ));
-      let discovered = direct.results
-        .filter((result) => is1688ProductUrl(result.productUrl))
-        .map((result) => normalize1688Result(result));
-      let discoveryUsage: AiUsageReport[] = [...(direct.aiUsage ?? [])];
-      let discoveryReason = direct.reason;
-
-      if (discovered.length === 0) {
-        const mirror = outcomeParts(await mirrorSource.search(
-          build1688MirrorSearchInput(input),
-          signal,
-        ));
-        const seen = new Set<string>();
-        discovered = mirror.results
-          .map(normalizeMirrorResult)
-          .filter((result): result is SupplierSearchResult => Boolean(result))
-          .filter((result) => {
-            if (seen.has(result.productUrl)) return false;
-            seen.add(result.productUrl);
-            return true;
-          });
-        discoveryUsage = [...discoveryUsage, ...(mirror.aiUsage ?? [])];
-        discoveryReason = mirror.reason ?? discoveryReason;
-      }
+      const seen = new Set<string>();
+      const discovered = discovery.results
+        .map(normalizeDiscoveryResult)
+        .filter((result): result is SupplierSearchResult => Boolean(result))
+        .filter((result) => {
+          if (seen.has(result.productUrl)) return false;
+          seen.add(result.productUrl);
+          return true;
+        });
+      const discoveryUsage: AiUsageReport[] = [...(discovery.aiUsage ?? [])];
 
       if (discovered.length === 0) {
         return {
           results: [],
-          reason: discoveryReason ?? "TAJA 1688 search returned no verified direct or indexed-mirror product pages.",
+          reason: discovery.reason ?? "TAJA 1688 search returned no verified direct or indexed-mirror product pages.",
           ...(discoveryUsage.length ? { aiUsage: discoveryUsage } : {}),
         };
       }
