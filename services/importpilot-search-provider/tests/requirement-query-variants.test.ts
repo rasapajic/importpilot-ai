@@ -90,7 +90,7 @@ describe("requirement-driven supplier query variants", () => {
     expect(requestBody).toContain("Do not stop merely because the first query returned generic related products");
   });
 
-  it("uses the supplied Chinese variants for the dedicated 1688 pass", async () => {
+  it("preserves two supplied Chinese variants while adding bounded 1688 mirror recovery", async () => {
     let requestBody = "";
     const fetcher = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       requestBody = String(init?.body ?? "");
@@ -119,8 +119,9 @@ describe("requirement-driven supplier query variants", () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(requestBody).toContain("露台 喷雾降温系统 水泵 20个喷嘴 厂家 批发 site:detail.1688.com inurl:offer");
     expect(requestBody).toContain("户外 喷雾套装 水泵 20喷头 厂家 批发 site:detail.1688.com inurl:offer");
-    expect(requestBody).toContain("露台 喷雾降温系统 水泵 20个喷嘴 厂家 批发 site:1688.com");
-    expect(requestBody).toContain("Do not discard a verified direct offer");
-    expect(requestBody).toContain("Supplier not confirmed");
+    expect(requestBody).toContain("露台 喷雾降温系统 水泵 20个喷嘴 厂家 批发 site:1688wholesale.com china_alibaba_item");
+    expect(requestBody).toContain("露台 喷雾降温系统 水泵 20个喷嘴 厂家 批发 site:buy2you.com 1688wholesale china_alibaba_item");
+    expect(requestBody).toContain("露台 喷雾降温系统 水泵 20个喷嘴 厂家 批发 site:darabuying.com 1688wholesale china_alibaba_item");
+    expect(requestBody).toContain("Return only direct product-detail pages");
   });
 });
