@@ -2,8 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { Supplier1688Enricher } from "../src/openai-1688-enrichment.js";
 import {
+  canonical1688UrlFromMirror,
   createOpenAI1688SearchSource,
+  is1688MirrorProductUrl,
   is1688ProductUrl,
+  mirror1688OfferId,
   prepare1688ResultsForEnrichment,
 } from "../src/openai-1688-search-source.js";
 import type { SupplierSearchResult } from "../src/contract.js";
@@ -43,9 +46,10 @@ function incompleteResult(
 function discoveryResponse(
   results: SupplierSearchResult[],
   citedUrls: string[],
+  id = "resp_discovery_partial_logistics",
 ) {
   return {
-    id: "resp_discovery_partial_logistics",
+    id,
     status: "completed",
     output: [{
       type: "web_search_call",
@@ -75,17 +79,37 @@ describe("TAJA 1688 partial logistics handoff", () => {
     expect(is1688ProductUrl("https://fake1688.com/offer/123456.html")).toBe(false);
   });
 
-  it("uses a dedicated 1688-only prompt and logs rejected host/path diagnostics", async () => {
+  it("accepts only allowlisted mirror item URLs and derives the source offer mechanically", () => {
+    const wholesale = "https://www.1688wholesale.com/zh-CHS/1688/china_alibaba_item/669806086431.html";
+    const buy2you = "https://www.buy2you.com/en/1688wholesale/china_alibaba_item/672530970404.html";
+    expect(is1688MirrorProductUrl(wholesale)).toBe(true);
+    expect(is1688MirrorProductUrl(buy2you)).toBe(true);
+    expect(mirror1688OfferId(wholesale)).toBe("669806086431");
+    expect(canonical1688UrlFromMirror(wholesale)).toBe(
+      "https://detail.1688.com/offer/669806086431.html",
+    );
+    expect(is1688MirrorProductUrl(
+      "https://example.com/en/1688wholesale/china_alibaba_item/672530970404.html",
+    )).toBe(false);
+    expect(is1688MirrorProductUrl(
+      "http://www.buy2you.com/en/1688wholesale/china_alibaba_item/672530970404.html",
+    )).toBe(false);
+  });
+
+  it("uses a dedicated 1688-only primary prompt and logs rejected host/path diagnostics", async () => {
     const searchPage = "https://s.1688.com/selloffer/offer_search.htm?keywords=misting";
     const otherMarketplace = "https://www.alibaba.com/product-detail/misting-kit_123.html";
-    let requestBody: Record<string, unknown> | null = null;
+    const requestBodies: Record<string, unknown>[] = [];
     const events: Array<{ event: string; details?: Record<string, unknown> }> = [];
     const fetcher = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
-      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
-      return new Response(JSON.stringify(discoveryResponse([
-        incompleteResult(searchPage),
-        incompleteResult(otherMarketplace),
-      ], [searchPage, otherMarketplace])), {
+      requestBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      const payload = requestBodies.length === 1
+        ? discoveryResponse([
+            incompleteResult(searchPage),
+            incompleteResult(otherMarketplace),
+          ], [searchPage, otherMarketplace], "resp_direct_rejected")
+        : discoveryResponse([], [], "resp_mirror_empty");
+      return new Response(JSON.stringify(payload), {
         status: 200,
         headers: { "content-type": "application/json" },
       });
@@ -94,6 +118,7 @@ describe("TAJA 1688 partial logistics handoff", () => {
       apiKey: "sk-test",
       fetcher: fetcher as typeof fetch,
       logger: (event, details) => events.push({ event, details }),
+      enricher: { implemented: false, async enrich() { throw new Error("not expected"); } },
     });
 
     const outcome = await source.search({
@@ -107,9 +132,10 @@ describe("TAJA 1688 partial logistics handoff", () => {
     if (Array.isArray(outcome)) throw new Error("Expected structured outcome.");
 
     expect(outcome.results).toEqual([]);
-    expect(outcome.reason).toContain("no cited direct 1688 offer pages");
-    expect(JSON.stringify(requestBody)).toContain("dedicated 1688 sourcing researcher");
-    expect(JSON.stringify(requestBody)).toContain("/offer/<numeric-id>.htm");
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(JSON.stringify(requestBodies[0])).toContain("dedicated 1688 sourcing researcher");
+    expect(JSON.stringify(requestBodies[0])).toContain("/offer/<numeric-id>.htm");
+    expect(JSON.stringify(requestBodies[1])).toContain("1688wholesale.com");
     expect(events).toContainEqual({
       event: "openai_web_search",
       details: expect.objectContaining({
@@ -131,23 +157,15 @@ describe("TAJA 1688 partial logistics handoff", () => {
     });
   });
 
-  it("targets indexed detail and mobile offer hosts in the 1688-only request", async () => {
+  it("targets indexed detail and mobile offer hosts in the primary 1688 request", async () => {
     let requestBody: Record<string, unknown> | null = null;
     const fetcher = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
-      return new Response(JSON.stringify({
-        id: "resp_1688_query_targeting",
-        status: "completed",
-        output: [{
-          type: "message",
-          content: [{
-            type: "output_text",
-            text: JSON.stringify({ results: [] }),
-            annotations: [],
-          }],
-        }],
-        usage: { input_tokens: 100, output_tokens: 20, total_tokens: 120 },
-      }), { status: 200, headers: { "content-type": "application/json" } });
+      return new Response(JSON.stringify(discoveryResponse(
+        [incompleteResult()],
+        [offerUrl],
+        "resp_1688_query_targeting",
+      )), { status: 200, headers: { "content-type": "application/json" } });
     });
     const source = createOpenAI1688SearchSource({
       apiKey: "sk-test",
@@ -155,7 +173,7 @@ describe("TAJA 1688 partial logistics handoff", () => {
       enricher: {
         implemented: false,
         async enrich() {
-          throw new Error("Enrichment must not run without discovery results.");
+          throw new Error("Enrichment must not run when disabled.");
         },
       },
     });
@@ -175,6 +193,65 @@ describe("TAJA 1688 partial logistics handoff", () => {
     expect(serialized).toContain("site:detail.1688.com inurl:offer");
     expect(serialized).toContain("site:m.1688.com inurl:offer");
     expect(serialized).toContain("dedicated 1688 sourcing researcher");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back to an allowlisted indexed mirror, converts only the item identity, and discards mirror commercial data", async () => {
+    const mirrorUrl = "https://www.1688wholesale.com/zh-CHS/1688/china_alibaba_item/669806086431.html";
+    const directUrl = "https://detail.1688.com/offer/669806086431.html";
+    const requestBodies: Record<string, unknown>[] = [];
+    const fetcher = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      requestBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      const payload = requestBodies.length === 1
+        ? discoveryResponse([], [], "resp_direct_empty")
+        : discoveryResponse([
+            incompleteResult(mirrorUrl, {
+              title: "景观喷雾设备雾森系统高压喷雾主机",
+              supplierName: "zk泽昆环保",
+              supplierCountry: "CN",
+              price: 1150.31,
+              currency: "USD",
+              minimumOrderQuantity: 1,
+              source: "mirror",
+            }),
+          ], [mirrorUrl], "resp_mirror_hit");
+      return new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    const source = createOpenAI1688SearchSource({
+      apiKey: "sk-test",
+      fetcher: fetcher as typeof fetch,
+      enricher: { implemented: false, async enrich() { throw new Error("not expected"); } },
+    });
+
+    const outcome = await source.search({
+      productQuery: "outdoor high pressure misting system pump nozzles",
+      chinese1688QueryVariants: ["户外 高压 喷雾 降温 系统 水泵 喷嘴"],
+      quantity: 100,
+      targetCountry: "AT",
+      language: "sr",
+    }, new AbortController().signal);
+    if (Array.isArray(outcome)) throw new Error("Expected structured outcome.");
+
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(JSON.stringify(requestBodies[1])).toContain("site:1688wholesale.com");
+    expect(outcome.results).toEqual([
+      expect.objectContaining({
+        title: "景观喷雾设备雾森系统高压喷雾主机",
+        supplierName: "zk泽昆环保",
+        productUrl: directUrl,
+        source: "TAJA 1688 · indexed mirror",
+        supplierCountry: null,
+        price: null,
+        currency: null,
+        minimumOrderQuantity: null,
+        incoterm: null,
+        imageUrl: null,
+      }),
+    ]);
+    expect(outcome.aiUsage).toHaveLength(2);
   });
 
   it("strips unusable partial logistics before enrichment", () => {
