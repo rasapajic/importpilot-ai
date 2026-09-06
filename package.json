@@ -17,6 +17,7 @@
     "db:seed:country-costs": "tsx scripts/seed-primary-country-costs.ts",
     "diagnose:supplier-search": "node scripts/diagnose-supplier-search.mjs",
     "diagnose:url-import": "tsx scripts/diagnose-url-import.ts",
+    "test:taja-pr73-live": "node scripts/taja-pr73-live-gate.mjs",
     "test:url-provider-live": "tsx scripts/test-url-provider-live.ts",
     "cache:import-supplier-fixture": "tsx scripts/import-supplier-search-fixture.ts"
   },
