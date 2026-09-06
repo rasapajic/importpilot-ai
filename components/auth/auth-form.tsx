@@ -123,7 +123,9 @@ export function AuthForm({ mode }: AuthFormProps) {
       const data = await readApiJson<AuthResponse>(response, copy.genericError);
 
       if (!response.ok) {
-        setError(t(data.error ?? copy.genericError));
+        setError(data.error === "AUTH_UNAVAILABLE"
+          ? copy.genericError
+          : t(data.error ?? copy.genericError));
         return;
       }
 
