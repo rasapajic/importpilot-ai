@@ -7,8 +7,10 @@ function source(path: string) {
   return readFileSync(join(process.cwd(), path), "utf8");
 }
 
-function exportedNumber(file: string, name: string) {
-  const match = file.match(new RegExp(`export const ${name} = ([0-9_]+);`));
+function numericConstant(file: string, name: string) {
+  const match = file.match(
+    new RegExp(`(?:export\\s+)?const\\s+${name}\\s*=\\s*([0-9_]+);`),
+  );
   if (!match?.[1]) throw new Error(`Missing numeric constant ${name}`);
   return Number(match[1].replaceAll("_", ""));
 }
@@ -20,13 +22,13 @@ const finalistSource = source("modules/product-search/infrastructure/finalist-ur
 
 describe("supplier-search end-to-end deadline contract", () => {
   it("finishes paid provider work before app and browser deadlines", () => {
-    const service = exportedNumber(serverSource, "SEARCH_SERVICE_HARD_TIMEOUT_MS");
-    const appProvider = exportedNumber(
+    const service = numericConstant(serverSource, "SEARCH_SERVICE_HARD_TIMEOUT_MS");
+    const appProvider = numericConstant(
       providerSource,
       "SUPPLIER_SEARCH_APP_PROVIDER_HARD_TIMEOUT_MS",
     );
-    const route = exportedNumber(routeSource, "SUPPLIER_SEARCH_REQUEST_TIMEOUT_MS");
-    const finalist = exportedNumber(finalistSource, "TAJA_FINALIST_EXACT_PAGE_TIMEOUT_MS");
+    const route = numericConstant(routeSource, "SUPPLIER_SEARCH_REQUEST_TIMEOUT_MS");
+    const finalist = numericConstant(finalistSource, "TAJA_FINALIST_EXACT_PAGE_TIMEOUT_MS");
 
     expect(service).toBe(50_000);
     expect(appProvider).toBe(55_000);
@@ -37,17 +39,17 @@ describe("supplier-search end-to-end deadline contract", () => {
   });
 
   it("keeps every configured source path inside the service deadline", () => {
-    const service = exportedNumber(serverSource, "SEARCH_SERVICE_HARD_TIMEOUT_MS");
-    const openAi = exportedNumber(serverSource, "OPENAI_SEARCH_HARD_TIMEOUT_MS");
-    const enrichment = exportedNumber(
+    const service = numericConstant(serverSource, "SEARCH_SERVICE_HARD_TIMEOUT_MS");
+    const openAi = numericConstant(serverSource, "OPENAI_SEARCH_HARD_TIMEOUT_MS");
+    const enrichment = numericConstant(
       serverSource,
       "OPENAI_1688_ENRICH_HARD_TIMEOUT_MS",
     );
-    const alibabaDirect = exportedNumber(
+    const alibabaDirect = numericConstant(
       serverSource,
       "ALIBABA_DIRECT_HARD_TIMEOUT_MS",
     );
-    const madeInChina = exportedNumber(
+    const madeInChina = numericConstant(
       serverSource,
       "MADE_IN_CHINA_HARD_TIMEOUT_MS",
     );
