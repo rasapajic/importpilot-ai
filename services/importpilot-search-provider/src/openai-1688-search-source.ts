@@ -172,17 +172,19 @@ function base1688Queries(input: SearchRequest) {
 }
 
 function build1688SearchInput(input: SearchRequest): SearchRequest {
-  const base = base1688Queries(input)[0] ?? input.productQuery;
+  const baseQueries = base1688Queries(input);
+  const primary = baseQueries[0] ?? input.productQuery;
+  const secondary = baseQueries[1];
   const queryVariants = uniqueQueries([
-    `${base} site:detail.1688.com inurl:offer`,
-    `${base} site:m.1688.com inurl:offer`,
-    `${base} site:1688wholesale.com china_alibaba_item`,
-    `${base} site:buy2you.com 1688wholesale china_alibaba_item`,
-    `${base} site:darabuying.com 1688wholesale china_alibaba_item`,
+    `${primary} site:detail.1688.com inurl:offer`,
+    ...(secondary ? [`${secondary} site:detail.1688.com inurl:offer`] : []),
+    `${primary} site:1688wholesale.com china_alibaba_item`,
+    `${primary} site:buy2you.com 1688wholesale china_alibaba_item`,
+    `${primary} site:darabuying.com 1688wholesale china_alibaba_item`,
   ]);
   return {
     ...input,
-    productQuery: queryVariants[0] ?? base,
+    productQuery: queryVariants[0] ?? primary,
     queryVariants,
   };
 }
@@ -192,12 +194,13 @@ function build1688SearchInput(input: SearchRequest): SearchRequest {
  *
  * Public search indexes often expose either the native detail.1688.com offer or
  * an agent mirror whose URL path embeds the original numeric 1688 item id. One
- * bounded web-search pass therefore targets both native 1688 offer hosts and
- * three allowlisted indexed mirrors. The URL policy accepts nothing else.
- * Mirror URLs are never returned to the client: the numeric identity is mapped
- * mechanically to detail.1688.com/offer/<id>.html, while all mirror commercial
- * values are discarded before exact-URL enrichment so converted prices or
- * agent terms cannot masquerade as native 1688 evidence.
+ * bounded web-search pass therefore preserves up to two precise Chinese native
+ * offer queries and uses the remaining bounded slots for three allowlisted
+ * indexed mirrors. The URL policy accepts nothing else. Mirror URLs are never
+ * returned to the client: the numeric identity is mapped mechanically to
+ * detail.1688.com/offer/<id>.html, while all mirror commercial values are
+ * discarded before exact-URL enrichment so converted prices or agent terms
+ * cannot masquerade as native 1688 evidence.
  */
 export function createOpenAI1688SearchSource(
   options: OpenAI1688SearchOptions = {},
