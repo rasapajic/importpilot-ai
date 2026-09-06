@@ -197,7 +197,7 @@ describe("TAJA 1688 partial logistics handoff", () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
-  it("converts an allowlisted mirror identity and discards mirror commercial data", async () => {
+  it("converts an allowlisted mirror identity and discards unverified supplier/commercial data", async () => {
     const mirrorUrl = "https://www.1688wholesale.com/zh-CHS/1688/china_alibaba_item/669806086431.html";
     const directUrl = "https://detail.1688.com/offer/669806086431.html";
     const fetcher = vi.fn(async () => new Response(JSON.stringify(discoveryResponse([
@@ -233,7 +233,7 @@ describe("TAJA 1688 partial logistics handoff", () => {
     expect(outcome.results).toEqual([
       expect.objectContaining({
         title: "景观喷雾设备雾森系统高压喷雾主机",
-        supplierName: "zk泽昆环保",
+        supplierName: "Supplier not confirmed",
         productUrl: directUrl,
         source: "TAJA 1688 · indexed mirror",
         supplierCountry: null,
