@@ -73,8 +73,8 @@ describe("OpenAI Alibaba fallback source", () => {
     )).toBe(false);
   });
 
-  it("uses an Alibaba-only primary profile and rejects other cited marketplaces", async () => {
-    const alibabaUrl = "https://www.alibaba.com/product-detail/Patio-Misting-System_1600000000001.html";
+  it("uses one bounded Alibaba-indexed pass and rejects other cited marketplaces", async () => {
+    const alibabaUrl = "https://www.alibaba.com/product-introduction/Patio-Misting-System_1600000000001.html";
     const madeInChinaUrl = "https://example.en.made-in-china.com/product/example.html";
     let requestBody: Record<string, unknown> | null = null;
     const events: Array<{ event: string; details?: Record<string, unknown> }> = [];
@@ -83,7 +83,7 @@ describe("OpenAI Alibaba fallback source", () => {
       return new Response(JSON.stringify(response(
         [result(alibabaUrl), result(madeInChinaUrl)],
         [alibabaUrl, madeInChinaUrl],
-        "resp_alibaba_fallback",
+        "resp_alibaba_indexed",
       )), { status: 200, headers: { "content-type": "application/json" } });
     });
     const source = createOpenAIAlibabaSearchSource({
@@ -102,18 +102,19 @@ describe("OpenAI Alibaba fallback source", () => {
       }),
     ]);
     const serializedRequest = JSON.stringify(requestBody);
+    expect(serializedRequest).toContain("site:alibaba.com inurl:product-introduction");
     expect(serializedRequest).toContain("site:alibaba.com inurl:product-detail");
-    expect(serializedRequest).toContain("Search Alibaba.com only");
+    expect(serializedRequest).toContain("site:wholesaler.alibaba.com inurl:product-detail");
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(events).toContainEqual({
       event: "openai_web_search",
       details: expect.objectContaining({
-        search_profile: "alibaba_only",
+        search_profile: "general",
         cited_sources: 2,
         accepted_results: 1,
         cited_source_samples: expect.arrayContaining([
           expect.objectContaining({
-            url: "www.alibaba.com/product-detail/Patio-Misting-System_1600000000001.html",
+            url: "www.alibaba.com/product-introduction/Patio-Misting-System_1600000000001.html",
             direct_page: true,
             source_policy_accepted: true,
           }),
@@ -125,38 +126,5 @@ describe("OpenAI Alibaba fallback source", () => {
         ]),
       }),
     });
-  });
-
-  it("falls back once to current indexed Alibaba product-introduction pages", async () => {
-    const indexedUrl = "https://www.alibaba.com/product-introduction/Mist-Cooling-System_1600120729579.html";
-    const requestBodies: Record<string, unknown>[] = [];
-    const fetcher = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
-      requestBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
-      const payload = requestBodies.length === 1
-        ? response([], [], "resp_alibaba_primary_empty")
-        : response([result(indexedUrl)], [indexedUrl], "resp_alibaba_indexed");
-      return new Response(JSON.stringify(payload), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      });
-    });
-    const source = createOpenAIAlibabaSearchSource({
-      apiKey: "sk-test",
-      fetcher: fetcher as typeof fetch,
-    });
-
-    const outcome = await source.search(input, new AbortController().signal);
-    if (Array.isArray(outcome)) throw new Error("Expected structured outcome.");
-
-    expect(fetcher).toHaveBeenCalledTimes(2);
-    expect(JSON.stringify(requestBodies[0])).toContain("inurl:product-detail");
-    expect(JSON.stringify(requestBodies[1])).toContain("inurl:product-introduction");
-    expect(outcome.results).toEqual([
-      expect.objectContaining({
-        productUrl: indexedUrl,
-        source: "TAJA Alibaba",
-      }),
-    ]);
-    expect(outcome.aiUsage).toHaveLength(2);
   });
 });
