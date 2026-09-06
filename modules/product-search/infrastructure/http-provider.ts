@@ -13,9 +13,10 @@ import {
   type SupplierOfferSearchProviderOutcome,
 } from "../domain/search";
 
-// The search service owns a 90-second aggregate budget. The app waits slightly
-// longer so the service can return its own structured success or timeout body.
-export const SUPPLIER_SEARCH_TIMEOUT_MS = 95_000;
+// The search service owns a 50-second aggregate budget. The app-provider waits
+// up to 55 seconds so the service can return its structured success/timeout body,
+// while the browser/API route retains the final 60-second user-facing deadline.
+export const SUPPLIER_SEARCH_TIMEOUT_MS = 55_000;
 export const SUPPLIER_SEARCH_MAX_RESPONSE_BYTES = 1_000_000;
 export const SUPPLIER_SEARCH_CACHE_TTL_MS = 10 * 60 * 1_000;
 
