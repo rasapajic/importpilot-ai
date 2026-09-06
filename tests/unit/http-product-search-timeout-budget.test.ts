@@ -10,8 +10,9 @@ import {
 const input = { query: "foldable organizer", quantity: 100, targetCountry: "AT" };
 
 describe("deep supplier-search timeout budget", () => {
-  it("waits longer than the search service aggregate budget", () => {
-    expect(SUPPLIER_SEARCH_TIMEOUT_MS).toBeGreaterThan(90_000);
+  it("leaves room for the final 60-second browser/API deadline", () => {
+    expect(SUPPLIER_SEARCH_TIMEOUT_MS).toBe(55_000);
+    expect(SUPPLIER_SEARCH_TIMEOUT_MS).toBeLessThan(60_000);
   });
 
   it("does not repeat an expensive request after the local timeout", async () => {
