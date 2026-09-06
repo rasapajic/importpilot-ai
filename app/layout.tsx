@@ -7,6 +7,7 @@ import { GlobalHeaderActions } from "@/components/layout/global-header-actions";
 import { LOCALE_COOKIE, resolveLocale } from "@/modules/i18n/translations";
 
 import "./globals.css";
+import "./auth-password.css";
 import "./taja-search-progress.css";
 import "./search-result-actions.css";
 import "./taja-requirement-match.css";
