@@ -156,7 +156,7 @@ describe("TAJA 1688 partial logistics handoff", () => {
     });
   });
 
-  it("targets native offer hosts and all allowlisted mirror hosts in the same request", async () => {
+  it("preserves two native Chinese variants and covers all allowlisted mirror hosts in the same request", async () => {
     let requestBody: Record<string, unknown> | null = null;
     const fetcher = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
@@ -181,6 +181,7 @@ describe("TAJA 1688 partial logistics handoff", () => {
       productQuery: "patio misting system with pump 20 nozzles",
       chinese1688QueryVariants: [
         "露台 喷雾降温系统 水泵 20个喷嘴 厂家 批发",
+        "户外 喷雾套装 水泵 20喷头 厂家 批发",
       ],
       quantity: 100,
       targetCountry: "AT",
@@ -188,8 +189,8 @@ describe("TAJA 1688 partial logistics handoff", () => {
     }, new AbortController().signal);
 
     const serialized = JSON.stringify(requestBody);
-    expect(serialized).toContain("site:detail.1688.com inurl:offer");
-    expect(serialized).toContain("site:m.1688.com inurl:offer");
+    expect(serialized).toContain("露台 喷雾降温系统 水泵 20个喷嘴 厂家 批发 site:detail.1688.com inurl:offer");
+    expect(serialized).toContain("户外 喷雾套装 水泵 20喷头 厂家 批发 site:detail.1688.com inurl:offer");
     expect(serialized).toContain("site:1688wholesale.com china_alibaba_item");
     expect(serialized).toContain("site:buy2you.com 1688wholesale china_alibaba_item");
     expect(serialized).toContain("site:darabuying.com 1688wholesale china_alibaba_item");
