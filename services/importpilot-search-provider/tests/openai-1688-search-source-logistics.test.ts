@@ -4,6 +4,7 @@ import type { Supplier1688Enricher } from "../src/openai-1688-enrichment.js";
 import {
   canonical1688UrlFromMirror,
   createOpenAI1688SearchSource,
+  is1688DiscoveryUrl,
   is1688MirrorProductUrl,
   is1688ProductUrl,
   mirror1688OfferId,
@@ -84,6 +85,8 @@ describe("TAJA 1688 partial logistics handoff", () => {
     const buy2you = "https://www.buy2you.com/en/1688wholesale/china_alibaba_item/672530970404.html";
     expect(is1688MirrorProductUrl(wholesale)).toBe(true);
     expect(is1688MirrorProductUrl(buy2you)).toBe(true);
+    expect(is1688DiscoveryUrl(wholesale)).toBe(true);
+    expect(is1688DiscoveryUrl("https://detail.1688.com/offer/669806086431.html")).toBe(true);
     expect(mirror1688OfferId(wholesale)).toBe("669806086431");
     expect(canonical1688UrlFromMirror(wholesale)).toBe(
       "https://detail.1688.com/offer/669806086431.html",
@@ -96,20 +99,17 @@ describe("TAJA 1688 partial logistics handoff", () => {
     )).toBe(false);
   });
 
-  it("uses a dedicated 1688-only primary prompt and logs rejected host/path diagnostics", async () => {
+  it("uses one bounded discovery pass and rejects unrelated cited pages", async () => {
     const searchPage = "https://s.1688.com/selloffer/offer_search.htm?keywords=misting";
     const otherMarketplace = "https://www.alibaba.com/product-detail/misting-kit_123.html";
-    const requestBodies: Record<string, unknown>[] = [];
+    let requestBody: Record<string, unknown> | null = null;
     const events: Array<{ event: string; details?: Record<string, unknown> }> = [];
     const fetcher = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
-      requestBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
-      const payload = requestBodies.length === 1
-        ? discoveryResponse([
-            incompleteResult(searchPage),
-            incompleteResult(otherMarketplace),
-          ], [searchPage, otherMarketplace], "resp_direct_rejected")
-        : discoveryResponse([], [], "resp_mirror_empty");
-      return new Response(JSON.stringify(payload), {
+      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return new Response(JSON.stringify(discoveryResponse([
+        incompleteResult(searchPage),
+        incompleteResult(otherMarketplace),
+      ], [searchPage, otherMarketplace], "resp_rejected_sources")), {
         status: 200,
         headers: { "content-type": "application/json" },
       });
@@ -132,14 +132,13 @@ describe("TAJA 1688 partial logistics handoff", () => {
     if (Array.isArray(outcome)) throw new Error("Expected structured outcome.");
 
     expect(outcome.results).toEqual([]);
-    expect(fetcher).toHaveBeenCalledTimes(2);
-    expect(JSON.stringify(requestBodies[0])).toContain("dedicated 1688 sourcing researcher");
-    expect(JSON.stringify(requestBodies[0])).toContain("/offer/<numeric-id>.htm");
-    expect(JSON.stringify(requestBodies[1])).toContain("1688wholesale.com");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(requestBody)).toContain("site:detail.1688.com inurl:offer");
+    expect(JSON.stringify(requestBody)).toContain("site:1688wholesale.com china_alibaba_item");
     expect(events).toContainEqual({
       event: "openai_web_search",
       details: expect.objectContaining({
-        search_profile: "1688_only",
+        search_profile: "general",
         parsed_results: 2,
         accepted_results: 0,
         rejected_results: 2,
@@ -157,7 +156,7 @@ describe("TAJA 1688 partial logistics handoff", () => {
     });
   });
 
-  it("targets indexed detail and mobile offer hosts in the primary 1688 request", async () => {
+  it("targets native offer hosts and all allowlisted mirror hosts in the same request", async () => {
     let requestBody: Record<string, unknown> | null = null;
     const fetcher = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
@@ -180,7 +179,6 @@ describe("TAJA 1688 partial logistics handoff", () => {
 
     await source.search({
       productQuery: "patio misting system with pump 20 nozzles",
-      queryVariants: ["patio misting system with pump 20 nozzles"],
       chinese1688QueryVariants: [
         "露台 喷雾降温系统 水泵 20个喷嘴 厂家 批发",
       ],
@@ -192,34 +190,29 @@ describe("TAJA 1688 partial logistics handoff", () => {
     const serialized = JSON.stringify(requestBody);
     expect(serialized).toContain("site:detail.1688.com inurl:offer");
     expect(serialized).toContain("site:m.1688.com inurl:offer");
-    expect(serialized).toContain("dedicated 1688 sourcing researcher");
+    expect(serialized).toContain("site:1688wholesale.com china_alibaba_item");
+    expect(serialized).toContain("site:buy2you.com 1688wholesale china_alibaba_item");
+    expect(serialized).toContain("site:darabuying.com 1688wholesale china_alibaba_item");
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
-  it("falls back to an allowlisted indexed mirror, converts only the item identity, and discards mirror commercial data", async () => {
+  it("converts an allowlisted mirror identity and discards mirror commercial data", async () => {
     const mirrorUrl = "https://www.1688wholesale.com/zh-CHS/1688/china_alibaba_item/669806086431.html";
     const directUrl = "https://detail.1688.com/offer/669806086431.html";
-    const requestBodies: Record<string, unknown>[] = [];
-    const fetcher = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
-      requestBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
-      const payload = requestBodies.length === 1
-        ? discoveryResponse([], [], "resp_direct_empty")
-        : discoveryResponse([
-            incompleteResult(mirrorUrl, {
-              title: "景观喷雾设备雾森系统高压喷雾主机",
-              supplierName: "zk泽昆环保",
-              supplierCountry: "CN",
-              price: 1150.31,
-              currency: "USD",
-              minimumOrderQuantity: 1,
-              source: "mirror",
-            }),
-          ], [mirrorUrl], "resp_mirror_hit");
-      return new Response(JSON.stringify(payload), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      });
-    });
+    const fetcher = vi.fn(async () => new Response(JSON.stringify(discoveryResponse([
+      incompleteResult(mirrorUrl, {
+        title: "景观喷雾设备雾森系统高压喷雾主机",
+        supplierName: "zk泽昆环保",
+        supplierCountry: "CN",
+        price: 1150.31,
+        currency: "USD",
+        minimumOrderQuantity: 1,
+        source: "mirror",
+      }),
+    ], [mirrorUrl], "resp_mirror_hit")), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }));
     const source = createOpenAI1688SearchSource({
       apiKey: "sk-test",
       fetcher: fetcher as typeof fetch,
@@ -235,8 +228,7 @@ describe("TAJA 1688 partial logistics handoff", () => {
     }, new AbortController().signal);
     if (Array.isArray(outcome)) throw new Error("Expected structured outcome.");
 
-    expect(fetcher).toHaveBeenCalledTimes(2);
-    expect(JSON.stringify(requestBodies[1])).toContain("site:1688wholesale.com");
+    expect(fetcher).toHaveBeenCalledTimes(1);
     expect(outcome.results).toEqual([
       expect.objectContaining({
         title: "景观喷雾设备雾森系统高压喷雾主机",
@@ -251,7 +243,7 @@ describe("TAJA 1688 partial logistics handoff", () => {
         imageUrl: null,
       }),
     ]);
-    expect(outcome.aiUsage).toHaveLength(2);
+    expect(outcome.aiUsage).toHaveLength(1);
   });
 
   it("strips unusable partial logistics before enrichment", () => {
