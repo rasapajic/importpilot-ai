@@ -98,6 +98,7 @@ function normalizeMirrorResult(result: SupplierSearchResult) {
   if (!productUrl) return null;
   return {
     ...result,
+    supplierName: "Supplier not confirmed",
     supplierCountry: null,
     price: null,
     currency: null,
@@ -198,9 +199,9 @@ function build1688SearchInput(input: SearchRequest): SearchRequest {
  * offer queries and uses the remaining bounded slots for three allowlisted
  * indexed mirrors. The URL policy accepts nothing else. Mirror URLs are never
  * returned to the client: the numeric identity is mapped mechanically to
- * detail.1688.com/offer/<id>.html, while all mirror commercial values are
- * discarded before exact-URL enrichment so converted prices or agent terms
- * cannot masquerade as native 1688 evidence.
+ * detail.1688.com/offer/<id>.html. Mirror supplier identity and all commercial
+ * values are discarded before exact-URL enrichment so third-party labels,
+ * converted prices or agent terms cannot masquerade as native 1688 evidence.
  */
 export function createOpenAI1688SearchSource(
   options: OpenAI1688SearchOptions = {},
