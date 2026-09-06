@@ -174,7 +174,7 @@ describe("TAJA Deep Search phase 1", () => {
     });
   });
 
-  it("runs a dedicated 1688 query and accepts only verified 1688 product pages", async () => {
+  it("runs bounded 1688 native and mirror queries and accepts only verified discovery pages", async () => {
     const direct1688Url = "https://detail.1688.com/offer/123456789.html";
     const alibabaUrl = "https://www.alibaba.com/product-detail/example.html";
     let requestBody = "";
@@ -231,7 +231,8 @@ describe("TAJA Deep Search phase 1", () => {
       }),
     ]);
     expect(fetcher).toHaveBeenCalledTimes(1);
-    expect(requestBody).toContain("site:1688.com");
+    expect(requestBody).toContain("site:detail.1688.com inurl:offer");
+    expect(requestBody).toContain("site:1688wholesale.com china_alibaba_item");
     expect(requestBody).toContain("中国");
   });
 
