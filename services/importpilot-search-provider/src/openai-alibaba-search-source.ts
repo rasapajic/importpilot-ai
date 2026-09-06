@@ -63,34 +63,21 @@ function buildAlibabaSearchInput(input: SearchRequest): SearchRequest {
   const sourceQueries = input.queryVariants?.length
     ? input.queryVariants
     : [input.productQuery];
-  const queryVariants = uniqueQueries(
-    sourceQueries.map((query) => `${query} site:alibaba.com inurl:product-detail`),
-  );
-  const fallback = `${input.productQuery} site:alibaba.com inurl:product-detail`;
-  return {
-    ...input,
-    productQuery: queryVariants[0] ?? fallback,
-    queryVariants: queryVariants.length > 0 ? queryVariants : [fallback],
-  };
-}
-
-function buildAlibabaIndexedSearchInput(input: SearchRequest): SearchRequest {
-  const sourceQueries = input.queryVariants?.length
-    ? input.queryVariants
-    : [input.productQuery];
+  const primary = sourceQueries[0] ?? input.productQuery;
+  const secondary = sourceQueries[1];
   const queryVariants = uniqueQueries([
-    ...sourceQueries.slice(0, 2).map(
-      (query) => `${query} site:alibaba.com inurl:product-introduction`,
-    ),
-    ...(sourceQueries[0]
-      ? [`${sourceQueries[0]} site:wholesaler.alibaba.com inurl:product-detail`]
-      : []),
+    `${primary} site:alibaba.com inurl:product-introduction`,
+    `${primary} site:alibaba.com inurl:product-detail`,
+    ...(secondary ? [
+      `${secondary} site:alibaba.com inurl:product-introduction`,
+      `${secondary} site:alibaba.com inurl:product-detail`,
+    ] : []),
+    `${primary} site:wholesaler.alibaba.com inurl:product-detail`,
   ]);
-  const fallback = `${input.productQuery} site:alibaba.com inurl:product-introduction`;
   return {
     ...input,
-    productQuery: queryVariants[0] ?? fallback,
-    queryVariants: queryVariants.length > 0 ? queryVariants : [fallback],
+    productQuery: queryVariants[0],
+    queryVariants,
   };
 }
 
@@ -102,24 +89,17 @@ function normalizeAlibabaResult(result: SupplierSearchResult): SupplierSearchRes
 }
 
 /**
- * AI-assisted Alibaba fallback used only after the direct Alibaba adapter
- * returns no usable cards. The first pass remains constrained to canonical
- * /product-detail/ pages. If Alibaba's current public index exposes no such
- * pages, one bounded second pass accepts only product-specific Alibaba-owned
- * /product-introduction/ pages (plus wholesaler.alibaba.com product-detail
- * pages). Search/category/RFQ/storefront pages and every non-Alibaba host stay
- * rejected. Unknown commercial fields remain null.
+ * AI-assisted Alibaba fallback used only after the direct Alibaba HTML adapter
+ * returns no usable cards. Public search indexing has shifted many current
+ * concrete offers from /product-detail/ to /product-introduction/, so one
+ * bounded OpenAI web-search pass now searches both product-specific forms.
+ * A strict URL policy still rejects search/category/RFQ/storefront pages and
+ * every non-Alibaba host. Unknown commercial fields remain null.
  */
 export function createOpenAIAlibabaSearchSource(
   options: OpenAIAlibabaSearchOptions = {},
 ): SupplierSearchSource {
-  const primarySource = createOpenAIWebSearchSource({
-    ...options,
-    maxResults: options.maxResults ?? 5,
-    searchProfile: "alibaba_only",
-    resultUrlPolicy: isAlibabaProductUrl,
-  });
-  const indexedFallbackSource = createOpenAIWebSearchSource({
+  const baseSource = createOpenAIWebSearchSource({
     ...options,
     maxResults: options.maxResults ?? 5,
     searchProfile: "general",
@@ -128,37 +108,22 @@ export function createOpenAIAlibabaSearchSource(
 
   return {
     name: "openai-alibaba-web-v1",
-    implemented: primarySource.implemented,
+    implemented: baseSource.implemented,
     trustedRelevance: true,
 
     async healthCheck(signal) {
-      return primarySource.healthCheck ? primarySource.healthCheck(signal) : true;
+      return baseSource.healthCheck ? baseSource.healthCheck(signal) : true;
     },
 
     async search(input, signal) {
-      const primary = outcomeParts(await primarySource.search(
+      const outcome = outcomeParts(await baseSource.search(
         buildAlibabaSearchInput(input),
         signal,
       ));
-      if (primary.results.length > 0) {
-        return {
-          results: primary.results.map(normalizeAlibabaResult),
-          ...(primary.reason ? { reason: primary.reason } : {}),
-          ...(primary.aiUsage?.length ? { aiUsage: primary.aiUsage } : {}),
-        };
-      }
-
-      const indexed = outcomeParts(await indexedFallbackSource.search(
-        buildAlibabaIndexedSearchInput(input),
-        signal,
-      ));
-      const aiUsage = [...(primary.aiUsage ?? []), ...(indexed.aiUsage ?? [])];
       return {
-        results: indexed.results.map(normalizeAlibabaResult),
-        ...(indexed.results.length === 0
-          ? { reason: indexed.reason ?? primary.reason ?? "TAJA Alibaba search returned no verified indexed product pages." }
-          : {}),
-        ...(aiUsage.length ? { aiUsage } : {}),
+        results: outcome.results.map(normalizeAlibabaResult),
+        ...(outcome.reason ? { reason: outcome.reason } : {}),
+        ...(outcome.aiUsage?.length ? { aiUsage: outcome.aiUsage } : {}),
       };
     },
   };
