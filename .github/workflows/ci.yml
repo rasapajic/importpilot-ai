@@ -101,3 +101,6 @@ jobs:
         env:
           NODE_ENV: production
         run: npm run build
+
+      - name: Built-app production smoke
+        run: node scripts/ci-production-smoke.mjs
