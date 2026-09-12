@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 
-const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 const baseUrl = process.env.CI_SMOKE_BASE_URL ?? "http://127.0.0.1:3000";
 const startupDeadlineMs = 30_000;
 const requestTimeoutMs = 8_000;
@@ -45,10 +44,35 @@ function sessionCookieFrom(response) {
   return raw.split(";", 1)[0];
 }
 
-const child = spawn(npmCommand, ["start"], {
-  env: { ...process.env, NODE_ENV: "production" },
-  stdio: ["ignore", "pipe", "pipe"],
-});
+async function stopServer(child) {
+  if (child.exitCode !== null) return;
+  child.kill("SIGTERM");
+  await new Promise((resolve) => {
+    const forceKill = setTimeout(() => {
+      if (child.exitCode === null) child.kill("SIGKILL");
+    }, 4_000);
+    const hardDeadline = setTimeout(() => {
+      clearTimeout(forceKill);
+      resolve();
+    }, 7_000);
+    child.once("exit", () => {
+      clearTimeout(forceKill);
+      clearTimeout(hardDeadline);
+      resolve();
+    });
+  });
+}
+
+// Spawn Next directly rather than through npm so shutdown cannot leave an orphaned
+// child holding stdout/stderr open and hanging the CI smoke step.
+const child = spawn(
+  process.execPath,
+  ["node_modules/next/dist/bin/next", "start", "--hostname", "127.0.0.1", "--port", "3000"],
+  {
+    env: { ...process.env, NODE_ENV: "production" },
+    stdio: ["ignore", "pipe", "pipe"],
+  },
+);
 child.stdout.on("data", appendLog);
 child.stderr.on("data", appendLog);
 
@@ -110,13 +134,5 @@ try {
   if (logs.trim()) console.error(`--- production server log ---\n${logs}`);
   process.exitCode = 1;
 } finally {
-  child.kill("SIGTERM");
-  await new Promise((resolve) => {
-    if (child.exitCode !== null) return resolve();
-    const timer = setTimeout(resolve, 5_000);
-    child.once("exit", () => {
-      clearTimeout(timer);
-      resolve();
-    });
-  });
+  await stopServer(child);
 }
