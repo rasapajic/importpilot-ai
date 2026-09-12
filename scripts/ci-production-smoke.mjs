@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
+import { cpSync, existsSync, mkdirSync } from "node:fs";
 
-const baseUrl = process.env.CI_SMOKE_BASE_URL ?? "http://127.0.0.1:3000";
+const baseUrl = process.env.CI_SMOKE_BASE_URL ?? "http://localhost:3000";
 const startupDeadlineMs = 30_000;
 const requestTimeoutMs = 8_000;
 let logs = "";
@@ -63,16 +64,34 @@ async function stopServer(child) {
   });
 }
 
-// Spawn Next directly rather than through npm so shutdown cannot leave an orphaned
-// child holding stdout/stderr open and hanging the CI smoke step.
-const child = spawn(
-  process.execPath,
-  ["node_modules/next/dist/bin/next", "start", "--hostname", "127.0.0.1", "--port", "3000"],
-  {
-    env: { ...process.env, NODE_ENV: "production" },
-    stdio: ["ignore", "pipe", "pipe"],
+function prepareStandaloneRuntime() {
+  const standaloneRoot = ".next/standalone";
+  if (!existsSync(`${standaloneRoot}/server.js`)) {
+    throw new Error("Standalone production server was not produced by next build.");
+  }
+  mkdirSync(`${standaloneRoot}/.next`, { recursive: true });
+  if (existsSync(".next/static")) {
+    cpSync(".next/static", `${standaloneRoot}/.next/static`, { recursive: true });
+  }
+  if (existsSync("public")) {
+    cpSync("public", `${standaloneRoot}/public`, { recursive: true });
+  }
+}
+
+prepareStandaloneRuntime();
+
+// This is the same runtime shape as docker/app.Dockerfile: standalone server +
+// copied public/.next/static assets, with the server process spawned directly so
+// shutdown remains bounded.
+const child = spawn(process.execPath, [".next/standalone/server.js"], {
+  env: {
+    ...process.env,
+    NODE_ENV: "production",
+    HOSTNAME: "localhost",
+    PORT: "3000",
   },
-);
+  stdio: ["ignore", "pipe", "pipe"],
+});
 child.stdout.on("data", appendLog);
 child.stderr.on("data", appendLog);
 
@@ -128,7 +147,7 @@ try {
     throw new Error(`Logged-out dashboard request returned ${afterLogout.status}, expected 401.`);
   }
 
-  console.log("IMPORTPILOT_PRODUCTION_SMOKE PASS: health, public pages, registration, authenticated dashboard and logout lifecycle are healthy on the built app.");
+  console.log("IMPORTPILOT_PRODUCTION_SMOKE PASS: standalone runtime health, public pages, registration, authenticated dashboard and logout lifecycle are healthy.");
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   if (logs.trim()) console.error(`--- production server log ---\n${logs}`);
