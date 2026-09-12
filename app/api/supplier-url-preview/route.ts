@@ -3,8 +3,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest } from "@/modules/auth/infrastructure/request-auth";
 import { supplierOfferUrlImportRequestSchema } from "@/modules/product-search/domain/search";
 import {
+  getDetailedSupplierOfferUrlImportProvider,
+} from "@/modules/product-search/infrastructure/detailed-url-import-provider";
+import {
   buildSlugFallbackPreview,
-  getSupplierOfferUrlImportProvider,
   getUrlImportRuntimeDiagnostics,
   UrlImportBlockedError,
   UrlImportFetchError,
@@ -24,6 +26,24 @@ function previewFieldCount(preview: { title?: unknown; supplierName?: unknown; p
     preview.minimumOrderQuantity,
     preview.imageUrl,
   ].filter((value) => value !== null && value !== undefined && value !== "").length;
+}
+
+function detailCounts(preview: {
+  details?: {
+    priceTiers?: unknown[];
+    attributes?: unknown[];
+    variants?: unknown[];
+    packaging?: Record<string, unknown> | null;
+  } | null;
+}) {
+  return {
+    priceTiers: preview.details?.priceTiers?.length ?? 0,
+    attributes: preview.details?.attributes?.length ?? 0,
+    variants: preview.details?.variants?.length ?? 0,
+    packagingFields: preview.details?.packaging
+      ? Object.values(preview.details.packaging).filter((value) => value !== null).length
+      : 0,
+  };
 }
 
 function logPreviewRoute(event: Record<string, unknown>) {
@@ -54,7 +74,9 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const preview = await getSupplierOfferUrlImportProvider().previewSupplierOfferUrl(parsed.data.productUrl);
+    const preview = await getDetailedSupplierOfferUrlImportProvider()
+      .previewSupplierOfferUrl(parsed.data.productUrl);
+    const details = detailCounts(preview);
     logPreviewRoute({
       route: "/api/supplier-url-preview",
       externalProviderConfigured: Boolean(process.env.URL_IMPORT_PROVIDER_URL),
@@ -63,6 +85,7 @@ export async function POST(request: NextRequest) {
       previewPresent: true,
       errorPresent: false,
       previewFieldCount: previewFieldCount(preview),
+      detailCounts: details,
       title: preview.title,
       supplier: preview.supplierName,
       price: preview.price,
@@ -74,6 +97,7 @@ export async function POST(request: NextRequest) {
       diagnostics: developmentDiagnostics({
         providerStatus: "success",
         previewFieldCount: previewFieldCount(preview),
+        detailCounts: details,
         title: preview.title,
         supplier: preview.supplierName,
         price: preview.price,

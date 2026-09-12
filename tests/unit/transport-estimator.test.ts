@@ -54,6 +54,26 @@ describe("smart transport cost estimation", () => {
     expect(estimate.confidence).toBe("HIGH");
   });
 
+  it("uses explicit 1688 unit data with evidence-aware confidence", () => {
+    const estimate = estimateProductLogistics({
+      productName: "unknown 1688 organizer",
+      quantity: 100,
+      supplierLogistics: {
+        unitWeightKg: 0.7,
+        unitVolumeCbm: 0.004,
+        evidence: "SEARCH_SNIPPET",
+      },
+    });
+
+    expect(estimate).toMatchObject({
+      source: "SUPPLIER",
+      estimatedWeightKg: 70,
+      estimatedVolumeCbm: 0.4,
+      confidence: "MEDIUM",
+    });
+    expect(estimate.reasons.join(" ")).toContain("search snippet");
+  });
+
   it("falls back when supplier weight is not available", () => {
     const estimate = estimateProductLogistics({
       productName: "custom accessory",
@@ -86,7 +106,7 @@ describe("smart transport cost estimation", () => {
     expect(routes.find((route) => route.mode === "AIR")?.confidence).toBe("LOW");
   });
 
-  it("extracts supplier logistics from source metadata", () => {
+  it("extracts legacy logistics and evidence from source metadata", () => {
     expect(extractSupplierLogisticsData({
       logistics: {
         gross_weight_kg: "10.5",
@@ -94,6 +114,9 @@ describe("smart transport cost estimation", () => {
         carton_width_cm: "40",
         carton_height_cm: "30",
         pieces_per_carton: "25",
+        unit_weight_kg: "0.42",
+        unit_volume_cbm: "0.003",
+        evidence: "PRODUCT_PAGE",
       },
     })).toEqual({
       grossWeightKg: 10.5,
@@ -102,6 +125,35 @@ describe("smart transport cost estimation", () => {
       cartonWidthCm: 40,
       cartonHeightCm: 30,
       piecesPerCarton: 25,
+      unitWeightKg: 0.42,
+      unitVolumeCbm: 0.003,
+      evidence: "PRODUCT_PAGE",
+    });
+  });
+
+  it("restores supplierLogistics saved with a TAJA offer", () => {
+    expect(extractSupplierLogisticsData({
+      supplierLogistics: {
+        grossWeightKg: 12,
+        netWeightKg: null,
+        cartonLengthCm: 60,
+        cartonWidthCm: 40,
+        cartonHeightCm: 35,
+        piecesPerCarton: 20,
+        unitWeightKg: null,
+        unitVolumeCbm: null,
+        evidence: "PRODUCT_PAGE",
+      },
+    })).toEqual({
+      grossWeightKg: 12,
+      netWeightKg: null,
+      cartonLengthCm: 60,
+      cartonWidthCm: 40,
+      cartonHeightCm: 35,
+      piecesPerCarton: 20,
+      unitWeightKg: null,
+      unitVolumeCbm: null,
+      evidence: "PRODUCT_PAGE",
     });
   });
 });

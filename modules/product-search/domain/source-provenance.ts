@@ -10,7 +10,14 @@ export function is1688Url(value: string) {
   try {
     const url = new URL(value);
     const host = url.hostname.toLowerCase();
-    return url.protocol === "https:" && (host === "1688.com" || host.endsWith(".1688.com"));
+    if (
+      url.protocol !== "https:" ||
+      (host !== "1688.com" && !host.endsWith(".1688.com"))
+    ) {
+      return false;
+    }
+    const path = url.pathname.toLowerCase().replace(/\/+$/, "");
+    return /^\/offer\/\d+(?:\.html?)?$/.test(path);
   } catch {
     return false;
   }
@@ -30,6 +37,7 @@ export function createBrowserAssisted1688Preview(productUrl: string): SupplierOf
     productUrl: url.toString(),
     imageUrl: null,
     source: url.hostname.toLowerCase(),
+    details: null,
     isPartial: true,
     titleFromSlug: false,
   });
@@ -69,6 +77,8 @@ export function createSupplierOfferSourceMetadata(
     sourceHost: url.hostname.toLowerCase(),
     imageUrl: result.imageUrl,
     providerSource: result.source,
+    marketplaceDetails: result.marketplaceDetails ?? null,
+    supplierLogistics: result.supplierLogistics ?? null,
     fetchedAt: provenance.fetchedAt,
     resultOrigin: provenance.resultOrigin,
     captureMode,

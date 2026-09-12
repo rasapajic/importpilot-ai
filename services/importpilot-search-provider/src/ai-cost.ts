@@ -17,6 +17,7 @@ export const DEFAULT_OPENAI_PRICING: OpenAiPricingSnapshot = {
 };
 
 type UsageInput = {
+  operation?: AiUsageReport["operation"];
   model: string;
   responseId: string;
   inputTokens: number;
@@ -39,6 +40,7 @@ function money(value: number) {
 }
 
 export function createOpenAiUsageReport({
+  operation = "supplier_search",
   model,
   responseId,
   inputTokens,
@@ -85,7 +87,7 @@ export function createOpenAiUsageReport({
 
   return {
     provider: "openai",
-    operation: "supplier_search",
+    operation,
     model,
     responseId,
     status: "completed",

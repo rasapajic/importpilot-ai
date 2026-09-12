@@ -8,8 +8,11 @@ import { prisma } from "../../../lib/database/prisma";
 import { recordAiUsageEvents } from "../../ai-usage/application/ai-usage-service";
 import {
   projectSupplierSearchRequestSchema,
+  supplierOfferLogisticsSchema,
   supplierOfferSearchInputSchema,
   supplierOfferSearchResultsSchema,
+  type ProjectSupplierSearchRequest,
+  type SupplierOfferLogistics,
   type SupplierOfferSearchProvider,
   type SupplierOfferSearchResult,
   type SupplierOfferUrlImportProvider,
@@ -27,14 +30,20 @@ import {
 } from "../domain/taja-candidate-analysis";
 import { mergeTajaCandidateEnrichment } from "../domain/taja-candidate-enrichment";
 import { estimateTajaPreliminaryLandedCost } from "../domain/taja-preliminary-cost-estimate";
+import { applyTajaProductFormPolicy } from "../domain/taja-product-form-policy";
 import { canonicalSupplierProductUrl } from "../domain/supplier-product-url";
 import {
   createBrowserAssisted1688Preview,
   createSupplierOfferSourceMetadata,
 } from "../domain/source-provenance";
+import {
+  findLastSuccessfulSupplierSearch,
+  storeSuccessfulSupplierSearch,
+} from "../infrastructure/persistent-cache";
 import { getSupplierOfferSearchProvider } from "../infrastructure/provider";
 import { getSupplierOfferUrlImportProvider } from "../infrastructure/url-import-provider";
 import { recordProjectActivity } from "../../timeline/application/timeline-service";
+import { extractSupplierLogisticsData } from "../../transport/domain/transport-estimator";
 import { autoEnrichTajaCandidates } from "./taja-auto-enrichment";
 import { searchSupplierOffersWithPersistentFallback } from "./search-fallback";
 
@@ -46,10 +55,41 @@ export class DuplicateSupplierOfferUrlError extends Error {
   }
 }
 
+type EffectiveProjectSupplierSearchRequest = ProjectSupplierSearchRequest & {
+  targetMarginPercent: number;
+};
+
+type SearchResultOrigin = "live" | "cache" | null;
+
+type SearchPresentationInput = {
+  projectId: string;
+  organizationId: string;
+  effectiveRequest: EffectiveProjectSupplierSearchRequest;
+  lunaPlan: ReturnType<typeof createLunaSearchPlan>;
+  sourceResults: SupplierOfferSearchResult[];
+  resultOrigin: SearchResultOrigin;
+  fetchedAt: string;
+  urlImportProvider?: SupplierOfferUrlImportProvider;
+};
+
+function developmentLog(event: string, details: Record<string, unknown>) {
+  if (process.env.NODE_ENV !== "development") return;
+  console.info(JSON.stringify({ service: "importpilot-app", event, ...details }));
+}
+
 function sourceMetadataProductUrl(metadata: unknown) {
   if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
   const productUrl = (metadata as Record<string, unknown>).productUrl;
   return typeof productUrl === "string" && productUrl.trim() ? productUrl : null;
+}
+
+function sourceMetadataSupplierLogistics(
+  metadata: unknown,
+): SupplierOfferLogistics | undefined {
+  const extracted = extractSupplierLogisticsData(metadata);
+  if (!extracted) return undefined;
+  const parsed = supplierOfferLogisticsSchema.safeParse(extracted);
+  return parsed.success ? parsed.data : undefined;
 }
 
 function landedCostStatus(status: CalculationStatus | undefined) {
@@ -101,12 +141,17 @@ function offerCandidateEnrichment(offer: {
   };
 }
 
-async function findCandidateEnrichment(
+type StoredCandidateContext = {
+  enrichment: TajaCandidateEnrichment;
+  supplierLogistics?: SupplierOfferLogistics;
+};
+
+async function findCandidateContext(
   projectId: string,
   organizationId: string,
   targetCountry: string,
   quantity: number,
-): Promise<Map<string, TajaCandidateEnrichment>> {
+): Promise<Map<string, StoredCandidateContext>> {
   const offers = await prisma.supplierOffer.findMany({
     where: {
       projectId,
@@ -123,20 +168,23 @@ async function findCandidateEnrichment(
     },
   });
 
-  const enrichment = new Map<string, TajaCandidateEnrichment>();
+  const contexts = new Map<string, StoredCandidateContext>();
   for (const offer of offers) {
     const productUrl = sourceMetadataProductUrl(offer.sourceMetadata);
     if (!productUrl) continue;
     const key = canonicalSupplierProductUrl(productUrl);
-    enrichment.set(
-      key,
-      mergeTajaCandidateEnrichment(
-        enrichment.get(key),
+    const existing = contexts.get(key);
+    const supplierLogistics = existing?.supplierLogistics ??
+      sourceMetadataSupplierLogistics(offer.sourceMetadata);
+    contexts.set(key, {
+      enrichment: mergeTajaCandidateEnrichment(
+        existing?.enrichment,
         offerCandidateEnrichment(offer),
       ),
-    );
+      ...(supplierLogistics ? { supplierLogistics } : {}),
+    });
   }
-  return enrichment;
+  return contexts;
 }
 
 async function findExistingSearchResultOffer(
@@ -161,71 +209,99 @@ async function findExistingSearchResultOffer(
   }) ?? null;
 }
 
-export async function searchProjectSupplierOffers(
-  projectId: string,
-  organizationId: string,
-  searchInput: unknown,
-  provider?: SupplierOfferSearchProvider,
-  urlImportProvider: SupplierOfferUrlImportProvider = getSupplierOfferUrlImportProvider(),
-) {
+async function findSearchProject(projectId: string, organizationId: string) {
   const project = await prisma.importProject.findFirst({
     where: { id: projectId, organizationId },
     select: { id: true, targetMargin: true },
   });
   if (!project) throw new ProductSearchProjectNotFoundError();
+  return project;
+}
 
-  const activeProvider = provider ?? getSupplierOfferSearchProvider({
-    onAiUsage: async (events) => {
-      await recordAiUsageEvents({ organizationId, projectId: project.id, events });
-    },
-  });
+function effectiveSearchRequest(
+  project: Awaited<ReturnType<typeof findSearchProject>>,
+  searchInput: unknown,
+): EffectiveProjectSupplierSearchRequest {
   const request = projectSupplierSearchRequestSchema.parse(searchInput);
-  const effectiveRequest = {
+  return {
     ...request,
     targetMarginPercent: request.targetMarginPercent ?? Number(project.targetMargin.toString()),
   };
-  const lunaPlan = createLunaSearchPlan(effectiveRequest);
-  const providerInput = supplierOfferSearchInputSchema.parse(
-    buildLunaProviderSearchInput(lunaPlan, effectiveRequest),
-  );
-  const outcome = await searchSupplierOffersWithPersistentFallback(providerInput, activeProvider);
-  const fetchedAt = new Date().toISOString();
-  const constrainedResults = applyLunaSearchConstraints(outcome.results, effectiveRequest);
+}
+
+async function buildSearchPresentation(input: SearchPresentationInput) {
+  const {
+    projectId,
+    organizationId,
+    effectiveRequest,
+    lunaPlan,
+    sourceResults,
+    resultOrigin,
+    fetchedAt,
+    urlImportProvider,
+  } = input;
+  const constrainedResults = applyLunaSearchConstraints(sourceResults, effectiveRequest);
   const preliminaryResults = rankPreliminarySupplierOffers(constrainedResults, {
     quantity: effectiveRequest.quantity,
+    productQuery: effectiveRequest.query,
   });
-  const autoEnrichment = await autoEnrichTajaCandidates(
-    preliminaryResults,
-    urlImportProvider,
-    { maxCandidates: 10, concurrency: 4 },
-  );
-  const enrichment = await findCandidateEnrichment(
+
+  let candidateResults = preliminaryResults;
+  let autoEnrichmentSummary: Awaited<
+    ReturnType<typeof autoEnrichTajaCandidates>
+  >["summary"] | undefined;
+  if (urlImportProvider) {
+    const autoEnrichment = await autoEnrichTajaCandidates(
+      preliminaryResults,
+      urlImportProvider,
+      { maxCandidates: 10, concurrency: 4 },
+    );
+    candidateResults = autoEnrichment.results;
+    autoEnrichmentSummary = autoEnrichment.summary;
+  }
+
+  const candidateContext = await findCandidateContext(
     projectId,
     organizationId,
     effectiveRequest.targetCountry,
     effectiveRequest.quantity,
   );
   const tajaAnalysis = analyzeAndRankTajaCandidates(
-    autoEnrichment.results.map((result) => ({
-      result,
-      enrichment: enrichment.get(canonicalSupplierProductUrl(result.productUrl)),
-      preliminaryCostEstimate: estimateTajaPreliminaryLandedCost({
-        result,
-        quantity: effectiveRequest.quantity,
-        targetCountry: effectiveRequest.targetCountry,
-        targetMarginPercent: effectiveRequest.targetMarginPercent,
-      }),
-    })),
+    candidateResults.map((result) => {
+      const stored = candidateContext.get(
+        canonicalSupplierProductUrl(result.productUrl),
+      );
+      const resultWithStoredLogistics = result.supplierLogistics ||
+          !stored?.supplierLogistics
+        ? result
+        : { ...result, supplierLogistics: stored.supplierLogistics };
+      return {
+        result: resultWithStoredLogistics,
+        enrichment: stored?.enrichment,
+        preliminaryCostEstimate: estimateTajaPreliminaryLandedCost({
+          result: resultWithStoredLogistics,
+          quantity: effectiveRequest.quantity,
+          targetCountry: effectiveRequest.targetCountry,
+          targetMarginPercent: effectiveRequest.targetMarginPercent,
+        }),
+      };
+    }),
     {
       quantity: effectiveRequest.quantity,
       targetMarginPercent: effectiveRequest.targetMarginPercent,
+      productQuery: effectiveRequest.query,
     },
   );
-  const results = tajaAnalysis.rankedResults.map((result) => ({
+  const productFormAnalysis = applyTajaProductFormPolicy({
+    rankedResults: tajaAnalysis.rankedResults,
+    analyses: tajaAnalysis.analyses,
+    productQuery: effectiveRequest.query,
+  });
+  const results = productFormAnalysis.rankedResults.map((result) => ({
     ...result,
     provenance: {
       fetchedAt,
-      resultOrigin: outcome.resultOrigin ?? "live",
+      resultOrigin: resultOrigin ?? "live",
       originalQuery: effectiveRequest.query,
       providerQuery: lunaPlan.providerQuery,
       chinese1688Query: lunaPlan.chinese1688Query,
@@ -235,13 +311,94 @@ export async function searchProjectSupplierOffers(
   }));
 
   return {
-    ...outcome,
     results,
-    candidateAnalyses: tajaAnalysis.analyses,
-    autoEnrichmentSummary: autoEnrichment.summary,
-    unfilteredResultCount: outcome.results.length,
+    candidateAnalyses: productFormAnalysis.analyses,
+    ...(autoEnrichmentSummary ? { autoEnrichmentSummary } : {}),
+    unfilteredResultCount: sourceResults.length,
     lunaPlan,
     fetchedAt,
+  };
+}
+
+export async function searchProjectSupplierOffers(
+  projectId: string,
+  organizationId: string,
+  searchInput: unknown,
+  provider?: SupplierOfferSearchProvider,
+  urlImportProvider: SupplierOfferUrlImportProvider = getSupplierOfferUrlImportProvider(),
+) {
+  const project = await findSearchProject(projectId, organizationId);
+  const activeProvider = provider ?? getSupplierOfferSearchProvider({
+    onAiUsage: async (events) => {
+      await recordAiUsageEvents({ organizationId, projectId: project.id, events });
+    },
+  });
+  const effectiveRequest = effectiveSearchRequest(project, searchInput);
+  const lunaPlan = createLunaSearchPlan(effectiveRequest);
+  const providerInput = supplierOfferSearchInputSchema.parse(
+    buildLunaProviderSearchInput(lunaPlan, effectiveRequest),
+  );
+  const outcome = await searchSupplierOffersWithPersistentFallback(providerInput, activeProvider);
+  const presentation = await buildSearchPresentation({
+    projectId,
+    organizationId,
+    effectiveRequest,
+    lunaPlan,
+    sourceResults: outcome.results,
+    resultOrigin: outcome.resultOrigin,
+    fetchedAt: new Date().toISOString(),
+    urlImportProvider,
+  });
+
+  if (outcome.resultOrigin === "live" && presentation.results.length > 0) {
+    await storeSuccessfulSupplierSearch(providerInput, presentation.results).catch((error: unknown) => {
+      developmentLog("supplier_search_final_cache_write_failed", {
+        error: error instanceof Error ? error.message : "unknown",
+      });
+    });
+  }
+
+  return {
+    ...outcome,
+    ...presentation,
+  };
+}
+
+/**
+ * Restores the last successful result set from the persistent cache and runs
+ * only deterministic local ranking and analysis. It never calls the live
+ * supplier-search provider or records a paid AI search event.
+ */
+export async function loadCachedProjectSupplierOffers(
+  projectId: string,
+  organizationId: string,
+  searchInput: unknown,
+) {
+  const project = await findSearchProject(projectId, organizationId);
+  const effectiveRequest = effectiveSearchRequest(project, searchInput);
+  const lunaPlan = createLunaSearchPlan(effectiveRequest);
+  const providerInput = supplierOfferSearchInputSchema.parse(
+    buildLunaProviderSearchInput(lunaPlan, effectiveRequest),
+  );
+  const cached = await findLastSuccessfulSupplierSearch(providerInput);
+  if (!cached) return null;
+
+  const presentation = await buildSearchPresentation({
+    projectId,
+    organizationId,
+    effectiveRequest,
+    lunaPlan,
+    sourceResults: cached.results,
+    resultOrigin: "cache",
+    fetchedAt: cached.createdAt.toISOString(),
+  });
+
+  return {
+    ...presentation,
+    resultOrigin: "cache" as const,
+    cacheHit: true,
+    returnedFromCache: true,
+    liveProviderFailed: false,
   };
 }
 

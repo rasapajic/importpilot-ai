@@ -1,0 +1,114 @@
+.supplier-search:has(.supplier-search-form > button[type="submit"]:disabled) {
+  position: relative;
+}
+
+.supplier-search:has(.supplier-search-form > button[type="submit"]:disabled)::before {
+  animation: taja-search-card-pulse 1.8s ease-in-out infinite;
+  border: 2px solid rgb(19 119 82 / 42%);
+  border-radius: 1rem;
+  content: "";
+  inset: -2px;
+  pointer-events: none;
+  position: absolute;
+  z-index: 1;
+}
+
+.supplier-search-form:has(> button[type="submit"]:disabled) {
+  background: linear-gradient(135deg, #f1faf6 0%, #e8f5ef 100%);
+  border: 1px solid #9fcdb9;
+  border-radius: 0.85rem;
+  box-shadow: 0 0.75rem 1.5rem rgb(19 119 82 / 10%);
+  padding: 1rem;
+}
+
+.supplier-search-form:has(> button[type="submit"]:disabled) > label {
+  opacity: 0.72;
+}
+
+.supplier-search-form > button[type="submit"]:disabled {
+  align-items: center;
+  background: linear-gradient(110deg, #0b5f41 0%, #16845c 50%, #0b5f41 100%);
+  background-size: 220% 100%;
+  box-shadow: 0 0.6rem 1.25rem rgb(11 95 65 / 24%);
+  cursor: progress;
+  display: flex;
+  font-size: 1.05rem;
+  gap: 0.9rem;
+  grid-column: 1 / -1;
+  justify-content: center;
+  min-height: 5.25rem;
+  opacity: 1;
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+}
+
+.supplier-search-form > button[type="submit"]:disabled::before {
+  animation: taja-search-spinner 0.8s linear infinite;
+  border: 4px solid rgb(255 255 255 / 35%);
+  border-radius: 50%;
+  border-top-color: white;
+  content: "";
+  flex: 0 0 1.7rem;
+  height: 1.7rem;
+  width: 1.7rem;
+}
+
+.supplier-search-form > button[type="submit"]:disabled::after {
+  animation: taja-search-progress 1.55s ease-in-out infinite;
+  background: rgb(255 255 255 / 78%);
+  bottom: 0;
+  content: "";
+  height: 0.32rem;
+  left: -35%;
+  position: absolute;
+  width: 35%;
+}
+
+@keyframes taja-search-spinner {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes taja-search-progress {
+  0% {
+    left: -35%;
+  }
+
+  100% {
+    left: 100%;
+  }
+}
+
+@keyframes taja-search-card-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(19 119 82 / 8%);
+  }
+
+  50% {
+    box-shadow: 0 0 0 0.45rem rgb(19 119 82 / 5%);
+  }
+}
+
+@media (max-width: 760px) {
+  .supplier-search-form > button[type="submit"]:disabled {
+    font-size: 1rem;
+    min-height: 4.75rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .supplier-search:has(.supplier-search-form > button[type="submit"]:disabled)::before,
+  .supplier-search-form > button[type="submit"]:disabled,
+  .supplier-search-form > button[type="submit"]:disabled::before,
+  .supplier-search-form > button[type="submit"]:disabled::after {
+    animation: none;
+  }
+
+  .supplier-search-form > button[type="submit"]:disabled::after {
+    left: 0;
+    width: 100%;
+  }
+}

@@ -6,9 +6,16 @@ import { useRouter } from "next/navigation";
 import { useI18n } from "@/components/i18n/i18n-provider";
 import { DeleteEmptySearchButton } from "@/components/projects/delete-empty-search-button";
 import { getRecoverySearchCopy } from "@/components/search/recovery-search-copy";
+import { SearchResultImage } from "@/components/search/search-result-image";
 import { UrlImportReview } from "@/components/search/url-import-review";
 import { getLunaSearchCopy } from "@/components/search/luna-search-copy";
 import { hasSupplierSearchResultCards } from "@/components/search/search-result-display";
+import {
+  TajaPriceSignalWarning,
+  TajaProductFormPanel,
+  TajaRequirementMatchPanel,
+  TajaSearchLoadingNotice,
+} from "@/components/search/taja-search-feedback";
 import {
   isPartialLunaSearchResult,
   type LunaSearchPlan,
@@ -19,10 +26,10 @@ import {
   type RecoverySearchCriteria,
 } from "@/modules/product-search/domain/recovery-search";
 import type { SupplierOfferSearchResult } from "@/modules/product-search/domain/search";
-import type {
-  TajaCandidateAnalysis,
-  TajaMissingDataKey,
-} from "@/modules/product-search/domain/taja-candidate-analysis";
+import type { TajaMissingDataKey } from "@/modules/product-search/domain/taja-candidate-analysis";
+import { TajaProductFormMatchStatuses } from "@/modules/product-search/domain/taja-product-form";
+import type { TajaCandidateAnalysisWithProductForm } from "@/modules/product-search/domain/taja-product-form-policy";
+import { TajaRequirementMatchStatuses } from "@/modules/product-search/domain/taja-requirement-match";
 
 type ProviderStatus = "connected" | "not_configured" | "error";
 type ResultOrigin = "live" | "cache";
@@ -30,6 +37,15 @@ type SearchOverrides = {
   maxUnitPrice?: string;
   maxUnitPriceCurrency?: string;
   strictPriceLimit?: boolean;
+};
+
+export type SupplierSearchInitialOutcome = {
+  results: SupplierOfferSearchResult[];
+  candidateAnalyses: TajaCandidateAnalysisWithProductForm[];
+  resultOrigin: ResultOrigin;
+  lunaPlan: LunaSearchPlan;
+  fetchedAt: string;
+  unfilteredResultCount: number;
 };
 
 const INITIAL_OTHER_RESULTS = 7;
@@ -66,36 +82,42 @@ const comparisonCopy = {
 
 const recommendationCopy = {
   sr: {
-    preliminaryTitle: "Tajine preliminarne preporuke",
-    preliminaryDescription: "Do tri ponude su izdvojene prema trenutno dostupnoj ceni, MOQ-u i kompletnosti podataka. Konačni izbor sledi posle landed-cost obračuna i provere rizika.",
-    analyzedTitle: "Tajine najbolje analizirane ponude",
-    analyzedDescription: "Ponude sa potvrđenim landed cost-om i dovoljnim podacima imaju konačan status. Ostale su jasno označene kao preliminarne.",
+    exactTitle: "Ponude koje potpuno odgovaraju zahtevu",
+    exactDescription: "Ove ponude trenutno potvrđuju traženu vrstu proizvoda, sve ključne osobine i količinski uslov. Konačna odluka i dalje zahteva landed-cost i proveru dobavljača.",
+    noExactTitle: "Nijedna ponuda trenutno ne potvrđuje sve tražene osobine",
+    noExactDescription: "Ispod su najbolje dostupne alternative. Nepotvrđene osobine su jasno označene i ne tretiraju se kao dokazane.",
     rankPreliminary: (rank: number) => `#${rank} preliminarna preporuka`,
-    otherTitle: "Ostale pronađene ponude",
-    otherDescription: (count: number) => `Taja je pronašla još ${count} upotrebljivih ponuda koje možete pregledati i dodati za poređenje.`,
-    showAll: (count: number) => `Prikaži svih ${count} ostalih ponuda`,
+    otherTitle: "Ostale alternative za kompletan sistem",
+    otherDescription: (count: number) => `Taja je pronašla još ${count} ponuda koje mogu biti relevantne, ali zahtevaju dodatnu proveru sadržaja ili uslova.`,
+    componentsTitle: "Komponente i rezervni delovi",
+    componentsDescription: (count: number) => `Pronađeno je ${count} ponuda za pumpe, mlaznice ili druge delove. One se ne porede cenovno sa kompletnim sistemima.`,
+    showAll: (count: number) => `Prikaži svih ${count} dodatnih ponuda`,
     showLess: "Prikaži manje",
   },
   de: {
-    preliminaryTitle: "Tajas vorläufige Empfehlungen",
-    preliminaryDescription: "Bis zu drei Angebote werden anhand des derzeit verfügbaren Preises, der MOQ und der Datenvollständigkeit hervorgehoben. Die endgültige Auswahl folgt nach Landed-Cost- und Risikoprüfung.",
-    analyzedTitle: "Tajas bestbewertete analysierte Angebote",
-    analyzedDescription: "Angebote mit bestätigten Landed Costs und ausreichenden Lieferantendaten erhalten einen endgültigen Status. Alle anderen bleiben klar als vorläufig gekennzeichnet.",
+    exactTitle: "Angebote, die die Anforderungen vollständig erfüllen",
+    exactDescription: "Diese Angebote bestätigen derzeit die gesuchte Produktart, alle wesentlichen Merkmale und die Mengenanforderung. Die endgültige Entscheidung erfordert weiterhin Landed-Cost- und Lieferantenprüfung.",
+    noExactTitle: "Kein Angebot bestätigt derzeit alle geforderten Merkmale",
+    noExactDescription: "Unten stehen die besten verfügbaren Alternativen. Nicht bestätigte Merkmale werden klar gekennzeichnet und nicht als nachgewiesen behandelt.",
     rankPreliminary: (rank: number) => `#${rank} vorläufige Empfehlung`,
-    otherTitle: "Weitere gefundene Angebote",
-    otherDescription: (count: number) => `Taja hat ${count} weitere brauchbare Angebote gefunden, die Sie prüfen und zum Vergleich hinzufügen können.`,
-    showAll: (count: number) => `Alle ${count} weiteren Angebote anzeigen`,
+    otherTitle: "Weitere Alternativen für ein komplettes System",
+    otherDescription: (count: number) => `Taja hat ${count} weitere möglicherweise relevante Angebote gefunden, deren Kit-Inhalt oder Bedingungen noch geprüft werden müssen.`,
+    componentsTitle: "Komponenten und Ersatzteile",
+    componentsDescription: (count: number) => `${count} Angebote betreffen Pumpen, Düsen oder andere Teile. Sie werden preislich nicht mit kompletten Systemen verglichen.`,
+    showAll: (count: number) => `Alle ${count} zusätzlichen Angebote anzeigen`,
     showLess: "Weniger anzeigen",
   },
   en: {
-    preliminaryTitle: "Taja's preliminary recommendations",
-    preliminaryDescription: "Up to three offers are highlighted using the currently available price, MOQ and data completeness. Final selection follows landed-cost and risk verification.",
-    analyzedTitle: "Taja's best analyzed offers",
-    analyzedDescription: "Offers with confirmed landed cost and sufficient supplier evidence receive a final status. All others remain clearly marked as preliminary.",
+    exactTitle: "Offers that fully match the request",
+    exactDescription: "These offers currently confirm the requested product unit, all material features and the quantity condition. Final selection still requires landed-cost and supplier verification.",
+    noExactTitle: "No offer currently confirms every requested feature",
+    noExactDescription: "The best available alternatives are shown below. Unconfirmed features remain clearly marked and are not treated as proven.",
     rankPreliminary: (rank: number) => `#${rank} preliminary recommendation`,
-    otherTitle: "Other offers found",
-    otherDescription: (count: number) => `Taja found ${count} more usable offers that you can review and add for comparison.`,
-    showAll: (count: number) => `Show all ${count} other offers`,
+    otherTitle: "Other complete-system alternatives",
+    otherDescription: (count: number) => `Taja found ${count} more potentially relevant offers whose kit contents or commercial conditions still require verification.`,
+    componentsTitle: "Components and spare parts",
+    componentsDescription: (count: number) => `${count} offers appear to be pumps, nozzles or other parts. Their prices are not compared with complete systems.`,
+    showAll: (count: number) => `Show all ${count} additional offers`,
     showLess: "Show fewer",
   },
 } as const;
@@ -119,6 +141,8 @@ const analysisCopy = {
       COMMERCIAL_TERMS: "komercijalni uslovi",
       TRANSPORT_DETAILS: "detalji transporta",
       CORE_OFFER_DATA: "osnovni podaci ponude",
+      PRODUCT_REQUIREMENTS: "potvrda traženih osobina proizvoda",
+      PRICE_BASIS: "potvrda cenovne jedinice",
     },
     score: "Taja rezultat",
     confidence: "Pouzdanost podataka",
@@ -126,6 +150,7 @@ const analysisCopy = {
     landedCostLabel: "Landed cost",
     missingLabel: "Nedostaje za konačnu odluku",
     preliminary: "preliminarna analiza",
+    incompleteData: "NEPOTPUNI PODACI",
   },
   de: {
     recommendation: {
@@ -145,6 +170,8 @@ const analysisCopy = {
       COMMERCIAL_TERMS: "Geschäftsbedingungen",
       TRANSPORT_DETAILS: "Transportdetails",
       CORE_OFFER_DATA: "Kerndaten des Angebots",
+      PRODUCT_REQUIREMENTS: "Bestätigung der gewünschten Produkteigenschaften",
+      PRICE_BASIS: "Bestätigung der Preiseinheit",
     },
     score: "Taja-Bewertung",
     confidence: "Datenzuverlässigkeit",
@@ -152,6 +179,7 @@ const analysisCopy = {
     landedCostLabel: "Landed Cost",
     missingLabel: "Fehlt für die endgültige Entscheidung",
     preliminary: "vorläufige Analyse",
+    incompleteData: "UNVOLLSTÄNDIGE DATEN",
   },
   en: {
     recommendation: {
@@ -171,6 +199,8 @@ const analysisCopy = {
       COMMERCIAL_TERMS: "commercial terms",
       TRANSPORT_DETAILS: "transport details",
       CORE_OFFER_DATA: "core offer data",
+      PRODUCT_REQUIREMENTS: "confirmation of requested product features",
+      PRICE_BASIS: "confirmation of the price unit",
     },
     score: "Taja score",
     confidence: "Data confidence",
@@ -178,6 +208,7 @@ const analysisCopy = {
     landedCostLabel: "Landed cost",
     missingLabel: "Missing for a final decision",
     preliminary: "preliminary analysis",
+    incompleteData: "INCOMPLETE DATA",
   },
 } as const;
 
@@ -187,6 +218,18 @@ function optionalNumber(value: string) {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+function consumeAutomaticSearchFlag() {
+  if (typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  if (url.searchParams.get("autoSearch") !== "1") return;
+  url.searchParams.delete("autoSearch");
+  window.history.replaceState(
+    window.history.state,
+    "",
+    `${url.pathname}${url.search}${url.hash}`,
+  );
+}
+
 export function SupplierOfferSearch({
   projectId,
   productName,
@@ -194,6 +237,8 @@ export function SupplierOfferSearch({
   targetCountry,
   openUrlImport = false,
   canDeleteSearch = false,
+  autoStart = false,
+  initialOutcome = null,
 }: {
   projectId: string;
   productName: string;
@@ -201,6 +246,8 @@ export function SupplierOfferSearch({
   targetCountry: string | null;
   openUrlImport?: boolean;
   canDeleteSearch?: boolean;
+  autoStart?: boolean;
+  initialOutcome?: SupplierSearchInitialOutcome | null;
 }) {
   const { t, locale } = useI18n();
   const lunaCopy = getLunaSearchCopy(locale);
@@ -222,8 +269,12 @@ export function SupplierOfferSearch({
   const [targetMarginPercent, setTargetMarginPercent] = useState("");
   const [avoidComplexCompliance, setAvoidComplexCompliance] = useState(true);
   const [privateLabel, setPrivateLabel] = useState(false);
-  const [results, setResults] = useState<SupplierOfferSearchResult[] | null>(null);
-  const [candidateAnalyses, setCandidateAnalyses] = useState<TajaCandidateAnalysis[]>([]);
+  const [results, setResults] = useState<SupplierOfferSearchResult[] | null>(
+    initialOutcome?.results ?? null,
+  );
+  const [candidateAnalyses, setCandidateAnalyses] = useState<TajaCandidateAnalysisWithProductForm[]>(
+    initialOutcome?.candidateAnalyses ?? [],
+  );
   const [showAllResults, setShowAllResults] = useState(false);
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState<number | null>(null);
@@ -233,10 +284,18 @@ export function SupplierOfferSearch({
   const [reviewingUrl, setReviewingUrl] = useState(false);
   const [urlImportOpen, setUrlImportOpen] = useState(openUrlImport);
   const [providerStatus, setProviderStatus] = useState<ProviderStatus | null>(null);
-  const [resultOrigin, setResultOrigin] = useState<ResultOrigin | null>(null);
-  const [lunaPlan, setLunaPlan] = useState<LunaSearchPlan | null>(null);
-  const [fetchedAt, setFetchedAt] = useState<string | null>(null);
-  const [unfilteredResultCount, setUnfilteredResultCount] = useState<number | null>(null);
+  const [resultOrigin, setResultOrigin] = useState<ResultOrigin | null>(
+    initialOutcome?.resultOrigin ?? null,
+  );
+  const [lunaPlan, setLunaPlan] = useState<LunaSearchPlan | null>(
+    initialOutcome?.lunaPlan ?? null,
+  );
+  const [fetchedAt, setFetchedAt] = useState<string | null>(
+    initialOutcome?.fetchedAt ?? null,
+  );
+  const [unfilteredResultCount, setUnfilteredResultCount] = useState<number | null>(
+    initialOutcome?.unfilteredResultCount ?? null,
+  );
   const automaticSearchStarted = useRef(false);
   const criteriaDetailsRef = useRef<HTMLDetailsElement>(null);
 
@@ -278,7 +337,7 @@ export function SupplierOfferSearch({
       });
       const payload = (await response.json()) as {
         results?: SupplierOfferSearchResult[];
-        candidateAnalyses?: TajaCandidateAnalysis[];
+        candidateAnalyses?: TajaCandidateAnalysisWithProductForm[];
         error?: string;
         providerStatus?: ProviderStatus;
         reason?: string;
@@ -330,14 +389,16 @@ export function SupplierOfferSearch({
 
   useEffect(() => {
     if (
+      !autoStart ||
       automaticSearchStarted.current ||
       query.trim().length < 2 ||
       !searchQuantity ||
       searchCountry.length !== 2
     ) return;
     automaticSearchStarted.current = true;
+    consumeAutomaticSearchFlag();
     void runSearch();
-  }, [query, runSearch, searchCountry, searchQuantity]);
+  }, [autoStart, query, runSearch, searchCountry, searchQuantity]);
 
   useEffect(() => {
     function handleRecoverySearch(event: Event) {
@@ -404,17 +465,46 @@ export function SupplierOfferSearch({
     unfilteredResultCount !== null &&
     unfilteredResultCount > 0,
   );
-  const recommendedResults = results?.slice(0, 3) ?? [];
-  const otherResults = results?.slice(3) ?? [];
-  const visibleOtherResults = showAllResults
-    ? otherResults
-    : otherResults.slice(0, INITIAL_OTHER_RESULTS);
   const candidateAnalysisByUrl = new Map(
     candidateAnalyses.map((analysis) => [analysis.productUrl, analysis]),
   );
-  const hasFinalTopAnalysis = recommendedResults.some(
-    (result) => candidateAnalysisByUrl.get(result.productUrl)?.status === "FINAL",
+  const indexedResults = (results ?? []).map((result, index) => ({
+    result,
+    index,
+    analysis: candidateAnalysisByUrl.get(result.productUrl),
+  }));
+  const componentResults = indexedResults.filter((entry) =>
+    entry.analysis?.productForm.matchStatus === TajaProductFormMatchStatuses.MISMATCH,
   );
+  const comparableResults = indexedResults.filter((entry) =>
+    entry.analysis?.productForm.matchStatus !== TajaProductFormMatchStatuses.MISMATCH,
+  );
+  const requestedQuantity = Number(searchQuantity);
+  const exactResults = comparableResults.filter((entry) =>
+    entry.analysis?.productForm.matchStatus === TajaProductFormMatchStatuses.MATCH &&
+    entry.analysis.requirementMatch.status === TajaRequirementMatchStatuses.FULL &&
+    entry.result.minimumOrderQuantity !== null &&
+    Number.isFinite(requestedQuantity) &&
+    entry.result.minimumOrderQuantity <= requestedQuantity,
+  );
+  const exactUrls = new Set(exactResults.map((entry) => entry.result.productUrl));
+  const alternativeResults = comparableResults.filter((entry) =>
+    !exactUrls.has(entry.result.productUrl),
+  );
+  const featuredResults = exactResults.length > 0
+    ? exactResults.slice(0, 3)
+    : alternativeResults.slice(0, 3);
+  const featuredUrls = new Set(featuredResults.map((entry) => entry.result.productUrl));
+  const remainingComparableResults = comparableResults.filter((entry) =>
+    !featuredUrls.has(entry.result.productUrl),
+  );
+  const visibleRemainingComparableResults = showAllResults
+    ? remainingComparableResults
+    : remainingComparableResults.slice(0, INITIAL_OTHER_RESULTS);
+  const visibleComponentResults = showAllResults
+    ? componentResults
+    : componentResults.slice(0, INITIAL_OTHER_RESULTS);
+  const additionalResultCount = remainingComparableResults.length + componentResults.length;
 
   function missingDataText(keys: TajaMissingDataKey[]) {
     return keys.map((key) => analysisText.missing[key]).join(", ");
@@ -432,11 +522,7 @@ export function SupplierOfferSearch({
 
     return (
       <article className="search-result-card" key={`${result.source}-${result.productUrl}`}>
-        {result.imageUrl && (
-          // Provider URLs are validated and rendered without proxying or persisting image bytes.
-          // eslint-disable-next-line @next/next/no-img-element
-          <img alt="" className="search-result-image" loading="lazy" src={result.imageUrl} />
-        )}
+        <SearchResultImage src={result.imageUrl} title={result.title} />
         <div>
           <p className="eyebrow">{result.source}</p>
           {(recommendationRank !== undefined || analysis?.status === "FINAL") && (
@@ -455,7 +541,9 @@ export function SupplierOfferSearch({
             </span>
           )}
           {isPartialLunaSearchResult(result) && (
-            <span className="provider-status provider-status-not_configured">PARTIAL</span>
+            <span className="provider-status provider-status-not_configured">
+              {analysisText.incompleteData}
+            </span>
           )}
           <h3>{result.title}</h3>
           <p><strong>{result.supplierName}</strong>{result.supplierCountry ? ` · ${result.supplierCountry}` : ""}</p>
@@ -467,6 +555,9 @@ export function SupplierOfferSearch({
               : t("Minimalna količina (MOQ) nije navedena")}
             {result.incoterm ? ` · ${result.incoterm}` : ""}
           </p>
+          {analysis && <TajaProductFormPanel assessment={analysis.productForm} />}
+          {analysis && <TajaRequirementMatchPanel match={analysis.requirementMatch} />}
+          {analysis?.priceSignal && <TajaPriceSignalWarning signal={analysis.priceSignal} />}
           {analysis && (
             <div>
               <p>
@@ -660,18 +751,37 @@ export function SupplierOfferSearch({
           />
         </label>
         <button className="primary-button" disabled={loading} type="submit">
-          {loading ? lunaCopy.searching : lunaCopy.startSearch}
+          {loading
+            ? lunaCopy.searching
+            : results !== null
+              ? lunaCopy.repeatSearch
+              : lunaCopy.startSearch}
         </button>
       </form>
+      {loading && <TajaSearchLoadingNotice />}
+      {resultOrigin === "cache" && results && results.length > 0 && !loading && (
+        <p className="muted-text" role="status">{lunaCopy.cachedResultsNotice}</p>
+      )}
       {error && <p className="form-error" role="alert">{t(error)}</p>}
       {lunaPlan && (
         <div className="empty-state">
           <h3>{lunaCopy.preparedQueries}</h3>
-          <p><strong>Alibaba / Made-in-China:</strong> {lunaPlan.providerQuery}</p>
-          <p>
-            <strong>1688:</strong>{" "}
-            {lunaPlan.chinese1688Query ?? lunaCopy.chineseConfirmationRequired}
-          </p>
+          <p><strong>Alibaba / Made-in-China:</strong></p>
+          <ol>
+            {lunaPlan.providerQueries.map((preparedQuery) => (
+              <li key={preparedQuery}>{preparedQuery}</li>
+            ))}
+          </ol>
+          <p><strong>1688:</strong></p>
+          {lunaPlan.chinese1688Queries.length > 0 ? (
+            <ol>
+              {lunaPlan.chinese1688Queries.map((preparedQuery) => (
+                <li key={preparedQuery}>{preparedQuery}</li>
+              ))}
+            </ol>
+          ) : (
+            <p>{lunaCopy.chineseConfirmationRequired}</p>
+          )}
           {unfilteredResultCount !== null && results && unfilteredResultCount !== results.length && (
             <p>{lunaCopy.filteredResultsPrefix}: {unfilteredResultCount - results.length}</p>
           )}
@@ -681,7 +791,7 @@ export function SupplierOfferSearch({
           ))}
         </div>
       )}
-      {results === null && <p className="muted-text">{t("Unesite proizvod da biste pronašli ponude.")}</p>}
+      {results === null && !loading && <p className="muted-text">{lunaCopy.idlePrompt}</p>}
       {results?.length === 0 && (
         <div className="empty-state">
           <h3>
@@ -726,40 +836,51 @@ export function SupplierOfferSearch({
         <div className="search-result-list">
           <div className="empty-state">
             <h3>
-              {hasFinalTopAnalysis
-                ? recommendationText.analyzedTitle
-                : recommendationText.preliminaryTitle}
+              {exactResults.length > 0
+                ? recommendationText.exactTitle
+                : recommendationText.noExactTitle}
             </h3>
             <p>
-              {hasFinalTopAnalysis
-                ? recommendationText.analyzedDescription
-                : recommendationText.preliminaryDescription}
+              {exactResults.length > 0
+                ? recommendationText.exactDescription
+                : recommendationText.noExactDescription}
             </p>
           </div>
-          {recommendedResults.map((result, index) =>
-            renderResultCard(result, index, index + 1),
+          {featuredResults.map((entry, rankIndex) =>
+            renderResultCard(entry.result, entry.index, rankIndex + 1),
           )}
-          {otherResults.length > 0 && (
+          {remainingComparableResults.length > 0 && (
             <>
               <div className="empty-state">
                 <h3>{recommendationText.otherTitle}</h3>
-                <p>{recommendationText.otherDescription(otherResults.length)}</p>
+                <p>{recommendationText.otherDescription(remainingComparableResults.length)}</p>
               </div>
-              {visibleOtherResults.map((result, index) =>
-                renderResultCard(result, index + 3),
-              )}
-              {otherResults.length > INITIAL_OTHER_RESULTS && (
-                <button
-                  className="secondary-button"
-                  onClick={() => setShowAllResults((current) => !current)}
-                  type="button"
-                >
-                  {showAllResults
-                    ? recommendationText.showLess
-                    : recommendationText.showAll(otherResults.length)}
-                </button>
+              {visibleRemainingComparableResults.map((entry) =>
+                renderResultCard(entry.result, entry.index),
               )}
             </>
+          )}
+          {componentResults.length > 0 && (
+            <>
+              <div className="empty-state">
+                <h3>{recommendationText.componentsTitle}</h3>
+                <p>{recommendationText.componentsDescription(componentResults.length)}</p>
+              </div>
+              {visibleComponentResults.map((entry) =>
+                renderResultCard(entry.result, entry.index),
+              )}
+            </>
+          )}
+          {additionalResultCount > INITIAL_OTHER_RESULTS * 2 && (
+            <button
+              className="secondary-button"
+              onClick={() => setShowAllResults((current) => !current)}
+              type="button"
+            >
+              {showAllResults
+                ? recommendationText.showLess
+                : recommendationText.showAll(additionalResultCount)}
+            </button>
           )}
           {imported.length > 0 && (
             <div className="empty-state search-comparison-actions" role="status">

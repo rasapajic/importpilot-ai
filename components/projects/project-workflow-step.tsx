@@ -31,8 +31,23 @@ export function ProjectWorkflowStep({
   const stepRef = useRef<HTMLDetailsElement>(null);
 
   useEffect(() => {
-    if (status === "ACTIVE" || forceOpen) stepRef.current?.scrollIntoView({ block: "start" });
-  }, [forceOpen, status]);
+    const explicitHash = window.location.hash;
+    const currentHash = id ? `#${id}` : "";
+
+    // An explicit workflow hash is the user's navigation intent. Open and
+    // focus that step even when it is already marked completed, and prevent a
+    // different active step from stealing the viewport afterwards.
+    if (explicitHash && currentHash) {
+      if (explicitHash !== currentHash) return;
+      if (stepRef.current) stepRef.current.open = true;
+      stepRef.current?.scrollIntoView({ block: "start" });
+      return;
+    }
+
+    if (forceOpen || status === "ACTIVE") {
+      stepRef.current?.scrollIntoView({ block: "start" });
+    }
+  }, [forceOpen, id, status]);
 
   if (status === "HIDDEN") return null;
 

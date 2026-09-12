@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createSearchProviderApp } from "../src/app.js";
 import type { SupplierSearchSource } from "../src/provider.js";
@@ -33,6 +33,22 @@ const aiUsage = {
   estimatedTotalCostUsd: 0.0101205,
   estimated: true as const,
 };
+const validSearchInput = {
+  productQuery: "PTZ camera",
+  quantity: 100,
+  targetCountry: "RS",
+  language: "sr",
+};
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
 
 async function start(source?: SupplierSearchSource) {
   const server = createServer(createSearchProviderApp({ token, source }));
@@ -65,6 +81,7 @@ async function request(baseUrl: string, path: string, init: RequestInit = {}) {
 }
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await Promise.all(servers.splice(0).map(
     (server) => new Promise<void>((resolve) => server.close(() => resolve())),
   ));
@@ -91,12 +108,7 @@ describe("ImportPilot Search Provider service", () => {
     const baseUrl = await start();
     const response = await request(baseUrl, "/search", {
       method: "POST",
-      body: JSON.stringify({
-        productQuery: "PTZ camera",
-        quantity: 100,
-        targetCountry: "RS",
-        language: "sr",
-      }),
+      body: JSON.stringify(validSearchInput),
     });
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
@@ -116,12 +128,7 @@ describe("ImportPilot Search Provider service", () => {
     const baseUrl = await start(source);
     const response = await request(baseUrl, "/search", {
       method: "POST",
-      body: JSON.stringify({
-        productQuery: "PTZ camera",
-        quantity: 100,
-        targetCountry: "RS",
-        language: "sr",
-      }),
+      body: JSON.stringify(validSearchInput),
     });
 
     expect(response.status).toBe(200);
@@ -143,12 +150,7 @@ describe("ImportPilot Search Provider service", () => {
     const baseUrl = await start(source);
     const response = await request(baseUrl, "/search", {
       method: "POST",
-      body: JSON.stringify({
-        productQuery: "PTZ camera",
-        quantity: 100,
-        targetCountry: "RS",
-        language: "en",
-      }),
+      body: JSON.stringify({ ...validSearchInput, language: "en" }),
     });
     expect(response.status).toBe(502);
     await expect(response.json()).resolves.toMatchObject({
@@ -192,12 +194,7 @@ describe("ImportPilot Search Provider service", () => {
     );
     const response = await request(baseUrl, "/search", {
       method: "POST",
-      body: JSON.stringify({
-        productQuery: "PTZ camera",
-        quantity: 100,
-        targetCountry: "RS",
-        language: "en",
-      }),
+      body: JSON.stringify({ ...validSearchInput, language: "en" }),
     });
 
     expect(response.status).toBe(200);
@@ -217,5 +214,97 @@ describe("ImportPilot Search Provider service", () => {
       },
     });
     expect(JSON.stringify(events)).not.toContain(token);
+  });
+
+  it("coalesces concurrent identical requests so the paid source runs once", async () => {
+    const started = deferred<void>();
+    const release = deferred<void>();
+    const search = vi.fn(async () => {
+      started.resolve();
+      await release.promise;
+      return { results: [], reason: "No offers." };
+    });
+    const source: SupplierSearchSource = {
+      name: "paid-source",
+      implemented: true,
+      search,
+    };
+    const baseUrl = await start(source);
+    const init: RequestInit = {
+      method: "POST",
+      headers: { "idempotency-key": "same-paid-search-123" },
+      body: JSON.stringify(validSearchInput),
+    };
+
+    const first = request(baseUrl, "/search", init);
+    await started.promise;
+    const second = request(baseUrl, "/search", init);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    release.resolve();
+
+    const [firstResponse, secondResponse] = await Promise.all([first, second]);
+    expect(firstResponse.status).toBe(200);
+    expect(secondResponse.status).toBe(200);
+    expect(search).toHaveBeenCalledTimes(1);
+    expect(firstResponse.headers.get("x-importpilot-idempotency")).toBe("new");
+    expect(secondResponse.headers.get("x-importpilot-idempotency"))
+      .toBe("in-flight-coalesced");
+    await expect(firstResponse.json()).resolves.toEqual({
+      results: [],
+      reason: "No offers.",
+    });
+    await expect(secondResponse.json()).resolves.toEqual({
+      results: [],
+      reason: "No offers.",
+    });
+  });
+
+  it("replays a recently completed identical request without another source call", async () => {
+    const search = vi.fn(async () => ({ results: [], reason: "No offers." }));
+    const source: SupplierSearchSource = {
+      name: "paid-source",
+      implemented: true,
+      search,
+    };
+    const baseUrl = await start(source);
+    const init: RequestInit = {
+      method: "POST",
+      headers: { "idempotency-key": "completed-paid-search-123" },
+      body: JSON.stringify(validSearchInput),
+    };
+
+    const firstResponse = await request(baseUrl, "/search", init);
+    const secondResponse = await request(baseUrl, "/search", init);
+
+    expect(firstResponse.status).toBe(200);
+    expect(secondResponse.status).toBe(200);
+    expect(search).toHaveBeenCalledTimes(1);
+    expect(firstResponse.headers.get("x-importpilot-idempotency")).toBe("new");
+    expect(secondResponse.headers.get("x-importpilot-idempotency"))
+      .toBe("completed-replay");
+  });
+
+  it("does not reuse an idempotency key for a different validated request body", async () => {
+    const search = vi.fn(async () => ({ results: [], reason: "No offers." }));
+    const source: SupplierSearchSource = {
+      name: "paid-source",
+      implemented: true,
+      search,
+    };
+    const baseUrl = await start(source);
+    const headers = { "idempotency-key": "shared-key-different-body" };
+
+    await request(baseUrl, "/search", {
+      method: "POST",
+      headers,
+      body: JSON.stringify(validSearchInput),
+    });
+    await request(baseUrl, "/search", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ ...validSearchInput, quantity: 200 }),
+    });
+
+    expect(search).toHaveBeenCalledTimes(2);
   });
 });

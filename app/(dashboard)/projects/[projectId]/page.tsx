@@ -24,6 +24,7 @@ import { getCountryDisplayName } from "@/modules/i18n/country-names";
 import { getServerLocale } from "@/modules/i18n/server";
 import { getStatusLabel, translateText } from "@/modules/i18n/translations";
 import { listNegotiationMessages } from "@/modules/negotiation/application/negotiation-service";
+import { loadCachedProjectSupplierOffers } from "@/modules/product-search/application/product-search-service";
 import { getProject } from "@/modules/projects/application/project-service";
 import { canDeleteEmptySearch } from "@/modules/projects/domain/empty-search-deletion";
 import { getMobileWorkflowActions } from "@/modules/projects/domain/mobile-workflow-actions";
@@ -50,6 +51,7 @@ export default async function ProjectPage({
   params: Promise<{ projectId: string }>;
   searchParams: Promise<{
     activityType?: string;
+    autoSearch?: string;
     editCalculationOffer?: string;
     importUrl?: string;
     profitabilityError?: string;
@@ -66,6 +68,20 @@ export default async function ProjectPage({
   const decision = await getLatestProjectDecision(projectId, auth.membership.organizationId);
   const messages = await listNegotiationMessages(projectId, auth.membership.organizationId);
   const resolvedSearchParams = await searchParams;
+  const autoStartSupplierSearch = resolvedSearchParams.autoSearch === "1";
+  const initialSupplierSearch = autoStartSupplierSearch
+    ? null
+    : await loadCachedProjectSupplierOffers(
+        projectId,
+        auth.membership.organizationId,
+        {
+          query: projectDisplayName,
+          quantity: project.quantity,
+          targetCountry: project.targetCountry,
+          avoidComplexCompliance: true,
+          privateLabel: false,
+        },
+      );
   const requestedType = resolvedSearchParams.activityType;
   const selectedCalculationOfferId = project.offers.some(
     (offer) => offer.id === resolvedSearchParams.editCalculationOffer && offer.costCalculations.length > 0,
@@ -179,7 +195,7 @@ export default async function ProjectPage({
         </ProjectWorkflowStep>
 
         <ProjectWorkflowStep
-          forceOpen={resolvedSearchParams.importUrl === "1"}
+          forceOpen={resolvedSearchParams.importUrl === "1" || autoStartSupplierSearch}
           id="workflow-step-offer"
           number={2}
           title={offerStepDisplay.title}
@@ -195,6 +211,8 @@ export default async function ProjectPage({
             targetCountry={project.targetCountry}
             openUrlImport={resolvedSearchParams.importUrl === "1"}
             canDeleteSearch={canDeleteCurrentSearch}
+            autoStart={autoStartSupplierSearch}
+            initialOutcome={initialSupplierSearch}
           />
           {canDeleteCurrentSearch && (
             <div className="empty-search-delete-panel">

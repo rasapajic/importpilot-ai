@@ -2,6 +2,7 @@ export type ProductSizeOption = "POCKET" | "BOOK" | "SHOEBOX" | "MICROWAVE" | "L
 export type ProductWeightOption = "UNDER_100G" | "G_100_500" | "KG_0_5_2" | "KG_2_10" | "OVER_10KG";
 export type TransportConfidence = "HIGH" | "MEDIUM" | "LOW";
 export type TransportMode = "AIR" | "RAIL" | "SEA";
+export type SupplierLogisticsEvidence = "PRODUCT_PAGE" | "SEARCH_SNIPPET";
 
 export type SupplierLogisticsData = {
   grossWeightKg?: number | null;
@@ -10,6 +11,9 @@ export type SupplierLogisticsData = {
   cartonWidthCm?: number | null;
   cartonHeightCm?: number | null;
   piecesPerCarton?: number | null;
+  unitWeightKg?: number | null;
+  unitVolumeCbm?: number | null;
+  evidence?: SupplierLogisticsEvidence | null;
 };
 
 export type ProductEstimateInput = {
@@ -108,6 +112,16 @@ function findProductProfile(productName: string) {
   );
 }
 
+function supplierConfidence(evidence?: SupplierLogisticsEvidence | null): TransportConfidence {
+  return evidence === "SEARCH_SNIPPET" ? "MEDIUM" : "HIGH";
+}
+
+function supplierReason(evidence?: SupplierLogisticsEvidence | null) {
+  return evidence === "SEARCH_SNIPPET"
+    ? "Weight and volume were extracted from a supplier search snippet."
+    : "Supplier provided weight and package dimensions.";
+}
+
 function supplierEstimate(quantity: number, supplier?: SupplierLogisticsData | null) {
   if (!supplier) return null;
   const piecesPerCarton = clampPositive(supplier.piecesPerCarton ?? 0);
@@ -116,13 +130,30 @@ function supplierEstimate(quantity: number, supplier?: SupplierLogisticsData | n
   const width = clampPositive(supplier.cartonWidthCm ?? 0);
   const height = clampPositive(supplier.cartonHeightCm ?? 0);
 
-  if (!piecesPerCarton || !cartonWeight || !length || !width || !height) return null;
+  if (piecesPerCarton && cartonWeight && length && width && height) {
+    const cartonCount = Math.ceil(quantity / piecesPerCarton);
+    return {
+      estimatedWeightKg: round(cartonWeight * cartonCount, 2),
+      estimatedVolumeCbm: round((length * width * height / 1_000_000) * cartonCount, 3),
+      confidence: supplierConfidence(supplier.evidence),
+      reason: supplierReason(supplier.evidence),
+    };
+  }
 
-  const cartonCount = Math.ceil(quantity / piecesPerCarton);
-  return {
-    estimatedWeightKg: round(cartonWeight * cartonCount, 2),
-    estimatedVolumeCbm: round((length * width * height / 1_000_000) * cartonCount, 3),
-  };
+  const unitWeightKg = clampPositive(supplier.unitWeightKg ?? 0);
+  const unitVolumeCbm = clampPositive(supplier.unitVolumeCbm ?? 0);
+  if (unitWeightKg && unitVolumeCbm) {
+    return {
+      estimatedWeightKg: round(unitWeightKg * quantity, 2),
+      estimatedVolumeCbm: round(unitVolumeCbm * quantity, 3),
+      confidence: supplierConfidence(supplier.evidence),
+      reason: supplier.evidence === "SEARCH_SNIPPET"
+        ? "Unit weight and volume were extracted from a supplier search snippet."
+        : "Supplier provided unit weight and volume.",
+    };
+  }
+
+  return null;
 }
 
 export function estimateProductLogistics(input: ProductEstimateInput): ProductLogisticsEstimate {
@@ -130,9 +161,10 @@ export function estimateProductLogistics(input: ProductEstimateInput): ProductLo
   if (supplier) {
     return {
       category: "Supplier data",
-      ...supplier,
-      confidence: "HIGH",
-      reasons: ["Supplier provided weight and carton dimensions."],
+      estimatedWeightKg: supplier.estimatedWeightKg,
+      estimatedVolumeCbm: supplier.estimatedVolumeCbm,
+      confidence: supplier.confidence,
+      reasons: [supplier.reason],
       source: "SUPPLIER",
     };
   }
@@ -199,12 +231,22 @@ function readNumber(record: Record<string, unknown>, keys: string[]) {
   return null;
 }
 
+function readEvidence(record: Record<string, unknown>) {
+  const value = record.evidence ?? record.logisticsEvidence ?? record.logistics_evidence;
+  return value === "PRODUCT_PAGE" || value === "SEARCH_SNIPPET" ? value : null;
+}
+
+function nestedLogisticsRecord(record: Record<string, unknown>) {
+  const candidate = record.supplierLogistics ?? record.logistics;
+  return typeof candidate === "object" && candidate !== null && !Array.isArray(candidate)
+    ? { ...record, ...(candidate as Record<string, unknown>) }
+    : record;
+}
+
 export function extractSupplierLogisticsData(metadata: unknown): SupplierLogisticsData | null {
   if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
   const record = metadata as Record<string, unknown>;
-  const nested = typeof record.logistics === "object" && record.logistics !== null && !Array.isArray(record.logistics)
-    ? { ...record, ...(record.logistics as Record<string, unknown>) }
-    : record;
+  const nested = nestedLogisticsRecord(record);
 
   const data: SupplierLogisticsData = {
     grossWeightKg: readNumber(nested, ["grossWeightKg", "gross_weight_kg", "grossWeight", "gross_weight"]),
@@ -213,7 +255,13 @@ export function extractSupplierLogisticsData(metadata: unknown): SupplierLogisti
     cartonWidthCm: readNumber(nested, ["cartonWidthCm", "carton_width_cm", "widthCm"]),
     cartonHeightCm: readNumber(nested, ["cartonHeightCm", "carton_height_cm", "heightCm"]),
     piecesPerCarton: readNumber(nested, ["piecesPerCarton", "pieces_per_carton", "pcsPerCarton"]),
+    unitWeightKg: readNumber(nested, ["unitWeightKg", "unit_weight_kg", "pieceWeightKg"]),
+    unitVolumeCbm: readNumber(nested, ["unitVolumeCbm", "unit_volume_cbm", "pieceVolumeCbm"]),
+    evidence: readEvidence(nested),
   };
 
-  return Object.values(data).some((value) => value !== null && value !== undefined) ? data : null;
+  const hasNumericData = Object.entries(data).some(
+    ([key, value]) => key !== "evidence" && value !== null && value !== undefined,
+  );
+  return hasNumericData ? data : null;
 }

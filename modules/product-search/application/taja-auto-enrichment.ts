@@ -1,8 +1,12 @@
+import {
+  marketplaceDetailsToSupplierLogistics,
+} from "../domain/marketplace-product-details";
 import type {
   SupplierOfferSearchResult,
   SupplierOfferUrlImportProvider,
   SupplierOfferUrlPreview,
 } from "../domain/search";
+import { canonicalSupplierProductUrl } from "../domain/supplier-product-url";
 import { detectUrlImportProvider } from "../infrastructure/url-import-provider";
 
 export const TajaAutoEnrichmentStatuses = {
@@ -21,12 +25,15 @@ export type TajaAutoEnrichmentField =
   | "price"
   | "minimumOrderQuantity"
   | "incoterm"
-  | "imageUrl";
+  | "imageUrl"
+  | "marketplaceDetails"
+  | "supplierLogistics";
 
 export type TajaAutoEnrichmentReport = {
   productUrl: string;
   status: TajaAutoEnrichmentStatus;
   fieldsFilled: TajaAutoEnrichmentField[];
+  fieldsCorrected: TajaAutoEnrichmentField[];
   failureCode?: string;
 };
 
@@ -34,6 +41,7 @@ export type TajaAutoEnrichmentSummary = {
   requestedCandidates: number;
   attemptedCandidates: number;
   enrichedCandidates: number;
+  correctedCandidates: number;
   unchangedCandidates: number;
   failedCandidates: number;
   skippedUnsupportedCandidates: number;
@@ -59,49 +67,140 @@ function isSupportedProductUrl(productUrl: string) {
   }
 }
 
-function needsAutoEnrichment(result: SupplierOfferSearchResult) {
-  return result.supplierCountry === null ||
-    result.price === null ||
-    result.currency === null ||
-    result.minimumOrderQuantity === null ||
-    result.incoterm === null ||
-    result.imageUrl === null;
+function sameProductUrl(left: string, right: string) {
+  return canonicalSupplierProductUrl(left) === canonicalSupplierProductUrl(right);
+}
+
+function isAuthoritativePreview(preview: SupplierOfferUrlPreview) {
+  return !preview.isPartial && !preview.titleFromSlug;
+}
+
+function changedNumber(left: number | null, right: number | null) {
+  return left !== null && right !== null && Math.abs(left - right) > 0.0001;
+}
+
+function changedStructuredValue(left: unknown, right: unknown) {
+  return JSON.stringify(left ?? null) !== JSON.stringify(right ?? null);
+}
+
+function unchangedMerge(result: SupplierOfferSearchResult) {
+  return {
+    result,
+    fieldsFilled: [] as TajaAutoEnrichmentField[],
+    fieldsCorrected: [] as TajaAutoEnrichmentField[],
+  };
 }
 
 function mergePreview(
   result: SupplierOfferSearchResult,
   preview: SupplierOfferUrlPreview,
 ) {
-  const fieldsFilled: TajaAutoEnrichmentField[] = [];
-  let price = result.price;
-  let currency = result.currency;
-  if (
-    price === null &&
-    currency === null &&
-    preview.price !== null &&
-    preview.currency !== null
-  ) {
-    price = preview.price;
-    currency = preview.currency;
-    fieldsFilled.push("price");
+  // Never accept commercial data from a redirect or parser result that points
+  // to a different canonical product. This applies to both corrections and
+  // fill-only enrichment.
+  if (!sameProductUrl(result.productUrl, preview.productUrl)) {
+    return unchangedMerge(result);
   }
 
-  const supplierCountry = result.supplierCountry ?? preview.supplierCountry;
-  if (result.supplierCountry === null && supplierCountry !== null) {
-    fieldsFilled.push("supplierCountry");
+  const fieldsFilled: TajaAutoEnrichmentField[] = [];
+  const fieldsCorrected: TajaAutoEnrichmentField[] = [];
+  const authoritative = isAuthoritativePreview(preview);
+
+  let price = result.price;
+  let currency = result.currency;
+  if (preview.price !== null && preview.currency !== null) {
+    if (price === null && currency === null) {
+      price = preview.price;
+      currency = preview.currency;
+      fieldsFilled.push("price");
+    } else if (
+      authoritative &&
+      (
+        changedNumber(price, preview.price) ||
+        currency !== preview.currency
+      )
+    ) {
+      price = preview.price;
+      currency = preview.currency;
+      fieldsCorrected.push("price");
+    }
   }
-  const minimumOrderQuantity =
-    result.minimumOrderQuantity ?? preview.minimumOrderQuantity;
-  if (
-    result.minimumOrderQuantity === null &&
-    minimumOrderQuantity !== null
-  ) {
-    fieldsFilled.push("minimumOrderQuantity");
+
+  let supplierCountry = result.supplierCountry;
+  if (preview.supplierCountry !== null) {
+    if (supplierCountry === null) {
+      supplierCountry = preview.supplierCountry;
+      fieldsFilled.push("supplierCountry");
+    } else if (authoritative && supplierCountry !== preview.supplierCountry) {
+      supplierCountry = preview.supplierCountry;
+      fieldsCorrected.push("supplierCountry");
+    }
   }
-  const incoterm = result.incoterm ?? preview.incoterm;
-  if (result.incoterm === null && incoterm !== null) fieldsFilled.push("incoterm");
-  const imageUrl = result.imageUrl ?? preview.imageUrl;
-  if (result.imageUrl === null && imageUrl !== null) fieldsFilled.push("imageUrl");
+
+  let minimumOrderQuantity = result.minimumOrderQuantity;
+  if (preview.minimumOrderQuantity !== null) {
+    if (minimumOrderQuantity === null) {
+      minimumOrderQuantity = preview.minimumOrderQuantity;
+      fieldsFilled.push("minimumOrderQuantity");
+    } else if (
+      authoritative &&
+      minimumOrderQuantity !== preview.minimumOrderQuantity
+    ) {
+      minimumOrderQuantity = preview.minimumOrderQuantity;
+      fieldsCorrected.push("minimumOrderQuantity");
+    }
+  }
+
+  let incoterm = result.incoterm;
+  if (preview.incoterm !== null) {
+    if (incoterm === null) {
+      incoterm = preview.incoterm;
+      fieldsFilled.push("incoterm");
+    } else if (authoritative && incoterm !== preview.incoterm) {
+      incoterm = preview.incoterm;
+      fieldsCorrected.push("incoterm");
+    }
+  }
+
+  let imageUrl = result.imageUrl;
+  if (preview.imageUrl !== null) {
+    if (imageUrl === null) {
+      imageUrl = preview.imageUrl;
+      fieldsFilled.push("imageUrl");
+    } else if (authoritative && imageUrl !== preview.imageUrl) {
+      imageUrl = preview.imageUrl;
+      fieldsCorrected.push("imageUrl");
+    }
+  }
+
+  let marketplaceDetails = result.marketplaceDetails ?? null;
+  if (preview.details) {
+    if (!marketplaceDetails) {
+      marketplaceDetails = preview.details;
+      fieldsFilled.push("marketplaceDetails");
+    } else if (
+      authoritative &&
+      changedStructuredValue(marketplaceDetails, preview.details)
+    ) {
+      marketplaceDetails = preview.details;
+      fieldsCorrected.push("marketplaceDetails");
+    }
+  }
+
+  const previewLogistics = marketplaceDetailsToSupplierLogistics(preview.details);
+  let supplierLogistics = result.supplierLogistics ?? null;
+  if (previewLogistics) {
+    if (!supplierLogistics) {
+      supplierLogistics = previewLogistics;
+      fieldsFilled.push("supplierLogistics");
+    } else if (
+      authoritative &&
+      changedStructuredValue(supplierLogistics, previewLogistics)
+    ) {
+      supplierLogistics = previewLogistics;
+      fieldsCorrected.push("supplierLogistics");
+    }
+  }
 
   return {
     result: {
@@ -112,8 +211,11 @@ function mergePreview(
       minimumOrderQuantity,
       incoterm,
       imageUrl,
+      marketplaceDetails,
+      supplierLogistics,
     } satisfies SupplierOfferSearchResult,
     fieldsFilled,
+    fieldsCorrected,
   };
 }
 
@@ -123,10 +225,13 @@ function failureCode(error: unknown) {
 }
 
 /**
- * Enriches a bounded set of finalists from their direct marketplace pages.
- * Failures are isolated per candidate and no raw upstream error text is sent
- * to the browser. Existing verified search fields are preserved; the preview
- * only fills missing values. Complete candidates are not fetched again.
+ * Verifies a bounded set of finalists against their exact marketplace pages.
+ * A non-partial preview tied to the same canonical product URL is stronger than
+ * search snippets or cached discovery data and may correct conflicting price,
+ * MOQ, country, Incoterm, image or structured marketplace details. Exact-page
+ * packaging evidence is normalized into supplier logistics. Partial previews
+ * remain fill-only. Failures are isolated per candidate and no raw upstream
+ * error text is sent to the browser.
  */
 export async function autoEnrichTajaCandidates(
   results: SupplierOfferSearchResult[],
@@ -144,13 +249,12 @@ export async function autoEnrichTajaCandidates(
         ? TajaAutoEnrichmentStatuses.UNCHANGED
         : TajaAutoEnrichmentStatuses.SKIPPED_UNSUPPORTED,
     fieldsFilled: [],
+    fieldsCorrected: [],
   }));
   const work = results
     .map((result, index) => ({ result, index }))
     .filter(({ result, index }) =>
-      index < maxCandidates &&
-      isSupportedProductUrl(result.productUrl) &&
-      needsAutoEnrichment(result),
+      index < maxCandidates && isSupportedProductUrl(result.productUrl),
     );
   let cursor = 0;
 
@@ -165,16 +269,18 @@ export async function autoEnrichTajaCandidates(
         enrichedResults[current.index] = merged.result;
         reports[current.index] = {
           productUrl: current.result.productUrl,
-          status: merged.fieldsFilled.length > 0
+          status: merged.fieldsFilled.length > 0 || merged.fieldsCorrected.length > 0
             ? TajaAutoEnrichmentStatuses.ENRICHED
             : TajaAutoEnrichmentStatuses.UNCHANGED,
           fieldsFilled: merged.fieldsFilled,
+          fieldsCorrected: merged.fieldsCorrected,
         };
       } catch (error) {
         reports[current.index] = {
           productUrl: current.result.productUrl,
           status: TajaAutoEnrichmentStatuses.FAILED,
           fieldsFilled: [],
+          fieldsCorrected: [],
           failureCode: failureCode(error),
         };
       }
@@ -191,6 +297,7 @@ export async function autoEnrichTajaCandidates(
       requestedCandidates: results.length,
       attemptedCandidates: work.length,
       enrichedCandidates: reports.filter((report) => report.status === TajaAutoEnrichmentStatuses.ENRICHED).length,
+      correctedCandidates: reports.filter((report) => report.fieldsCorrected.length > 0).length,
       unchangedCandidates: reports.filter((report) => report.status === TajaAutoEnrichmentStatuses.UNCHANGED).length,
       failedCandidates: reports.filter((report) => report.status === TajaAutoEnrichmentStatuses.FAILED).length,
       skippedUnsupportedCandidates: reports.filter((report) => report.status === TajaAutoEnrichmentStatuses.SKIPPED_UNSUPPORTED).length,

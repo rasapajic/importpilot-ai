@@ -1,0 +1,222 @@
+.taja-preview-summary {
+  border: 1px solid #d7dfdb;
+  border-radius: 0.85rem;
+  display: grid;
+  gap: 1rem;
+  grid-column: 1 / -1;
+  padding: 1rem;
+}
+
+.taja-preview-summary-review {
+  background: #fffaf0;
+  border-color: #e6c36a;
+}
+
+.taja-preview-summary-blocked {
+  background: #fff5f4;
+  border-color: #d9948f;
+}
+
+.taja-preview-summary-ready {
+  background: #eff9f3;
+  border-color: #91c7aa;
+}
+
+.taja-preview-summary > header {
+  align-items: flex-start;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.taja-preview-summary h3,
+.taja-preview-summary p {
+  margin: 0;
+}
+
+.taja-preview-summary > header p:last-child {
+  margin-top: 0.35rem;
+  max-width: 62rem;
+}
+
+.taja-preview-summary-status {
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 0.35rem 0.65rem;
+}
+
+.taja-preview-summary-review .taja-preview-summary-status {
+  color: #7c5a00;
+}
+
+.taja-preview-summary-blocked .taja-preview-summary-status {
+  color: #9c2f29;
+}
+
+.taja-preview-summary-ready .taja-preview-summary-status {
+  color: #137752;
+}
+
+.taja-preview-summary-grid {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+}
+
+.taja-preview-summary-grid > div {
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(23, 59, 45, 0.14);
+  border-radius: 0.55rem;
+  min-width: 0;
+  padding: 0.7rem;
+}
+
+.taja-preview-summary-grid dt {
+  color: #60766c;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.taja-preview-summary-grid dd {
+  color: #173b2d;
+  margin: 0.2rem 0 0;
+  overflow-wrap: anywhere;
+}
+
+.taja-preview-next-step,
+.taja-preview-supplier-question {
+  border-radius: 0.55rem;
+  padding: 0.75rem;
+}
+
+.taja-preview-next-step {
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(23, 59, 45, 0.14);
+}
+
+.taja-preview-supplier-question {
+  background: #f3f7f5;
+  border-left: 0.25rem solid #16865d;
+}
+
+.taja-preview-next-step p,
+.taja-preview-supplier-question p {
+  margin-top: 0.3rem;
+}
+
+.marketplace-evidence {
+  background: #f8fbf9;
+  border: 1px solid #b8dcca;
+  border-radius: 0.85rem;
+  grid-column: 1 / -1;
+  padding: 1rem;
+}
+
+.marketplace-evidence > summary {
+  color: #08734f;
+  cursor: pointer;
+  font-weight: 800;
+  list-style-position: inside;
+}
+
+.marketplace-evidence[open] > summary {
+  border-bottom: 1px solid #dce7e1;
+  margin-bottom: 0.85rem;
+  padding-bottom: 0.85rem;
+}
+
+.marketplace-evidence-source {
+  font-size: 0.82rem;
+  margin: 0 0 0.85rem;
+  overflow-wrap: anywhere;
+}
+
+.marketplace-evidence section {
+  border-top: 1px solid #dce7e1;
+  margin-top: 0.85rem;
+  padding-top: 0.85rem;
+}
+
+.marketplace-evidence section:first-of-type {
+  border-top: 0;
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.marketplace-evidence h4 {
+  color: #173b2d;
+  margin: 0 0 0.55rem;
+}
+
+.marketplace-evidence-list {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.marketplace-attribute-list {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+}
+
+.marketplace-attribute-list > div {
+  background: white;
+  border: 1px solid #dce7e1;
+  border-radius: 0.55rem;
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+  padding: 0.65rem;
+}
+
+.marketplace-attribute-list dt {
+  color: #60766c;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.marketplace-attribute-list dd {
+  color: #173b2d;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.marketplace-logistics-status {
+  border-radius: 0.55rem;
+  font-size: 0.85rem;
+  margin: 0.75rem 0 0;
+  padding: 0.7rem;
+}
+
+.marketplace-logistics-status-usable {
+  background: #e9f7ef;
+  color: #137752;
+}
+
+.marketplace-logistics-status-review {
+  background: #fff8df;
+  color: #6b5300;
+}
+
+@media (max-width: 767px) {
+  .taja-preview-summary > header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .taja-preview-summary-status {
+    align-self: flex-start;
+  }
+
+  .taja-preview-summary-grid,
+  .marketplace-attribute-list {
+    grid-template-columns: 1fr;
+  }
+}

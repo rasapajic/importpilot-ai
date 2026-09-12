@@ -24,9 +24,11 @@ function result(overrides: Partial<SupplierOfferSearchResult> = {}): SupplierOff
 }
 
 describe("supplier offer source provenance", () => {
-  it("recognizes only genuine HTTPS 1688 hosts", () => {
+  it("recognizes only genuine HTTPS 1688 offer-detail URLs", () => {
     expect(is1688Url("https://detail.1688.com/offer/123456.html")).toBe(true);
-    expect(is1688Url("https://m.1688.com/offer/123456.html")).toBe(true);
+    expect(is1688Url("https://m.1688.com/offer/123456.htm?spm=tracking")).toBe(true);
+    expect(is1688Url("https://s.1688.com/selloffer/offer_search.htm?keywords=fan")).toBe(false);
+    expect(is1688Url("https://www.1688.com/")).toBe(false);
     expect(is1688Url("http://detail.1688.com/offer/123456.html")).toBe(false);
     expect(is1688Url("https://fake1688.com/offer/123456.html")).toBe(false);
   });
@@ -43,6 +45,9 @@ describe("supplier offer source provenance", () => {
       source: "detail.1688.com",
       isPartial: true,
     });
+    expect(createBrowserAssisted1688Preview(
+      "https://s.1688.com/selloffer/offer_search.htm?keywords=fan",
+    )).toBeNull();
   });
 
   it("preserves Luna live-search provenance in saved offer metadata", () => {
@@ -64,10 +69,39 @@ describe("supplier offer source provenance", () => {
       resultOrigin: "live",
       captureMode: "LUNA_SEARCH",
       dataStatus: "COMPLETE",
+      supplierLogistics: null,
       provenance: {
         originalQuery: "oprema za plastenike",
         targetCountry: "RS",
         quantity: 100,
+      },
+    });
+  });
+
+  it("persists 1688 logistics evidence next to source provenance", () => {
+    const metadata = createSupplierOfferSourceMetadata(result({
+      productUrl: "https://detail.1688.com/offer/123456.html",
+      source: "TAJA 1688",
+      incoterm: null,
+      supplierLogistics: {
+        grossWeightKg: 12,
+        netWeightKg: null,
+        cartonLengthCm: 60,
+        cartonWidthCm: 40,
+        cartonHeightCm: 35,
+        piecesPerCarton: 20,
+        unitWeightKg: null,
+        unitVolumeCbm: null,
+        evidence: "PRODUCT_PAGE",
+      },
+    }), new Date("2026-08-04T08:30:00.000Z"));
+
+    expect(metadata).toMatchObject({
+      sourceHost: "detail.1688.com",
+      supplierLogistics: {
+        grossWeightKg: 12,
+        piecesPerCarton: 20,
+        evidence: "PRODUCT_PAGE",
       },
     });
   });

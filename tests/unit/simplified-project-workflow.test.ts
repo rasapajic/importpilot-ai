@@ -13,6 +13,10 @@ const profitabilitySource = readFileSync(
   join(process.cwd(), "components/projects/simple-profitability-panel.tsx"),
   "utf8",
 );
+const profitabilityControlSource = readFileSync(
+  join(process.cwd(), "components/projects/profitability-check-control.tsx"),
+  "utf8",
+);
 const profitabilityServiceSource = readFileSync(
   join(process.cwd(), "modules/projects/application/profitability-check-service.ts"),
   "utf8",
@@ -37,11 +41,13 @@ describe("simple client workflow", () => {
     expect(pageSource).not.toContain('title={t("Realna nabavna cena")}');
   });
 
-  it("uses one reliable server action to assess calculated offers and generate the decision", () => {
+  it("uses one bounded request to assess calculated offers and generate the decision", () => {
     expect(profitabilitySource).toContain("Proveri isplativost");
-    expect(profitabilitySource).toContain('action={`/api/projects/${projectId}/profitability-check`}');
-    expect(profitabilitySource).toContain('method="post"');
-    expect(profitabilitySource).not.toContain("onClick={checkProfitability}");
+    expect(profitabilitySource).toContain("ProfitabilityCheckControl");
+    expect(profitabilityControlSource).toContain('action={`/api/projects/${projectId}/profitability-check`}');
+    expect(profitabilityControlSource).toContain('method="post"');
+    expect(profitabilityControlSource).toContain("onSubmit={submit}");
+    expect(profitabilityControlSource).toContain("AbortController");
     expect(profitabilityServiceSource).toContain("assessSupplierOffer");
     expect(profitabilityServiceSource).toContain("generateProjectDecision");
     expect(profitabilitySource).not.toContain("LUNA_COUNTRY_RANKING_V1");

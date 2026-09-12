@@ -27,6 +27,14 @@ const projectUrlPreviewRouteSource = readFileSync(
   join(process.cwd(), "app/api/projects/[projectId]/supplier-search/url-preview/route.ts"),
   "utf8",
 );
+const atomicUrlCreationRouteSource = readFileSync(
+  join(process.cwd(), "app/api/projects/from-url/route.ts"),
+  "utf8",
+);
+const atomicUrlCreationServiceSource = readFileSync(
+  join(process.cwd(), "modules/projects/application/create-project-from-url.ts"),
+  "utf8",
+);
 
 describe("project URL entry flow", () => {
   it("focuses product name for standard search flow", () => {
@@ -51,10 +59,20 @@ describe("project URL entry flow", () => {
     expect(urlFirstFormSource).toContain("ref={urlInputRef}");
   });
 
-  it("creates the project only after preview and imports extracted offer data", () => {
-    expect(urlFirstFormSource.indexOf("setPreview(payload.preview)")).toBeLessThan(urlFirstFormSource.indexOf('fetch("/api/projects"'));
-    expect(urlFirstFormSource).toContain("supplier-search/import");
+  it("creates the project and initial offer through one atomic endpoint", () => {
+    expect(urlFirstFormSource.indexOf("setPreview(payload.preview)")).toBeLessThan(
+      urlFirstFormSource.indexOf('fetch("/api/projects/from-url"'),
+    );
+    expect(urlFirstFormSource).toContain("project: {");
+    expect(urlFirstFormSource).toContain("offer: result");
+    expect(urlFirstFormSource).not.toContain('fetch("/api/projects"');
+    expect(urlFirstFormSource).not.toContain("supplier-search/import");
     expect(urlFirstFormSource).toContain("Kreiraj pretragu");
+    expect(atomicUrlCreationRouteSource).toContain("createProjectFromUrlRequestSchema");
+    expect(atomicUrlCreationRouteSource).toContain("createProjectFromUrl(");
+    expect(atomicUrlCreationServiceSource).toContain("prisma.$transaction");
+    expect(atomicUrlCreationServiceSource).toContain("transaction.importProject.create");
+    expect(atomicUrlCreationServiceSource).toContain("transaction.supplierOffer.create");
   });
 
   it("offers manual fallback when recognized URL fetching is blocked or unavailable", () => {
@@ -88,5 +106,11 @@ describe("project URL entry flow", () => {
       expect(source).toContain("Došlo je do mrežne greške. Pokušajte ponovo.");
       expect(source).not.toContain("Podaci iz linka nisu mogli biti preuzeti.");
     }
+  });
+
+  it("never exposes raw HTML JSON parsing errors in the URL-first client", () => {
+    expect(urlFirstFormSource).toContain("readApiJson");
+    expect(urlFirstFormSource).not.toContain("projectResponse.json()");
+    expect(urlFirstFormSource).not.toContain("importResponse.json()");
   });
 });

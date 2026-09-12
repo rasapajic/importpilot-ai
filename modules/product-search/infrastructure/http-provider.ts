@@ -13,7 +13,10 @@ import {
   type SupplierOfferSearchProviderOutcome,
 } from "../domain/search";
 
-export const SUPPLIER_SEARCH_TIMEOUT_MS = 35_000;
+// The search service owns a 50-second aggregate budget. The app-provider waits
+// up to 55 seconds so the service can return its structured success/timeout body,
+// while the browser/API route retains the final 60-second user-facing deadline.
+export const SUPPLIER_SEARCH_TIMEOUT_MS = 55_000;
 export const SUPPLIER_SEARCH_MAX_RESPONSE_BYTES = 1_000_000;
 export const SUPPLIER_SEARCH_CACHE_TTL_MS = 10 * 60 * 1_000;
 
@@ -74,7 +77,10 @@ function idempotencyKey(endpoint: URL, input: SupplierOfferSearchInput) {
 }
 
 function isRetryableStatus(status: number) {
-  return status === 408 || status === 429 || status >= 500;
+  // A 504 can arrive only after the expensive service-side search budget is
+  // exhausted. Retrying it would duplicate AI work because the service does
+  // not persist idempotency responses. Fast transient failures remain retryable.
+  return status === 429 || (status >= 500 && status !== 504);
 }
 
 function developmentLog(event: string, details: Record<string, unknown>) {
@@ -109,9 +115,13 @@ export function createHttpSupplierOfferSearchProvider({
     ...(token ? { authorization: `Bearer ${token}` } : {}),
   };
 
-  async function fetchWithTimeout(url: URL, init: RequestInit) {
+  async function fetchWithTimeout(
+    url: URL,
+    init: RequestInit,
+    requestTimeoutMs = timeoutMs,
+  ) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
     try {
       return await fetcher(url, { ...init, signal: controller.signal });
     } catch (error) {
@@ -140,7 +150,11 @@ export function createHttpSupplierOfferSearchProvider({
   return {
     async healthCheck() {
       try {
-        const response = await fetchWithTimeout(healthUrl, { method: "GET", headers });
+        const response = await fetchWithTimeout(
+          healthUrl,
+          { method: "GET", headers },
+          Math.min(timeoutMs, 5_000),
+        );
         return response.ok;
       } catch {
         return false;
@@ -216,12 +230,12 @@ export function createHttpSupplierOfferSearchProvider({
         } catch (error) {
           if (
             attempt < maxAttempts &&
-            (error instanceof SupplierSearchProviderTimeoutError ||
-              (error instanceof SupplierSearchProviderError &&
-                !(error instanceof SupplierSearchProviderHttpError) &&
-                !(error instanceof SupplierSearchProviderInvalidResponseError) &&
-                !(error instanceof SupplierSearchProviderResponseTooLargeError) &&
-                !(error instanceof SupplierSearchProviderUnavailableError)))
+            error instanceof SupplierSearchProviderError &&
+            !(error instanceof SupplierSearchProviderTimeoutError) &&
+            !(error instanceof SupplierSearchProviderHttpError) &&
+            !(error instanceof SupplierSearchProviderInvalidResponseError) &&
+            !(error instanceof SupplierSearchProviderResponseTooLargeError) &&
+            !(error instanceof SupplierSearchProviderUnavailableError)
           ) {
             await wait(retryDelayMs * attempt);
             continue;

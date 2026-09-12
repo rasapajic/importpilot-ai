@@ -4,7 +4,15 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { useI18n } from "@/components/i18n/i18n-provider";
-import type { SupplierOfferSearchResult, SupplierOfferUrlPreview } from "@/modules/product-search/domain/search";
+import { MarketplaceProductEvidence } from "@/components/search/marketplace-product-evidence";
+import { TajaPreviewBusinessSummary } from "@/components/search/taja-preview-business-summary";
+import {
+  marketplaceDetailsToSupplierLogistics,
+} from "@/modules/product-search/domain/marketplace-product-details";
+import type {
+  SupplierOfferSearchResult,
+  SupplierOfferUrlPreview,
+} from "@/modules/product-search/domain/search";
 
 const emptyPreview: SupplierOfferUrlPreview = {
   title: null,
@@ -17,6 +25,7 @@ const emptyPreview: SupplierOfferUrlPreview = {
   productUrl: "https://example.com",
   imageUrl: null,
   source: "example.com",
+  details: null,
   isPartial: false,
   titleFromSlug: false,
 };
@@ -25,10 +34,14 @@ export function UrlImportReview({
   projectId,
   onReviewChange,
   defaultOpen = false,
+  productQuery = null,
+  requestedQuantity = null,
 }: {
   projectId: string;
   onReviewChange: (reviewing: boolean) => void;
   defaultOpen?: boolean;
+  productQuery?: string | null;
+  requestedQuantity?: number | null;
 }) {
   const { t } = useI18n();
   const router = useRouter();
@@ -57,14 +70,21 @@ export function UrlImportReview({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ productUrl }),
       });
-      const payload = (await response.json()) as { preview?: SupplierOfferUrlPreview; error?: string };
+      const payload = (await response.json()) as {
+        preview?: SupplierOfferUrlPreview;
+        error?: string;
+      };
       if (!response.ok || !payload.preview) throw new Error(payload.error);
       setPreview(payload.preview);
       onReviewChange(true);
     } catch (loadError) {
       setPreview(null);
       onReviewChange(false);
-      setError(loadError instanceof Error && loadError.message ? loadError.message : t("Podaci iz linka nisu mogli biti preuzeti."));
+      setError(
+        loadError instanceof Error && loadError.message
+          ? loadError.message
+          : t("Podaci iz linka nisu mogli biti preuzeti."),
+      );
     } finally {
       setLoading(false);
     }
@@ -104,6 +124,8 @@ export function UrlImportReview({
       productUrl: preview.productUrl,
       imageUrl: preview.imageUrl,
       source: preview.source,
+      marketplaceDetails: preview.details ?? null,
+      supplierLogistics: marketplaceDetailsToSupplierLogistics(preview.details),
     };
     try {
       const response = await fetch(`/api/projects/${projectId}/supplier-search/import`, {
@@ -116,7 +138,11 @@ export function UrlImportReview({
       setSaved(true);
       router.refresh();
     } catch (saveError) {
-      setError(saveError instanceof Error && saveError.message ? saveError.message : t("Ponuda nije dodata. Pokušajte ponovo."));
+      setError(
+        saveError instanceof Error && saveError.message
+          ? saveError.message
+          : t("Ponuda nije dodata. Pokušajte ponovo."),
+      );
     } finally {
       setSaving(false);
     }
@@ -129,7 +155,14 @@ export function UrlImportReview({
         <form className="url-import-form" onSubmit={loadPreview}>
           <label>
             {t("Link proizvoda")}
-            <input onChange={(event) => setProductUrl(event.target.value)} placeholder="https://..." ref={urlInputRef} required type="url" value={productUrl} />
+            <input
+              onChange={(event) => setProductUrl(event.target.value)}
+              placeholder="https://..."
+              ref={urlInputRef}
+              required
+              type="url"
+              value={productUrl}
+            />
           </label>
           <button className="secondary-button" disabled={loading} type="submit">
             {loading ? t("Preuzimanje...") : t("Preuzmi podatke")}
@@ -140,21 +173,101 @@ export function UrlImportReview({
       {preview && (
         <form className="url-review-form" onSubmit={save}>
           <p className={preview.isPartial ? "url-fallback-heading" : "url-import-success"}>
-            {preview.isPartial ? t("Delimično prepoznati podaci") : `✓ ${t("Podaci preuzeti")}`}
+            {preview.isPartial
+              ? t("Delimično prepoznati podaci")
+              : `✓ ${t("Podaci preuzeti")}`}
           </p>
-          <p className="warning-text">{t("Proverite podatke i potvrdite dodavanje u kupovinu.")}</p>
-          <label>{t("Naziv proizvoda")}<input onChange={(event) => update("title", event.target.value)} placeholder={t("Nije prepoznato")} required value={preview.title ?? ""} /></label>
-          <label>{t("Dobavljač")}<input onChange={(event) => update("supplierName", event.target.value)} placeholder={t("Nije prepoznato")} required value={preview.supplierName ?? ""} /></label>
-          <label>{t("Cena")}<input min="0" onChange={(event) => update("price", event.target.value)} placeholder={t("Nije prepoznato")} step="any" type="number" value={preview.price ?? ""} /></label>
-          <label>{t("Valuta")}<input maxLength={3} onChange={(event) => update("currency", event.target.value.toUpperCase())} placeholder={t("Nije prepoznato")} value={preview.currency ?? ""} /></label>
-          <label>{t("Minimalna količina (MOQ)")}<input min="1" onChange={(event) => update("minimumOrderQuantity", event.target.value)} placeholder={t("Nije navedeno")} type="number" value={preview.minimumOrderQuantity ?? ""} /></label>
-          <label>{t("Incoterm")}<input onChange={(event) => update("incoterm", event.target.value.toUpperCase())} placeholder={t("Nije naveden")} value={preview.incoterm ?? ""} /></label>
-          <label>{t("Link slike")}<input onChange={(event) => update("imageUrl", event.target.value)} placeholder={t("Nije prepoznato")} type="url" value={preview.imageUrl ?? ""} /></label>
+          <p className="warning-text">
+            {t("Proverite podatke i potvrdite dodavanje u kupovinu.")}
+          </p>
+          <label>
+            {t("Naziv proizvoda")}
+            <input
+              onChange={(event) => update("title", event.target.value)}
+              placeholder={t("Nije prepoznato")}
+              required
+              value={preview.title ?? ""}
+            />
+          </label>
+          <label>
+            {t("Dobavljač")}
+            <input
+              onChange={(event) => update("supplierName", event.target.value)}
+              placeholder={t("Nije prepoznato")}
+              required
+              value={preview.supplierName ?? ""}
+            />
+          </label>
+          <label>
+            {t("Cena")}
+            <input
+              min="0"
+              onChange={(event) => update("price", event.target.value)}
+              placeholder={t("Nije prepoznato")}
+              step="any"
+              type="number"
+              value={preview.price ?? ""}
+            />
+          </label>
+          <label>
+            {t("Valuta")}
+            <input
+              maxLength={3}
+              onChange={(event) => update("currency", event.target.value.toUpperCase())}
+              placeholder={t("Nije prepoznato")}
+              value={preview.currency ?? ""}
+            />
+          </label>
+          <label>
+            {t("Minimalna količina (MOQ)")}
+            <input
+              min="1"
+              onChange={(event) => update("minimumOrderQuantity", event.target.value)}
+              placeholder={t("Nije navedeno")}
+              type="number"
+              value={preview.minimumOrderQuantity ?? ""}
+            />
+          </label>
+          <label>
+            {t("Incoterm")}
+            <input
+              onChange={(event) => update("incoterm", event.target.value.toUpperCase())}
+              placeholder={t("Nije naveden")}
+              value={preview.incoterm ?? ""}
+            />
+          </label>
+          <label>
+            {t("Link slike")}
+            <input
+              onChange={(event) => update("imageUrl", event.target.value)}
+              placeholder={t("Nije prepoznato")}
+              type="url"
+              value={preview.imageUrl ?? ""}
+            />
+          </label>
+
+          <TajaPreviewBusinessSummary
+            preview={preview}
+            productQuery={productQuery}
+            requestedQuantity={requestedQuantity}
+          />
+          <MarketplaceProductEvidence preview={preview} />
+
           <div className="url-review-actions">
             <button className="primary-button" disabled={saving || saved} type="submit">
-              {saved ? t("Dodato u kupovinu") : saving ? t("Dodavanje...") : t("Potvrdi i dodaj u kupovinu")}
+              {saved
+                ? t("Dodato u kupovinu")
+                : saving
+                  ? t("Dodavanje...")
+                  : t("Potvrdi i dodaj u kupovinu")}
             </button>
-            <button className="secondary-button" onClick={loadAnotherLink} type="button">{t("Učitaj drugi link")}</button>
+            <button
+              className="secondary-button"
+              onClick={loadAnotherLink}
+              type="button"
+            >
+              {t("Učitaj drugi link")}
+            </button>
           </div>
         </form>
       )}

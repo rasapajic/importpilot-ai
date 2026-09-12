@@ -13,6 +13,9 @@ type LunaSearchCopy = {
   privateLabel: string;
   searching: string;
   startSearch: string;
+  repeatSearch: string;
+  idlePrompt: string;
+  cachedResultsNotice: string;
   preparedQueries: string;
   chineseConfirmationRequired: string;
   filteredResultsPrefix: string;
@@ -32,6 +35,9 @@ const copy: Record<Locale, LunaSearchCopy> = {
     privateLabel: "Traži OEM / sopstveni brend",
     searching: `${ASSISTANT_DISPLAY_NAME} pretražuje internet...`,
     startSearch: "Pronađi stvarne ponude",
+    repeatSearch: "Ponovi živu pretragu",
+    idlePrompt: "Pokrenite pretragu da biste pronašli aktuelne ponude.",
+    cachedResultsNotice: "Prikazani su poslednji sačuvani rezultati. Nova internet pretraga pokreće se samo kada izaberete „Ponovi živu pretragu“.",
     preparedQueries: `${ASSISTANT_DISPLAY_NAME} je pripremila pretragu`,
     chineseConfirmationRequired: "Kineski upit zahteva ručnu potvrdu.",
     filteredResultsPrefix: `${ASSISTANT_DISPLAY_NAME} kriterijumi su uklonili`,
@@ -54,6 +60,9 @@ const copy: Record<Locale, LunaSearchCopy> = {
     privateLabel: "OEM / Eigenmarke suchen",
     searching: `${ASSISTANT_DISPLAY_NAME} durchsucht das Internet...`,
     startSearch: "Reale Angebote finden",
+    repeatSearch: "Live-Suche wiederholen",
+    idlePrompt: "Starten Sie die Suche, um aktuelle Angebote zu finden.",
+    cachedResultsNotice: "Die zuletzt gespeicherten Ergebnisse werden angezeigt. Eine neue Internetsuche startet erst mit „Live-Suche wiederholen“.",
     preparedQueries: `${ASSISTANT_DISPLAY_NAME} hat die Suche vorbereitet`,
     chineseConfirmationRequired: "Die chinesische Suchanfrage muss manuell bestätigt werden.",
     filteredResultsPrefix: `Durch die ${ASSISTANT_DISPLAY_NAME}-Kriterien entfernt`,
@@ -76,6 +85,9 @@ const copy: Record<Locale, LunaSearchCopy> = {
     privateLabel: "Search for OEM / private label",
     searching: `${ASSISTANT_DISPLAY_NAME} is searching the web...`,
     startSearch: "Find real offers",
+    repeatSearch: "Repeat live search",
+    idlePrompt: "Start the search to find current offers.",
+    cachedResultsNotice: "The latest saved results are shown. A new web search starts only when you choose “Repeat live search”.",
     preparedQueries: `${ASSISTANT_DISPLAY_NAME} prepared the search`,
     chineseConfirmationRequired: "The Chinese query requires manual confirmation.",
     filteredResultsPrefix: `Removed by ${ASSISTANT_DISPLAY_NAME} criteria`,

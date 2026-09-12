@@ -26,6 +26,21 @@ type OfferWithDetails = SupplierOffer & {
   latestCostAssumptions?: SerbiaLandedCostAssumptions | null;
 };
 
+const emptyComparisonCopy = {
+  sr: {
+    title: "Još niste dodali nijednu ponudu za poređenje.",
+    description: "Izaberite jednu ili više pronađenih ponuda pomoću dugmeta „Dodaj za poređenje“, ili ručno dodajte ponudu.",
+  },
+  de: {
+    title: "Sie haben noch kein Angebot zum Vergleich hinzugefügt.",
+    description: "Wählen Sie ein oder mehrere gefundene Angebote über „Zum Vergleich hinzufügen“ aus oder fügen Sie ein Angebot manuell hinzu.",
+  },
+  en: {
+    title: "You have not added any offers for comparison yet.",
+    description: "Select one or more found offers with “Add for comparison”, or add an offer manually.",
+  },
+} as const;
+
 export function OffersPanel({
   projectId,
   projectName,
@@ -54,6 +69,7 @@ export function OffersPanel({
   offers: OfferWithDetails[];
 }) {
   const { locale, t } = useI18n();
+  const emptyComparisonText = emptyComparisonCopy[locale];
   const router = useRouter();
   const [showAdd, setShowAdd] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
@@ -268,8 +284,8 @@ export function OffersPanel({
         })}
         {offers.length === 0 && (
           <div className="empty-state">
-            <h3>{t("Još nema ponuda.")}</h3>
-            <p>{t("Ručno dodajte ponudu ili otpremite dokument ponude u uvozne dokumente.")}</p>
+            <h3>{emptyComparisonText.title}</h3>
+            <p>{emptyComparisonText.description}</p>
           </div>
         )}
       </div>
