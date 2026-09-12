@@ -15,6 +15,7 @@
     "db:migrate:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
     "db:seed:country-costs": "tsx scripts/seed-primary-country-costs.ts",
+    "check:production-config": "node scripts/check-production-config.mjs",
     "diagnose:supplier-search": "node scripts/diagnose-supplier-search.mjs",
     "diagnose:url-import": "tsx scripts/diagnose-url-import.ts",
     "test:taja-pr73-live": "node scripts/taja-pr73-live-gate.mjs",
