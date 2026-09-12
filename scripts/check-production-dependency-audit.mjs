@@ -26,7 +26,7 @@ function runAudit() {
 function readLockfile() {
   try {
     const lock = JSON.parse(readFileSync("package-lock.json", "utf8"));
-    if (!lock.packages || typeof lock.packages !== "object") {
+    if (!lock.packages || typeof lock.packages !== "object" || !lock.packages[""]) {
       fail("package-lock.json does not contain package reachability metadata.");
     }
     return lock;
@@ -47,16 +47,40 @@ function packageNameFromPath(path) {
     : parts[0] ?? null;
 }
 
-const lock = readLockfile();
-const productionPaths = new Set();
-const productionNames = new Set();
+function dependencyKeys(metadata) {
+  if (!metadata || typeof metadata !== "object") return [];
+  return [
+    ...Object.keys(metadata.dependencies ?? {}),
+    ...Object.keys(metadata.optionalDependencies ?? {}),
+  ];
+}
 
+const lock = readLockfile();
+const metadataByName = new Map();
 for (const [path, metadata] of Object.entries(lock.packages)) {
-  if (!path || !path.includes("node_modules/")) continue;
-  if (metadata && typeof metadata === "object" && metadata.dev === true) continue;
-  productionPaths.add(path);
   const name = packageNameFromPath(path);
-  if (name) productionNames.add(name);
+  if (!name || !metadata || typeof metadata !== "object") continue;
+  const entries = metadataByName.get(name) ?? [];
+  entries.push(metadata);
+  metadataByName.set(name, entries);
+}
+
+const root = lock.packages[""];
+const productionNames = new Set([
+  ...Object.keys(root.dependencies ?? {}),
+  ...Object.keys(root.optionalDependencies ?? {}),
+]);
+const queue = [...productionNames];
+
+while (queue.length > 0) {
+  const name = queue.shift();
+  for (const metadata of metadataByName.get(name) ?? []) {
+    for (const dependencyName of dependencyKeys(metadata)) {
+      if (productionNames.has(dependencyName)) continue;
+      productionNames.add(dependencyName);
+      queue.push(dependencyName);
+    }
+  }
 }
 
 const audit = runAudit();
@@ -68,17 +92,8 @@ if (!audit.vulnerabilities || typeof audit.vulnerabilities !== "object") {
 }
 
 const vulnerabilities = Object.entries(audit.vulnerabilities);
-
-function isProductionReachable(name, finding) {
-  const nodes = Array.isArray(finding?.nodes) ? finding.nodes : [];
-  if (nodes.length > 0) {
-    return nodes.some((node) => productionPaths.has(node));
-  }
-  return productionNames.has(name);
-}
-
 const productionFindings = vulnerabilities
-  .filter(([name, finding]) => finding && typeof finding === "object" && isProductionReachable(name, finding))
+  .filter(([name, finding]) => productionNames.has(name) && finding && typeof finding === "object")
   .map(([name, finding]) => ({
     name,
     severity: String(finding.severity ?? "unknown").toLowerCase(),
@@ -88,9 +103,9 @@ const productionFindings = vulnerabilities
 const blocked = productionFindings.filter((finding) => blockedSeverities.has(finding.severity));
 const ignoredHighDevOnly = vulnerabilities
   .filter(([name, finding]) =>
+    !productionNames.has(name) &&
     finding &&
     typeof finding === "object" &&
-    !isProductionReachable(name, finding) &&
     blockedSeverities.has(String(finding.severity ?? "").toLowerCase()))
   .map(([name, finding]) => `${name} (${String(finding.severity).toLowerCase()})`);
 
@@ -109,5 +124,5 @@ if (blocked.length > 0) {
 }
 
 console.log(
-  "PRODUCTION_DEPENDENCY_AUDIT PASS: no high or critical vulnerabilities are reachable from lockfile production packages.",
+  "PRODUCTION_DEPENDENCY_AUDIT PASS: no high or critical vulnerabilities are reachable from declared runtime dependency roots.",
 );
