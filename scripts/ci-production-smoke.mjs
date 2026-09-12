@@ -120,8 +120,8 @@ try {
       password: "Release-Smoke-2026A",
     }),
   });
-  if (register.status !== 200) {
-    throw new Error(`Registration returned ${register.status}: ${await register.text()}`);
+  if (register.status !== 201) {
+    throw new Error(`Registration returned ${register.status}, expected 201: ${await register.text()}`);
   }
   const cookie = sessionCookieFrom(register);
 
