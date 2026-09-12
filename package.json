@@ -23,11 +23,11 @@
     "cache:import-supplier-fixture": "tsx scripts/import-supplier-search-fixture.ts"
   },
   "dependencies": {
-    "@prisma/client": "6.19.3",
     "@aws-sdk/client-s3": "3.1067.0",
     "@aws-sdk/s3-request-presigner": "3.1067.0",
+    "@prisma/client": "6.19.3",
     "argon2": "0.44.0",
-    "next": "16.2.9",
+    "next": "16.3.5",
     "react": "19.2.7",
     "react-dom": "19.2.7",
     "zod": "4.4.3"
@@ -44,6 +44,6 @@
     "vitest": "3.2.6"
   },
   "overrides": {
-    "postcss": "8.5.10"
+    "postcss": "8.5.23"
   }
 }
