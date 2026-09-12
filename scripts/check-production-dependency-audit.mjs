@@ -1,59 +1,84 @@
+import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 const blockedSeverities = new Set(["high", "critical"]);
 
-function runNpm(args, label) {
-  const result = spawnSync(npmCommand, args, {
+function fail(message) {
+  console.error(`PRODUCTION_DEPENDENCY_AUDIT ERROR: ${message}`);
+  process.exit(2);
+}
+
+function runAudit() {
+  const result = spawnSync(npmCommand, ["audit", "--json"], {
     encoding: "utf8",
     maxBuffer: 20 * 1024 * 1024,
   });
-  if (result.error) {
-    console.error(`PRODUCTION_DEPENDENCY_AUDIT ERROR: ${label} could not start: ${result.error.message}`);
-    process.exit(2);
-  }
-  return result;
-}
-
-function parseJsonOutput(result, label) {
-  const stdout = result.stdout?.trim();
-  if (!stdout) {
-    console.error(`PRODUCTION_DEPENDENCY_AUDIT ERROR: ${label} returned no JSON output.`);
-    if (result.stderr?.trim()) console.error(result.stderr.trim());
-    process.exit(2);
-  }
+  if (result.error) fail(`npm audit could not start: ${result.error.message}`);
+  if (!result.stdout?.trim()) fail("npm audit returned no JSON output.");
   try {
-    return JSON.parse(stdout);
+    return JSON.parse(result.stdout);
   } catch (error) {
-    console.error(`PRODUCTION_DEPENDENCY_AUDIT ERROR: ${label} returned invalid JSON.`);
-    console.error(error instanceof Error ? error.message : String(error));
-    process.exit(2);
+    fail(`npm audit returned invalid JSON: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
-function collectDependencyNames(dependencies, names = new Set()) {
-  if (!dependencies || typeof dependencies !== "object") return names;
-  for (const [name, value] of Object.entries(dependencies)) {
-    names.add(name);
-    if (value && typeof value === "object") {
-      collectDependencyNames(value.dependencies, names);
+function readLockfile() {
+  try {
+    const lock = JSON.parse(readFileSync("package-lock.json", "utf8"));
+    if (!lock.packages || typeof lock.packages !== "object") {
+      fail("package-lock.json does not contain package reachability metadata.");
     }
+    return lock;
+  } catch (error) {
+    fail(`package-lock.json could not be read: ${error instanceof Error ? error.message : String(error)}`);
   }
-  return names;
 }
 
-const treeResult = runNpm(["ls", "--omit=dev", "--all", "--json"], "npm ls --omit=dev");
-const tree = parseJsonOutput(treeResult, "npm ls --omit=dev");
-const productionPackages = collectDependencyNames(tree.dependencies);
+function packageNameFromPath(path) {
+  const marker = "node_modules/";
+  const index = path.lastIndexOf(marker);
+  if (index < 0) return null;
+  const tail = path.slice(index + marker.length);
+  if (!tail) return null;
+  const parts = tail.split("/");
+  return parts[0]?.startsWith("@") && parts[1]
+    ? `${parts[0]}/${parts[1]}`
+    : parts[0] ?? null;
+}
 
-const auditResult = runNpm(["audit", "--json"], "npm audit");
-const audit = parseJsonOutput(auditResult, "npm audit");
-const vulnerabilities = audit.vulnerabilities && typeof audit.vulnerabilities === "object"
-  ? Object.entries(audit.vulnerabilities)
-  : [];
+const lock = readLockfile();
+const productionPaths = new Set();
+const productionNames = new Set();
+
+for (const [path, metadata] of Object.entries(lock.packages)) {
+  if (!path || !path.includes("node_modules/")) continue;
+  if (metadata && typeof metadata === "object" && metadata.dev === true) continue;
+  productionPaths.add(path);
+  const name = packageNameFromPath(path);
+  if (name) productionNames.add(name);
+}
+
+const audit = runAudit();
+if (audit.error) {
+  fail(`npm audit service returned an error: ${JSON.stringify(audit.error)}`);
+}
+if (!audit.vulnerabilities || typeof audit.vulnerabilities !== "object") {
+  fail("npm audit JSON did not contain a vulnerabilities object.");
+}
+
+const vulnerabilities = Object.entries(audit.vulnerabilities);
+
+function isProductionReachable(name, finding) {
+  const nodes = Array.isArray(finding?.nodes) ? finding.nodes : [];
+  if (nodes.length > 0) {
+    return nodes.some((node) => productionPaths.has(node));
+  }
+  return productionNames.has(name);
+}
 
 const productionFindings = vulnerabilities
-  .filter(([name, finding]) => productionPackages.has(name) && finding && typeof finding === "object")
+  .filter(([name, finding]) => finding && typeof finding === "object" && isProductionReachable(name, finding))
   .map(([name, finding]) => ({
     name,
     severity: String(finding.severity ?? "unknown").toLowerCase(),
@@ -63,13 +88,15 @@ const productionFindings = vulnerabilities
 const blocked = productionFindings.filter((finding) => blockedSeverities.has(finding.severity));
 const ignoredHighDevOnly = vulnerabilities
   .filter(([name, finding]) =>
-    !productionPackages.has(name) &&
     finding &&
     typeof finding === "object" &&
+    !isProductionReachable(name, finding) &&
     blockedSeverities.has(String(finding.severity ?? "").toLowerCase()))
   .map(([name, finding]) => `${name} (${String(finding.severity).toLowerCase()})`);
 
-console.log(`PRODUCTION_DEPENDENCY_AUDIT productionPackages=${productionPackages.size} findings=${productionFindings.length} blocked=${blocked.length}`);
+console.log(
+  `PRODUCTION_DEPENDENCY_AUDIT productionPackages=${productionNames.size} findings=${productionFindings.length} blocked=${blocked.length}`,
+);
 if (ignoredHighDevOnly.length > 0) {
   console.log(`PRODUCTION_DEPENDENCY_AUDIT ignoredDevOnly=${ignoredHighDevOnly.join(", ")}`);
 }
@@ -81,4 +108,6 @@ if (blocked.length > 0) {
   process.exit(1);
 }
 
-console.log("PRODUCTION_DEPENDENCY_AUDIT PASS: no high or critical vulnerabilities are reachable from the production dependency tree.");
+console.log(
+  "PRODUCTION_DEPENDENCY_AUDIT PASS: no high or critical vulnerabilities are reachable from lockfile production packages.",
+);
