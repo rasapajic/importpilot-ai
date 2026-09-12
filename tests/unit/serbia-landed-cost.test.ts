@@ -48,10 +48,29 @@ describe("primary-market landed cost assumptions", () => {
         customsDutyConfirmed: true,
       })).toBe(false);
     }
+  });
+
+  it("fails closed outside versioned country profiles until transport, duty and VAT are manually verified", () => {
     expect(requiresImportCostReview({
       targetCountry: "FR",
       transportConfirmed: false,
       customsDutyConfirmed: false,
+      vatRate: "20",
+      vatSource: "COUNTRY_DEFAULT",
+    })).toBe(true);
+    expect(requiresImportCostReview({
+      targetCountry: "FR",
+      transportConfirmed: true,
+      customsDutyConfirmed: true,
+      vatRate: "20",
+      vatSource: "COUNTRY_DEFAULT",
+    })).toBe(true);
+    expect(requiresImportCostReview({
+      targetCountry: "FR",
+      transportConfirmed: true,
+      customsDutyConfirmed: true,
+      vatRate: "20",
+      vatSource: "MANUAL_OVERRIDE",
     })).toBe(false);
   });
 

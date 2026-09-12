@@ -107,7 +107,7 @@ describeWithDatabase("supplier search result import and tenant isolation", () =>
     expect(corrected.sourceMetadata).toMatchObject({ productUrl: correctedUrl });
   });
 
-  it("passes validated manual comparison values to the provider and returns candidate analysis", async () => {
+  it("passes validated manual comparison values and normalized query variants to the provider", async () => {
     let received: unknown;
     const outcome = await service.searchProjectSupplierOffers(projectId, organizationId, {
       query: "fan",
@@ -120,7 +120,13 @@ describeWithDatabase("supplier search result import and tenant isolation", () =>
       },
     });
 
-    expect(received).toEqual({ query: "fan", quantity: 275, targetCountry: "AT" });
+    expect(received).toEqual({
+      query: "fan",
+      quantity: 275,
+      targetCountry: "AT",
+      queryVariants: ["fan"],
+      chinese1688QueryVariants: [],
+    });
     expect(outcome.results).toHaveLength(1);
     expect(outcome.candidateAnalyses).toEqual([
       expect.objectContaining({
