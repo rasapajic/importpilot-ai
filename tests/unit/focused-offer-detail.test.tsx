@@ -33,6 +33,13 @@ describe("focused ImportPilot 1.0 offer detail", () => {
     expect(panelSource).toContain("Otvori izvornu ponudu");
   });
 
+  it("does not let an older project decision mask a newly focused offer", () => {
+    expect(panelSource).toContain("const projectHasFinalDecision = isFinalDecisionStatus(decision?.status)");
+    expect(panelSource).toContain("!focusedOffer || decision?.selectedOfferId === focusedOffer.id");
+    expect(panelSource).toContain("const bestOffer = focusedOffer ?? decisionOffer ?? calculatedOffers[0] ?? null");
+    expect(panelSource).toContain("const canCheckProfitability = focusedOffer");
+  });
+
   it("asks only for the commercial terms required to unlock calculation", () => {
     expect(panelSource).toContain("<CommercialTermsForm");
     expect(formSource).toContain('name="unitPrice"');
