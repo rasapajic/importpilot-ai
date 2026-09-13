@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { useI18n } from "@/components/i18n/i18n-provider";
 import { readApiJson } from "@/lib/http/api-response";
@@ -25,10 +25,10 @@ function localizedError(
 ) {
   if (code === "NO_CALCULATED_OFFERS") {
     return locale === "de"
-      ? "Erfassen Sie zuerst die Kosten für mindestens ein Angebot."
+      ? "Erfassen Sie zuerst die Kosten für das ausgewählte Angebot."
       : locale === "en"
-        ? "Enter costs for at least one offer first."
-        : "Prvo unesite troškove za najmanje jednu ponudu.";
+        ? "Enter costs for the selected offer first."
+        : "Prvo unesite troškove za izabranu ponudu.";
   }
   if (code === "PROJECT_NOT_FOUND") {
     return locale === "de"
@@ -71,6 +71,14 @@ export function ProfitabilityCheckControl({
 }) {
   const { locale } = useI18n();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const focusedOfferId = searchParams.get("selectedOffer");
+  const actionUrl = focusedOfferId
+    ? `/api/projects/${projectId}/profitability-check?offerId=${encodeURIComponent(focusedOfferId)}`
+    : `/api/projects/${projectId}/profitability-check`;
+  const decisionUrl = focusedOfferId
+    ? `/projects/${projectId}?selectedOffer=${encodeURIComponent(focusedOfferId)}#workflow-step-decision`
+    : `/projects/${projectId}#workflow-step-decision`;
   const pendingRef = useRef(false);
   const controllerRef = useRef<AbortController | null>(null);
   const [pending, setPending] = useState(false);
@@ -94,15 +102,12 @@ export function ProfitabilityCheckControl({
     );
 
     try {
-      const response = await fetch(
-        `/api/projects/${projectId}/profitability-check`,
-        {
-          method: "POST",
-          headers: { accept: "application/json" },
-          credentials: "same-origin",
-          signal: controller.signal,
-        },
-      );
+      const response = await fetch(actionUrl, {
+        method: "POST",
+        headers: { accept: "application/json" },
+        credentials: "same-origin",
+        signal: controller.signal,
+      });
       const payload = await readApiJson<ProfitabilityResponse>(
         response,
         localizedError("CHECK_FAILED", locale),
@@ -111,17 +116,16 @@ export function ProfitabilityCheckControl({
       if (!response.ok) {
         const code = payload.error ?? "CHECK_FAILED";
         if (code === "UNAUTHENTICATED") {
-          router.push(`/login?next=${encodeURIComponent(`/projects/${projectId}`)}`);
+          const next = focusedOfferId
+            ? `/projects/${projectId}?selectedOffer=${encodeURIComponent(focusedOfferId)}`
+            : `/projects/${projectId}`;
+          router.push(`/login?next=${encodeURIComponent(next)}`);
           return;
         }
         throw new Error(localizedError(code, locale));
       }
 
-      window.history.replaceState(
-        null,
-        "",
-        `/projects/${projectId}#workflow-step-decision`,
-      );
+      window.history.replaceState(null, "", decisionUrl);
       router.refresh();
     } catch (requestError) {
       const message = controller.signal.aborted
@@ -141,7 +145,7 @@ export function ProfitabilityCheckControl({
   return (
     <div className="profitability-check-control">
       <form
-        action={`/api/projects/${projectId}/profitability-check`}
+        action={actionUrl}
         method="post"
         onSubmit={submit}
       >
