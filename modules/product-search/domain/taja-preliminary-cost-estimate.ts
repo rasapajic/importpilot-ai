@@ -2,6 +2,7 @@ import { getImportCountryProfile } from "../../cost-engine/domain/import-country
 import {
   DEFAULT_EUR_FX_SNAPSHOT,
   convertToEur,
+  type FxSnapshot,
 } from "../../fx/euro-display";
 import {
   estimateProductLogistics,
@@ -188,12 +189,17 @@ function estimateConfidence(
  * explicitly disclosed EXW planning basis, but can never unlock FINAL status.
  * A known MOQ above the requested quantity blocks the estimate because the
  * displayed unit price is not proven to apply to the user's order quantity.
+ *
+ * Passing fxSnapshot=null intentionally disables non-EUR estimates. Omitting
+ * fxSnapshot preserves the deterministic reference snapshot used by offline
+ * tests and legacy internal callers.
  */
 export function estimateTajaPreliminaryLandedCost(input: {
   result: SupplierOfferSearchResult;
   quantity: number;
   targetCountry: string;
   targetMarginPercent: number;
+  fxSnapshot?: FxSnapshot | null;
 }): TajaPreliminaryCostEstimate | null {
   const { result, quantity, targetCountry, targetMarginPercent } = input;
   const profile = getImportCountryProfile(targetCountry);
@@ -209,7 +215,13 @@ export function estimateTajaPreliminaryLandedCost(input: {
   if (originStatus === "UNSUPPORTED" || !basis) return null;
   if (result.price === null || result.currency === null || result.price <= 0) return null;
 
-  const unitPriceEur = convertToEur(result.price, result.currency);
+  const conversionSnapshot = input.fxSnapshot === undefined
+    ? DEFAULT_EUR_FX_SNAPSHOT
+    : input.fxSnapshot;
+  if (result.currency !== "EUR" && conversionSnapshot === null) return null;
+  const unitPriceEur = result.currency === "EUR"
+    ? result.price
+    : convertToEur(result.price, result.currency, conversionSnapshot!);
   if (unitPriceEur === null || unitPriceEur <= 0) return null;
   const goodsCostEur = unitPriceEur * quantity;
   const logistics = estimateProductLogistics({
@@ -274,6 +286,7 @@ export function estimateTajaPreliminaryLandedCost(input: {
   }
   if (confidence === "LOW") warnings.push("LOW_LOGISTICS_CONFIDENCE");
 
+  const fxMetadata = conversionSnapshot ?? DEFAULT_EUR_FX_SNAPSHOT;
   return {
     version: TAJA_PRELIMINARY_COST_ESTIMATE_VERSION,
     currency: "EUR",
@@ -294,8 +307,8 @@ export function estimateTajaPreliminaryLandedCost(input: {
     pricingBasisAssumed: basis.assumed,
     vatRatePercent: Number(profile.defaultVatRate),
     customsDutyRateScenarios: [0, 5, 10],
-    fxSource: DEFAULT_EUR_FX_SNAPSHOT.source,
-    fxTimestamp: DEFAULT_EUR_FX_SNAPSHOT.timestamp,
+    fxSource: fxMetadata.source,
+    fxTimestamp: fxMetadata.timestamp,
     assumptions: [
       originStatus === "ASSUMED_MARKETPLACE"
         ? "Supplier country is missing; China is assumed only because the offer is on a China marketplace."
