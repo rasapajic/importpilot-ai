@@ -11,6 +11,7 @@ import { ProfitabilityRecoveryPanel } from "@/components/projects/profitability-
 import { ProjectBackLink } from "@/components/projects/project-back-link";
 import { ProjectWorkflowStep } from "@/components/projects/project-workflow-step";
 import { SimpleProfitabilityPanel } from "@/components/projects/simple-profitability-panel";
+import { SimpleSupplierOfferSearch } from "@/components/search/simple-supplier-offer-search";
 import { SupplierOfferSearch } from "@/components/search/supplier-offer-search";
 import { ProjectTimeline } from "@/components/timeline/project-timeline";
 import { requireSession } from "@/modules/auth/infrastructure/session";
@@ -146,6 +147,7 @@ export default async function ProjectPage({
   const decisionStepBadge = getDecisionStepBadge(decisionAreaStatus, locale);
   const mainProductImage = selectMainProjectImage(project.files);
   const vaultDocuments = excludeMainProjectImages(project.files);
+  const legacyUrlImport = resolvedSearchParams.importUrl === "1";
 
   return (
     <main className="dashboard-shell">
@@ -168,7 +170,6 @@ export default async function ProjectPage({
             <span className="workflow-product-summary">
               <span>📍 {targetCountryName}</span>
               <span>📦 {project.quantity} {t("kom")}</span>
-              <span>🎯 {t("Marža")} {project.targetMargin.toString()}%</span>
             </span>
           )}
           statusLabel={productStepDisplay.badge}
@@ -178,7 +179,6 @@ export default async function ProjectPage({
             <p>{t("Naziv proizvoda")}: <strong>{projectDisplayName}</strong></p>
             <p>{t("Ciljna zemlja")}: <strong>{targetCountryName}</strong></p>
             <p>{t("Količina")}: <strong>{project.quantity}</strong></p>
-            <p>{t("Ciljna marža")}: <strong>{project.targetMargin.toString()}%</strong></p>
             <ProductImageCard
               projectId={project.id}
               productName={projectDisplayName}
@@ -195,7 +195,7 @@ export default async function ProjectPage({
         </ProjectWorkflowStep>
 
         <ProjectWorkflowStep
-          forceOpen={resolvedSearchParams.importUrl === "1" || autoStartSupplierSearch}
+          forceOpen={legacyUrlImport || autoStartSupplierSearch}
           id="workflow-step-offer"
           number={2}
           title={offerStepDisplay.title}
@@ -204,16 +204,26 @@ export default async function ProjectPage({
           statusLabel={offerStepDisplay.badge}
           lockedText={lockedText}
         >
-          <SupplierOfferSearch
-            projectId={project.id}
-            productName={projectDisplayName}
-            quantity={project.quantity}
-            targetCountry={project.targetCountry}
-            openUrlImport={resolvedSearchParams.importUrl === "1"}
-            canDeleteSearch={canDeleteCurrentSearch}
-            autoStart={autoStartSupplierSearch}
-            initialOutcome={initialSupplierSearch}
-          />
+          {legacyUrlImport ? (
+            <SupplierOfferSearch
+              projectId={project.id}
+              productName={projectDisplayName}
+              quantity={project.quantity}
+              targetCountry={project.targetCountry}
+              openUrlImport
+              canDeleteSearch={canDeleteCurrentSearch}
+              initialOutcome={initialSupplierSearch}
+            />
+          ) : (
+            <SimpleSupplierOfferSearch
+              projectId={project.id}
+              productName={projectDisplayName}
+              quantity={project.quantity}
+              targetCountry={project.targetCountry}
+              autoStart={autoStartSupplierSearch}
+              initialOutcome={initialSupplierSearch}
+            />
+          )}
           {canDeleteCurrentSearch && (
             <div className="empty-search-delete-panel">
               <DeleteEmptySearchButton projectId={project.id} />
