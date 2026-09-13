@@ -1,15 +1,8 @@
 import type { ProjectDecisionStatusValue } from "../domain/project-decision";
 
 export function getSimplifiedNextActions(status: ProjectDecisionStatusValue) {
-  if (status === "READY_TO_BUY") {
-    return ["Zatraži uzorak", "Kontaktiraj dobavljača", "Izvezi PDF"];
-  }
-  if (status === "NEGOTIATE_FIRST") {
-    return ["Predloži poruku", "Traži bolju cenu", "Traži manji MOQ", "Izvezi PDF"];
-  }
-  if (status === "DO_NOT_BUY") {
-    // The recovery panel provides the single actionable CTA with a calculated price cap.
+  if (status === "READY_TO_BUY" || status === "NEGOTIATE_FIRST" || status === "DO_NOT_BUY") {
     return [];
   }
-  return ["Generiši odluku"];
+  return ["Pronađi bolje ponude"];
 }
