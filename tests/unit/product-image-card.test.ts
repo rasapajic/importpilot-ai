@@ -25,11 +25,11 @@ const storageSource = readFileSync(
 );
 
 describe("product image card", () => {
-  it("places one main product image inside the selected-product step", () => {
-    expect(pageSource).toContain("ProductImageCard");
-    expect(pageSource).toContain("selectMainProjectImage(project.files)");
-    expect(pageSource).toContain("excludeMainProjectImages(project.files)");
-    expect(pageSource).toContain("image={mainProductImage");
+  it("keeps product-image tooling out of the frozen ImportPilot 1.0 project flow", () => {
+    expect(pageSource).not.toContain("ProductImageCard");
+    expect(pageSource).not.toContain("selectMainProjectImage(project.files)");
+    expect(pageSource).not.toContain("excludeMainProjectImages(project.files)");
+    expect(componentSource).toContain("ProductImageCard");
   });
 
   it("supports private upload, drag and drop, gallery selection and phone camera", () => {
