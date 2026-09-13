@@ -3,24 +3,19 @@ import { describe, expect, it } from "vitest";
 import { getSimplifiedNextActions } from "../../modules/decisions/application/simplified-next-actions";
 
 describe("simplified next actions", () => {
-  it("returns purchase actions for KUPI", () => {
-    expect(getSimplifiedNextActions("READY_TO_BUY")).toEqual([
-      "Zatraži uzorak",
-      "Kontaktiraj dobavljača",
-      "Izvezi PDF",
-    ]);
+  it("does not surface 2.0 purchase actions after BUY", () => {
+    expect(getSimplifiedNextActions("READY_TO_BUY")).toEqual([]);
   });
 
-  it("returns negotiation actions for PREGOVARAJ", () => {
-    expect(getSimplifiedNextActions("NEGOTIATE_FIRST")).toEqual([
-      "Predloži poruku",
-      "Traži bolju cenu",
-      "Traži manji MOQ",
-      "Izvezi PDF",
-    ]);
+  it("does not surface the 2.0 negotiation assistant after NEGOTIATE", () => {
+    expect(getSimplifiedNextActions("NEGOTIATE_FIRST")).toEqual([]);
   });
 
-  it("leaves the unprofitable action to the recovery panel", () => {
+  it("keeps final SKIP free of recovery-panel actions", () => {
     expect(getSimplifiedNextActions("DO_NOT_BUY")).toEqual([]);
+  });
+
+  it("keeps WATCH focused on finding better offers", () => {
+    expect(getSimplifiedNextActions("NEED_MORE_OFFERS")).toEqual(["Pronađi bolje ponude"]);
   });
 });
