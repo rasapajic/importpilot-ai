@@ -19,7 +19,11 @@ import {
   type LandedCostAssumptions,
 } from "@/modules/cost-engine/domain/serbia-landed-cost";
 import { getAutomaticVatRate, resolveVatRate } from "@/modules/cost-engine/domain/vat-rates";
-import { getEuroDisplay } from "@/modules/fx/euro-display";
+import {
+  convertFromEur,
+  convertToEur,
+  getEuroDisplay,
+} from "@/modules/fx/euro-display";
 import { getStatusLabel } from "@/modules/i18n/translations";
 
 function safeAmount(value: string) {
@@ -99,16 +103,27 @@ export function CostCalculatorForm({
     landedCostTotal: getEuroDisplay(latestCalculation.landedCostTotal, currency),
     expectedProfit: getEuroDisplay(profit.totalProfit, currency),
   } : null;
+  const previousSellingPriceEur = values.targetSellingPrice
+    ? convertToEur(values.targetSellingPrice, currency)
+    : null;
+  const sellingPriceDefault = previousSellingPriceEur === null
+    ? ""
+    : previousSellingPriceEur.toFixed(2);
   const confirmCostsLabel = locale === "de"
     ? "Importkosten prüfen und bestätigen"
     : locale === "en"
       ? "Review and confirm import costs"
       : "Proverite i potvrdite uvozne troškove";
   const sellingPriceHelp = locale === "de"
-    ? "Geben Sie Ihren Verkaufspreis ein. ImportPilot berechnet den Gewinn nach Bestätigung der Importkosten."
+    ? `Verkaufspreis in EUR. ImportPilot rechnet ihn intern in ${currency} um, damit alle Kosten in derselben Währung berechnet werden.`
     : locale === "en"
-      ? "Enter your selling price. ImportPilot calculates profit after the import costs are confirmed."
-      : "Unesite svoju prodajnu cenu. ImportPilot računa zaradu nakon potvrde uvoznih troškova.";
+      ? `Selling price in EUR. ImportPilot converts it internally to ${currency} so every cost is calculated in one currency.`
+      : `Prodajnu cenu unosite u EUR. ImportPilot je interno pretvara u ${currency}, tako da se svi troškovi računaju u istoj valuti.`;
+  const fxUnavailableError = locale === "de"
+    ? `Für ${currency} ist kein Referenzkurs verfügbar. Die Kalkulation kann noch nicht gespeichert werden.`
+    : locale === "en"
+      ? `No reference FX rate is available for ${currency}. The calculation cannot be saved yet.`
+      : `Za ${currency} nema referentnog kursa. Računica još ne može da se sačuva.`;
 
   useEffect(() => {
     if (!editInitially) return;
@@ -121,6 +136,20 @@ export function CostCalculatorForm({
     setError("");
     const form = new FormData(event.currentTarget);
     const body: Record<string, FormDataEntryValue | boolean> = Object.fromEntries(form.entries());
+    const sellingPriceEur = Number(form.get("targetSellingPriceEur"));
+    const sellingPriceInOfferCurrency = convertFromEur(sellingPriceEur, currency);
+    if (
+      !Number.isFinite(sellingPriceEur) ||
+      sellingPriceEur <= 0 ||
+      sellingPriceInOfferCurrency === null ||
+      sellingPriceInOfferCurrency <= 0
+    ) {
+      setError(fxUnavailableError);
+      setPending(false);
+      return;
+    }
+    body.targetSellingPrice = sellingPriceInOfferCurrency.toFixed(2);
+    delete body.targetSellingPriceEur;
     body.transportConfirmed = !isPrimaryCountry || form.has("transportConfirmed");
     body.customsDutyConfirmed = !isPrimaryCountry || form.has("customsDutyConfirmed");
     body.vatSource = overrideVat
@@ -156,10 +185,11 @@ export function CostCalculatorForm({
       {editing && (
         <form className="cost-form" onSubmit={submit}>
           <label className="cost-form-wide">
-            {copy.sellingPrice} ({currency})
-            <input defaultValue={values.targetSellingPrice} min="0.01" name="targetSellingPrice" required step="0.01" type="number" />
+            {copy.sellingPrice} (EUR)
+            <input defaultValue={sellingPriceDefault} min="0.01" name="targetSellingPriceEur" required step="0.01" type="number" />
           </label>
           <p className="muted-text cost-form-wide">{sellingPriceHelp}</p>
+          {currency !== "EUR" && <div className="cost-form-wide"><FxSourceNote /></div>}
 
           <details className="advanced-costs cost-form-wide" open={editInitially}>
             <summary>{confirmCostsLabel}</summary>
