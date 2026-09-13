@@ -6,11 +6,15 @@ import {
   deletableManualOfferFilter,
   tenantOfferFilter,
 } from "@/modules/offers/domain/offer-access";
-import type { manualOfferSchema } from "@/modules/offers/domain/offer-validation";
+import type {
+  commercialTermsSchema,
+  manualOfferSchema,
+} from "@/modules/offers/domain/offer-validation";
 import { findOrganizationProject } from "@/modules/projects/application/project-service";
 import { recordProjectActivity } from "@/modules/timeline/application/timeline-service";
 
 type ManualOfferInput = z.infer<typeof manualOfferSchema>;
+type CommercialTermsInput = z.infer<typeof commercialTermsSchema>;
 
 export class OfferProjectNotFoundError extends Error {}
 export class OfferNotFoundError extends Error {}
@@ -63,6 +67,28 @@ export async function updateManualOffer(
         offer.extractionStatus === OfferExtractionStatus.EXTRACTED
           ? OfferExtractionStatus.REVIEWED
           : offer.extractionStatus,
+    },
+  });
+}
+
+export async function updateOfferCommercialTerms(
+  offerId: string,
+  organizationId: string,
+  input: CommercialTermsInput,
+) {
+  const offer = await prisma.supplierOffer.findFirst({
+    where: tenantOfferFilter(offerId, organizationId),
+    select: { id: true },
+  });
+  if (!offer) throw new OfferNotFoundError();
+
+  return prisma.supplierOffer.update({
+    where: { id: offerId },
+    data: {
+      unitPrice: input.unitPrice,
+      currency: input.currency,
+      incoterm: input.incoterm,
+      deliveryTimeDays: input.deliveryTimeDays,
     },
   });
 }
