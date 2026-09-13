@@ -11,6 +11,10 @@ const transportSource = readFileSync(
   join(process.cwd(), "components/costs/transport-cost-assistant.tsx"),
   "utf8",
 );
+const fxRouteSource = readFileSync(
+  join(process.cwd(), "app/api/fx/latest/route.ts"),
+  "utf8",
+);
 
 describe("ImportPilot 1.0 profitability entry", () => {
   it("keeps the user selling price in EUR before the technical-cost disclosure", () => {
@@ -23,16 +27,27 @@ describe("ImportPilot 1.0 profitability entry", () => {
     expect(sellingPrice).toBeLessThan(importCostDetails);
   });
 
+  it("requires a fresh authenticated ECB snapshot for non-EUR calculation", () => {
+    expect(source).toContain('fetch("/api/fx/latest"');
+    expect(source).toContain('fxStatus !== "ready"');
+    expect(source).toContain('disabled={pending || fxStatus !== "ready"}');
+    expect(source).toContain("Za ${currency} nema svežeg ECB referentnog kursa");
+    expect(fxRouteSource).toContain("authenticateRequest");
+    expect(fxRouteSource).toContain("getLatestEcbFxSnapshot");
+    expect(fxRouteSource).toContain("status: 503");
+  });
+
   it("converts the EUR selling price into the offer currency before backend calculation", () => {
-    expect(source).toContain("convertFromEur(sellingPriceEur, currency)");
+    expect(source).toContain("convertFromEur(sellingPriceEur, currency, fxSnapshot)");
     expect(source).toContain("body.targetSellingPrice = sellingPriceInOfferCurrency.toFixed(2)");
     expect(source).toContain("delete body.targetSellingPriceEur");
   });
 
   it("converts EUR transport estimates before applying them to offer-currency fields", () => {
-    expect(transportSource).toContain("convertFromEur(route.estimatedCostEur, currency)");
+    expect(transportSource).toContain("convertFromEur(route.estimatedCostEur, currency, fxSnapshot)");
     expect(transportSource).toContain("onApply(formatCurrency(convertedCost))");
     expect(transportSource).not.toContain("onApply(route.estimatedCostEur.toFixed(2))");
+    expect(transportSource).toContain("A fresh ECB exchange rate is required");
   });
 
   it("puts technical import inputs behind progressive disclosure", () => {
