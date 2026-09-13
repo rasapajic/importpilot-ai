@@ -1,19 +1,12 @@
-import { ProjectActivityType } from "@prisma/client";
 import { notFound } from "next/navigation";
 
-import { NegotiationAssistant } from "@/components/negotiation/negotiation-assistant";
 import { OffersPanel } from "@/components/offers/offers-panel";
 import { DeleteEmptySearchButton } from "@/components/projects/delete-empty-search-button";
-import { DirectUploadForm } from "@/components/projects/direct-upload-form";
-import { MobileWorkflowActionBar } from "@/components/projects/mobile-workflow-action-bar";
-import { ProductImageCard } from "@/components/projects/product-image-card";
-import { ProfitabilityRecoveryPanel } from "@/components/projects/profitability-recovery-panel";
 import { ProjectBackLink } from "@/components/projects/project-back-link";
 import { ProjectWorkflowStep } from "@/components/projects/project-workflow-step";
 import { SimpleProfitabilityPanel } from "@/components/projects/simple-profitability-panel";
 import { SimpleSupplierOfferSearch } from "@/components/search/simple-supplier-offer-search";
 import { SupplierOfferSearch } from "@/components/search/supplier-offer-search";
-import { ProjectTimeline } from "@/components/timeline/project-timeline";
 import { requireSession } from "@/modules/auth/infrastructure/session";
 import {
   getDecisionStepSummary,
@@ -24,26 +17,19 @@ import { getLatestProjectDecision } from "@/modules/decisions/application/projec
 import { getCountryDisplayName } from "@/modules/i18n/country-names";
 import { getServerLocale } from "@/modules/i18n/server";
 import { getStatusLabel, translateText } from "@/modules/i18n/translations";
-import { listNegotiationMessages } from "@/modules/negotiation/application/negotiation-service";
 import { loadCachedProjectSupplierOffers } from "@/modules/product-search/application/product-search-service";
 import { getProject } from "@/modules/projects/application/project-service";
 import { canDeleteEmptySearch } from "@/modules/projects/domain/empty-search-deletion";
-import { getMobileWorkflowActions } from "@/modules/projects/domain/mobile-workflow-actions";
 import {
   getProjectWorkflow,
   type ProjectWorkflowStepId,
   type ProjectWorkflowStepStatus,
 } from "@/modules/projects/domain/project-workflow";
 import {
-  excludeMainProjectImages,
-  selectMainProjectImage,
-} from "@/modules/projects/domain/product-image";
-import {
   getDecisionStepBadge,
   getOfferStepDisplay,
   getProductStepDisplay,
 } from "@/modules/projects/domain/workflow-step-display";
-import { listProjectActivities } from "@/modules/timeline/application/timeline-service";
 
 export default async function ProjectPage({
   params,
@@ -51,7 +37,6 @@ export default async function ProjectPage({
 }: {
   params: Promise<{ projectId: string }>;
   searchParams: Promise<{
-    activityType?: string;
     autoSearch?: string;
     editCalculationOffer?: string;
     importUrl?: string;
@@ -67,7 +52,6 @@ export default async function ProjectPage({
 
   const projectDisplayName = t(project.name);
   const decision = await getLatestProjectDecision(projectId, auth.membership.organizationId);
-  const messages = await listNegotiationMessages(projectId, auth.membership.organizationId);
   const resolvedSearchParams = await searchParams;
   const autoStartSupplierSearch = resolvedSearchParams.autoSearch === "1";
   const initialSupplierSearch = autoStartSupplierSearch
@@ -83,22 +67,11 @@ export default async function ProjectPage({
           privateLabel: false,
         },
       );
-  const requestedType = resolvedSearchParams.activityType;
   const selectedCalculationOfferId = project.offers.some(
     (offer) => offer.id === resolvedSearchParams.editCalculationOffer && offer.costCalculations.length > 0,
   )
     ? resolvedSearchParams.editCalculationOffer
     : undefined;
-  const activityType = Object.values(ProjectActivityType).includes(
-    requestedType as ProjectActivityType,
-  )
-    ? (requestedType as ProjectActivityType)
-    : undefined;
-  const activities = await listProjectActivities(
-    projectId,
-    auth.membership.organizationId,
-    activityType,
-  );
 
   const offerCount = project.offers.length;
   const calculatedOffers = project.offers.filter((offer) => offer.costCalculations.length > 0);
@@ -130,14 +103,6 @@ export default async function ProjectPage({
     : hasFinalRecommendation
       ? "COMPLETED"
       : "ACTIVE";
-  const mobileWorkflowActions = getMobileWorkflowActions({
-    projectId: project.id,
-    offerCount,
-    calculatedOfferCount,
-    assessedOfferCount,
-    hasFinalRecommendation,
-    decisionStatus: decision?.status ?? null,
-  });
   const targetCountryName = getCountryDisplayName(project.targetCountry, locale);
   const lockedText = t("Završite prethodni korak da biste nastavili.");
   const productStepDisplay = getProductStepDisplay(stepStatus.PRODUCT, locale);
@@ -145,8 +110,6 @@ export default async function ProjectPage({
   const decisionStepTitle = getDecisionStepTitle(decision?.status, locale);
   const decisionStepSummary = getDecisionStepSummary(decision?.status, locale);
   const decisionStepBadge = getDecisionStepBadge(decisionAreaStatus, locale);
-  const mainProductImage = selectMainProjectImage(project.files);
-  const vaultDocuments = excludeMainProjectImages(project.files);
   const legacyUrlImport = resolvedSearchParams.importUrl === "1";
 
   return (
@@ -179,18 +142,6 @@ export default async function ProjectPage({
             <p>{t("Naziv proizvoda")}: <strong>{projectDisplayName}</strong></p>
             <p>{t("Ciljna zemlja")}: <strong>{targetCountryName}</strong></p>
             <p>{t("Količina")}: <strong>{project.quantity}</strong></p>
-            <ProductImageCard
-              projectId={project.id}
-              productName={projectDisplayName}
-              image={mainProductImage
-                ? {
-                    id: mainProductImage.id,
-                    originalFilename: mainProductImage.originalFilename,
-                    mimeType: mainProductImage.mimeType,
-                    size: String(mainProductImage.size),
-                  }
-                : null}
-            />
           </section>
         </ProjectWorkflowStep>
 
@@ -229,15 +180,18 @@ export default async function ProjectPage({
               <DeleteEmptySearchButton projectId={project.id} />
             </div>
           )}
-          <OffersPanel
-            projectId={project.id}
-            projectName={projectDisplayName}
-            targetCountry={project.targetCountry}
-            projectQuantity={project.quantity}
-            offers={project.offers}
-            showCosts={false}
-            showAssessments={false}
-          />
+          {offerCount > 0 && (
+            <OffersPanel
+              projectId={project.id}
+              projectName={projectDisplayName}
+              targetCountry={project.targetCountry}
+              projectQuantity={project.quantity}
+              offers={project.offers}
+              showAddControls={false}
+              showCosts={false}
+              showAssessments={false}
+            />
+          )}
         </ProjectWorkflowStep>
 
         <ProjectWorkflowStep
@@ -261,47 +215,8 @@ export default async function ProjectPage({
             selectedCalculationOfferId={selectedCalculationOfferId}
             profitabilityError={resolvedSearchParams.profitabilityError}
           />
-          <ProfitabilityRecoveryPanel
-            projectId={project.id}
-            targetCountry={project.targetCountry}
-            projectTargetMargin={Number(project.targetMargin.toString())}
-            offers={project.offers}
-            decision={decision}
-          />
-          {decision?.status === "NEGOTIATE_FIRST" && (
-            <div id="negotiation-assistant">
-              <NegotiationAssistant projectId={project.id} canGenerate messages={messages} />
-            </div>
-          )}
         </ProjectWorkflowStep>
       </div>
-
-      <section className="secondary-project-sections">
-        <h2>{t("Dodatne informacije")}</h2>
-        <details className="dashboard-card secondary-project-section" id="documents">
-          <summary>
-            <strong>{t("Uvozni dokumenti")}</strong>
-            <span>{vaultDocuments.length}</span>
-          </summary>
-          <p>{t("Ponude, proforme, transportne ponude i slike proizvoda na jednom mestu.")}</p>
-          <DirectUploadForm
-            projectId={project.id}
-            offers={project.offers.map((offer) => ({
-              id: offer.id,
-              supplierName: offer.supplierName,
-            }))}
-            documents={vaultDocuments.map((file) => ({
-              id: file.id,
-              originalFilename: file.originalFilename,
-              size: String(file.size),
-              documentType: file.documentType,
-              linkedOffer: file.linkedOffer,
-            }))}
-          />
-        </details>
-        <ProjectTimeline activities={activities ?? []} selectedType={activityType} />
-      </section>
-      <MobileWorkflowActionBar actions={mobileWorkflowActions} locale={locale} />
     </main>
   );
 }
