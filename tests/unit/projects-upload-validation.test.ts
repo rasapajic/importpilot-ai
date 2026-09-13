@@ -24,7 +24,7 @@ describe("project validation", () => {
     });
   });
 
-  it("uses the internal 1.0 margin default when the simple search omits it", () => {
+  it("uses a neutral 1.0 margin default when the simple search omits it", () => {
     const result = createProjectSchema.parse({
       name: "USB-C 100W cable",
       targetCountry: "AT",
@@ -34,7 +34,7 @@ describe("project validation", () => {
     expect(result).toMatchObject({
       targetCountry: "AT",
       quantity: 250,
-      targetMargin: 25,
+      targetMargin: 0,
     });
   });
 
