@@ -14,6 +14,18 @@ const optionalBoolean = z.preprocess(
   z.boolean().nullable(),
 );
 
+export const commercialTermsSchema = z
+  .object({
+    unitPrice: z.coerce.number().positive().finite(),
+    currency: z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/),
+    incoterm: z.string().trim().toUpperCase().min(2).max(20),
+    deliveryTimeDays: z.preprocess(
+      (value) => (value === "" || value === null || value === undefined ? null : Number(value)),
+      z.number().int().nonnegative().nullable(),
+    ),
+  })
+  .strict();
+
 export const manualOfferSchema = z
   .object({
     supplierName: z.string().trim().min(1).max(200),
