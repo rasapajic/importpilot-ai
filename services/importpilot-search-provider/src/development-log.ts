@@ -4,7 +4,11 @@ export type DevelopmentLogger = (
 ) => void;
 
 const PRODUCTION_SAFE_EVENTS = new Set([
+  "provider_attempt",
   "provider_attempt_failed",
+  "provider_relevance_filter",
+  "provider_aggregation_complete",
+  "provider_final_result",
 ]);
 
 export function createDevelopmentLogger(
