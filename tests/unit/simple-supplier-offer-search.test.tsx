@@ -43,12 +43,13 @@ describe("ImportPilot 1.0 simple supplier results", () => {
     expect(projectSource).not.toContain('t("Ciljna marža")');
   });
 
-  it("keeps 2.0 tools off the normal 1.0 project screen", () => {
+  it("keeps 2.0 tools and duplicate offer lists off the normal 1.0 project screen", () => {
     expect(projectSource).not.toContain("ProfitabilityRecoveryPanel");
     expect(projectSource).not.toContain("NegotiationAssistant");
     expect(projectSource).not.toContain("ProjectTimeline");
     expect(projectSource).not.toContain("DirectUploadForm");
     expect(projectSource).not.toContain("MobileWorkflowActionBar");
-    expect(projectSource).toContain("showAddControls={false}");
+    expect(projectSource).not.toContain("OffersPanel");
+    expect(projectSource).toContain("Unesite svoju prodajnu cenu");
   });
 });
