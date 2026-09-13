@@ -19,8 +19,14 @@ function acceptsHtml(request: NextRequest) {
   return request.headers.get("accept")?.includes("text/html") ?? false;
 }
 
-function projectRedirect(request: NextRequest, projectId: string, error?: string) {
+function projectRedirect(
+  request: NextRequest,
+  projectId: string,
+  error?: string,
+  offerId?: string,
+) {
   const url = new URL(`/projects/${projectId}`, request.url);
+  if (offerId) url.searchParams.set("selectedOffer", offerId);
   if (error) url.searchParams.set("profitabilityError", error);
   url.hash = "workflow-step-decision";
   return NextResponse.redirect(url, 303);
@@ -43,6 +49,7 @@ function withProfitabilityTimeout<T>(operation: Promise<T>) {
 async function runProfitabilityRequest(
   request: NextRequest,
   projectId: string,
+  offerId?: string,
 ): Promise<ProfitabilityRequestResult> {
   const auth = await authenticateRequest(request);
   if (!auth) return { kind: "UNAUTHENTICATED" };
@@ -50,6 +57,7 @@ async function runProfitabilityRequest(
   const decision = await checkProjectProfitability(
     projectId,
     auth.membership.organizationId,
+    offerId,
   );
   return { kind: "SUCCESS", decision };
 }
@@ -59,6 +67,7 @@ function logLifecycle(
   projectId: string,
   startedAt: number,
   code?: string,
+  offerId?: string,
 ) {
   if (process.env.NODE_ENV !== "development") return;
   console.info(JSON.stringify({
@@ -66,6 +75,7 @@ function logLifecycle(
     event: `profitability_check_${event}`,
     projectId,
     durationMs: Date.now() - startedAt,
+    ...(offerId ? { offerId } : {}),
     ...(code ? { code } : {}),
   }));
 }
@@ -76,25 +86,28 @@ export async function POST(
 ) {
   const startedAt = Date.now();
   const { projectId } = await params;
+  const offerId = request.nextUrl.searchParams.get("offerId") || undefined;
 
   try {
     const result = await withProfitabilityTimeout(
-      runProfitabilityRequest(request, projectId),
+      runProfitabilityRequest(request, projectId, offerId),
     );
 
     if (result.kind === "UNAUTHENTICATED") {
-      logLifecycle("failed", projectId, startedAt, "UNAUTHENTICATED");
+      logLifecycle("failed", projectId, startedAt, "UNAUTHENTICATED", offerId);
       if (acceptsHtml(request)) {
         const login = new URL("/login", request.url);
-        login.searchParams.set("next", `/projects/${projectId}`);
+        const next = new URL(`/projects/${projectId}`, request.url);
+        if (offerId) next.searchParams.set("selectedOffer", offerId);
+        login.searchParams.set("next", `${next.pathname}${next.search}`);
         return NextResponse.redirect(login, 303);
       }
       return NextResponse.json({ error: "UNAUTHENTICATED" }, { status: 401 });
     }
 
-    logLifecycle("completed", projectId, startedAt);
+    logLifecycle("completed", projectId, startedAt, undefined, offerId);
     return acceptsHtml(request)
-      ? projectRedirect(request, projectId)
+      ? projectRedirect(request, projectId, undefined, offerId)
       : NextResponse.json(result.decision, { status: 201 });
   } catch (error) {
     const code = error instanceof ProfitabilityNoCalculatedOffersError
@@ -110,9 +123,9 @@ export async function POST(
         ? 500
         : 400;
 
-    logLifecycle("failed", projectId, startedAt, code);
+    logLifecycle("failed", projectId, startedAt, code, offerId);
     return acceptsHtml(request)
-      ? projectRedirect(request, projectId, code)
+      ? projectRedirect(request, projectId, code, offerId)
       : NextResponse.json({ error: code }, { status });
   }
 }
