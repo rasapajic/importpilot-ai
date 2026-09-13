@@ -170,15 +170,9 @@ export function CostCalculatorForm({
       : "Učitavam najnoviji ECB referentni kurs...";
 
   useEffect(() => {
-    if (currency === "EUR") {
-      setFxSnapshot(DEFAULT_EUR_FX_SNAPSHOT);
-      setFxStatus("ready");
-      return;
-    }
+    if (currency === "EUR") return;
 
     const controller = new AbortController();
-    setFxSnapshot(null);
-    setFxStatus("loading");
     void fetch("/api/fx/latest", { signal: controller.signal })
       .then(async (response) => {
         const payload = await response.json().catch(() => null);
