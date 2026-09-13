@@ -3,7 +3,11 @@
 import { useMemo, useState } from "react";
 
 import { useI18n } from "@/components/i18n/i18n-provider";
-import { convertFromEur, formatCurrency } from "@/modules/fx/euro-display";
+import {
+  convertFromEur,
+  formatCurrency,
+  type FxSnapshot,
+} from "@/modules/fx/euro-display";
 import {
   estimateProductLogistics,
   estimateTransportRoutes,
@@ -40,12 +44,14 @@ export function TransportCostAssistant({
   quantity,
   currency,
   sourceMetadata,
+  fxSnapshot,
   onApply,
 }: {
   productName: string;
   quantity: number;
   currency: string;
   sourceMetadata?: unknown;
+  fxSnapshot?: FxSnapshot | null;
   onApply: (value: string) => void;
 }) {
   const { t } = useI18n();
@@ -104,7 +110,11 @@ export function TransportCostAssistant({
 
       <div className="transport-route-grid">
         {routes.map((route) => {
-          const convertedCost = convertFromEur(route.estimatedCostEur, currency);
+          const convertedCost = currency === "EUR"
+            ? route.estimatedCostEur
+            : fxSnapshot
+              ? convertFromEur(route.estimatedCostEur, currency, fxSnapshot)
+              : null;
           return (
             <article key={route.mode}>
               <strong>{t(routeLabel(route.mode))}</strong>
@@ -131,7 +141,9 @@ export function TransportCostAssistant({
 
       {currency !== "EUR" && (
         <p className="warning-text">
-          {t("Transport estimates are shown in EUR and converted into the offer currency before saving.")}
+          {fxSnapshot
+            ? t("Transport estimates are shown in EUR and converted into the offer currency before saving.")
+            : t("A fresh ECB exchange rate is required before an EUR transport estimate can be applied.")}
         </p>
       )}
 
