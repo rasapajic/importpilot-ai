@@ -41,15 +41,16 @@ describe("simple client workflow", () => {
     expect(pageSource).not.toContain('title={t("Realna nabavna cena")}');
   });
 
-  it("uses one bounded request to assess calculated offers and generate the decision", () => {
+  it("uses one bounded request to assess the focused calculated offer and generate the decision", () => {
     expect(profitabilitySource).toContain("Proveri isplativost");
     expect(profitabilitySource).toContain("ProfitabilityCheckControl");
-    expect(profitabilityControlSource).toContain('action={`/api/projects/${projectId}/profitability-check`}');
+    expect(profitabilityControlSource).toContain("const actionUrl = focusedOfferId");
+    expect(profitabilityControlSource).toContain("action={actionUrl}");
     expect(profitabilityControlSource).toContain('method="post"');
     expect(profitabilityControlSource).toContain("onSubmit={submit}");
     expect(profitabilityControlSource).toContain("AbortController");
     expect(profitabilityServiceSource).toContain("assessSupplierOffer");
-    expect(profitabilityServiceSource).toContain("generateProjectDecision");
+    expect(profitabilityServiceSource).toContain("generateProjectDecision(projectId, organizationId, offerId)");
     expect(profitabilitySource).not.toContain("LUNA_COUNTRY_RANKING_V1");
     expect(profitabilitySource).not.toContain("countryProfileVersion");
   });
