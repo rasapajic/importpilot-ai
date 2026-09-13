@@ -9,7 +9,7 @@ export const createProjectSchema = z.object({
   name: z.string().trim().min(2).max(160),
   targetCountry: targetCountrySchema,
   quantity: z.coerce.number().int().positive().max(2_147_483_647),
-  targetMargin: z.coerce.number().min(0).max(100).default(25),
+  targetMargin: z.coerce.number().min(0).max(100).default(0),
 });
 
 export const listProjectsSchema = z.object({
