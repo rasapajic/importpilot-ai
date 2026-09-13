@@ -36,6 +36,15 @@ describe("ImportPilot 1.0 simple supplier results", () => {
     expect(resultsSource).not.toContain("preparedQueries");
   });
 
+  it("opens the exact selected offer directly in the decision step", () => {
+    expect(resultsSource).toContain("existingOfferId?: string");
+    expect(resultsSource).toContain("selectedOffer=${encodeURIComponent(selectedOfferId)}#workflow-step-decision");
+    expect(projectSource).toContain("selectedOffer?: string");
+    expect(projectSource).toContain("const focusedOfferId = project.offers.some");
+    expect(projectSource).toContain("focusedOfferId={focusedOfferId}");
+    expect(projectSource).toContain("Boolean(selectedCalculationOfferId || focusedOfferId)");
+  });
+
   it("uses the simple results screen in the normal project flow and keeps legacy URL import isolated", () => {
     expect(projectSource).toContain("<SimpleSupplierOfferSearch");
     expect(projectSource).toContain("legacyUrlImport ?");
