@@ -9,9 +9,9 @@ const source = readFileSync(
 );
 
 describe("ImportPilot 1.0 profitability entry", () => {
-  it("keeps the user selling price as the primary visible input", () => {
+  it("keeps the user selling price before the technical-cost disclosure", () => {
     const sellingPrice = source.indexOf('name="targetSellingPrice"');
-    const importCostDetails = source.indexOf("Proverite i potvrdite uvozne troškove");
+    const importCostDetails = source.indexOf('<details className="advanced-costs cost-form-wide" open={editInitially}>');
 
     expect(sellingPrice).toBeGreaterThan(-1);
     expect(importCostDetails).toBeGreaterThan(-1);
@@ -26,10 +26,11 @@ describe("ImportPilot 1.0 profitability entry", () => {
   });
 
   it("still requires explicit import-cost review instead of silently treating unknown costs as free", () => {
-    const summary = source.indexOf("Proverite i potvrdite uvozne troškove");
+    const details = source.indexOf('<details className="advanced-costs cost-form-wide" open={editInitially}>');
     const submit = source.indexOf('type="submit"');
 
-    expect(summary).toBeGreaterThan(-1);
-    expect(submit).toBeGreaterThan(summary);
+    expect(details).toBeGreaterThan(-1);
+    expect(submit).toBeGreaterThan(details);
+    expect(source).toContain("Proverite i potvrdite uvozne troškove");
   });
 });
