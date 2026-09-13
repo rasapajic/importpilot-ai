@@ -6,15 +6,33 @@ on:
     branches:
       - main
       - "feature/**"
+      - "release/**"
   workflow_dispatch:
 
 jobs:
   validate:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: tradepilot
+          POSTGRES_PASSWORD: tradepilot
+          POSTGRES_DB: tradepilot
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U tradepilot -d tradepilot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+
     env:
       NODE_ENV: test
       DATABASE_URL: postgresql://tradepilot:tradepilot@localhost:5432/tradepilot?schema=public
+      TEST_DATABASE_URL: postgresql://tradepilot:tradepilot@localhost:5432/tradepilot?schema=public
       S3_ENDPOINT: http://localhost:9000
       S3_PUBLIC_ENDPOINT: http://localhost:9000
       S3_REGION: eu-central-1
@@ -26,6 +44,9 @@ jobs:
       SUPPLIER_SEARCH_PROVIDER_TOKEN: ""
       URL_IMPORT_PROVIDER_URL: ""
       URL_IMPORT_PROVIDER_TOKEN: ""
+      GOOGLE_CLIENT_ID: ""
+      GOOGLE_CLIENT_SECRET: ""
+      GOOGLE_OAUTH_REDIRECT_URI: ""
 
     steps:
       - name: Checkout
@@ -40,8 +61,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Production dependency audit
+        run: node scripts/check-production-dependency-audit.mjs
+
       - name: Generate Prisma client
         run: npm run db:generate
+
+      - name: Apply database migrations
+        run: npm run db:migrate:deploy
 
       - name: Lint
         run: npm run lint
@@ -49,10 +76,31 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Unit and integration test suite
+      - name: Production config preflight self-test
+        env:
+          DATABASE_URL: postgresql://release:release@db.internal:5432/importpilot?schema=public
+          S3_ENDPOINT: https://storage.internal.example
+          S3_PUBLIC_ENDPOINT: https://files.importpilot.example
+          S3_REGION: eu-central-1
+          S3_BUCKET: importpilot-private
+          S3_ACCESS_KEY: release-access-key
+          S3_SECRET_KEY: release-secret-key-123456789
+          SUPPLIER_SEARCH_PROVIDER_URL: https://search.importpilot.example/search
+          SUPPLIER_SEARCH_PROVIDER_TOKEN: search-provider-token-123456789
+          URL_IMPORT_PROVIDER_URL: https://url-import.importpilot.example/preview
+          URL_IMPORT_PROVIDER_TOKEN: url-import-provider-token-123456789
+          GOOGLE_CLIENT_ID: importpilot.apps.googleusercontent.com
+          GOOGLE_CLIENT_SECRET: google-client-secret-123456789
+          GOOGLE_OAUTH_REDIRECT_URI: https://app.importpilot.example/api/auth/google/callback
+        run: npm run check:production-config
+
+      - name: Unit and database integration test suite
         run: npm test
 
       - name: Production build
         env:
           NODE_ENV: production
         run: npm run build
+
+      - name: Built-app production smoke
+        run: node scripts/ci-production-smoke.mjs

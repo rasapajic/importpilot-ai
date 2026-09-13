@@ -5,6 +5,10 @@ export type RequestContext = {
   userAgent: string | null;
 };
 
+function firstForwardedValue(value: string | null) {
+  return value?.split(",")[0]?.trim() || null;
+}
+
 export function getRequestContext(request: NextRequest): RequestContext {
   const forwardedFor = request.headers.get("x-forwarded-for");
 
@@ -16,5 +20,21 @@ export function getRequestContext(request: NextRequest): RequestContext {
 
 export function isSameOrigin(request: NextRequest) {
   const origin = request.headers.get("origin");
-  return origin === request.nextUrl.origin;
+  if (!origin) return false;
+
+  const host =
+    firstForwardedValue(request.headers.get("x-forwarded-host")) ||
+    request.headers.get("host")?.trim() ||
+    request.nextUrl.host;
+  const protocol =
+    firstForwardedValue(request.headers.get("x-forwarded-proto")) ||
+    request.nextUrl.protocol.replace(/:$/, "");
+
+  if (!host || !protocol) return false;
+
+  try {
+    return new URL(origin).origin === new URL(`${protocol}://${host}`).origin;
+  } catch {
+    return false;
+  }
 }

@@ -93,10 +93,10 @@ export async function createCostCalculation(
     targetSellingPrice: normalizedRequest.targetSellingPrice,
   });
 
-  const calculationStatus = profile && requiresImportCostReview({
-    targetCountry: profile.countryCode,
-    transportConfirmed: assumptions?.transportConfirmed ?? false,
-    customsDutyConfirmed: assumptions?.customsDutyConfirmed ?? false,
+  const calculationStatus = requiresImportCostReview({
+    targetCountry: offer.project.targetCountry,
+    transportConfirmed: normalizedRequest.transportConfirmed,
+    customsDutyConfirmed: normalizedRequest.customsDutyConfirmed,
     vatRate: normalizedRequest.vatRate,
     vatSource: normalizedRequest.vatSource,
   })
@@ -142,7 +142,13 @@ export async function createCostCalculation(
             defaultVatRate: profile.defaultVatRate,
           },
           costAssumptions: assumptions,
-        } : {}),
+        } : {
+          manualVerification: {
+            transportConfirmed: normalizedRequest.transportConfirmed,
+            customsDutyConfirmed: normalizedRequest.customsDutyConfirmed,
+            vatSource: normalizedRequest.vatSource,
+          },
+        }),
       },
     });
     return calculation;

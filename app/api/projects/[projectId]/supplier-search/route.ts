@@ -124,14 +124,23 @@ export async function POST(
       );
     }
     if (error instanceof SupplierSearchProviderUnavailableError) {
-      return NextResponse.json({
-        results: [],
-        reason: error.reason,
-        ...developmentStatus("connected"),
-      });
+      return NextResponse.json(
+        {
+          error: error.reason,
+          reason: error.reason,
+          ...developmentStatus("connected"),
+        },
+        { status: 503 },
+      );
     }
     if (error instanceof SupplierSearchProviderError) {
-      return NextResponse.json({ results: [], ...developmentStatus("error") });
+      return NextResponse.json(
+        {
+          error: "TAJA pretraga dobavljača trenutno nije dostupna. Pokušajte ponovo kasnije.",
+          ...developmentStatus("error"),
+        },
+        { status: 502 },
+      );
     }
     return NextResponse.json(
       { error: "Pretraga trenutno nije dostupna. Pokušajte ponovo." },

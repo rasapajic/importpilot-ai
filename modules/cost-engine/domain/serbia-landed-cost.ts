@@ -92,9 +92,16 @@ export function requiresImportCostReview(input: {
   vatRate?: string;
   vatSource?: VatAssumptionSource;
 }) {
-  const profile = getImportCountryProfile(input.targetCountry);
-  if (!profile) return false;
   if (!input.transportConfirmed || !input.customsDutyConfirmed) return true;
+
+  const profile = getImportCountryProfile(input.targetCountry);
+  if (!profile) {
+    // Without a versioned country profile, ImportPilot must not claim a final
+    // landed cost from a generic/default VAT assumption. A manually verified
+    // VAT value is required in addition to confirmed transport and duty data.
+    return input.vatSource !== "MANUAL_OVERRIDE";
+  }
+
   return input.vatSource === "COUNTRY_PROFILE_DEFAULT" &&
     input.vatRate !== undefined &&
     Number(input.vatRate) !== Number(profile.defaultVatRate);
