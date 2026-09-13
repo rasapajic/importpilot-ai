@@ -69,7 +69,10 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Unit and integration test suite
+      - name: PostgreSQL integration gate
+        run: npx vitest run tests/integration --reporter=verbose --bail=1
+
+      - name: Full unit and integration suite
         run: npm test
 
       - name: Production build
