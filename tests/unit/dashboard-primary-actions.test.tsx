@@ -16,34 +16,31 @@ const newProjectSource = readFileSync(
   "utf8",
 );
 
-describe("unified dashboard product intake", () => {
-  it("keeps text, image and link in one intake", () => {
-    expect(intakeSource).toContain("Opišite proizvod");
-    expect(intakeSource).toContain("Dodajte sliku");
-    expect(intakeSource).toContain("Nalepite link");
-    expect(intakeSource).toContain("Podesite pretragu");
-    expect(intakeSource).toContain('type="file"');
-    expect(intakeSource).toContain('type="url"');
+describe("ImportPilot 1.0 core search intake", () => {
+  it("asks only for product, quantity and destination", () => {
+    expect(intakeSource).toContain('name="name"');
+    expect(intakeSource).toContain('name="quantity"');
+    expect(intakeSource).toContain('name="targetCountry"');
+    expect(intakeSource).toContain("Pronađi najbolje ponude");
+    expect(intakeSource).not.toContain('name="targetMargin"');
+    expect(intakeSource).not.toContain('type="file"');
+    expect(intakeSource).not.toContain('type="url"');
   });
 
-  it("asks for business details only in the second step", () => {
-    expect(intakeSource).toContain('step === "product"');
-    expect(intakeSource).toContain("Još samo osnovni podaci");
-    expect(intakeSource).toContain('name="targetCountry"');
-    expect(intakeSource).toContain('name="quantity"');
-    expect(intakeSource).toContain('name="targetMargin"');
+  it("starts supplier search immediately after creation", () => {
+    expect(intakeSource).toContain('getProjectCreationDestination(project.id, "search")');
+    expect(intakeSource).not.toContain("targetMargin: form.get");
   });
 
   it("keeps saved searches beside the new demand on desktop", () => {
     expect(dashboardSource).toContain("demandColumn");
     expect(dashboardSource).toContain("searchesColumn");
     expect(dashboardSource).toContain("Moje pretrage");
+    expect(dashboardSource).toContain("Unesite proizvod, količinu i destinaciju");
   });
 
-  it("prefills the existing robust URL flow", () => {
-    expect(intakeSource).toContain('params.set("description", cleanDescription)');
-    expect(intakeSource).toContain("productUrl: cleanUrl");
-    expect(newProjectSource).toContain("initialProductUrl={initialProductUrl}");
-    expect(newProjectSource).toContain("initialProductName={initialDescription}");
+  it("uses the same simple search intake on the new-search page", () => {
+    expect(newProjectSource).toContain("<DashboardPrimaryActions />");
+    expect(newProjectSource).toContain("proizvod, količinu i destinaciju");
   });
 });
