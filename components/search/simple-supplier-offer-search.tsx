@@ -5,8 +5,10 @@ import { useRouter } from "next/navigation";
 
 import { useI18n } from "@/components/i18n/i18n-provider";
 import { SearchResultImage } from "@/components/search/search-result-image";
+import type { FxSnapshot } from "@/modules/fx/euro-display";
 import type { Locale } from "@/modules/i18n/translations";
 import type { SupplierOfferSearchResult } from "@/modules/product-search/domain/search";
+import { estimateTajaPreliminaryLandedCost } from "@/modules/product-search/domain/taja-preliminary-cost-estimate";
 import type { TajaCandidateAnalysisWithProductForm } from "@/modules/product-search/domain/taja-product-form-policy";
 
 type ResultOrigin = "live" | "cache";
@@ -142,6 +144,17 @@ function consumeAutomaticSearchFlag() {
   window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
 }
 
+function isFxSnapshotPayload(value: unknown): value is FxSnapshot {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return record.baseCurrency === "EUR" &&
+    typeof record.source === "string" &&
+    typeof record.timestamp === "string" &&
+    Boolean(record.ratesToEur) &&
+    typeof record.ratesToEur === "object" &&
+    !Array.isArray(record.ratesToEur);
+}
+
 function simpleDecision(analysis: TajaCandidateAnalysisWithProductForm | undefined) {
   if (!analysis || analysis.status !== "FINAL") return "WATCH" as const;
   if (analysis.recommendationStatus === "RECOMMENDED") return "BUY" as const;
@@ -188,6 +201,7 @@ export function SimpleSupplierOfferSearch({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [selectingUrl, setSelectingUrl] = useState<string | null>(null);
+  const [fxSnapshot, setFxSnapshot] = useState<FxSnapshot | null>(null);
   const automaticSearchStarted = useRef(false);
 
   const runSearch = useCallback(async () => {
@@ -232,6 +246,21 @@ export function SimpleSupplierOfferSearch({
     consumeAutomaticSearchFlag();
     void runSearch();
   }, [autoStart, productName, quantity, runSearch, targetCountry]);
+
+  useEffect(() => {
+    const needsFx = Boolean(results?.some((result) => result.currency && result.currency !== "EUR"));
+    if (!needsFx) return;
+
+    const controller = new AbortController();
+    void fetch("/api/fx/latest", { signal: controller.signal })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => null);
+        if (!response.ok || !isFxSnapshotPayload(payload)) return;
+        setFxSnapshot(payload);
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [results]);
 
   async function selectOffer(result: SupplierOfferSearchResult) {
     setSelectingUrl(result.productUrl);
@@ -303,7 +332,16 @@ export function SimpleSupplierOfferSearch({
         <div className="search-result-list">
           {visible.map(({ result, analysis }, index) => {
             const decision = simpleDecision(analysis);
-            const estimate = analysis?.preliminaryCostEstimate ?? null;
+            const liveEstimate = quantity && targetCountry
+              ? estimateTajaPreliminaryLandedCost({
+                  result,
+                  quantity,
+                  targetCountry,
+                  targetMarginPercent: 0,
+                  fxSnapshot: result.currency === "EUR" ? null : fxSnapshot,
+                })
+              : null;
+            const deliveryEstimate = liveEstimate ?? analysis?.preliminaryCostEstimate ?? null;
             const selecting = selectingUrl === result.productUrl;
             return (
               <article className="search-result-card" key={`${result.source}-${result.productUrl}`}>
@@ -319,11 +357,11 @@ export function SimpleSupplierOfferSearch({
                     </span>
                     <span>
                       {text.landedCost}
-                      <strong>{estimate ? `≈ ${formatMoney(estimate.basePerUnitEur, locale)} / kom (${text.landedEstimate})` : text.landedPending}</strong>
+                      <strong>{liveEstimate ? `≈ ${formatMoney(liveEstimate.basePerUnitEur, locale)} / kom (${text.landedEstimate})` : text.landedPending}</strong>
                     </span>
                     <span>
                       {text.delivery}
-                      <strong>{estimate?.deliveryTimeDays ?? text.unknown}</strong>
+                      <strong>{deliveryEstimate?.deliveryTimeDays ?? text.unknown}</strong>
                     </span>
                     <span>
                       {text.supplierRisk}
@@ -334,9 +372,9 @@ export function SimpleSupplierOfferSearch({
                   <details>
                     <summary>{text.details}</summary>
                     <p>{text.moq}: {result.minimumOrderQuantity ?? text.unknown} · {text.incoterm}: {result.incoterm ?? text.unknown}</p>
-                    {estimate && (
+                    {liveEstimate && (
                       <p>
-                        {text.landedCost}: {formatMoney(estimate.lowPerUnitEur, locale)} – {formatMoney(estimate.highPerUnitEur, locale)} / kom
+                        {text.landedCost}: {formatMoney(liveEstimate.lowPerUnitEur, locale)} – {formatMoney(liveEstimate.highPerUnitEur, locale)} / kom
                       </p>
                     )}
                     {analysis && (
