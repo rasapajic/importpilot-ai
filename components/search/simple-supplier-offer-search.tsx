@@ -41,7 +41,6 @@ type Copy = {
   source: string;
   select: string;
   selecting: string;
-  selected: string;
   cached: string;
   unknown: string;
   risk: Record<"LOW" | "MEDIUM" | "HIGH" | "UNKNOWN", string>;
@@ -71,8 +70,7 @@ const copy: Record<Locale, Copy> = {
     missing: "Još treba proveriti",
     source: "Otvori izvornu ponudu",
     select: "Izaberi ponudu",
-    selecting: "Dodavanje...",
-    selected: "Ponuda je izabrana",
+    selecting: "Otvaranje...",
     cached: "Prikazani su poslednji sačuvani rezultati.",
     unknown: "nije poznato",
     risk: { LOW: "nizak rizik", MEDIUM: "srednji rizik", HIGH: "visok rizik", UNKNOWN: "nije provereno" },
@@ -100,8 +98,7 @@ const copy: Record<Locale, Copy> = {
     missing: "Noch zu prüfen",
     source: "Quellangebot öffnen",
     select: "Angebot auswählen",
-    selecting: "Wird hinzugefügt...",
-    selected: "Angebot ausgewählt",
+    selecting: "Wird geöffnet...",
     cached: "Die letzten gespeicherten Ergebnisse werden angezeigt.",
     unknown: "unbekannt",
     risk: { LOW: "niedriges Risiko", MEDIUM: "mittleres Risiko", HIGH: "hohes Risiko", UNKNOWN: "nicht geprüft" },
@@ -129,8 +126,7 @@ const copy: Record<Locale, Copy> = {
     missing: "Still to verify",
     source: "Open source offer",
     select: "Select offer",
-    selecting: "Adding...",
-    selected: "Offer selected",
+    selecting: "Opening...",
     cached: "Showing the latest saved results.",
     unknown: "unknown",
     risk: { LOW: "low risk", MEDIUM: "medium risk", HIGH: "high risk", UNKNOWN: "not checked" },
@@ -192,7 +188,6 @@ export function SimpleSupplierOfferSearch({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [selectingUrl, setSelectingUrl] = useState<string | null>(null);
-  const [selectedUrls, setSelectedUrls] = useState<string[]>([]);
   const automaticSearchStarted = useRef(false);
 
   const runSearch = useCallback(async () => {
@@ -247,13 +242,23 @@ export function SimpleSupplierOfferSearch({
         headers: { "content-type": "application/json" },
         body: JSON.stringify(result),
       });
-      const payload = (await response.json().catch(() => null)) as { error?: string } | null;
-      if (!response.ok && response.status !== 409) throw new Error(payload?.error || text.noResultsText);
-      setSelectedUrls((current) => current.includes(result.productUrl) ? current : [...current, result.productUrl]);
+      const payload = (await response.json().catch(() => null)) as {
+        offerId?: string;
+        existingOfferId?: string;
+        error?: string;
+      } | null;
+      if (!response.ok && response.status !== 409) {
+        throw new Error(payload?.error || text.noResultsText);
+      }
+      const selectedOfferId = response.ok ? payload?.offerId : payload?.existingOfferId;
+      if (!selectedOfferId) throw new Error(payload?.error || text.noResultsText);
+
+      router.push(
+        `/projects/${projectId}?selectedOffer=${encodeURIComponent(selectedOfferId)}#workflow-step-decision`,
+      );
       router.refresh();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : text.noResultsText);
-    } finally {
       setSelectingUrl(null);
     }
   }
@@ -299,7 +304,6 @@ export function SimpleSupplierOfferSearch({
           {visible.map(({ result, analysis }, index) => {
             const decision = simpleDecision(analysis);
             const estimate = analysis?.preliminaryCostEstimate ?? null;
-            const selected = selectedUrls.includes(result.productUrl);
             const selecting = selectingUrl === result.productUrl;
             return (
               <article className="search-result-card" key={`${result.source}-${result.productUrl}`}>
@@ -347,11 +351,11 @@ export function SimpleSupplierOfferSearch({
                 </div>
                 <button
                   className="secondary-button"
-                  disabled={selecting || selected}
+                  disabled={selecting}
                   onClick={() => void selectOffer(result)}
                   type="button"
                 >
-                  {selected ? text.selected : selecting ? text.selecting : text.select}
+                  {selecting ? text.selecting : text.select}
                 </button>
               </article>
             );
