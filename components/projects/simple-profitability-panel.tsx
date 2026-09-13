@@ -236,14 +236,17 @@ export function SimpleProfitabilityPanel({
   const { locale, t } = useI18n();
   const text = copy[locale];
   const calculatedOffers = offers.filter((offer) => offer.costCalculations.length > 0);
-  const hasFinalDecision = isFinalDecisionStatus(decision?.status);
+  const projectHasFinalDecision = isFinalDecisionStatus(decision?.status);
   const decisionOffer = decision?.selectedOfferId
     ? offers.find((offer) => offer.id === decision.selectedOfferId) ?? null
     : null;
   const focusedOffer = focusedOfferId
     ? offers.find((offer) => offer.id === focusedOfferId) ?? null
     : null;
-  const bestOffer = decisionOffer ?? focusedOffer ?? calculatedOffers[0] ?? null;
+  const hasFinalDecision = projectHasFinalDecision && (
+    !focusedOffer || decision?.selectedOfferId === focusedOffer.id
+  );
+  const bestOffer = focusedOffer ?? decisionOffer ?? calculatedOffers[0] ?? null;
   const calculation = bestOffer?.costCalculations[0] ?? null;
   const assessment = bestOffer?.assessments[0] ?? null;
   const assumptions = bestOffer?.latestCostAssumptions ?? null;
@@ -251,6 +254,9 @@ export function SimpleProfitabilityPanel({
     ? offers.find((offer) => offer.id === selectedCalculationOfferId) ?? null
     : null;
   const offersForInput = focusedOffer ? [focusedOffer] : offers;
+  const canCheckProfitability = focusedOffer
+    ? focusedOffer.costCalculations.length > 0
+    : calculatedOffers.length > 0;
 
   function money(value: { toString(): string } | number | null | undefined, currency: string) {
     const numeric = numberValue(value);
@@ -305,9 +311,9 @@ export function SimpleProfitabilityPanel({
             ? getDecisionStepTitle(decision.status, locale)
             : text.question}</h2>
         </div>
-        {(calculatedOffers.length > 0 || hasFinalDecision) && (
+        {(canCheckProfitability || hasFinalDecision) && (
           <ProfitabilityCheckControl
-            disabled={calculatedOffers.length === 0}
+            disabled={!canCheckProfitability}
             idleLabel={hasFinalDecision ? text.checkAgain : text.check}
             pendingLabel={text.checking}
             projectId={projectId}
@@ -363,7 +369,7 @@ export function SimpleProfitabilityPanel({
         </>
       ) : (
         <>
-          {calculatedOffers.length > 0 && <p>{text.readyForCheck}</p>}
+          {canCheckProfitability && <p>{text.readyForCheck}</p>}
           <div className="offer-list">
             {offersForInput.map((offer) => {
               const latest = offer.costCalculations[0];
