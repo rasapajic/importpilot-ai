@@ -1,7 +1,7 @@
 import Link from "next/link";
 
+import { DashboardPrimaryActions } from "@/components/dashboard/dashboard-primary-actions";
 import { CreateProjectFromUrlForm } from "@/components/projects/create-project-from-url-form";
-import { CreateProjectForm } from "@/components/projects/create-project-form";
 import { requireSession } from "@/modules/auth/infrastructure/session";
 import { getServerLocale } from "@/modules/i18n/server";
 import type { Locale } from "@/modules/i18n/translations";
@@ -17,20 +17,20 @@ const newProjectCopy: Record<Locale, NewProjectCopy> = {
   sr: {
     back: "Nazad na moje pretrage",
     title: "Koji proizvod tražite?",
-    searchIntro: "Za početak opišite proizvod koji tražite. Poslovne podatke unosite u sledećem koraku.",
-    urlIntro: "Proverite link proizvoda. Nakon pregleda unosite količinu, zemlju uvoza i ciljnu maržu.",
+    searchIntro: "Unesite proizvod, količinu i destinaciju. ImportPilot će zatim pronaći i uporediti ponude.",
+    urlIntro: "Proverite link proizvoda. Nakon pregleda unosite podatke potrebne za računicu.",
   },
   de: {
     back: "Zurück zu meinen Suchen",
     title: "Welches Produkt suchen Sie?",
-    searchIntro: "Beschreiben Sie zuerst das gesuchte Produkt. Die Geschäftsdaten folgen im nächsten Schritt.",
-    urlIntro: "Prüfen Sie den Produktlink. Nach der Prüfung geben Sie Menge, Einfuhrland und Zielmarge an.",
+    searchIntro: "Geben Sie Produkt, Menge und Zielland ein. ImportPilot sucht und vergleicht anschließend passende Angebote.",
+    urlIntro: "Prüfen Sie den Produktlink. Danach geben Sie die für die Kalkulation nötigen Angaben ein.",
   },
   en: {
     back: "Back to my searches",
     title: "Which product are you looking for?",
-    searchIntro: "Start by describing the product you are looking for. Business details come in the next step.",
-    urlIntro: "Review the product link. After review, enter quantity, import country, and target margin.",
+    searchIntro: "Enter the product, quantity, and destination. ImportPilot will then find and compare suitable offers.",
+    urlIntro: "Review the product link. After review, enter the details needed for the calculation.",
   },
 };
 
@@ -69,7 +69,7 @@ export default async function NewProjectPage({
             initialProductUrl={initialProductUrl}
           />
         ) : (
-          <CreateProjectForm mode={mode} />
+          <DashboardPrimaryActions />
         )}
       </section>
     </main>
