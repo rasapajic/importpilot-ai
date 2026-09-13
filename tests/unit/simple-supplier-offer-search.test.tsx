@@ -26,6 +26,7 @@ describe("ImportPilot 1.0 simple supplier results", () => {
     expect(resultsSource).toContain('fetch("/api/fx/latest"');
     expect(resultsSource).toContain("estimateTajaPreliminaryLandedCost");
     expect(resultsSource).toContain('fxSnapshot: result.currency === "EUR" ? null : fxSnapshot');
+    expect(resultsSource).toContain("targetMarginPercent: 0");
     expect(resultsSource).toContain("const liveEstimate = quantity && targetCountry");
     expect(resultsSource).toContain("liveEstimate.basePerUnitEur");
     expect(resultsSource).not.toContain("const estimate = analysis?.preliminaryCostEstimate ?? null");
@@ -38,8 +39,9 @@ describe("ImportPilot 1.0 simple supplier results", () => {
     expect(resultsSource).toContain('return "WATCH" as const');
   });
 
-  it("does not expose advanced search criteria in the simple results component", () => {
-    expect(resultsSource).not.toContain("targetMarginPercent");
+  it("does not expose advanced search criteria in the simple results UI", () => {
+    expect(resultsSource).not.toContain("setTargetMarginPercent");
+    expect(resultsSource).not.toContain("Ciljna marža (%)");
     expect(resultsSource).not.toContain("privateLabel: true");
     expect(resultsSource).not.toContain("maxUnitPrice");
     expect(resultsSource).not.toContain("preparedQueries");
