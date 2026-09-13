@@ -62,16 +62,16 @@ export default async function NewProjectPage({
       <p className="muted-text">
         {mode === "url" ? copy.urlIntro : copy.searchIntro}
       </p>
-      <section className="dashboard-card">
-        {mode === "url" ? (
+      {mode === "url" ? (
+        <section className="dashboard-card">
           <CreateProjectFromUrlForm
             initialProductName={initialDescription}
             initialProductUrl={initialProductUrl}
           />
-        ) : (
-          <DashboardPrimaryActions />
-        )}
-      </section>
+        </section>
+      ) : (
+        <DashboardPrimaryActions />
+      )}
     </main>
   );
 }
