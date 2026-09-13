@@ -67,11 +67,12 @@ describe("simple client workflow", () => {
     expect(pageSource).toContain("summary={decisionStepSummary}");
   });
 
-  it("keeps documents and history as secondary information", () => {
-    expect(pageSource).toContain("Dodatne informacije");
-    expect(pageSource).toContain("Uvozni dokumenti");
-    expect(pageSource).toContain("ProjectTimeline");
-    expect(pageSource).toContain("MobileWorkflowActionBar");
+  it("keeps 2.0 workspace tools outside the frozen 1.0 flow", () => {
+    expect(pageSource).not.toContain("Dodatne informacije");
+    expect(pageSource).not.toContain("Uvozni dokumenti");
+    expect(pageSource).not.toContain("ProjectTimeline");
+    expect(pageSource).not.toContain("DirectUploadForm");
+    expect(pageSource).not.toContain("MobileWorkflowActionBar");
   });
 
   it("localizes the primary profitability action", () => {
