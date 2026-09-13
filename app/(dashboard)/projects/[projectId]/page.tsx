@@ -40,6 +40,7 @@ export default async function ProjectPage({
     editCalculationOffer?: string;
     importUrl?: string;
     profitabilityError?: string;
+    selectedOffer?: string;
   }>;
 }) {
   const auth = await requireSession();
@@ -70,6 +71,11 @@ export default async function ProjectPage({
     (offer) => offer.id === resolvedSearchParams.editCalculationOffer && offer.costCalculations.length > 0,
   )
     ? resolvedSearchParams.editCalculationOffer
+    : undefined;
+  const focusedOfferId = project.offers.some(
+    (offer) => offer.id === resolvedSearchParams.selectedOffer,
+  )
+    ? resolvedSearchParams.selectedOffer
     : undefined;
 
   const offerCount = project.offers.length;
@@ -182,7 +188,7 @@ export default async function ProjectPage({
         </ProjectWorkflowStep>
 
         <ProjectWorkflowStep
-          forceOpen={Boolean(selectedCalculationOfferId)}
+          forceOpen={Boolean(selectedCalculationOfferId || focusedOfferId)}
           id="workflow-step-decision"
           number={3}
           title={decisionStepTitle}
@@ -199,6 +205,7 @@ export default async function ProjectPage({
             projectQuantity={project.quantity}
             offers={project.offers}
             decision={decision}
+            focusedOfferId={focusedOfferId}
             selectedCalculationOfferId={selectedCalculationOfferId}
             profitabilityError={resolvedSearchParams.profitabilityError}
           />
