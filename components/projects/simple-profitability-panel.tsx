@@ -9,6 +9,7 @@ import Link from "next/link";
 
 import { CostCalculatorForm } from "@/components/costs/cost-calculator-form";
 import { useI18n } from "@/components/i18n/i18n-provider";
+import { CommercialTermsForm } from "@/components/offers/commercial-terms-form";
 import { ProfitabilityCheckControl } from "@/components/projects/profitability-check-control";
 import { formatDisplayedPercent } from "@/modules/cost-engine/application/calculation-summary";
 import type { LandedCostAssumptions } from "@/modules/cost-engine/domain/serbia-landed-cost";
@@ -17,7 +18,6 @@ import {
   getDecisionStepTitle,
   isFinalDecisionStatus,
 } from "@/modules/decisions/application/decision-step-summary";
-import { getSimplifiedNextActions } from "@/modules/decisions/application/simplified-next-actions";
 import type { ProjectDecisionResult } from "@/modules/decisions/domain/project-decision";
 import { getEuroDisplay } from "@/modules/fx/euro-display";
 import type { Locale } from "@/modules/i18n/translations";
@@ -40,12 +40,20 @@ type SimpleCopy = {
   readyForCheck: string;
   selectedSupplier: string;
   sellingPrice: string;
+  supplierPrice: string;
+  supplierCountry: string;
+  moq: string;
+  incoterm: string;
+  delivery: string;
+  days: string;
+  offerDetail: string;
+  sourceOffer: string;
+  commercialDataMissing: string;
   costPerUnit: string;
   profitPerUnit: string;
   totalProfit: string;
   margin: string;
   risk: string;
-  nextStep: string;
   howCalculated: string;
   changeCosts: string;
   goodsValue: string;
@@ -59,6 +67,7 @@ type SimpleCopy = {
   totalCost: string;
   offerReady: string;
   missingCost: string;
+  unknown: string;
 };
 
 const copy: Record<Locale, SimpleCopy> = {
@@ -68,16 +77,24 @@ const copy: Record<Locale, SimpleCopy> = {
     check: "Proveri isplativost",
     checking: "Provera u toku...",
     checkAgain: "Proveri ponovo",
-    enterCostsFirst: "Prvo unesite troškove za najmanje jednu ponudu.",
-    readyForCheck: "Troškovi su uneti. Jednim klikom dobićete jasnu preporuku.",
+    enterCostsFirst: "Prvo završite računicu za izabranu ponudu.",
+    readyForCheck: "Računica je spremna. Jednim klikom dobićete jasnu odluku.",
     selectedSupplier: "Dobavljač",
     sellingPrice: "Prodajna cena",
+    supplierPrice: "Cena dobavljača",
+    supplierCountry: "Zemlja dobavljača",
+    moq: "MOQ",
+    incoterm: "Incoterm",
+    delivery: "Rok isporuke",
+    days: "dana",
+    offerDetail: "Izabrana ponuda",
+    sourceOffer: "Otvori izvornu ponudu",
+    commercialDataMissing: "Nedostaju podaci potrebni za računicu.",
     costPerUnit: "Stvarna cena po komadu",
     profitPerUnit: "Zarada po komadu",
     totalProfit: "Ukupna očekivana zarada",
     margin: "Bruto marža",
     risk: "Rizik dobavljača",
-    nextStep: "Sledeći korak",
     howCalculated: "Kako je izračunato?",
     changeCosts: "Promeni troškove",
     goodsValue: "Vrednost robe",
@@ -90,7 +107,8 @@ const copy: Record<Locale, SimpleCopy> = {
     other: "Ostali troškovi",
     totalCost: "Ukupna nabavna cena",
     offerReady: "Spremno za proveru",
-    missingCost: "Unesite troškove ove ponude",
+    missingCost: "Unesite prodajnu cenu i proverite uvozne troškove",
+    unknown: "nije poznato",
   },
   de: {
     eyebrow: "Einfache Prüfung",
@@ -98,16 +116,24 @@ const copy: Record<Locale, SimpleCopy> = {
     check: "Rentabilität prüfen",
     checking: "Prüfung läuft...",
     checkAgain: "Erneut prüfen",
-    enterCostsFirst: "Erfassen Sie zuerst die Kosten für mindestens ein Angebot.",
-    readyForCheck: "Die Kosten sind erfasst. Mit einem Klick erhalten Sie eine klare Empfehlung.",
+    enterCostsFirst: "Schließen Sie zuerst die Kalkulation für das ausgewählte Angebot ab.",
+    readyForCheck: "Die Kalkulation ist bereit. Mit einem Klick erhalten Sie eine klare Entscheidung.",
     selectedSupplier: "Lieferant",
     sellingPrice: "Verkaufspreis",
+    supplierPrice: "Lieferantenpreis",
+    supplierCountry: "Lieferantenland",
+    moq: "MOQ",
+    incoterm: "Incoterm",
+    delivery: "Lieferzeit",
+    days: "Tage",
+    offerDetail: "Ausgewähltes Angebot",
+    sourceOffer: "Quellangebot öffnen",
+    commercialDataMissing: "Für die Kalkulation fehlen erforderliche Angebotsdaten.",
     costPerUnit: "Tatsächliche Stückkosten",
     profitPerUnit: "Gewinn pro Stück",
     totalProfit: "Erwarteter Gesamtgewinn",
     margin: "Bruttomarge",
     risk: "Lieferantenrisiko",
-    nextStep: "Nächster Schritt",
     howCalculated: "Wie wurde gerechnet?",
     changeCosts: "Kosten ändern",
     goodsValue: "Warenwert",
@@ -120,7 +146,8 @@ const copy: Record<Locale, SimpleCopy> = {
     other: "Sonstige Kosten",
     totalCost: "Gesamteinkaufskosten",
     offerReady: "Bereit zur Prüfung",
-    missingCost: "Kosten für dieses Angebot erfassen",
+    missingCost: "Verkaufspreis eingeben und Importkosten prüfen",
+    unknown: "unbekannt",
   },
   en: {
     eyebrow: "Simple check",
@@ -128,16 +155,24 @@ const copy: Record<Locale, SimpleCopy> = {
     check: "Check profitability",
     checking: "Checking...",
     checkAgain: "Check again",
-    enterCostsFirst: "Enter costs for at least one offer first.",
-    readyForCheck: "Costs are ready. One click will produce a clear recommendation.",
+    enterCostsFirst: "Complete the calculation for the selected offer first.",
+    readyForCheck: "The calculation is ready. One click will produce a clear decision.",
     selectedSupplier: "Supplier",
     sellingPrice: "Selling price",
+    supplierPrice: "Supplier price",
+    supplierCountry: "Supplier country",
+    moq: "MOQ",
+    incoterm: "Incoterm",
+    delivery: "Delivery time",
+    days: "days",
+    offerDetail: "Selected offer",
+    sourceOffer: "Open source offer",
+    commercialDataMissing: "Required commercial data is missing for the calculation.",
     costPerUnit: "True cost per unit",
     profitPerUnit: "Profit per unit",
     totalProfit: "Total expected profit",
     margin: "Gross margin",
     risk: "Supplier risk",
-    nextStep: "Next step",
     howCalculated: "How was this calculated?",
     changeCosts: "Change costs",
     goodsValue: "Goods value",
@@ -150,7 +185,8 @@ const copy: Record<Locale, SimpleCopy> = {
     other: "Other costs",
     totalCost: "Total landed cost",
     offerReady: "Ready to check",
-    missingCost: "Enter costs for this offer",
+    missingCost: "Enter selling price and review import costs",
+    unknown: "unknown",
   },
 };
 
@@ -158,6 +194,13 @@ function numberValue(value: { toString(): string } | number | null | undefined) 
   if (value === null || value === undefined) return null;
   const parsed = Number(value.toString());
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function sourceOfferUrl(metadata: unknown) {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  const source = metadata as Record<string, unknown>;
+  const value = source.sourceUrl ?? source.productUrl;
+  return typeof value === "string" && value.startsWith("https://") ? value : null;
 }
 
 function riskLabel(score: number | null, locale: Locale) {
@@ -169,16 +212,6 @@ function riskLabel(score: number | null, locale: Locale) {
   return locale === "de" ? "Hoch" : locale === "en" ? "High" : "Visok";
 }
 
-function actionHref(projectId: string, label: string) {
-  if (["Predloži poruku", "Traži bolju cenu", "Traži manji MOQ"].includes(label)) {
-    return "#negotiation-assistant";
-  }
-  if (label === "Pronađi bolje ponude") return "#workflow-step-offer";
-  if (label === "Ubaci drugi link") return `/projects/${projectId}?importUrl=1#workflow-step-offer`;
-  if (label === "Izvezi PDF") return `/projects/${projectId}/summary`;
-  return "#documents";
-}
-
 export function SimpleProfitabilityPanel({
   projectId,
   projectName,
@@ -186,6 +219,7 @@ export function SimpleProfitabilityPanel({
   projectQuantity,
   offers,
   decision,
+  focusedOfferId,
   selectedCalculationOfferId,
   profitabilityError,
 }: {
@@ -195,6 +229,7 @@ export function SimpleProfitabilityPanel({
   projectQuantity: number;
   offers: OfferWithDetails[];
   decision: DecisionView | null;
+  focusedOfferId?: string;
   selectedCalculationOfferId?: string;
   profitabilityError?: string;
 }) {
@@ -202,16 +237,20 @@ export function SimpleProfitabilityPanel({
   const text = copy[locale];
   const calculatedOffers = offers.filter((offer) => offer.costCalculations.length > 0);
   const hasFinalDecision = isFinalDecisionStatus(decision?.status);
-  const selectedOffer = decision?.selectedOfferId
+  const decisionOffer = decision?.selectedOfferId
     ? offers.find((offer) => offer.id === decision.selectedOfferId) ?? null
     : null;
-  const bestOffer = selectedOffer ?? calculatedOffers[0] ?? null;
+  const focusedOffer = focusedOfferId
+    ? offers.find((offer) => offer.id === focusedOfferId) ?? null
+    : null;
+  const bestOffer = decisionOffer ?? focusedOffer ?? calculatedOffers[0] ?? null;
   const calculation = bestOffer?.costCalculations[0] ?? null;
   const assessment = bestOffer?.assessments[0] ?? null;
   const assumptions = bestOffer?.latestCostAssumptions ?? null;
   const editingOffer = selectedCalculationOfferId
     ? offers.find((offer) => offer.id === selectedCalculationOfferId) ?? null
     : null;
+  const offersForInput = focusedOffer ? [focusedOffer] : offers;
 
   function money(value: { toString(): string } | number | null | undefined, currency: string) {
     const numeric = numberValue(value);
@@ -248,9 +287,6 @@ export function SimpleProfitabilityPanel({
   const goodsValue = calculation
     ? numberValue(calculation.unitPrice)! * calculation.quantity
     : null;
-  const nextAction = hasFinalDecision && decision
-    ? getSimplifiedNextActions(decision.status)[0] ?? null
-    : null;
   const decisionSummary = hasFinalDecision && decision && bestOffer
     ? getClientDecisionSummary({
         locale,
@@ -269,12 +305,14 @@ export function SimpleProfitabilityPanel({
             ? getDecisionStepTitle(decision.status, locale)
             : text.question}</h2>
         </div>
-        <ProfitabilityCheckControl
-          disabled={calculatedOffers.length === 0}
-          idleLabel={hasFinalDecision ? text.checkAgain : text.check}
-          pendingLabel={text.checking}
-          projectId={projectId}
-        />
+        {(calculatedOffers.length > 0 || hasFinalDecision) && (
+          <ProfitabilityCheckControl
+            disabled={calculatedOffers.length === 0}
+            idleLabel={hasFinalDecision ? text.checkAgain : text.check}
+            pendingLabel={text.checking}
+            projectId={projectId}
+          />
+        )}
       </header>
 
       {profitabilityError && (
@@ -302,13 +340,6 @@ export function SimpleProfitabilityPanel({
             <div><span>{text.risk}</span><strong>{riskLabel(numberValue(assessment?.supplierRiskScore), locale)}</strong></div>
           </div>
 
-          {nextAction && (
-            <div className="actions">
-              <span><strong>{text.nextStep}</strong></span>
-              <a className="primary-link" href={actionHref(projectId, nextAction)}>{t(nextAction)}</a>
-            </div>
-          )}
-
           <details className="advanced-costs">
             <summary>{text.howCalculated}</summary>
             <div className="cost-results">
@@ -323,7 +354,7 @@ export function SimpleProfitabilityPanel({
               <strong>{text.totalCost}: {money(calculation.landedCostTotal, currency)}</strong>
               <Link
                 className="secondary-button"
-                href={`/projects/${projectId}?editCalculationOffer=${bestOffer.id}#workflow-step-decision`}
+                href={`/projects/${projectId}?selectedOffer=${bestOffer.id}&editCalculationOffer=${bestOffer.id}#workflow-step-decision`}
               >
                 {text.changeCosts}
               </Link>
@@ -334,42 +365,76 @@ export function SimpleProfitabilityPanel({
         <>
           {calculatedOffers.length > 0 && <p>{text.readyForCheck}</p>}
           <div className="offer-list">
-            {offers.map((offer) => {
+            {offersForInput.map((offer) => {
               const latest = offer.costCalculations[0];
-              if (latest) {
-                return (
-                  <article className="offer-card" key={offer.id}>
-                    <header><strong>{offer.supplierName}</strong><span>{text.offerReady}</span></header>
-                    <div className="offer-highlights">
-                      <span>{text.costPerUnit}<strong>{money(latest.landedCostPerUnit, latest.currency)}</strong></span>
-                      <span>{text.margin}<strong>{formatDisplayedPercent(latest.grossMarginPercent)}%</strong></span>
-                      <span>{text.risk}<strong>{riskLabel(numberValue(offer.assessments[0]?.supplierRiskScore), locale)}</strong></span>
-                    </div>
-                    <Link
-                      className="secondary-button"
-                      href={`/projects/${projectId}?editCalculationOffer=${offer.id}#workflow-step-decision`}
-                    >
-                      {text.changeCosts}
-                    </Link>
-                  </article>
-                );
-              }
+              const sourceUrl = sourceOfferUrl(offer.sourceMetadata);
+              const commercialTermsComplete = Boolean(
+                offer.unitPrice && offer.currency && offer.incoterm,
+              );
 
-              if (!offer.unitPrice || !offer.currency || !offer.incoterm) return null;
               return (
                 <article className="offer-card" key={offer.id}>
-                  <h3>{text.missingCost}</h3>
-                  <CostCalculatorForm
-                    offerId={offer.id}
-                    unitPrice={offer.unitPrice.toString()}
-                    currency={offer.currency}
-                    targetCountry={targetCountry}
-                    productName={projectName}
-                    quantity={projectQuantity}
-                    sourceMetadata={offer.sourceMetadata}
-                    latestCostAssumptions={offer.latestCostAssumptions}
-                    showResults={false}
-                  />
+                  <header>
+                    <div>
+                      <p className="eyebrow">{text.offerDetail}</p>
+                      <strong>{offer.supplierName}</strong>
+                    </div>
+                    {latest && <span>{text.offerReady}</span>}
+                  </header>
+
+                  <div className="offer-highlights">
+                    <span>{text.supplierPrice}<strong>{offer.unitPrice && offer.currency ? money(offer.unitPrice, offer.currency) : text.unknown}</strong></span>
+                    <span>{text.moq}<strong>{offer.moq ?? text.unknown}</strong></span>
+                    <span>{text.incoterm}<strong>{offer.incoterm ?? text.unknown}</strong></span>
+                    <span>{text.delivery}<strong>{offer.deliveryTimeDays === null ? text.unknown : `${offer.deliveryTimeDays} ${text.days}`}</strong></span>
+                    <span>{text.supplierCountry}<strong>{offer.supplierCountry ?? text.unknown}</strong></span>
+                  </div>
+
+                  {sourceUrl && (
+                    <p><a href={sourceUrl} rel="noreferrer" target="_blank">{text.sourceOffer}</a></p>
+                  )}
+
+                  {latest ? (
+                    <>
+                      <div className="offer-highlights">
+                        <span>{text.costPerUnit}<strong>{money(latest.landedCostPerUnit, latest.currency)}</strong></span>
+                        <span>{text.margin}<strong>{formatDisplayedPercent(latest.grossMarginPercent)}%</strong></span>
+                        <span>{text.risk}<strong>{riskLabel(numberValue(offer.assessments[0]?.supplierRiskScore), locale)}</strong></span>
+                      </div>
+                      <Link
+                        className="secondary-button"
+                        href={`/projects/${projectId}?selectedOffer=${offer.id}&editCalculationOffer=${offer.id}#workflow-step-decision`}
+                      >
+                        {text.changeCosts}
+                      </Link>
+                    </>
+                  ) : !commercialTermsComplete ? (
+                    <>
+                      <p className="warning-text">{text.commercialDataMissing}</p>
+                      <CommercialTermsForm
+                        offerId={offer.id}
+                        unitPrice={offer.unitPrice?.toString() ?? null}
+                        currency={offer.currency}
+                        incoterm={offer.incoterm}
+                        deliveryTimeDays={offer.deliveryTimeDays}
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <h3>{text.missingCost}</h3>
+                      <CostCalculatorForm
+                        offerId={offer.id}
+                        unitPrice={offer.unitPrice!.toString()}
+                        currency={offer.currency!}
+                        targetCountry={targetCountry}
+                        productName={projectName}
+                        quantity={projectQuantity}
+                        sourceMetadata={offer.sourceMetadata}
+                        latestCostAssumptions={offer.latestCostAssumptions}
+                        showResults={false}
+                      />
+                    </>
+                  )}
                 </article>
               );
             })}
