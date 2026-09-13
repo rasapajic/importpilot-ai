@@ -61,10 +61,12 @@ describe("simple client workflow", () => {
     expect(profitabilitySource).toContain("Promeni troškove");
   });
 
-  it("keeps profitability active until a final recommendation exists", () => {
-    expect(pageSource).toContain("const hasFinalRecommendation = isFinalDecisionStatus(decision?.status)");
+  it("keeps a newly focused offer active until that same offer has a final recommendation", () => {
+    expect(pageSource).toContain("const decisionMatchesFocusedOffer = !focusedOfferId || decision?.selectedOfferId === focusedOfferId");
+    expect(pageSource).toContain("const visibleDecisionStatus = decisionMatchesFocusedOffer ? decision?.status ?? null : null");
+    expect(pageSource).toContain("const hasFinalRecommendation = isFinalDecisionStatus(visibleDecisionStatus)");
     expect(pageSource).toContain('hasFinalRecommendation\n      ? "COMPLETED"\n      : "ACTIVE"');
-    expect(pageSource).toContain("const decisionStepSummary = getDecisionStepSummary(decision?.status, locale)");
+    expect(pageSource).toContain("const decisionStepSummary = getDecisionStepSummary(visibleDecisionStatus, locale)");
     expect(pageSource).toContain("summary={decisionStepSummary}");
   });
 
