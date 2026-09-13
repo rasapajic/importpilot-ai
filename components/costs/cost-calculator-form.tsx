@@ -99,6 +99,16 @@ export function CostCalculatorForm({
     landedCostTotal: getEuroDisplay(latestCalculation.landedCostTotal, currency),
     expectedProfit: getEuroDisplay(profit.totalProfit, currency),
   } : null;
+  const confirmCostsLabel = locale === "de"
+    ? "Importkosten prüfen und bestätigen"
+    : locale === "en"
+      ? "Review and confirm import costs"
+      : "Proverite i potvrdite uvozne troškove";
+  const sellingPriceHelp = locale === "de"
+    ? "Geben Sie Ihren Verkaufspreis ein. ImportPilot berechnet den Gewinn nach Bestätigung der Importkosten."
+    : locale === "en"
+      ? "Enter your selling price. ImportPilot calculates profit after the import costs are confirmed."
+      : "Unesite svoju prodajnu cenu. ImportPilot računa zaradu nakon potvrde uvoznih troškova.";
 
   useEffect(() => {
     if (!editInitially) return;
@@ -143,101 +153,116 @@ export function CostCalculatorForm({
   return (
     <div className="cost-panel" id={`offer-cost-${offerId}`} ref={panelRef}>
       <h3>{isPrimaryCountry ? copy.title : t("Kalkulator ukupne nabavne cene")}</h3>
-      {isPrimaryCountry && <p className="muted-text">{copy.description}</p>}
       {editing && (
         <form className="cost-form" onSubmit={submit}>
-          {isPrimaryCountry && (
-            <div className="cost-form-wide empty-state">
-              <strong>{copy.assumptionTitle}</strong>
-              <p>{copy.assumptionText}</p>
-              <p className="warning-text">{copy.reviewWarning}</p>
-              <p><strong>{copy.goodsCost}:</strong> {goodsCost} {currency}</p>
-            </div>
-          )}
-          <div className="cost-form-wide">
-            <TransportCostAssistant
-              currency={currency}
-              onApply={isPrimaryCountry ? setInternationalTransportCost : setShippingCost}
-              productName={productName}
-              quantity={quantity}
-              sourceMetadata={sourceMetadata}
-            />
-          </div>
-          {isPrimaryCountry ? (
-            <>
-              <label>{copy.chinaDomesticTransport} ({currency})
-                <input min={0} name="chinaDomesticTransportCost" onChange={(event) => setChinaDomesticTransportCost(event.target.value)} required step="0.01" type="number" value={chinaDomesticTransportCost} />
-              </label>
-              <label>{copy.internationalTransport} ({currency})
-                <input min={0} name="internationalTransportCost" onChange={(event) => setInternationalTransportCost(event.target.value)} required step="0.01" type="number" value={internationalTransportCost} />
-              </label>
-              <label>{copy.insurance} ({currency})
-                <input min={0} name="insuranceCost" onChange={(event) => setInsuranceCost(event.target.value)} required step="0.01" type="number" value={insuranceCost} />
-              </label>
-              <p className="vat-helper"><strong>{copy.transportTotal}:</strong> {currentTransportTotal} {currency}</p>
-              <label className="checkbox-label cost-form-wide">
-                <input defaultChecked={values.transportConfirmed} name="transportConfirmed" type="checkbox" />
-                {copy.transportConfirmed}
-              </label>
-            </>
-          ) : (
-            <label>{copy.legacyTransport} ({currency})
-              <input min={0} name="shippingCost" onChange={(event) => setShippingCost(event.target.value)} required step="0.01" type="number" value={shippingCost} />
-            </label>
-          )}
-          <label>{copy.customsDuty} (%)
-            <input defaultValue={values.customsDutyRate} max={500} min={0} name="customsDutyRate" required step="0.0001" type="number" />
+          <label className="cost-form-wide">
+            {copy.sellingPrice} ({currency})
+            <input defaultValue={values.targetSellingPrice} min="0.01" name="targetSellingPrice" required step="0.01" type="number" />
           </label>
-          {isPrimaryCountry && (
-            <label className="checkbox-label cost-form-wide">
-              <input defaultChecked={values.customsDutyConfirmed} name="customsDutyConfirmed" type="checkbox" />
-              {copy.customsConfirmed}
-            </label>
-          )}
-          <label>{copy.vat} (%)<input aria-describedby={`vat-help-${offerId}`} readOnly type="number" value={effectiveVatRate} /></label>
-          <input name="vatRate" type="hidden" value={effectiveVatRate} />
-          <p className={automaticVatRate === null && !overrideVat ? "form-error vat-helper" : "vat-helper"} id={`vat-help-${offerId}`}>
-            {automaticVatRate === null && !overrideVat
-              ? t("PDV nije automatski podešen jer ciljna država nije podržana.")
-              : overrideVat
-                ? t("PDV je ručno izmenjen.")
-                : isPrimaryCountry
-                  ? copy.assumptionText
-                  : t("PDV je automatski podešen prema ciljnoj državi.")}
-          </p>
-          {isPrimaryCountry && (
-            <label>{copy.customsBroker} ({currency})
-              <input defaultValue={values.customsBrokerCost} min={0} name="customsBrokerCost" required step="0.01" type="number" />
-            </label>
-          )}
-          <label>{copy.sellingPrice} ({currency})<input defaultValue={values.targetSellingPrice} min="0.01" name="targetSellingPrice" required step="0.01" type="number" /></label>
-          <details
-            className="advanced-costs"
-            open={previousVatIsOverride || values.needsReview || ["storageCost", "inspectionCost", "otherCosts"].some(
-              (key) => Number(values[key as keyof typeof values]) > 0,
-            )}
-          >
-            <summary>Napredna podešavanja</summary>
-            <div>
-              <label className="checkbox-label">
-                <input checked={overrideVat} onChange={(event) => setOverrideVat(event.target.checked)} type="checkbox" />
-                {t("Ručno izmeni PDV")}
-              </label>
-              {overrideVat && (
-                <label>{t("Ručna stopa PDV-a (%)")}
-                  <input max={100} min={0} onChange={(event) => setManualVatRate(event.target.value)} required step="0.0001" type="number" value={manualVatRate} />
+          <p className="muted-text cost-form-wide">{sellingPriceHelp}</p>
+
+          <details className="advanced-costs cost-form-wide" open={editInitially}>
+            <summary>{confirmCostsLabel}</summary>
+            <div className="cost-form">
+              {isPrimaryCountry && (
+                <div className="cost-form-wide empty-state">
+                  <strong>{copy.assumptionTitle}</strong>
+                  <p>{copy.assumptionText}</p>
+                  <p className="warning-text">{copy.reviewWarning}</p>
+                  <p><strong>{copy.goodsCost}:</strong> {goodsCost} {currency}</p>
+                </div>
+              )}
+
+              <div className="cost-form-wide">
+                <TransportCostAssistant
+                  currency={currency}
+                  onApply={isPrimaryCountry ? setInternationalTransportCost : setShippingCost}
+                  productName={productName}
+                  quantity={quantity}
+                  sourceMetadata={sourceMetadata}
+                />
+              </div>
+
+              {isPrimaryCountry ? (
+                <>
+                  <label>{copy.chinaDomesticTransport} ({currency})
+                    <input min={0} name="chinaDomesticTransportCost" onChange={(event) => setChinaDomesticTransportCost(event.target.value)} required step="0.01" type="number" value={chinaDomesticTransportCost} />
+                  </label>
+                  <label>{copy.internationalTransport} ({currency})
+                    <input min={0} name="internationalTransportCost" onChange={(event) => setInternationalTransportCost(event.target.value)} required step="0.01" type="number" value={internationalTransportCost} />
+                  </label>
+                  <label>{copy.insurance} ({currency})
+                    <input min={0} name="insuranceCost" onChange={(event) => setInsuranceCost(event.target.value)} required step="0.01" type="number" value={insuranceCost} />
+                  </label>
+                  <p className="vat-helper"><strong>{copy.transportTotal}:</strong> {currentTransportTotal} {currency}</p>
+                  <label className="checkbox-label cost-form-wide">
+                    <input defaultChecked={values.transportConfirmed} name="transportConfirmed" type="checkbox" />
+                    {copy.transportConfirmed}
+                  </label>
+                </>
+              ) : (
+                <label>{copy.legacyTransport} ({currency})
+                  <input min={0} name="shippingCost" onChange={(event) => setShippingCost(event.target.value)} required step="0.01" type="number" value={shippingCost} />
                 </label>
               )}
-              <label>{copy.inspection} ({currency})<input defaultValue={values.inspectionCost} min={0} name="inspectionCost" required step="0.01" type="number" /></label>
-              <label>{copy.storage} ({currency})<input defaultValue={values.storageCost} min={0} name="storageCost" required step="0.01" type="number" /></label>
-              <label>{copy.other} ({currency})<input defaultValue={values.otherCosts} min={0} name="otherCosts" required step="0.01" type="number" /></label>
-              <label className="checkbox-label"><input defaultChecked={values.needsReview} name="needsReview" type="checkbox" /> Označi za proveru</label>
+
+              <label>{copy.customsDuty} (%)
+                <input defaultValue={values.customsDutyRate} max={500} min={0} name="customsDutyRate" required step="0.0001" type="number" />
+              </label>
+              {isPrimaryCountry && (
+                <label className="checkbox-label cost-form-wide">
+                  <input defaultChecked={values.customsDutyConfirmed} name="customsDutyConfirmed" type="checkbox" />
+                  {copy.customsConfirmed}
+                </label>
+              )}
+              <label>{copy.vat} (%)<input aria-describedby={`vat-help-${offerId}`} readOnly type="number" value={effectiveVatRate} /></label>
+              <input name="vatRate" type="hidden" value={effectiveVatRate} />
+              <p className={automaticVatRate === null && !overrideVat ? "form-error vat-helper" : "vat-helper"} id={`vat-help-${offerId}`}>
+                {automaticVatRate === null && !overrideVat
+                  ? t("PDV nije automatski podešen jer ciljna država nije podržana.")
+                  : overrideVat
+                    ? t("PDV je ručno izmenjen.")
+                    : isPrimaryCountry
+                      ? copy.assumptionText
+                      : t("PDV je automatski podešen prema ciljnoj državi.")}
+              </p>
+              {isPrimaryCountry && (
+                <label>{copy.customsBroker} ({currency})
+                  <input defaultValue={values.customsBrokerCost} min={0} name="customsBrokerCost" required step="0.01" type="number" />
+                </label>
+              )}
+
+              <details
+                className="advanced-costs cost-form-wide"
+                open={previousVatIsOverride || values.needsReview || ["storageCost", "inspectionCost", "otherCosts"].some(
+                  (key) => Number(values[key as keyof typeof values]) > 0,
+                )}
+              >
+                <summary>{locale === "de" ? "Weitere Einstellungen" : locale === "en" ? "More settings" : "Dodatna podešavanja"}</summary>
+                <div>
+                  <label className="checkbox-label">
+                    <input checked={overrideVat} onChange={(event) => setOverrideVat(event.target.checked)} type="checkbox" />
+                    {t("Ručno izmeni PDV")}
+                  </label>
+                  {overrideVat && (
+                    <label>{t("Ručna stopa PDV-a (%)")}
+                      <input max={100} min={0} onChange={(event) => setManualVatRate(event.target.value)} required step="0.0001" type="number" value={manualVatRate} />
+                    </label>
+                  )}
+                  <label>{copy.inspection} ({currency})<input defaultValue={values.inspectionCost} min={0} name="inspectionCost" required step="0.01" type="number" /></label>
+                  <label>{copy.storage} ({currency})<input defaultValue={values.storageCost} min={0} name="storageCost" required step="0.01" type="number" /></label>
+                  <label>{copy.other} ({currency})<input defaultValue={values.otherCosts} min={0} name="otherCosts" required step="0.01" type="number" /></label>
+                  <label className="checkbox-label"><input defaultChecked={values.needsReview} name="needsReview" type="checkbox" /> Označi za proveru</label>
+                </div>
+              </details>
+
+              {error && <p className="form-error cost-form-wide" role="alert">{error}</p>}
+              <button className="cost-form-wide" disabled={pending} type="submit">{pending ? copy.calculating : copy.calculate}</button>
             </div>
           </details>
-          {error && <p className="form-error" role="alert">{error}</p>}
-          <button disabled={pending} type="submit">{pending ? copy.calculating : copy.calculate}</button>
         </form>
       )}
+
       {showResults && latestCalculation && (
         <div className="cost-results">
           <strong>{t("Poslednja kalkulacija")} · {getStatusLabel(latestCalculation.calculationStatus, locale)}</strong>
