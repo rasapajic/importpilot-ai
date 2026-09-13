@@ -70,7 +70,13 @@ jobs:
         run: npm run typecheck
 
       - name: PostgreSQL integration gate
-        run: npx vitest run tests/integration --reporter=verbose --bail=1
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r file; do
+            echo "=== DB INTEGRATION: $file ==="
+            npx vitest run "$file" --reporter=dot --bail=1
+          done < <(find tests/integration -maxdepth 1 -name '*.test.ts' -print | sort)
 
       - name: Full unit and integration suite
         run: npm test
