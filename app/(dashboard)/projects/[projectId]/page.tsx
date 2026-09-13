@@ -1,6 +1,5 @@
 import { notFound } from "next/navigation";
 
-import { OffersPanel } from "@/components/offers/offers-panel";
 import { DeleteEmptySearchButton } from "@/components/projects/delete-empty-search-button";
 import { ProjectBackLink } from "@/components/projects/project-back-link";
 import { ProjectWorkflowStep } from "@/components/projects/project-workflow-step";
@@ -151,7 +150,7 @@ export default async function ProjectPage({
           number={2}
           title={offerStepDisplay.title}
           status={stepStatus.OFFER}
-          summary={offerCount === 0 ? t("Još nema ponuda.") : `${offerCount} ${t("ponuda")}`}
+          summary={offerCount === 0 ? t("Još nema izabrane ponude.") : t("Ponuda je izabrana.")}
           statusLabel={offerStepDisplay.badge}
           lockedText={lockedText}
         >
@@ -180,18 +179,6 @@ export default async function ProjectPage({
               <DeleteEmptySearchButton projectId={project.id} />
             </div>
           )}
-          {offerCount > 0 && (
-            <OffersPanel
-              projectId={project.id}
-              projectName={projectDisplayName}
-              targetCountry={project.targetCountry}
-              projectQuantity={project.quantity}
-              offers={project.offers}
-              showAddControls={false}
-              showCosts={false}
-              showAssessments={false}
-            />
-          )}
         </ProjectWorkflowStep>
 
         <ProjectWorkflowStep
@@ -203,7 +190,7 @@ export default async function ProjectPage({
           summary={decisionStepSummary}
           statusLabel={decisionStepBadge}
           lockedText={lockedText}
-          helperText={t("Pogledajte realnu nabavnu cenu, rizik dobavljača i očekivanu zaradu.")}
+          helperText={t("Unesite svoju prodajnu cenu, proverite stvarni trošak i dobijte jasnu odluku.")}
         >
           <SimpleProfitabilityPanel
             projectId={project.id}
