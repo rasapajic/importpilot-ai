@@ -8,24 +8,26 @@ export class ProfitabilityNoCalculatedOffersError extends Error {}
 export async function checkProjectProfitability(
   projectId: string,
   organizationId: string,
+  offerId?: string,
 ) {
   const project = await prisma.importProject.findFirst({
     where: { id: projectId, organizationId },
     select: {
       id: true,
       offers: {
+        where: offerId ? { id: offerId } : undefined,
         select: {
-id: true,
-costCalculations: {
-  orderBy: { createdAt: "desc" },
-  take: 1,
-  select: { id: true },
-},
-assessments: {
-  orderBy: { createdAt: "desc" },
-  take: 1,
-  select: { costCalculationId: true },
-},
+          id: true,
+          costCalculations: {
+            orderBy: { createdAt: "desc" },
+            take: 1,
+            select: { id: true },
+          },
+          assessments: {
+            orderBy: { createdAt: "desc" },
+            take: 1,
+            select: { costCalculationId: true },
+          },
         },
       },
     },
@@ -48,5 +50,5 @@ assessments: {
     }
   }
 
-  return generateProjectDecision(projectId, organizationId);
+  return generateProjectDecision(projectId, organizationId, offerId);
 }
