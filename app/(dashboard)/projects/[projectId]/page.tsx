@@ -77,6 +77,8 @@ export default async function ProjectPage({
   )
     ? resolvedSearchParams.selectedOffer
     : undefined;
+  const decisionMatchesFocusedOffer = !focusedOfferId || decision?.selectedOfferId === focusedOfferId;
+  const visibleDecisionStatus = decisionMatchesFocusedOffer ? decision?.status ?? null : null;
 
   const offerCount = project.offers.length;
   const calculatedOffers = project.offers.filter((offer) => offer.costCalculations.length > 0);
@@ -90,18 +92,19 @@ export default async function ProjectPage({
     calculatedOfferCount,
     assessedOfferCount,
     assessedCalculatedOfferCount,
-    hasDecision: Boolean(decision),
-    decisionStatus: decision?.status ?? null,
+    hasDecision: Boolean(visibleDecisionStatus),
+    decisionStatus: visibleDecisionStatus,
   });
   const stepStatus = Object.fromEntries(
     workflow.map((step) => [step.id, step.status]),
   ) as Record<ProjectWorkflowStepId, ProjectWorkflowStepStatus>;
-  const hasFinalRecommendation = isFinalDecisionStatus(decision?.status);
+  const projectHasFinalRecommendation = isFinalDecisionStatus(decision?.status);
+  const hasFinalRecommendation = isFinalDecisionStatus(visibleDecisionStatus);
   const canDeleteCurrentSearch = canDeleteEmptySearch({
     offerCount,
     calculationCount: calculatedOfferCount,
     documentCount: project.files.length,
-    hasCompletedRecommendation: hasFinalRecommendation,
+    hasCompletedRecommendation: projectHasFinalRecommendation,
   });
   const decisionAreaStatus: ProjectWorkflowStepStatus = !offerCount
     ? "LOCKED"
@@ -112,8 +115,8 @@ export default async function ProjectPage({
   const lockedText = t("Završite prethodni korak da biste nastavili.");
   const productStepDisplay = getProductStepDisplay(stepStatus.PRODUCT, locale);
   const offerStepDisplay = getOfferStepDisplay(stepStatus.OFFER, locale);
-  const decisionStepTitle = getDecisionStepTitle(decision?.status, locale);
-  const decisionStepSummary = getDecisionStepSummary(decision?.status, locale);
+  const decisionStepTitle = getDecisionStepTitle(visibleDecisionStatus, locale);
+  const decisionStepSummary = getDecisionStepSummary(visibleDecisionStatus, locale);
   const decisionStepBadge = getDecisionStepBadge(decisionAreaStatus, locale);
   const legacyUrlImport = resolvedSearchParams.importUrl === "1";
 
