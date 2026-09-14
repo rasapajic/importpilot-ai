@@ -120,7 +120,13 @@ describeWithDatabase("supplier search result import and tenant isolation", () =>
       },
     });
 
-    expect(received).toEqual({ query: "fan", quantity: 275, targetCountry: "AT" });
+    expect(received).toEqual({
+      query: "fan",
+      quantity: 275,
+      targetCountry: "AT",
+      queryVariants: ["fan"],
+      chinese1688QueryVariants: [],
+    });
     expect(outcome.results).toHaveLength(1);
     expect(outcome.candidateAnalyses).toEqual([
       expect.objectContaining({
