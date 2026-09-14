@@ -29,6 +29,18 @@ export function convertToEur(
   return numericValue * rate;
 }
 
+export function convertFromEur(
+  value: number | string | { toString(): string },
+  currency: string | null,
+  snapshot: FxSnapshot = DEFAULT_EUR_FX_SNAPSHOT,
+) {
+  if (!currency) return null;
+  const rate = snapshot.ratesToEur[currency.toUpperCase()];
+  const numericValue = Number(value.toString());
+  if (!Number.isFinite(numericValue) || !Number.isFinite(rate) || rate <= 0) return null;
+  return numericValue / rate;
+}
+
 export function formatCurrency(value: number) {
   return value.toFixed(2);
 }

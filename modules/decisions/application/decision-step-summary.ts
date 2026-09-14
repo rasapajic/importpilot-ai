@@ -6,33 +6,46 @@ const finalDecisionStatuses = new Set([
   "DO_NOT_BUY",
 ]);
 
-type FinalDecisionStatus = "READY_TO_BUY" | "NEGOTIATE_FIRST" | "DO_NOT_BUY";
+type DecisionStatus =
+  | "READY_TO_BUY"
+  | "NEGOTIATE_FIRST"
+  | "NEED_MORE_OFFERS"
+  | "DO_NOT_BUY";
 
 type DecisionDisplayCopy = {
   title: string;
   summary: string;
 };
 
-const decisionDisplay: Record<FinalDecisionStatus, Record<Locale, DecisionDisplayCopy>> = {
+const decisionDisplay: Record<DecisionStatus, Record<Locale, DecisionDisplayCopy>> = {
   READY_TO_BUY: {
-    sr: { title: "Isplati se", summary: "Nastavi sa proverama" },
-    de: { title: "Rentabel", summary: "Prüfungen fortsetzen" },
-    en: { title: "Profitable", summary: "Continue the checks" },
+    sr: { title: "BUY", summary: "Ponuda prolazi osnovne provere" },
+    de: { title: "BUY", summary: "Das Angebot besteht die Grundprüfungen" },
+    en: { title: "BUY", summary: "The offer passes the core checks" },
   },
   NEGOTIATE_FIRST: {
-    sr: { title: "Može se isplatiti", summary: "Traži bolje uslove" },
-    de: { title: "Kann rentabel sein", summary: "Bessere Konditionen verhandeln" },
-    en: { title: "Can be profitable", summary: "Negotiate better terms" },
+    sr: { title: "NEGOTIATE", summary: "Traži bolje uslove pre kupovine" },
+    de: { title: "NEGOTIATE", summary: "Vor dem Kauf bessere Konditionen verhandeln" },
+    en: { title: "NEGOTIATE", summary: "Negotiate better terms before buying" },
+  },
+  NEED_MORE_OFFERS: {
+    sr: { title: "WATCH", summary: "Još nema dovoljno podataka za odluku" },
+    de: { title: "WATCH", summary: "Noch nicht genügend Daten für eine Entscheidung" },
+    en: { title: "WATCH", summary: "There is not enough data for a decision yet" },
   },
   DO_NOT_BUY: {
-    sr: { title: "Ne isplati se", summary: "Traži bolju ponudu" },
-    de: { title: "Nicht rentabel", summary: "Besseres Angebot suchen" },
-    en: { title: "Not profitable", summary: "Find a better offer" },
+    sr: { title: "SKIP", summary: "Odnos cene i rizika nije dovoljno dobar" },
+    de: { title: "SKIP", summary: "Preis und Risiko sind nicht attraktiv genug" },
+    en: { title: "SKIP", summary: "The price-to-risk tradeoff is not good enough" },
   },
 };
 
 function resolveLocale(locale: Locale | string): Locale {
   return locale === "de" || locale === "sr" ? locale : "en";
+}
+
+function isDecisionStatus(status: string | null | undefined): status is DecisionStatus {
+  return Boolean(status && status in decisionDisplay);
 }
 
 export function isFinalDecisionStatus(status: string | null | undefined) {
@@ -43,18 +56,18 @@ export function getDecisionStepTitle(
   status: string | null | undefined,
   locale: Locale | string,
 ) {
-  if (!isFinalDecisionStatus(status)) {
+  if (!isDecisionStatus(status)) {
     return translateText("Da li se isplati?", locale);
   }
-  return decisionDisplay[status as FinalDecisionStatus][resolveLocale(locale)].title;
+  return decisionDisplay[status][resolveLocale(locale)].title;
 }
 
 export function getDecisionStepSummary(
   status: string | null | undefined,
   locale: Locale | string,
 ) {
-  if (!isFinalDecisionStatus(status)) {
+  if (!isDecisionStatus(status)) {
     return translateText("Generate recommendation", locale);
   }
-  return decisionDisplay[status as FinalDecisionStatus][resolveLocale(locale)].summary;
+  return decisionDisplay[status][resolveLocale(locale)].summary;
 }

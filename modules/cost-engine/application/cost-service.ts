@@ -4,6 +4,7 @@ import type { z } from "zod";
 import { prisma } from "@/lib/database/prisma";
 import { calculateLandedCost } from "@/modules/cost-engine/domain/calculator";
 import { getImportCountryProfile } from "@/modules/cost-engine/domain/import-country-profiles";
+import { isSupportedLandedCostIncoterm } from "@/modules/cost-engine/domain/incoterms";
 import {
   createLandedCostAssumptions,
   requiresImportCostReview,
@@ -18,6 +19,11 @@ type CostRequest = z.input<typeof costCalculationRequestSchema>;
 
 export class CostOfferNotFoundError extends Error {}
 export class IncompleteOfferError extends Error {}
+export class UnsupportedLandedCostIncotermError extends Error {
+  constructor(readonly incoterm: string) {
+    super(`ImportPilot 1.0 ne računa potvrđeni landed cost za Incoterm ${incoterm}.`);
+  }
+}
 
 export async function createCostCalculation(
   offerId: string,
@@ -32,6 +38,9 @@ export async function createCostCalculation(
   if (!offer) throw new CostOfferNotFoundError();
   if (offer.unitPrice === null || !offer.currency || !offer.incoterm) {
     throw new IncompleteOfferError();
+  }
+  if (!isSupportedLandedCostIncoterm(offer.incoterm)) {
+    throw new UnsupportedLandedCostIncotermError(offer.incoterm);
   }
 
   const profile = getImportCountryProfile(offer.project.targetCountry);

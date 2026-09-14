@@ -29,11 +29,16 @@ function supplierRiskLevelFromAssessment(assessment: { scoreBreakdown: Prisma.Js
   return breakdown.supplierRiskV2?.riskLevel;
 }
 
-export async function generateProjectDecision(projectId: string, organizationId: string) {
+export async function generateProjectDecision(
+  projectId: string,
+  organizationId: string,
+  offerId?: string,
+) {
   const project = await prisma.importProject.findFirst({
     where: { id: projectId, organizationId },
     include: {
       offers: {
+        where: offerId ? { id: offerId } : undefined,
         include: {
           costCalculations: { orderBy: { createdAt: "desc" }, take: 1 },
           assessments: { orderBy: { createdAt: "desc" }, take: 1 },
@@ -77,14 +82,14 @@ export async function generateProjectDecision(projectId: string, organizationId:
   return prisma.$transaction(async (transaction) => {
     const created = await transaction.projectDecision.create({
       data: {
-      organizationId,
-      projectId,
-      selectedOfferId: decision.selectedOfferId,
-      status: decision.status,
-      decisionReason: decision.decisionReason,
-      actionChecklist: jsonValue(decision.actionChecklist),
-      summarySnapshot: jsonValue(decision.summarySnapshot),
-      decisionVersion: decision.decisionVersion,
+        organizationId,
+        projectId,
+        selectedOfferId: decision.selectedOfferId,
+        status: decision.status,
+        decisionReason: decision.decisionReason,
+        actionChecklist: jsonValue(decision.actionChecklist),
+        summarySnapshot: jsonValue(decision.summarySnapshot),
+        decisionVersion: decision.decisionVersion,
       },
     });
     if (project.completionStatus === ProjectCompletionStatus.ACTIVE) {
@@ -114,7 +119,11 @@ export async function generateProjectDecision(projectId: string, organizationId:
       type: ProjectActivityType.FINAL_DECISION_CREATED,
       title: "Finalna projektna odluka je kreirana",
       description: decision.status,
-      metadata: { decisionId: created.id, status: decision.status },
+      metadata: {
+        decisionId: created.id,
+        status: decision.status,
+        ...(offerId ? { focusedOfferId: offerId } : {}),
+      },
     });
     return created;
   });

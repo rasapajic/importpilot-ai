@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { convertToEur, getEuroDisplay, type FxSnapshot } from "../../modules/fx/euro-display";
+import {
+  convertFromEur,
+  convertToEur,
+  getEuroDisplay,
+  type FxSnapshot,
+} from "../../modules/fx/euro-display";
 
 const fx: FxSnapshot = {
   baseCurrency: "EUR",
@@ -19,6 +24,11 @@ describe("EUR presentation conversion", () => {
     });
   });
 
+  it("converts EUR back to the offer currency", () => {
+    expect(convertFromEur(9, "USD", fx)).toBe(10);
+    expect(convertFromEur(10, "EUR", fx)).toBe(10);
+  });
+
   it("keeps EUR as EUR", () => {
     expect(getEuroDisplay(10, "EUR", fx)).toMatchObject({
       original: "10.00 EUR",
@@ -33,5 +43,6 @@ describe("EUR presentation conversion", () => {
       eur: null,
       converted: false,
     });
+    expect(convertFromEur(10, "JPY", fx)).toBeNull();
   });
 });

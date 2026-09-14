@@ -41,15 +41,16 @@ describe("simple client workflow", () => {
     expect(pageSource).not.toContain('title={t("Realna nabavna cena")}');
   });
 
-  it("uses one bounded request to assess calculated offers and generate the decision", () => {
+  it("uses one bounded request to assess the focused calculated offer and generate the decision", () => {
     expect(profitabilitySource).toContain("Proveri isplativost");
     expect(profitabilitySource).toContain("ProfitabilityCheckControl");
-    expect(profitabilityControlSource).toContain('action={`/api/projects/${projectId}/profitability-check`}');
+    expect(profitabilityControlSource).toContain("const actionUrl = focusedOfferId");
+    expect(profitabilityControlSource).toContain("action={actionUrl}");
     expect(profitabilityControlSource).toContain('method="post"');
     expect(profitabilityControlSource).toContain("onSubmit={submit}");
     expect(profitabilityControlSource).toContain("AbortController");
     expect(profitabilityServiceSource).toContain("assessSupplierOffer");
-    expect(profitabilityServiceSource).toContain("generateProjectDecision");
+    expect(profitabilityServiceSource).toContain("generateProjectDecision(projectId, organizationId, offerId)");
     expect(profitabilitySource).not.toContain("LUNA_COUNTRY_RANKING_V1");
     expect(profitabilitySource).not.toContain("countryProfileVersion");
   });
@@ -60,18 +61,21 @@ describe("simple client workflow", () => {
     expect(profitabilitySource).toContain("Promeni troškove");
   });
 
-  it("keeps profitability active until a final recommendation exists", () => {
-    expect(pageSource).toContain("const hasFinalRecommendation = isFinalDecisionStatus(decision?.status)");
+  it("keeps a newly focused offer active until that same offer has a final recommendation", () => {
+    expect(pageSource).toContain("const decisionMatchesFocusedOffer = !focusedOfferId || decision?.selectedOfferId === focusedOfferId");
+    expect(pageSource).toContain("const visibleDecisionStatus = decisionMatchesFocusedOffer ? decision?.status ?? null : null");
+    expect(pageSource).toContain("const hasFinalRecommendation = isFinalDecisionStatus(visibleDecisionStatus)");
     expect(pageSource).toContain('hasFinalRecommendation\n      ? "COMPLETED"\n      : "ACTIVE"');
-    expect(pageSource).toContain("const decisionStepSummary = getDecisionStepSummary(decision?.status, locale)");
+    expect(pageSource).toContain("const decisionStepSummary = getDecisionStepSummary(visibleDecisionStatus, locale)");
     expect(pageSource).toContain("summary={decisionStepSummary}");
   });
 
-  it("keeps documents and history as secondary information", () => {
-    expect(pageSource).toContain("Dodatne informacije");
-    expect(pageSource).toContain("Uvozni dokumenti");
-    expect(pageSource).toContain("ProjectTimeline");
-    expect(pageSource).toContain("MobileWorkflowActionBar");
+  it("keeps 2.0 workspace tools outside the frozen 1.0 flow", () => {
+    expect(pageSource).not.toContain("Dodatne informacije");
+    expect(pageSource).not.toContain("Uvozni dokumenti");
+    expect(pageSource).not.toContain("ProjectTimeline");
+    expect(pageSource).not.toContain("DirectUploadForm");
+    expect(pageSource).not.toContain("MobileWorkflowActionBar");
   });
 
   it("localizes the primary profitability action", () => {

@@ -1,7 +1,19 @@
 import { describe, expect, it } from "vitest";
 
+import type { FxSnapshot } from "../../modules/fx/euro-display";
 import { estimateTajaPreliminaryLandedCost } from "../../modules/product-search/domain/taja-preliminary-cost-estimate";
 import type { SupplierOfferSearchResult } from "../../modules/product-search/domain/search";
+
+const freshFx: FxSnapshot = {
+  baseCurrency: "EUR",
+  ratesToEur: {
+    EUR: 1,
+    USD: 1 / 1.1592,
+    CNY: 1 / 7.7762,
+  },
+  source: "ECB test snapshot",
+  timestamp: "2026-09-11T00:00:00.000Z",
+};
 
 function offer(
   overrides: Partial<SupplierOfferSearchResult> = {},
@@ -55,6 +67,43 @@ describe("TAJA preliminary landed-cost estimate", () => {
     ]));
     expect(estimate!.warnings).not.toContain("CHINA_DOMESTIC_TRANSPORT_ASSUMED");
     expect(estimate!.warnings).not.toContain("SOURCING_AGENT_FEE_ASSUMED");
+  });
+
+  it("fails closed for non-EUR offers when live FX is intentionally unavailable", () => {
+    expect(estimateTajaPreliminaryLandedCost({
+      result: offer(),
+      quantity: 100,
+      targetCountry: "AT",
+      targetMarginPercent: 0,
+      fxSnapshot: null,
+    })).toBeNull();
+  });
+
+  it("uses an explicitly supplied fresh FX snapshot and records its provenance", () => {
+    const estimate = estimateTajaPreliminaryLandedCost({
+      result: offer(),
+      quantity: 100,
+      targetCountry: "AT",
+      targetMarginPercent: 0,
+      fxSnapshot: freshFx,
+    });
+
+    expect(estimate).not.toBeNull();
+    expect(estimate).toMatchObject({
+      fxSource: "ECB test snapshot",
+      fxTimestamp: "2026-09-11T00:00:00.000Z",
+    });
+    expect(estimate!.goodsCostEur).toBeCloseTo(500 / 1.1592, 2);
+  });
+
+  it("can estimate an EUR-denominated offer without any FX snapshot", () => {
+    expect(estimateTajaPreliminaryLandedCost({
+      result: offer({ currency: "EUR" }),
+      quantity: 100,
+      targetCountry: "AT",
+      targetMarginPercent: 0,
+      fxSnapshot: null,
+    })).not.toBeNull();
   });
 
   it("does not calculate a 100-unit landed cost from a price whose MOQ is 1000", () => {

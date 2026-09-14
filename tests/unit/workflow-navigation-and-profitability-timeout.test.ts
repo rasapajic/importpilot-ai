@@ -31,13 +31,14 @@ describe("workflow navigation priority", () => {
 });
 
 describe("profitability check timeout", () => {
-  it("bounds authentication and profitability work on the server", () => {
+  it("bounds authentication and focused-offer profitability work on the server", () => {
     expect(profitabilityRouteSource).toContain("PROFITABILITY_CHECK_TIMEOUT_MS = 14_000");
     expect(profitabilityRouteSource).toContain("Promise.race");
-    expect(profitabilityRouteSource).toContain("runProfitabilityRequest(request, projectId)");
+    expect(profitabilityRouteSource).toContain("runProfitabilityRequest(request, projectId, offerId)");
     expect(profitabilityRouteSource).toContain("await authenticateRequest(request)");
     expect(profitabilityRouteSource).toContain("ProfitabilityCheckTimeoutError");
     expect(profitabilityRouteSource).toContain('"CHECK_TIMEOUT"');
+    expect(profitabilityRouteSource).toContain('request.nextUrl.searchParams.get("offerId")');
   });
 
   it("stops the visible client lifecycle even if the server never responds", () => {

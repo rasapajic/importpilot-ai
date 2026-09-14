@@ -5,6 +5,7 @@ import {
   CostOfferNotFoundError,
   createCostCalculation,
   IncompleteOfferError,
+  UnsupportedLandedCostIncotermError,
 } from "@/modules/cost-engine/application/cost-service";
 import { costCalculationRequestSchema } from "@/modules/cost-engine/domain/validation";
 
@@ -39,10 +40,17 @@ export async function POST(
         { status: 400 },
       );
     }
+    if (error instanceof UnsupportedLandedCostIncotermError) {
+      return NextResponse.json(
+        {
+          error: `ImportPilot 1.0 potvrđeni landed cost podržava EXW, FCA, FAS i FOB. Ponuda koristi ${error.incoterm}; za taj uslov nećemo prikazati potencijalno pogrešnu računicu.`,
+        },
+        { status: 400 },
+      );
+    }
     if (error instanceof Error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
     throw error;
   }
 }
-

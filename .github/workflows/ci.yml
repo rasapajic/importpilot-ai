@@ -12,9 +12,26 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: tradepilot
+          POSTGRES_PASSWORD: tradepilot
+          POSTGRES_DB: tradepilot
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U tradepilot -d tradepilot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
     env:
       NODE_ENV: test
       DATABASE_URL: postgresql://tradepilot:tradepilot@localhost:5432/tradepilot?schema=public
+      TEST_DATABASE_URL: postgresql://tradepilot:tradepilot@localhost:5432/tradepilot?schema=public
       S3_ENDPOINT: http://localhost:9000
       S3_PUBLIC_ENDPOINT: http://localhost:9000
       S3_REGION: eu-central-1
@@ -40,8 +57,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Production dependency audit
+        run: npm audit --omit=dev --audit-level=high
+
       - name: Generate Prisma client
         run: npm run db:generate
+
+      - name: Apply test database migrations
+        run: npm run db:migrate:deploy
 
       - name: Lint
         run: npm run lint
@@ -49,7 +72,16 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Unit and integration test suite
+      - name: PostgreSQL integration gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r file; do
+            echo "=== DB INTEGRATION: $file ==="
+            npx vitest run "$file" --reporter=dot --bail=1
+          done < <(find tests/integration -maxdepth 1 -name '*.test.ts' -print | sort)
+
+      - name: Full unit and integration suite
         run: npm test
 
       - name: Production build
