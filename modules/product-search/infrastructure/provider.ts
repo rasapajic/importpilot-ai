@@ -10,11 +10,13 @@ type SupplierProviderOptions = {
   onAiUsage?: (events: AiUsageEvent[]) => Promise<void> | void;
 };
 
-type SupplierProviderEnvironment = Pick<
-  NodeJS.ProcessEnv,
-  | "SUPPLIER_SEARCH_PROVIDER_BASE_URL"
-  | "SUPPLIER_SEARCH_PROVIDER_URL"
-  | "SUPPLIER_SEARCH_PROVIDER_HEALTH_URL"
+type SupplierProviderEnvironment = Partial<
+  Pick<
+    NodeJS.ProcessEnv,
+    | "SUPPLIER_SEARCH_PROVIDER_BASE_URL"
+    | "SUPPLIER_SEARCH_PROVIDER_URL"
+    | "SUPPLIER_SEARCH_PROVIDER_HEALTH_URL"
+  >
 >;
 
 export const SUPPLIER_SEARCH_APP_PROVIDER_HARD_TIMEOUT_MS = 55_000;
