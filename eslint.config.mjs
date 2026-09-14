@@ -5,5 +5,10 @@ import nextTs from "eslint-config-next/typescript";
 export default defineConfig([
   ...nextVitals,
   ...nextTs,
-  globalIgnores([".next/**", "coverage/**", "generated/**"]),
+  globalIgnores([
+    ".next/**",
+    "coverage/**",
+    "generated/**",
+    "services/importpilot-search-provider/dist/**",
+  ]),
 ]);
