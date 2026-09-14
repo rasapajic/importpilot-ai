@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "node --env-file=.env --import tsx --watch src/dev.ts",
-    "start": "node --env-file=.env --import tsx src/dev.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/start.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
