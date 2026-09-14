@@ -14,7 +14,26 @@ export function getRequestContext(request: NextRequest): RequestContext {
   };
 }
 
+function normalizeOrigin(value: string | null | undefined) {
+  if (!value) return null;
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
+}
+
 export function isSameOrigin(request: NextRequest) {
-  const origin = request.headers.get("origin");
-  return origin === request.nextUrl.origin;
+  const requestOrigin = normalizeOrigin(request.headers.get("origin"));
+  if (!requestOrigin) return false;
+
+  const allowedOrigins = new Set(
+    [
+      normalizeOrigin(request.nextUrl.origin),
+      normalizeOrigin(process.env.APP_ORIGIN),
+      normalizeOrigin(process.env.RENDER_EXTERNAL_URL),
+    ].filter((origin): origin is string => Boolean(origin)),
+  );
+
+  return allowedOrigins.has(requestOrigin);
 }
