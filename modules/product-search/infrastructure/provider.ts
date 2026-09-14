@@ -10,14 +10,11 @@ type SupplierProviderOptions = {
   onAiUsage?: (events: AiUsageEvent[]) => Promise<void> | void;
 };
 
-type SupplierProviderEnvironment = Partial<
-  Pick<
-    NodeJS.ProcessEnv,
-    | "SUPPLIER_SEARCH_PROVIDER_BASE_URL"
-    | "SUPPLIER_SEARCH_PROVIDER_URL"
-    | "SUPPLIER_SEARCH_PROVIDER_HEALTH_URL"
-  >
->;
+type SupplierProviderEnvironment = {
+  SUPPLIER_SEARCH_PROVIDER_BASE_URL?: string;
+  SUPPLIER_SEARCH_PROVIDER_URL?: string;
+  SUPPLIER_SEARCH_PROVIDER_HEALTH_URL?: string;
+};
 
 export const SUPPLIER_SEARCH_APP_PROVIDER_HARD_TIMEOUT_MS = 55_000;
 
@@ -33,13 +30,23 @@ function boundedProviderTimeout(value: string | undefined) {
 }
 
 export function resolveSupplierProviderEndpoints(
-  environment: SupplierProviderEnvironment = process.env,
+  environment?: SupplierProviderEnvironment,
 ) {
-  const baseUrl = environment.SUPPLIER_SEARCH_PROVIDER_BASE_URL?.trim().replace(/\/+$/, "");
+  const resolvedEnvironment = environment ?? {
+    SUPPLIER_SEARCH_PROVIDER_BASE_URL: process.env.SUPPLIER_SEARCH_PROVIDER_BASE_URL,
+    SUPPLIER_SEARCH_PROVIDER_URL: process.env.SUPPLIER_SEARCH_PROVIDER_URL,
+    SUPPLIER_SEARCH_PROVIDER_HEALTH_URL: process.env.SUPPLIER_SEARCH_PROVIDER_HEALTH_URL,
+  };
+  const baseUrl = resolvedEnvironment.SUPPLIER_SEARCH_PROVIDER_BASE_URL
+    ?.trim()
+    .replace(/\/+$/, "");
+
   return {
-    endpoint: environment.SUPPLIER_SEARCH_PROVIDER_URL?.trim() || (baseUrl ? `${baseUrl}/search` : undefined),
+    endpoint:
+      resolvedEnvironment.SUPPLIER_SEARCH_PROVIDER_URL?.trim() ||
+      (baseUrl ? `${baseUrl}/search` : undefined),
     healthEndpoint:
-      environment.SUPPLIER_SEARCH_PROVIDER_HEALTH_URL?.trim() ||
+      resolvedEnvironment.SUPPLIER_SEARCH_PROVIDER_HEALTH_URL?.trim() ||
       (baseUrl ? `${baseUrl}/health` : undefined),
   };
 }
