@@ -60,6 +60,10 @@ jobs:
       - name: Production dependency audit
         run: npm audit --omit=dev --audit-level=high
 
+      - name: Search provider production build gate
+        working-directory: services/importpilot-search-provider
+        run: npm ci && npm run typecheck && npm test && npm run build
+
       - name: Generate Prisma client
         run: npm run db:generate
 
