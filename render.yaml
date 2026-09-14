@@ -18,3 +18,74 @@ services:
         value: "8000"
       - key: URL_IMPORT_MAX_RESPONSE_BYTES
         value: "1000000"
+
+  - type: web
+    name: importpilot-search-provider-staging
+    runtime: node
+    rootDir: services/importpilot-search-provider
+    plan: free
+    region: frankfurt
+    buildCommand: npm ci && npm run typecheck && npm test && npm run build
+    startCommand: NODE_ENV=production npm start
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: SEARCH_PROVIDER_TOKEN
+        generateValue: true
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_SEARCH_MODEL
+        value: gpt-5-mini
+      - key: OPENAI_SEARCH_MAX_RESULTS
+        value: "10"
+      - key: UPSTREAM_TIMEOUT_MS
+        value: "50000"
+      - key: SEARCH_PROVIDER_DEBUG_HTML
+        value: "false"
+
+  - type: web
+    name: importpilot-1-0-staging
+    runtime: node
+    plan: free
+    region: frankfurt
+    buildCommand: npm ci && npm run db:generate && npm run build
+    preDeployCommand: npm run db:migrate:deploy
+    startCommand: NODE_ENV=production npx next start --hostname 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: importpilot-staging-db
+          property: connectionString
+      - key: SUPPLIER_SEARCH_PROVIDER_BASE_URL
+        fromService:
+          type: web
+          name: importpilot-search-provider-staging
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: SUPPLIER_SEARCH_PROVIDER_TOKEN
+        fromService:
+          type: web
+          name: importpilot-search-provider-staging
+          envVarKey: SEARCH_PROVIDER_TOKEN
+      - key: SUPPLIER_SEARCH_PROVIDER_TIMEOUT_MS
+        value: "55000"
+      - key: SUPPLIER_SEARCH_PROVIDER_MAX_ATTEMPTS
+        value: "1"
+      - key: S3_ENDPOINT
+        value: https://storage-disabled.invalid
+      - key: S3_PUBLIC_ENDPOINT
+        value: https://storage-disabled.invalid
+      - key: S3_REGION
+        value: eu-central-1
+      - key: S3_BUCKET
+        value: importpilot-staging-disabled
+      - key: S3_ACCESS_KEY
+        value: disabled
+      - key: S3_SECRET_KEY
+        generateValue: true
+
+databases:
+  - name: importpilot-staging-db
+    plan: free
+    region: frankfurt
+    postgresMajorVersion: "16"
