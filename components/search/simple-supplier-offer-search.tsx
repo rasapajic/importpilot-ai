@@ -7,6 +7,7 @@ import { useI18n } from "@/components/i18n/i18n-provider";
 import { SearchResultImage } from "@/components/search/search-result-image";
 import type { FxSnapshot } from "@/modules/fx/euro-display";
 import type { Locale } from "@/modules/i18n/translations";
+import { matchesExplicitProductSpecifications } from "@/modules/product-search/domain/explicit-spec-match";
 import type { SupplierOfferSearchResult } from "@/modules/product-search/domain/search";
 import { estimateTajaPreliminaryLandedCost } from "@/modules/product-search/domain/taja-preliminary-cost-estimate";
 import type { TajaCandidateAnalysisWithProductForm } from "@/modules/product-search/domain/taja-product-form-policy";
@@ -57,7 +58,7 @@ const copy: Record<Locale, Copy> = {
     search: "Pronađi ponude",
     retry: "Pokušaj ponovo",
     noResults: "Nema dovoljno pouzdanih ponuda",
-    noResultsText: "Pokušajte ponovo. ImportPilot neće prikazati nepouzdanu ponudu samo da bi popunio listu.",
+    noResultsText: "Nijedna pronađena ponuda ne potvrđuje sve eksplicitne specifikacije. Pokušajte ponovo; ImportPilot neće prikazati pogrešan proizvod samo da bi popunio listu.",
     supplierPrice: "Cena dobavljača",
     landedCost: "Landed cost",
     landedEstimate: "procena",
@@ -85,7 +86,7 @@ const copy: Record<Locale, Copy> = {
     search: "Angebote finden",
     retry: "Erneut versuchen",
     noResults: "Keine ausreichend verlässlichen Angebote",
-    noResultsText: "Versuchen Sie es erneut. ImportPilot zeigt kein unzuverlässiges Angebot nur um die Liste zu füllen.",
+    noResultsText: "Kein gefundenes Angebot bestätigt alle ausdrücklich genannten Spezifikationen. Versuchen Sie es erneut; ImportPilot zeigt kein falsches Produkt nur um die Liste zu füllen.",
     supplierPrice: "Lieferantenpreis",
     landedCost: "Landed Cost",
     landedEstimate: "Schätzung",
@@ -113,7 +114,7 @@ const copy: Record<Locale, Copy> = {
     search: "Find offers",
     retry: "Try again",
     noResults: "No sufficiently reliable offers",
-    noResultsText: "Try again. ImportPilot will not show an unreliable offer just to fill the list.",
+    noResultsText: "No found offer confirms every explicit specification. Try again; ImportPilot will not show the wrong product just to fill the list.",
     supplierPrice: "Supplier price",
     landedCost: "Landed cost",
     landedEstimate: "estimate",
@@ -293,15 +294,15 @@ export function SimpleSupplierOfferSearch({
   }
 
   const analysisByUrl = new Map(analyses.map((analysis) => [analysis.productUrl, analysis]));
-  const ranked = (results ?? [])
+  const specificationMatches = (results ?? []).filter((result) =>
+    matchesExplicitProductSpecifications(productName, result),
+  );
+  const ranked = specificationMatches
     .map((result, index) => ({ result, index, analysis: analysisByUrl.get(result.productUrl) }))
     .filter((entry) => entry.analysis?.productForm.matchStatus !== "MISMATCH")
     .sort((left, right) => (left.analysis?.rank ?? left.index + 100) - (right.analysis?.rank ?? right.index + 100));
-  const visible = (ranked.length > 0 ? ranked : (results ?? []).map((result, index) => ({
-    result,
-    index,
-    analysis: analysisByUrl.get(result.productUrl),
-  }))).slice(0, 5);
+  const visible = ranked.slice(0, 5);
+  const noReliableResults = results !== null && !loading && visible.length === 0;
 
   return (
     <section className="dashboard-card supplier-search">
@@ -320,7 +321,7 @@ export function SimpleSupplierOfferSearch({
         <button className="primary-button" onClick={() => void runSearch()} type="button">{text.search}</button>
       )}
 
-      {results?.length === 0 && !loading && (
+      {noReliableResults && (
         <div className="empty-state">
           <h3>{text.noResults}</h3>
           <p>{text.noResultsText}</p>
