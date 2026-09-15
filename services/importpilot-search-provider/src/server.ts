@@ -4,6 +4,7 @@ import { DEFAULT_OPENAI_PRICING } from "./ai-cost.js";
 import { createSearchProviderApp } from "./app.js";
 import { createAlibabaSupplierSearchSource } from "./alibaba-source.js";
 import { createDevelopmentLogger } from "./development-log.js";
+import { createExplicitSpecFilteringSource } from "./explicit-spec-filter.js";
 import { createMadeInChinaSupplierSearchSource } from "./made-in-china-provider.js";
 import { createOpenAI1688SearchSource } from "./openai-1688-search-source.js";
 import { createOpenAIAlibabaSearchSource } from "./openai-alibaba-search-source.js";
@@ -119,7 +120,7 @@ const alibabaSource = createFallbackSupplierSearchSource([
     maxResults: Number(process.env.OPENAI_ALIBABA_MAX_RESULTS ?? 5),
   }),
 ], logger);
-const source = createAggregatingSupplierSearchSource([
+const aggregatedSource = createAggregatingSupplierSearchSource([
   createOpenAIWebSearchSource({
     ...openAiSourceOptions,
     maxResults: Number(process.env.OPENAI_SEARCH_MAX_RESULTS ?? 10),
@@ -148,6 +149,7 @@ const source = createAggregatingSupplierSearchSource([
   maxResults: Number(process.env.TAJA_DEEP_SEARCH_MAX_RESULTS ?? 30),
   maxResultsPerSource: Number(process.env.TAJA_DEEP_SEARCH_MAX_PER_SOURCE ?? 15),
 }, logger);
+const source = createExplicitSpecFilteringSource(aggregatedSource);
 
 const server = createServer(createSearchProviderApp({
   token,
