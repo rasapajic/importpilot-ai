@@ -80,6 +80,94 @@ export function coreProductTokens(query: string) {
   return [...new Set(tokens(query).filter((token) => !ignoredTokens.has(token)))];
 }
 
+function normalizedSpecText(value: string) {
+  return value
+    .normalize("NFKD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .replace(/[–—]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractWattages(value: string) {
+  return [...normalizedSpecText(value).matchAll(/\b(\d{2,4})\s*w(?:att(?:s)?)?\b/g)]
+    .map((match) => Number(match[1]))
+    .filter((number) => Number.isFinite(number));
+}
+
+function extractMeterLengths(value: string) {
+  return [...normalizedSpecText(value).matchAll(
+    /\b(\d+(?:[.,]\d+)?)\s*(?:m|meter|meters|metre|metres)\b/g,
+  )]
+    .map((match) => Number(match[1]?.replace(",", ".")))
+    .filter((number) => Number.isFinite(number));
+}
+
+function normalizedConnectorText(value: string) {
+  return normalizedSpecText(value)
+    .replace(/[-_/+]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function requestsUsbCToUsbC(value: string) {
+  const text = normalizedConnectorText(value);
+  return /\b(?:usb|type)\s*c\s+(?:to|2)\s+(?:usb|type)\s*c\b/.test(text);
+}
+
+function candidateMatchesUsbCToUsbC(value: string) {
+  const text = normalizedConnectorText(value);
+  if (/\b(?:2|3)\s*in\s*1\b/.test(text)) return false;
+  if (/\b(?:micro(?:\s*usb)?|lightning)\b/.test(text)) return false;
+  if (/\b(?:usb|type)\s*a\b/.test(text)) return false;
+  if (/\b(?:usb|type)\s*c\s+(?:to|2)\s+(?:usb|type)\s*c\b/.test(text)) return true;
+  const typeCMentions = text.match(/\b(?:usb|type)\s*c\b/g)?.length ?? 0;
+  return typeCMentions >= 2;
+}
+
+function matchesExplicitSpecifications(productQuery: string, title: string) {
+  const requestedWattages = extractWattages(productQuery);
+  if (requestedWattages.length > 0) {
+    const offeredWattages = new Set(extractWattages(title));
+    if (!requestedWattages.some((wattage) => offeredWattages.has(wattage))) return false;
+  }
+
+  const requestedLengths = extractMeterLengths(productQuery);
+  if (requestedLengths.length > 0) {
+    const offeredLengths = extractMeterLengths(title);
+    if (!requestedLengths.some((requested) =>
+      offeredLengths.some((offered) => Math.abs(offered - requested) < 0.001)
+    )) {
+      return false;
+    }
+  }
+
+  if (/\bbraid(?:ed|ing)?\b/.test(normalizedSpecText(productQuery)) &&
+      !/\bbraid(?:ed|ing)?\b/.test(normalizedSpecText(title))) {
+    return false;
+  }
+
+  if (requestsUsbCToUsbC(productQuery) && !candidateMatchesUsbCToUsbC(title)) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Enforces only specifications that are explicit and mechanically verifiable
+ * from the listing title. Semantic providers remain trusted for product meaning,
+ * but they may not override a direct contradiction such as 1.5 m vs 1 m,
+ * a missing requested wattage, or a multi-connector cable when C-to-C was asked.
+ */
+export function filterHardSpecificationMatches(
+  productQuery: string,
+  results: SupplierSearchResult[],
+) {
+  return results.filter((result) => matchesExplicitSpecifications(productQuery, result.title));
+}
+
 function relevanceScore(queryTokens: string[], title: string) {
   const titleTokens = tokens(title);
   const titleSet = new Set(titleTokens);
@@ -113,8 +201,9 @@ export function rankRelevantSupplierResults(
   const requiredMatches = strict
     ? Math.max(2, Math.ceil(queryTokens.length * 0.5))
     : 0;
+  const hardMatchedResults = filterHardSpecificationMatches(productQuery, results);
 
-  return results
+  return hardMatchedResults
     .map((result, index) => ({
       result,
       index,
