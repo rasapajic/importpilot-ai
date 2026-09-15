@@ -65,6 +65,61 @@
   width: 35%;
 }
 
+/*
+ * ImportPilot 1.0 simple search auto-starts after the project is created, so it
+ * has no disabled submit button to animate. While the live request is pending,
+ * the component renders a lone status paragraph before any results/empty state.
+ * Turn that static line into an unmistakable indeterminate progress surface.
+ */
+.supplier-search:not(:has(.search-result-list)):not(:has(.empty-state))
+  > .muted-text[role="status"] {
+  align-items: center;
+  animation: taja-search-card-pulse 1.8s ease-in-out infinite;
+  background: linear-gradient(135deg, #f1faf6 0%, #e8f5ef 100%);
+  border: 1px solid #9fcdb9;
+  border-radius: 0.85rem;
+  box-shadow: 0 0.75rem 1.5rem rgb(19 119 82 / 10%);
+  color: #0b5f41;
+  cursor: progress;
+  display: flex;
+  font-size: 1rem;
+  font-weight: 700;
+  gap: 0.85rem;
+  min-height: 4.6rem;
+  overflow: hidden;
+  padding: 1rem 1rem 1.15rem;
+  position: relative;
+}
+
+.supplier-search:not(:has(.search-result-list)):not(:has(.empty-state))
+  > .muted-text[role="status"]::before {
+  animation: taja-search-spinner 0.8s linear infinite;
+  border: 4px solid rgb(11 95 65 / 18%);
+  border-radius: 50%;
+  border-top-color: #0b5f41;
+  content: "";
+  flex: 0 0 1.55rem;
+  height: 1.55rem;
+  width: 1.55rem;
+}
+
+.supplier-search:not(:has(.search-result-list)):not(:has(.empty-state))
+  > .muted-text[role="status"]::after {
+  animation: taja-search-progress 1.55s ease-in-out infinite;
+  background: #16845c;
+  bottom: 0;
+  content: "";
+  height: 0.28rem;
+  left: -35%;
+  position: absolute;
+  width: 35%;
+}
+
+.supplier-search:not(:has(.search-result-list)):not(:has(.empty-state))
+  > .muted-text[role="status"] + * {
+  transition: opacity 0.2s ease;
+}
+
 @keyframes taja-search-spinner {
   to {
     transform: rotate(360deg);
@@ -97,17 +152,31 @@
     font-size: 1rem;
     min-height: 4.75rem;
   }
+
+  .supplier-search:not(:has(.search-result-list)):not(:has(.empty-state))
+    > .muted-text[role="status"] {
+    min-height: 4.25rem;
+    padding: 0.85rem 0.9rem 1.05rem;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .supplier-search:has(.supplier-search-form > button[type="submit"]:disabled)::before,
   .supplier-search-form > button[type="submit"]:disabled,
   .supplier-search-form > button[type="submit"]:disabled::before,
-  .supplier-search-form > button[type="submit"]:disabled::after {
+  .supplier-search-form > button[type="submit"]:disabled::after,
+  .supplier-search:not(:has(.search-result-list)):not(:has(.empty-state))
+    > .muted-text[role="status"],
+  .supplier-search:not(:has(.search-result-list)):not(:has(.empty-state))
+    > .muted-text[role="status"]::before,
+  .supplier-search:not(:has(.search-result-list)):not(:has(.empty-state))
+    > .muted-text[role="status"]::after {
     animation: none;
   }
 
-  .supplier-search-form > button[type="submit"]:disabled::after {
+  .supplier-search-form > button[type="submit"]:disabled::after,
+  .supplier-search:not(:has(.search-result-list)):not(:has(.empty-state))
+    > .muted-text[role="status"]::after {
     left: 0;
     width: 100%;
   }
