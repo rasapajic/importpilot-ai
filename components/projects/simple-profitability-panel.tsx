@@ -294,10 +294,7 @@ export function SimpleProfitabilityPanel({
   );
 
   useEffect(() => {
-    if (!needsFx) {
-      setFxSnapshot(null);
-      return;
-    }
+    if (!needsFx) return;
     const controller = new AbortController();
     void fetch("/api/fx/latest", { signal: controller.signal })
       .then(async (response) => {
