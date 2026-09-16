@@ -25,7 +25,7 @@ function result(title: string, index: number): SupplierSearchResult {
 describe("explicit supplier spec filter", () => {
   const query = "USB-C 100W braided cable, USB-C to USB-C, 1 m";
 
-  it("keeps compatible variants and removes the contradictory live-test results", () => {
+  it("removes the contradictory and ambiguous live-test results", () => {
     const candidates = [
       result("OEM Wholesale 1.5m Braided USB Type C Apple Cord Charger 3A 5A 60W 65W 100W PD3.0 Fast Charging USB C to USB C Cable for iPhone 15", 1),
       result("USB-C Fast Charging Cable 240W 100W 5A 1m 2m 3m Fast Charging USB Type C Cable Custom High Quality Braided Usb c to Type-C Kabel", 2),
@@ -34,10 +34,7 @@ describe("explicit supplier spec filter", () => {
       result("OEM ODM Most Popular USB-C PD Cable 100W 5A Fast Charging Type C to Type C Braided Data Cable 1m/1.5m/2m", 5),
     ];
 
-    expect(filterExplicitSpecMismatches(query, candidates).map((item) => item.title)).toEqual([
-      candidates[1]!.title,
-      candidates[4]!.title,
-    ]);
+    expect(filterExplicitSpecMismatches(query, candidates)).toEqual([]);
   });
 
   it("rejects only explicit contradictions and preserves unknown specs", () => {
@@ -56,9 +53,21 @@ describe("explicit supplier spec filter", () => {
     ).toContain(ExplicitSpecMismatchReasons.CONNECTOR);
   });
 
-  it("keeps a higher power rating when the requested length and connector are available", () => {
+  it("rejects a multi-length family even when it includes the requested length", () => {
     expect(
       explicitSpecMismatchReasons(query, result("240W USB-C to USB-C Braided Cable 1m 2m", 1)),
+    ).toContain(ExplicitSpecMismatchReasons.LENGTH);
+  });
+
+  it("keeps a higher power rating when the exact requested length is the only advertised length", () => {
+    expect(
+      explicitSpecMismatchReasons(query, result("240W USB-C to USB-C Braided Cable 1m", 1)),
+    ).toEqual([]);
+  });
+
+  it("does not treat repeated mentions of the same requested length as ambiguous", () => {
+    expect(
+      explicitSpecMismatchReasons(query, result("100W USB-C to USB-C 1m Braided Cable, cable length 1 meter", 1)),
     ).toEqual([]);
   });
 });
