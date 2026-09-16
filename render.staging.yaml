@@ -29,6 +29,13 @@ services:
         value: "55000"
       - key: SUPPLIER_SEARCH_PROVIDER_MAX_ATTEMPTS
         value: "1"
+      - key: URL_IMPORT_PROVIDER_URL
+        value: https://importpilot-url-import-provider.onrender.com/preview
+      - key: URL_IMPORT_PROVIDER_TOKEN
+        fromService:
+          type: web
+          name: importpilot-url-import-provider
+          envVarKey: URL_IMPORT_PROVIDER_TOKEN
       - key: S3_ENDPOINT
         value: https://storage-disabled.invalid
       - key: S3_PUBLIC_ENDPOINT
