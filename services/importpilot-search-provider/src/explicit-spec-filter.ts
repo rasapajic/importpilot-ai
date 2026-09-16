@@ -72,6 +72,14 @@ function containsMeasurement(values: number[], requested: number) {
   return values.some((value) => Math.abs(value - requested) <= 0.001);
 }
 
+function distinctMeasurements(values: number[]) {
+  const distinct: number[] = [];
+  for (const value of values) {
+    if (!containsMeasurement(distinct, value)) distinct.push(value);
+  }
+  return distinct;
+}
+
 export function explicitSpecMismatchReasons(
   productQuery: string,
   result: Pick<SupplierSearchResult, "title">,
@@ -99,8 +107,17 @@ export function explicitSpecMismatchReasons(
     "m|meter|meters|metre|metres",
   );
   if (requestedLength !== null) {
-    const offeredLengths = measurements(result.title, "m|meter|meters|metre|metres");
-    if (offeredLengths.length > 0 && !containsMeasurement(offeredLengths, requestedLength)) {
+    const offeredLengths = distinctMeasurements(
+      measurements(result.title, "m|meter|meters|metre|metres"),
+    );
+    // A listing that explicitly advertises several lengths is a variant family,
+    // not evidence that its displayed price and commercial terms belong to the
+    // exact requested length. Keep unknown length eligible, but reject ambiguous
+    // multi-length listings and direct length contradictions.
+    if (
+      offeredLengths.length > 1 ||
+      (offeredLengths.length === 1 && !containsMeasurement(offeredLengths, requestedLength))
+    ) {
       reasons.push(ExplicitSpecMismatchReasons.LENGTH);
     }
   }
