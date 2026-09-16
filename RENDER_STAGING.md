@@ -10,6 +10,13 @@ It reuses the existing `importpilot-search-provider` service and reads its publi
 Render URL and `SEARCH_PROVIDER_TOKEN` through Render service references. No
 OpenAI key is duplicated in the staging Blueprint.
 
+It also reuses the existing `importpilot-url-import-provider` for bounded exact-page
+enrichment of the supplier finalists. The staging app calls the provider's
+`/preview` endpoint and reads its `URL_IMPORT_PROVIDER_TOKEN` through a Render
+service reference. This allows already-discovered Made-in-China and Alibaba
+product pages to fill verifiable fields such as price, MOQ and product image
+without inventing missing commercial data.
+
 ## One-time bootstrap
 
 1. In the Render Dashboard open **New → Blueprint**.
@@ -45,5 +52,5 @@ a production database.
 
 Document/object storage is deliberately disabled in this staging Blueprint
 because the frozen ImportPilot 1.0 core flow does not expose the document-vault
-workspace. Supplier search, projects, landed-cost/profitability, and decisions
-are the staging gate.
+workspace. Supplier search, exact-page enrichment, projects,
+landed-cost/profitability, and decisions are the staging gate.
