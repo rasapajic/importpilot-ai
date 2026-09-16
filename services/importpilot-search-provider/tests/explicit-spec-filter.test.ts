@@ -53,6 +53,28 @@ describe("explicit supplier spec filter", () => {
     ).toContain(ExplicitSpecMismatchReasons.CONNECTOR);
   });
 
+  it("rejects USB-C to DC and barrel-adapter listings from the live staging test", () => {
+    const dcTitles = [
+      "USB C to DC Jack Power Cable, Type-C Male to DC Female Barrel Connector Adapter, PD Trigger, 65W/100W Fast Charging, Nylon Braided",
+      "Type-C to DC Power Cable, USB-C Male to 5.5x2.1mm/4.0x1.7mm DC Jack Charger Cord, 100W PD Trigger Cable for Lenovo/HP/DELL Laptops",
+    ];
+
+    for (const [index, title] of dcTitles.entries()) {
+      expect(
+        explicitSpecMismatchReasons(query, result(title, index + 10)),
+      ).toContain(ExplicitSpecMismatchReasons.CONNECTOR);
+    }
+  });
+
+  it("keeps a USB-C male-to-female extension listing when it does not explicitly contradict the requested connector family", () => {
+    expect(
+      explicitSpecMismatchReasons(
+        query,
+        result("USB C Extension Cable 20Gbps USB3.2 Gen2x2 Type C Male to Female Extender 240W PD Fast Charging Nylon Braided Cable", 20),
+      ),
+    ).not.toContain(ExplicitSpecMismatchReasons.CONNECTOR);
+  });
+
   it("rejects a multi-length family even when it includes the requested length", () => {
     expect(
       explicitSpecMismatchReasons(query, result("240W USB-C to USB-C Braided Cable 1m 2m", 1)),

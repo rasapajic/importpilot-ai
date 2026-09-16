@@ -11,11 +11,11 @@ export const ExplicitSpecMismatchReasons = {
 export type ExplicitSpecMismatchReason =
   (typeof ExplicitSpecMismatchReasons)[keyof typeof ExplicitSpecMismatchReasons];
 
-type Connector = "USB_C" | "USB_A" | "MICRO_USB" | "LIGHTNING";
+type Connector = "USB_C" | "USB_A" | "MICRO_USB" | "LIGHTNING" | "DC";
 type ConnectorPair = readonly [Connector, Connector];
 
 const CONNECTOR_TERM =
-  "(?:usb\\s*c|type\\s*c|usb\\s*a|type\\s*a|micro\\s*usb|lightning|usb|c)";
+  "(?:usb\\s*c|type\\s*c|usb\\s*a|type\\s*a|micro\\s*usb|lightning|dc\\s*(?:jack|plug|barrel)?|barrel\\s*(?:jack|plug)?|power\\s*jack|usb|c)";
 const CONNECTOR_PAIR_PATTERN = new RegExp(
   `\\b(${CONNECTOR_TERM})\\s+(?:to|2)\\s+(${CONNECTOR_TERM})\\b`,
 );
@@ -37,6 +37,14 @@ function connector(value: string): Connector | null {
   if (normalized === "usba" || normalized === "typea" || normalized === "usb") return "USB_A";
   if (normalized === "microusb") return "MICRO_USB";
   if (normalized === "lightning") return "LIGHTNING";
+  if (
+    normalized === "dc" ||
+    normalized.startsWith("dcjack") ||
+    normalized.startsWith("dcplug") ||
+    normalized.startsWith("dcbarrel") ||
+    normalized.startsWith("barrel") ||
+    normalized === "powerjack"
+  ) return "DC";
   return null;
 }
 
