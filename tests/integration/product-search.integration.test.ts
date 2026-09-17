@@ -124,7 +124,7 @@ describeWithDatabase("supplier search result import and tenant isolation", () =>
       query: "fan wholesale manufacturer supplier",
       quantity: 275,
       targetCountry: "AT",
-      queryVariants: ["fan wholesale manufacturer supplier"],
+      queryVariants: ["fan wholesale manufacturer supplier", "fan"],
       chinese1688QueryVariants: [],
     });
     expect(outcome.results).toHaveLength(1);
