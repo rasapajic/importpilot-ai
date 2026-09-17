@@ -14,7 +14,7 @@ All blocking items below must be confirmed on one exact release candidate commit
 - [ ] Prisma migration/schema drift gate passes with zero diff.
 - [ ] Lint passes with zero errors.
 - [ ] TypeScript passes.
-- [ ] Production-config preflight passes.
+- [ ] Production-config preflight passes, including Google OAuth credentials/callback contract.
 - [ ] PostgreSQL integration suite passes.
 - [ ] Full unit/integration suite passes.
 - [ ] Production build passes.
@@ -31,10 +31,17 @@ All blocking items below must be confirmed on one exact release candidate commit
 - [ ] Previous known-good application commit/image is recorded and deployable.
 - [ ] Operator has reviewed `RELEASE_1_0_RUNBOOK.md`.
 
-## C. Authentication, session and tenant boundary
+## C. Authentication, Google Sign-In, session and tenant boundary
 
 - [ ] New email/password registration succeeds.
-- [ ] Login succeeds.
+- [ ] Email/password login succeeds.
+- [ ] Google OAuth web client is configured with the exact candidate `APP_ORIGIN` and `/api/auth/google/callback` redirect URI.
+- [ ] Google button is enabled on login and registration in the candidate environment.
+- [ ] New Google identity with `email_verified=true` creates one user and one OWNER workspace and opens the dashboard.
+- [ ] Google sign-in whose verified email matches an existing ImportPilot user links to that user and does not create a duplicate user/workspace.
+- [ ] Google callback rejects missing/mismatched state.
+- [ ] Google profile with unverified email is rejected.
+- [ ] Cancelled/failed Google authorization returns a controlled localized auth error.
 - [ ] Logout invalidates the active session.
 - [ ] Expired/invalid session is rejected.
 - [ ] Same-origin/CSRF behavior works behind the real proxy/origin.
@@ -117,9 +124,9 @@ Use `npm run test:live-acceptance` for the provider-level matrix, with real envi
 
 ## I. UX and localization
 
-- [ ] SR Latin complete core flow.
-- [ ] DE complete core flow.
-- [ ] EN complete core flow.
+- [ ] SR Latin complete core flow, including Google auth labels/errors.
+- [ ] DE complete core flow, including Google auth labels/errors.
+- [ ] EN complete core flow, including Google auth labels/errors.
 - [ ] Desktop viewport.
 - [ ] Narrow/mobile viewport.
 - [ ] Search loading state is visibly active and bounded.
@@ -135,18 +142,19 @@ Use `npm run test:live-acceptance` for the provider-level matrix, with real envi
 
 On the exact deployed candidate:
 
-1. register;
-2. create sourcing request;
-3. receive real supplier results;
-4. inspect/enrich finalist;
-5. choose offer;
-6. complete missing commercial terms if necessary;
-7. calculate landed cost/profitability;
-8. receive BUY / NEGOTIATE / WATCH / SKIP;
-9. refresh and reopen project;
-10. confirm persisted state is consistent;
-11. logout/login and confirm state remains correct;
-12. verify `/api/health` still returns 200.
+1. register/sign in with Google and confirm dashboard access;
+2. verify Google sign-in links an existing same-email user without duplication;
+3. create sourcing request;
+4. receive real supplier results;
+5. inspect/enrich finalist;
+6. choose offer;
+7. complete missing commercial terms if necessary;
+8. calculate landed cost/profitability;
+9. receive BUY / NEGOTIATE / WATCH / SKIP;
+10. refresh and reopen project;
+11. confirm persisted state is consistent;
+12. logout/login and confirm state remains correct;
+13. verify `/api/health` still returns 200.
 
 - [ ] Final E2E PASS recorded with candidate SHA and date.
 
