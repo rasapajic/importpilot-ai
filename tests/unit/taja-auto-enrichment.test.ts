@@ -95,7 +95,7 @@ describe("TAJA finalist auto-enrichment", () => {
       result(failingUrl),
       result(unsupportedUrl),
       result(overLimitUrl),
-    ], provider, { maxCandidates: 2, concurrency: 2 });
+    ], provider, { maxCandidates: 1, concurrency: 2 });
 
     expect(outcome.results).toHaveLength(3);
     expect(outcome.summary).toMatchObject({
@@ -111,6 +111,54 @@ describe("TAJA finalist auto-enrichment", () => {
     ]);
     expect(outcome.summary.reports[0]?.failureCode).toBe("Error");
     expect(JSON.stringify(outcome.summary)).not.toContain("upstream secret details");
+  });
+
+  it("counts only supported pages against the enrichment candidate budget", async () => {
+    const unsupportedFirst = "https://manufacturer.example/products/fan";
+    const alibabaUrl = "https://www.alibaba.com/product-detail/fan_123456.html";
+    const unsupportedSecond = "https://supplier.example/catalog/fan";
+    const madeInChinaUrl = "https://fan.en.made-in-china.com/product/abc123/China-Fan.html";
+    const overLimitUrl = "https://www.alibaba.com/product-detail/fan_987654.html";
+    const preview = vi.fn(async (productUrl: string) => ({
+      title: "Parsed fan",
+      supplierName: "Parsed Supplier",
+      supplierCountry: "CN",
+      price: 7,
+      currency: "USD",
+      minimumOrderQuantity: 100,
+      incoterm: null,
+      productUrl,
+      imageUrl: "https://example.com/fan.jpg",
+      source: "supplier-page",
+      isPartial: false,
+      titleFromSlug: false,
+    }));
+    const provider = previewProvider(preview);
+
+    const outcome = await autoEnrichTajaCandidates([
+      result(unsupportedFirst),
+      result(alibabaUrl),
+      result(unsupportedSecond),
+      result(madeInChinaUrl),
+      result(overLimitUrl),
+    ], provider, { maxCandidates: 2, concurrency: 2 });
+
+    expect(preview).toHaveBeenCalledTimes(2);
+    expect(preview).toHaveBeenNthCalledWith(1, alibabaUrl);
+    expect(preview).toHaveBeenNthCalledWith(2, madeInChinaUrl);
+    expect(outcome.summary).toMatchObject({
+      attemptedCandidates: 2,
+      enrichedCandidates: 2,
+      skippedUnsupportedCandidates: 2,
+      skippedByLimitCandidates: 1,
+    });
+    expect(outcome.summary.reports.map((report) => report.status)).toEqual([
+      TajaAutoEnrichmentStatuses.SKIPPED_UNSUPPORTED,
+      TajaAutoEnrichmentStatuses.ENRICHED,
+      TajaAutoEnrichmentStatuses.SKIPPED_UNSUPPORTED,
+      TajaAutoEnrichmentStatuses.ENRICHED,
+      TajaAutoEnrichmentStatuses.SKIPPED_LIMIT,
+    ]);
   });
 
   it("keeps partial previews fill-only and preserves known commercial fields", async () => {
