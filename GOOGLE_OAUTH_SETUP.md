@@ -1,6 +1,6 @@
 # Google OAuth setup for ImportPilot 1.0
 
-Google Sign-In is a blocking ImportPilot 1.0 requirement. This document covers the external Google Cloud configuration that cannot be completed by repository code alone.
+Google Sign-In is a blocking ImportPilot 1.0 requirement. This document covers the external Google Cloud and hosting configuration that cannot be completed by repository code alone.
 
 ## Required production values
 
@@ -33,6 +33,16 @@ GOOGLE_OAUTH_REDIRECT_URI=https://<production-app-host>/api/auth/google/callback
 9. Run `npm run check:production-config`; it must return `IMPORTPILOT_PRODUCTION_CONFIG PASS`.
 
 The scheme, hostname, port and callback path must match exactly.
+
+## Render staging
+
+`render.staging.yaml` declares:
+
+- `GOOGLE_CLIENT_ID` with `sync: false`;
+- `GOOGLE_CLIENT_SECRET` with `sync: false`;
+- `GOOGLE_OAUTH_REDIRECT_URI=https://importpilot-1-0-staging.onrender.com/api/auth/google/callback`.
+
+The staging Blueprint already existed before these secret keys were added. Render does not prompt again for newly added `sync: false` variables when an existing Blueprint is updated, so `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` must be populated manually in the existing `importpilot-1-0-staging` service environment before the Google smoke tests. Do not commit either value.
 
 ## Required release smoke tests
 
