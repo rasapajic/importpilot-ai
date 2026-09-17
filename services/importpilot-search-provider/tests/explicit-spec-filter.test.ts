@@ -66,13 +66,38 @@ describe("explicit supplier spec filter", () => {
     }
   });
 
-  it("keeps a USB-C male-to-female extension listing when it does not explicitly contradict the requested connector family", () => {
+  it("rejects a male-to-female extension when a normal USB-C to USB-C cable was requested", () => {
     expect(
       explicitSpecMismatchReasons(
         query,
         result("USB C Extension Cable 20Gbps USB3.2 Gen2x2 Type C Male to Female Extender 240W PD Fast Charging Nylon Braided Cable", 20),
       ),
-    ).not.toContain(ExplicitSpecMismatchReasons.CONNECTOR);
+    ).toContain(ExplicitSpecMismatchReasons.PRODUCT_FORM);
+  });
+
+  it("rejects a magnetic cable when a normal USB-C to USB-C cable was requested", () => {
+    expect(
+      explicitSpecMismatchReasons(
+        query,
+        result("100W USB-C to Type-C PD Magnetic Nylon Braided Charger Cable 1m", 21),
+      ),
+    ).toContain(ExplicitSpecMismatchReasons.PRODUCT_FORM);
+  });
+
+  it("keeps extension and magnetic forms when the user explicitly requests them", () => {
+    expect(
+      explicitSpecMismatchReasons(
+        "USB-C to USB-C extension cable, 240W, 1 m",
+        result("USB C Extension Cable Type C Male to Female Extender 240W 1m", 22),
+      ),
+    ).not.toContain(ExplicitSpecMismatchReasons.PRODUCT_FORM);
+
+    expect(
+      explicitSpecMismatchReasons(
+        "magnetic USB-C to USB-C braided charging cable, 100W, 1 m",
+        result("100W USB-C to Type-C PD Magnetic Nylon Braided Charger Cable 1m", 23),
+      ),
+    ).not.toContain(ExplicitSpecMismatchReasons.PRODUCT_FORM);
   });
 
   it("rejects a multi-length family even when it includes the requested length", () => {
