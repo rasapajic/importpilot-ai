@@ -15,9 +15,9 @@ const googleCopy = {
 };
 
 const dashboardCopy = {
-  en: 'New search',
-  de: 'Neue Suche',
-  sr: 'Nova pretraga',
+  en: 'Find best offers',
+  de: 'Beste Angebote finden',
+  sr: 'Pronađi najbolje ponude',
 };
 
 const htmlLang = {
