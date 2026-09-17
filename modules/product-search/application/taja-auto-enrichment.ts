@@ -241,21 +241,26 @@ export async function autoEnrichTajaCandidates(
   const maxCandidates = boundedInteger(options.maxCandidates, 10, 15);
   const concurrency = boundedInteger(options.concurrency, 4, 5);
   const enrichedResults = [...results];
+
+  // The enrichment budget is for pages we can actually inspect. Unsupported
+  // manufacturer/direct-site candidates must not consume slots and prevent a
+  // later Alibaba or Made-in-China finalist from being verified.
+  const supportedCandidates = results
+    .map((result, index) => ({ result, index }))
+    .filter(({ result }) => isSupportedProductUrl(result.productUrl));
+  const work = supportedCandidates.slice(0, maxCandidates);
+  const attemptedIndexes = new Set(work.map(({ index }) => index));
+
   const reports: TajaAutoEnrichmentReport[] = results.map((result, index) => ({
     productUrl: result.productUrl,
-    status: index >= maxCandidates
-      ? TajaAutoEnrichmentStatuses.SKIPPED_LIMIT
-      : isSupportedProductUrl(result.productUrl)
+    status: !isSupportedProductUrl(result.productUrl)
+      ? TajaAutoEnrichmentStatuses.SKIPPED_UNSUPPORTED
+      : attemptedIndexes.has(index)
         ? TajaAutoEnrichmentStatuses.UNCHANGED
-        : TajaAutoEnrichmentStatuses.SKIPPED_UNSUPPORTED,
+        : TajaAutoEnrichmentStatuses.SKIPPED_LIMIT,
     fieldsFilled: [],
     fieldsCorrected: [],
   }));
-  const work = results
-    .map((result, index) => ({ result, index }))
-    .filter(({ result, index }) =>
-      index < maxCandidates && isSupportedProductUrl(result.productUrl),
-    );
   let cursor = 0;
 
   async function worker() {
