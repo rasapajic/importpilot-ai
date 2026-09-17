@@ -202,11 +202,11 @@ export function createLunaSearchPlan(input: ProjectSupplierSearchRequest): LunaS
   const requirementQueries = catalogEntry?.category === "misting-system" && chineseBaseQuery
     ? requirementDrivenMistingQueries(input.query, englishQuery, chineseBaseQuery)
     : null;
-  const providerQueries = uniqueQueries(
-    (requirementQueries?.english ?? [englishQuery]).map((query) =>
-      withEnglishCommercialTerms(query, input.privateLabel),
-    ),
-  );
+  const baseEnglishQueries = requirementQueries?.english ?? [englishQuery];
+  const providerQueries = uniqueQueries([
+    ...baseEnglishQueries.map((query) => withEnglishCommercialTerms(query, input.privateLabel)),
+    englishQuery,
+  ]);
   const chinese1688Queries = chineseBaseQuery
     ? uniqueQueries(
         (requirementQueries?.chinese ?? [chineseBaseQuery]).map((query) =>
