@@ -44,10 +44,24 @@ describe("Luna Search plan", () => {
 
     expect(plan.category).toBe("greenhouse-equipment");
     expect(plan.providerQuery).toContain("greenhouse equipment and accessories");
+    expect(plan.providerQuery).toContain("wholesale manufacturer supplier");
     expect(plan.providerQuery).toContain("OEM private label");
     expect(plan.chinese1688Query).toContain("温室大棚全套设备");
     expect(plan.chinese1688Query).toContain("OEM 贴牌");
     expect(plan.warnings).toContain("COMPLIANCE_NOT_VERIFIED");
+  });
+
+  it("keeps exact product specifications while adding B2B sourcing intent", () => {
+    const plan = createLunaSearchPlan({
+      ...baseRequest,
+      query: "USB-C to USB-C braided charging cable 100W exactly 1 m",
+      targetCountry: "AT",
+    });
+
+    expect(plan.providerQuery).toBe(
+      "USB-C to USB-C braided charging cable 100W exactly 1 m wholesale manufacturer supplier",
+    );
+    expect(plan.providerQueries).toEqual([plan.providerQuery]);
   });
 
   it("does not invent a Chinese translation for an unknown product", () => {
@@ -56,7 +70,9 @@ describe("Luna Search plan", () => {
       query: "specijalni proizvod bez kataloškog prevoda",
     });
 
-    expect(plan.providerQuery).toBe("specijalni proizvod bez kataloškog prevoda");
+    expect(plan.providerQuery).toBe(
+      "specijalni proizvod bez kataloškog prevoda wholesale manufacturer supplier",
+    );
     expect(plan.chinese1688Query).toBeNull();
     expect(plan.warnings).toContain("CHINESE_QUERY_UNCONFIRMED");
   });
@@ -113,7 +129,6 @@ describe("Luna Search plan", () => {
       result({
         productUrl: "https://provider.example/expensive-usd",
         price: 3.49,
-        currency: "USD",
       }),
       result({
         productUrl: "https://provider.example/eur",
