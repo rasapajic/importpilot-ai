@@ -17,6 +17,7 @@
     "db:seed:country-costs": "tsx scripts/seed-primary-country-costs.ts",
     "check:production-config": "node scripts/check-production-config.mjs",
     "test:production-smoke": "node scripts/ci-production-smoke.mjs",
+    "test:live-acceptance": "node scripts/importpilot-1-0-live-acceptance.mjs",
     "diagnose:supplier-search": "node scripts/diagnose-supplier-search.mjs",
     "diagnose:url-import": "tsx scripts/diagnose-url-import.ts",
     "test:taja-pr73-live": "node scripts/taja-pr73-live-gate.mjs",
