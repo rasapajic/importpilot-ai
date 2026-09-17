@@ -43,7 +43,7 @@ describe("Google auth routes", () => {
     expect(cookies).toContain("importpilot_google_oauth_verifier=");
     expect(cookies).toContain("importpilot_google_oauth_flow=register");
     expect(cookies).toContain("HttpOnly");
-    expect(cookies).toContain("SameSite=Lax");
+    expect(cookies).toContain("SameSite=lax");
     expect(cookies).toContain("Path=/api/auth/google");
   });
 
