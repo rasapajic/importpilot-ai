@@ -16,7 +16,7 @@ const request: ProjectSupplierSearchRequest = {
 };
 
 describe("TAJA requirement-driven query plan", () => {
-  it("creates exact English and Chinese queries before broader fallbacks", () => {
+  it("creates exact B2B queries plus one broader English fallback", () => {
     const plan = createLunaSearchPlan(request);
 
     expect(plan.category).toBe("misting-system");
@@ -25,6 +25,7 @@ describe("TAJA requirement-driven query plan", () => {
       "outdoor mist cooling kit pump 20 nozzles wholesale manufacturer supplier",
       "terrace misting system 20 nozzles pump kit wholesale manufacturer supplier",
       "patio misting cooling system wholesale manufacturer supplier",
+      "patio misting cooling system",
     ]);
     expect(plan.chinese1688Queries).toEqual([
       "露台 喷雾降温系统 水泵 20个喷嘴 厂家 批发",
