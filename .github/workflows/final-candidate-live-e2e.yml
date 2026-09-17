@@ -1,0 +1,22 @@
+name: ImportPilot exact-candidate live E2E
+
+on:
+  push:
+    branches:
+      - verify/importpilot-final-candidate-e2e
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      STAGING_ORIGIN: https://importpilot-1-0-staging.onrender.com
+    steps:
+      - name: Checkout verification script
+        uses: actions/checkout@v4
+
+      - name: Run exact-candidate RS live E2E
+        run: node scripts/final-candidate-live-e2e.mjs
