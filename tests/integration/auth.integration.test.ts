@@ -1,4 +1,4 @@
-import { OrganizationRole } from "@prisma/client";
+import { OAuthProvider, OrganizationRole } from "@prisma/client";
 import { NextRequest } from "next/server";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -9,6 +9,7 @@ describeWithDatabase("auth integration", () => {
   const context = { ipAddress: "127.0.0.1", userAgent: "Vitest" };
   const password = "Integration-Test-2026";
   const email = `owner-${crypto.randomUUID()}@example.test`;
+  const googleCleanup: Array<{ userId: string; organizationId: string }> = [];
   let prisma: typeof import("@/lib/database/prisma").prisma;
   let authService: typeof import("@/modules/auth/application/auth-service");
   let sessionService: typeof import("@/modules/auth/infrastructure/session");
@@ -37,6 +38,10 @@ describeWithDatabase("auth integration", () => {
 
   afterAll(async () => {
     if (!prisma || !userId) return;
+    for (const item of googleCleanup) {
+      await prisma.organization.delete({ where: { id: item.organizationId } }).catch(() => undefined);
+      await prisma.user.delete({ where: { id: item.userId } }).catch(() => undefined);
+    }
     await prisma.organization.delete({ where: { id: organizationId } });
     await prisma.user.delete({ where: { id: userId } });
     await prisma.$disconnect();
@@ -54,6 +59,51 @@ describeWithDatabase("auth integration", () => {
     expect(await sessionService.validateSessionToken(ownerToken)).not.toBeNull();
     expect(await sessionService.validateSessionToken(secondToken)).not.toBeNull();
     expect(await prisma.session.count({ where: { userId } })).toBe(2);
+  });
+
+  it("links Google sign-in to an existing verified-email user without duplicating the account", async () => {
+    const usersBefore = await prisma.user.count({ where: { email } });
+    const token = await authService.loginWithGoogle({
+      providerAccountId: `google-${crypto.randomUUID()}`,
+      email,
+      name: "Google Integration Owner",
+    }, context);
+    const auth = await sessionService.validateSessionToken(token);
+
+    expect(auth?.user.id).toBe(userId);
+    expect(auth?.membership.organizationId).toBe(organizationId);
+    expect(await prisma.user.count({ where: { email } })).toBe(usersBefore);
+    expect(await prisma.oAuthAccount.findFirst({
+      where: { userId, provider: OAuthProvider.GOOGLE },
+    })).toMatchObject({ userId, provider: OAuthProvider.GOOGLE });
+  });
+
+  it("creates an OAuth-only owner workspace for a new Google identity", async () => {
+    const googleEmail = `google-${crypto.randomUUID()}@example.test`;
+    const providerAccountId = `google-${crypto.randomUUID()}`;
+    const token = await authService.loginWithGoogle({
+      providerAccountId,
+      email: googleEmail,
+      name: "Google Only Owner",
+    }, context);
+    const auth = await sessionService.validateSessionToken(token);
+    googleCleanup.push({
+      userId: auth!.user.id,
+      organizationId: auth!.membership.organizationId,
+    });
+
+    expect(auth?.user.email).toBe(googleEmail);
+    expect(auth?.user.passwordHash).toBeNull();
+    expect(auth?.membership.role).toBe(OrganizationRole.OWNER);
+    expect(await prisma.oAuthAccount.findUnique({
+      where: {
+        provider_providerAccountId: {
+          provider: OAuthProvider.GOOGLE,
+          providerAccountId,
+        },
+      },
+    })).toMatchObject({ userId: auth?.user.id });
+    expect(await prisma.user.count({ where: { email: googleEmail } })).toBe(1);
   });
 
   it("logs out only the selected session", async () => {
