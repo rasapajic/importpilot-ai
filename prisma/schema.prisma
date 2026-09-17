@@ -176,6 +176,7 @@ model Organization {
   projectOutcomes ProjectOutcome[]
   recommendationFeedback RecommendationFeedback[]
   projectCompletionHistory ProjectCompletionHistory[]
+  aiUsageEvents AiUsageEvent[]
   createdAt DateTime             @default(now()) @map("created_at")
   updatedAt DateTime             @updatedAt @map("updated_at")
 
@@ -266,8 +267,8 @@ model SupplierSearchCache {
   createdAt       DateTime @default(now()) @map("created_at")
   expiresAt       DateTime @map("expires_at")
 
-  @@unique([normalizedQuery, targetCountry, quantity])
-  @@index([normalizedQuery, targetCountry, quantity, createdAt])
+  @@unique([normalizedQuery, targetCountry, quantity], map: "supplier_search_cache_lookup_key")
+  @@index([normalizedQuery, targetCountry, quantity, createdAt], map: "supplier_search_cache_lookup_created_at_idx")
   @@index([expiresAt])
   @@map("supplier_search_cache")
 }
@@ -293,13 +294,14 @@ model ImportProject {
   outcomes        ProjectOutcome[]
   recommendationFeedback RecommendationFeedback[]
   completionHistory ProjectCompletionHistory[]
+  aiUsageEvents AiUsageEvent[]
   completionStatus ProjectCompletionStatus @default(ACTIVE) @map("completion_status")
   createdAt      DateTime       @default(now()) @map("created_at")
   updatedAt      DateTime       @updatedAt @map("updated_at")
 
   @@index([organizationId, createdAt, id])
   @@index([organizationId, status, createdAt])
-  @@index([organizationId, completionStatus, createdAt])
+  @@index([organizationId, completionStatus, createdAt], map: "import_projects_organization_id_completion_status_created_at_id")
   @@index([organizationId, targetCountry])
   @@map("import_projects")
 }
@@ -335,7 +337,7 @@ model RecommendationFeedback {
   projectDecision   ProjectDecision            @relation(fields: [projectDecisionId], references: [id], onDelete: Cascade)
   createdAt         DateTime                   @default(now()) @map("created_at")
 
-  @@index([organizationId, projectId, createdAt])
+  @@index([organizationId, projectId, createdAt], map: "recommendation_feedback_organization_id_project_id_created_at_i")
   @@index([projectDecisionId, createdAt])
   @@map("recommendation_feedback")
 }
@@ -349,7 +351,7 @@ model ProjectCompletionHistory {
   project        ImportProject           @relation(fields: [projectId], references: [id], onDelete: Cascade)
   createdAt      DateTime                @default(now()) @map("created_at")
 
-  @@index([organizationId, projectId, createdAt])
+  @@index([organizationId, projectId, createdAt], map: "project_completion_history_organization_id_project_id_created_a")
   @@map("project_completion_history")
 }
 
@@ -366,7 +368,7 @@ model ProjectActivity {
   createdAt      DateTime            @default(now()) @map("created_at")
 
   @@index([organizationId, projectId, createdAt])
-  @@index([organizationId, projectId, type, createdAt])
+  @@index([organizationId, projectId, type, createdAt], map: "project_activities_organization_id_project_id_type_created_at_i")
   @@map("project_activities")
 }
 
@@ -579,4 +581,43 @@ model NegotiationMessage {
   @@index([projectId, createdAt])
   @@index([offerId, createdAt])
   @@map("negotiation_messages")
+}
+
+model AiUsageEvent {
+  id                             String         @id @db.Uuid
+  organizationId                 String         @map("organization_id") @db.Uuid
+  projectId                      String?        @map("project_id") @db.Uuid
+  provider                       String         @db.VarChar(40)
+  operation                      String         @db.VarChar(80)
+  modelName                      String         @map("model") @db.VarChar(120)
+  responseId                     String         @map("response_id") @db.VarChar(200)
+  status                         String         @db.VarChar(30)
+  inputTokens                    Int            @map("input_tokens")
+  cachedInputTokens              Int            @default(0) @map("cached_input_tokens")
+  outputTokens                   Int            @map("output_tokens")
+  reasoningOutputTokens          Int            @default(0) @map("reasoning_output_tokens")
+  totalTokens                    Int            @map("total_tokens")
+  webSearchCalls                 Int            @default(0) @map("web_search_calls")
+  durationMs                     Int            @default(0) @map("duration_ms")
+  currency                       String         @default("USD") @db.Char(3)
+  pricingVersion                 String         @map("pricing_version") @db.VarChar(80)
+  inputPricePerMillionUsd        Decimal        @map("input_price_per_million_usd") @db.Decimal(20, 12)
+  cachedInputPricePerMillionUsd  Decimal        @map("cached_input_price_per_million_usd") @db.Decimal(20, 12)
+  outputPricePerMillionUsd       Decimal        @map("output_price_per_million_usd") @db.Decimal(20, 12)
+  webSearchPricePerCallUsd       Decimal        @map("web_search_price_per_call_usd") @db.Decimal(20, 12)
+  inputCostUsd                   Decimal        @map("input_cost_usd") @db.Decimal(20, 12)
+  cachedInputCostUsd             Decimal        @map("cached_input_cost_usd") @db.Decimal(20, 12)
+  outputCostUsd                  Decimal        @map("output_cost_usd") @db.Decimal(20, 12)
+  webSearchCostUsd               Decimal        @map("web_search_cost_usd") @db.Decimal(20, 12)
+  estimatedTotalCostUsd          Decimal        @map("estimated_total_cost_usd") @db.Decimal(20, 12)
+  estimated                      Boolean        @default(true)
+  createdAt                      DateTime       @default(now()) @map("created_at")
+  organization                   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  project                        ImportProject? @relation(fields: [projectId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@unique([provider, responseId], map: "ai_usage_events_provider_response_id_key")
+  @@index([organizationId, createdAt], map: "ai_usage_events_organization_id_created_at_idx")
+  @@index([organizationId, projectId, createdAt], map: "ai_usage_events_organization_id_project_id_created_at_idx")
+  @@index([organizationId, operation, modelName], map: "ai_usage_events_organization_id_operation_model_idx")
+  @@map("ai_usage_events")
 }
