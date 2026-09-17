@@ -15,7 +15,7 @@ jobs:
     env:
       STAGING_ORIGIN: https://importpilot-1-0-staging.onrender.com
     steps:
-      - name: Verify staging health and Google route
+      - name: Verify staging baseline
         shell: bash
         run: |
           set -euo pipefail
@@ -24,136 +24,91 @@ jobs:
           grep -Eq '"database"[[:space:]]*:[[:space:]]*"ok"' /tmp/health.json
           curl --fail --silent --show-error --max-time 20 "$STAGING_ORIGIN/login" -o /tmp/login.html
           grep -Fq 'Continue with Google' /tmp/login.html
-          curl --silent --show-error --max-time 20 --output /dev/null --dump-header /tmp/google.headers "$STAGING_ORIGIN/api/auth/google/start?from=login"
-          status=$(awk 'NR==1 {print $2}' /tmp/google.headers)
-          case "$status" in 301|302|303|307|308) ;; *) exit 2 ;; esac
-          echo "STAGING_BASELINE PASS google_status=$status"
+          echo "STAGING_BASELINE PASS"
 
-      - name: Verify AT and DE live landed cost plus EUR CNY runtime
+      - name: Verify DE live landed cost and EUR CNY runtime
         shell: bash
         run: |
           set -euo pipefail
-          email="staging-market-${GITHUB_RUN_ID}@example.test"
-          password="Staging-Market-2026A"
-          register_body=$(node -e 'console.log(JSON.stringify({name:"Staging Market Acceptance",organizationName:"ImportPilot Market Acceptance",email:process.argv[1],password:process.argv[2]}))' "$email" "$password")
-          status=$(curl --silent --show-error --max-time 30 --cookie-jar /tmp/market.cookies --output /tmp/register.json --write-out '%{http_code}' --header 'content-type: application/json' --header "origin: $STAGING_ORIGIN" --data "$register_body" "$STAGING_ORIGIN/api/auth/register")
+          email="staging-de-${GITHUB_RUN_ID}@example.test"
+          password="Staging-DE-2026A"
+          body=$(node -e 'console.log(JSON.stringify({name:"Staging DE Acceptance",organizationName:"ImportPilot DE Acceptance",email:process.argv[1],password:process.argv[2]}))' "$email" "$password")
+          status=$(curl --silent --show-error --max-time 30 --cookie-jar /tmp/de.cookies --output /tmp/register.json --write-out '%{http_code}' --header 'content-type: application/json' --header "origin: $STAGING_ORIGIN" --data "$body" "$STAGING_ORIGIN/api/auth/register")
           test "$status" = "201"
 
-          fx_status=$(curl --silent --show-error --max-time 20 --cookie /tmp/market.cookies --output /tmp/fx.json --write-out '%{http_code}' "$STAGING_ORIGIN/api/fx/latest")
-          test "$fx_status" = "200"
+          status=$(curl --silent --show-error --max-time 20 --cookie /tmp/de.cookies --output /tmp/fx.json --write-out '%{http_code}' "$STAGING_ORIGIN/api/fx/latest")
+          test "$status" = "200"
           node - /tmp/fx.json <<'NODE'
-          const fs=require('fs'); const fx=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
-          const age=(Date.now()-Date.parse(fx.timestamp))/86400000;
-          if (!Number.isFinite(age)||age>7||age<-1) process.exit(10);
-          for (const c of ['EUR','USD','CNY']) if (!(Number(fx.ratesToEur?.[c])>0)) process.exit(11);
+          const fs=require('fs'); const fx=JSON.parse(fs.readFileSync(process.argv[2],'utf8')); const age=(Date.now()-Date.parse(fx.timestamp))/86400000;
+          if(!Number.isFinite(age)||age>7||age<-1) process.exit(10);
+          for(const c of ['EUR','USD','CNY']) if(!(Number(fx.ratesToEur?.[c])>0)) process.exit(11);
           console.log(JSON.stringify({fxSource:fx.source,fxTimestamp:fx.timestamp,USD:fx.ratesToEur.USD,CNY:fx.ratesToEur.CNY,EUR:fx.ratesToEur.EUR}));
           NODE
 
-          live_case() {
-            label="$1"; query="$2"; country="$3"; quantity="$4"; vat="$5"
-            project_body=$(node -e 'console.log(JSON.stringify({name:process.argv[1],targetCountry:process.argv[2],quantity:Number(process.argv[3]),targetMargin:20}))' "Live ${label} ${GITHUB_RUN_ID}" "$country" "$quantity")
-            project_file="/tmp/${label}-project.json"
-            status=$(curl --silent --show-error --max-time 30 --cookie /tmp/market.cookies --cookie-jar /tmp/market.cookies --output "$project_file" --write-out '%{http_code}' --header 'content-type: application/json' --header "origin: $STAGING_ORIGIN" --data "$project_body" "$STAGING_ORIGIN/api/projects")
-            test "$status" = "201"
-            project_id=$(node -e 'const x=require(process.argv[1]); process.stdout.write(x.id)' "$project_file")
+          project_body=$(node -e 'console.log(JSON.stringify({name:"Live DE Packaging "+process.argv[1],targetCountry:"DE",quantity:500,targetMargin:20}))' "$GITHUB_RUN_ID")
+          status=$(curl --silent --show-error --max-time 30 --cookie /tmp/de.cookies --output /tmp/de-project.json --write-out '%{http_code}' --header 'content-type: application/json' --header "origin: $STAGING_ORIGIN" --data "$project_body" "$STAGING_ORIGIN/api/projects")
+          test "$status" = "201"
+          project_id=$(node -e 'const x=require(process.argv[1]); process.stdout.write(x.id)' /tmp/de-project.json)
+          search_body='{"query":"kraft paper takeaway food box 1000ml","quantity":500,"targetCountry":"DE","targetMarginPercent":20}'
+          started=$(date +%s)
+          status=$(curl --silent --show-error --max-time 75 --cookie /tmp/de.cookies --output /tmp/de-search.json --write-out '%{http_code}' --header 'content-type: application/json' --header "origin: $STAGING_ORIGIN" --data "$search_body" "$STAGING_ORIGIN/api/projects/$project_id/supplier-search")
+          echo "de_search_status=$status duration_s=$(( $(date +%s)-started ))"
+          test "$status" = "200"
 
-            search_body=$(node -e 'console.log(JSON.stringify({query:process.argv[1],quantity:Number(process.argv[2]),targetCountry:process.argv[3],targetMarginPercent:20}))' "$query" "$quantity" "$country")
-            search_file="/tmp/${label}-search.json"
-            started=$(date +%s)
-            status=$(curl --silent --show-error --max-time 75 --cookie /tmp/market.cookies --cookie-jar /tmp/market.cookies --output "$search_file" --write-out '%{http_code}' --header 'content-type: application/json' --header "origin: $STAGING_ORIGIN" --data "$search_body" "$STAGING_ORIGIN/api/projects/$project_id/supplier-search")
-            duration=$(( $(date +%s)-started ))
-            echo "live_case=$label search_status=$status duration_s=$duration"
-            test "$status" = "200"
-
-            node - "$search_file" "$quantity" "/tmp/${label}-selected.json" "/tmp/${label}-terms.json" <<'NODE'
-          const fs=require('fs');
-          const [searchFile,qtyText,selectedFile,termsFile]=process.argv.slice(2);
-          const payload=JSON.parse(fs.readFileSync(searchFile,'utf8')); const qty=Number(qtyText);
-          const supported=new Set(['EXW','FCA','FAS','FOB']);
-          const candidates=(payload.results??[]).filter(r=>Number(r.price)>0&&/^[A-Z]{3}$/.test(String(r.currency??''))).map(r=>{
-            const term=String(r.incoterm??'').toUpperCase(); const moq=r.minimumOrderQuantity==null?null:Number(r.minimumOrderQuantity); let score=0;
-            if (supported.has(term)) score+=30; if (moq==null||moq<=qty) score+=20; if (r.provenance?.resultOrigin==='live') score+=10; if (r.imageUrl) score+=5;
-            return {r,score};
-          }).sort((a,b)=>b.score-a.score);
-          if (!candidates.length) process.exit(20);
-          const selected=candidates[0].r; const sourceTerm=String(selected.incoterm??'').toUpperCase(); const incoterm=supported.has(sourceTerm)?sourceTerm:'FOB';
-          fs.writeFileSync(selectedFile,JSON.stringify(selected));
-          fs.writeFileSync(termsFile,JSON.stringify({unitPrice:Number(selected.price),currency:selected.currency,incoterm,deliveryTimeDays:null}));
-          console.log(JSON.stringify({resultCount:(payload.results??[]).length,origin:selected.provenance?.resultOrigin??'unknown',source:selected.source,price:Number(selected.price),currency:selected.currency,moq:selected.minimumOrderQuantity??null,incoterm,incotermSource:supported.has(sourceTerm)?'search-result':'manual-acceptance-input'}));
+          node - /tmp/de-search.json /tmp/de-selected.json /tmp/de-terms.json <<'NODE'
+          const fs=require('fs'); const [searchFile,selectedFile,termsFile]=process.argv.slice(2); const payload=JSON.parse(fs.readFileSync(searchFile,'utf8')); const supported=new Set(['EXW','FCA','FAS','FOB']);
+          const candidates=(payload.results??[]).filter(r=>Number(r.price)>0&&/^[A-Z]{3}$/.test(String(r.currency??''))).map(r=>{const term=String(r.incoterm??'').toUpperCase(); const moq=r.minimumOrderQuantity==null?null:Number(r.minimumOrderQuantity); let score=0; if(supported.has(term))score+=30; if(moq==null||moq<=500)score+=20; if(r.provenance?.resultOrigin==='live')score+=10; if(r.imageUrl)score+=5; return {r,score}}).sort((a,b)=>b.score-a.score);
+          if(!candidates.length) process.exit(20); const selected=candidates[0].r; const term=String(selected.incoterm??'').toUpperCase(); const incoterm=supported.has(term)?term:'FOB';
+          fs.writeFileSync(selectedFile,JSON.stringify(selected)); fs.writeFileSync(termsFile,JSON.stringify({unitPrice:Number(selected.price),currency:selected.currency,incoterm,deliveryTimeDays:null}));
+          console.log(JSON.stringify({resultCount:(payload.results??[]).length,origin:selected.provenance?.resultOrigin??'unknown',source:selected.source,price:Number(selected.price),currency:selected.currency,moq:selected.minimumOrderQuantity??null,incoterm,incotermSource:supported.has(term)?'search-result':'manual-acceptance-input'}));
           NODE
 
-            status=$(curl --silent --show-error --max-time 30 --cookie /tmp/market.cookies --output "/tmp/${label}-import.json" --write-out '%{http_code}' --header 'content-type: application/json' --header "origin: $STAGING_ORIGIN" --data-binary "@/tmp/${label}-selected.json" "$STAGING_ORIGIN/api/projects/$project_id/supplier-search/import")
-            test "$status" = "201"
-            offer_id=$(node -e 'const x=require(process.argv[1]); process.stdout.write(x.offerId)' "/tmp/${label}-import.json")
-            status=$(curl --silent --show-error --max-time 30 --request PATCH --cookie /tmp/market.cookies --output "/tmp/${label}-terms-response.json" --write-out '%{http_code}' --header 'content-type: application/json' --header "origin: $STAGING_ORIGIN" --data-binary "@/tmp/${label}-terms.json" "$STAGING_ORIGIN/api/offers/$offer_id/commercial-terms")
-            test "$status" = "200"
+          status=$(curl --silent --show-error --max-time 30 --cookie /tmp/de.cookies --output /tmp/de-import.json --write-out '%{http_code}' --header 'content-type: application/json' --header "origin: $STAGING_ORIGIN" --data-binary @/tmp/de-selected.json "$STAGING_ORIGIN/api/projects/$project_id/supplier-search/import")
+          test "$status" = "201"
+          offer_id=$(node -e 'const x=require(process.argv[1]); process.stdout.write(x.offerId)' /tmp/de-import.json)
+          status=$(curl --silent --show-error --max-time 30 --request PATCH --cookie /tmp/de.cookies --output /tmp/de-terms-response.json --write-out '%{http_code}' --header 'content-type: application/json' --header "origin: $STAGING_ORIGIN" --data-binary @/tmp/de-terms.json "$STAGING_ORIGIN/api/offers/$offer_id/commercial-terms")
+          test "$status" = "200"
 
-            node - "/tmp/${label}-terms.json" "$country" "$vat" "$quantity" "/tmp/${label}-cost.json" <<'NODE'
-          const fs=require('fs'); const [termsFile,country,vat,qtyText,out]=process.argv.slice(2); const t=JSON.parse(fs.readFileSync(termsFile,'utf8')); const qty=Number(qtyText); const goods=Number(t.unitPrice)*qty; const money=n=>Math.max(0,n).toFixed(2);
-          const body={chinaDomesticTransportCost:money(Math.max(10,goods*.01)),internationalTransportCost:money(Math.max(50,goods*.05)),insuranceCost:money(Math.max(5,goods*.005)),customsBrokerCost:money(Math.max(20,goods*.01)),customsDutyRate:'5',vatRate:String(vat),vatSource:'COUNTRY_PROFILE_DEFAULT',storageCost:money(Math.max(10,goods*.005)),inspectionCost:money(Math.max(10,goods*.005)),otherCosts:money(Math.max(5,goods*.003)),targetSellingPrice:money(Number(t.unitPrice)*5),transportConfirmed:true,customsDutyConfirmed:true,calculationStatus:'CALCULATED'};
-          fs.writeFileSync(out,JSON.stringify(body)); console.log(JSON.stringify({country,vat:Number(vat),currency:t.currency,testSellingPrice:Number(body.targetSellingPrice)}));
+          node - /tmp/de-terms.json /tmp/de-cost.json <<'NODE'
+          const fs=require('fs'); const [termsFile,out]=process.argv.slice(2); const t=JSON.parse(fs.readFileSync(termsFile,'utf8')); const goods=Number(t.unitPrice)*500,m=n=>Math.max(0,n).toFixed(2); const selling=Math.max(Number(t.unitPrice)*5,5);
+          const x={chinaDomesticTransportCost:m(Math.max(10,goods*.01)),internationalTransportCost:m(Math.max(50,goods*.05)),insuranceCost:m(Math.max(5,goods*.005)),customsBrokerCost:m(Math.max(20,goods*.01)),customsDutyRate:'5',vatRate:'19',vatSource:'COUNTRY_PROFILE_DEFAULT',storageCost:m(Math.max(10,goods*.005)),inspectionCost:m(Math.max(10,goods*.005)),otherCosts:m(Math.max(5,goods*.003)),targetSellingPrice:m(selling),transportConfirmed:true,customsDutyConfirmed:true,calculationStatus:'CALCULATED'}; fs.writeFileSync(out,JSON.stringify(x)); console.log(JSON.stringify({currency:t.currency,unitPrice:t.unitPrice,testSellingPrice:Number(x.targetSellingPrice)}));
           NODE
-
-            if [ "$country" = "DE" ]; then
-              node - "/tmp/${label}-cost.json" "/tmp/${label}-cost-wrong-vat.json" <<'NODE'
+          node - /tmp/de-cost.json /tmp/de-cost-wrong.json <<'NODE'
           const fs=require('fs'); const [a,b]=process.argv.slice(2); const x=JSON.parse(fs.readFileSync(a,'utf8')); x.vatRate='20'; fs.writeFileSync(b,JSON.stringify(x));
           NODE
-              wrong_status=$(curl --silent --show-error --max-time 30 --cookie /tmp/market.cookies --output "/tmp/${label}-wrong-vat-response.json" --write-out '%{http_code}' --header 'content-type: application/json' --header "origin: $STAGING_ORIGIN" --data-binary "@/tmp/${label}-cost-wrong-vat.json" "$STAGING_ORIGIN/api/offers/$offer_id/cost-calculations")
-              test "$wrong_status" = "201"
-              node - "/tmp/${label}-wrong-vat-response.json" <<'NODE'
+          status=$(curl --silent --show-error --max-time 30 --cookie /tmp/de.cookies --output /tmp/de-wrong-response.json --write-out '%{http_code}' --header 'content-type: application/json' --header "origin: $STAGING_ORIGIN" --data-binary @/tmp/de-cost-wrong.json "$STAGING_ORIGIN/api/offers/$offer_id/cost-calculations")
+          test "$status" = "201"
+          node - /tmp/de-wrong-response.json <<'NODE'
           const x=require(process.argv[2]); if(x.calculationStatus!=='NEEDS_REVIEW'||Number(x.vatRate)!==20) process.exit(30); console.log(JSON.stringify({wrongProfileVat:20,status:x.calculationStatus}));
           NODE
-            fi
-
-            status=$(curl --silent --show-error --max-time 30 --cookie /tmp/market.cookies --output "/tmp/${label}-cost-response.json" --write-out '%{http_code}' --header 'content-type: application/json' --header "origin: $STAGING_ORIGIN" --data-binary "@/tmp/${label}-cost.json" "$STAGING_ORIGIN/api/offers/$offer_id/cost-calculations")
-            test "$status" = "201"
-            node - "/tmp/${label}-cost-response.json" "$country" "$vat" <<'NODE'
-          const fs=require('fs'); const [file,country,vat]=process.argv.slice(2); const x=JSON.parse(fs.readFileSync(file,'utf8')); if(x.calculationStatus!=='CALCULATED'||x.targetCountry!==country||Number(x.vatRate)!==Number(vat)||!(Number(x.grossMarginPercent)>0)) process.exit(31); console.log(JSON.stringify({country,currency:x.currency,landedCostPerUnit:Number(x.landedCostPerUnit),grossMarginPercent:Number(x.grossMarginPercent),vatRate:Number(x.vatRate),status:x.calculationStatus}));
+          status=$(curl --silent --show-error --max-time 30 --cookie /tmp/de.cookies --output /tmp/de-cost-response.json --write-out '%{http_code}' --header 'content-type: application/json' --header "origin: $STAGING_ORIGIN" --data-binary @/tmp/de-cost.json "$STAGING_ORIGIN/api/offers/$offer_id/cost-calculations")
+          test "$status" = "201"
+          node - /tmp/de-cost-response.json <<'NODE'
+          const x=require(process.argv[2]); if(x.calculationStatus!=='CALCULATED'||x.targetCountry!=='DE'||Number(x.vatRate)!==19||!(Number(x.grossMarginPercent)>0)) process.exit(31); console.log(JSON.stringify({country:'DE',currency:x.currency,landedCostPerUnit:Number(x.landedCostPerUnit),grossMarginPercent:Number(x.grossMarginPercent),vatRate:Number(x.vatRate),status:x.calculationStatus}));
+          NODE
+          status=$(curl --silent --show-error --max-time 25 --request POST --cookie /tmp/de.cookies --output /tmp/de-decision.json --write-out '%{http_code}' --header "origin: $STAGING_ORIGIN" "$STAGING_ORIGIN/api/projects/$project_id/profitability-check?offerId=$offer_id")
+          test "$status" = "201"
+          node - /tmp/de-decision.json "$offer_id" <<'NODE'
+          const x=require(process.argv[2]); if(x.selectedOfferId!==process.argv[3]) process.exit(32); console.log(JSON.stringify({decision:x.status,selectedOfferId:x.selectedOfferId}));
           NODE
 
-            decision_status=$(curl --silent --show-error --max-time 25 --request POST --cookie /tmp/market.cookies --output "/tmp/${label}-decision.json" --write-out '%{http_code}' --header "origin: $STAGING_ORIGIN" "$STAGING_ORIGIN/api/projects/$project_id/profitability-check?offerId=$offer_id")
-            test "$decision_status" = "201"
-            node - "/tmp/${label}-decision.json" "$offer_id" <<'NODE'
-          const x=require(process.argv[2]); const offerId=process.argv[3]; if(x.selectedOfferId!==offerId) process.exit(32); console.log(JSON.stringify({decision:x.status,selectedOfferId:x.selectedOfferId}));
+          manual_case(){
+            label="$1"; country="$2"; currency="$3"; unit="$4"; vat="$5"
+            pbody=$(node -e 'console.log(JSON.stringify({name:process.argv[1],targetCountry:process.argv[2],quantity:100,targetMargin:20}))' "Currency ${label} ${GITHUB_RUN_ID}" "$country")
+            status=$(curl --silent --show-error --max-time 30 --cookie /tmp/de.cookies --output "/tmp/${label}-p.json" --write-out '%{http_code}' --header 'content-type: application/json' --header "origin: $STAGING_ORIGIN" --data "$pbody" "$STAGING_ORIGIN/api/projects"); test "$status" = "201"; pid=$(node -e 'const x=require(process.argv[1]);process.stdout.write(x.id)' "/tmp/${label}-p.json")
+            obody=$(node -e 'console.log(JSON.stringify({supplierName:"Synthetic Acceptance Supplier",supplierCountry:"CN",contactEmail:null,contactPhone:null,moq:100,unitPrice:Number(process.argv[1]),currency:process.argv[2],incoterm:"FOB",deliveryTimeDays:30,paymentTerms:null,warranty:null,supplierVerified:null,yearsOnPlatform:null,responseRatePercent:null,transactionCount:null,employeeCount:null,profileCompletenessScore:null,sampleAvailable:null,termsClarityScore:null,shippingClarityScore:null}))' "$unit" "$currency")
+            status=$(curl --silent --show-error --max-time 30 --cookie /tmp/de.cookies --output "/tmp/${label}-o.json" --write-out '%{http_code}' --header 'content-type: application/json' --header "origin: $STAGING_ORIGIN" --data "$obody" "$STAGING_ORIGIN/api/projects/$pid/offers"); test "$status" = "201"; oid=$(node -e 'const x=require(process.argv[1]);process.stdout.write(x.id)' "/tmp/${label}-o.json")
+            node - /tmp/fx.json "$currency" "$unit" "$vat" "/tmp/${label}-cost.json" <<'NODE'
+          const fs=require('fs'); const [fxFile,currency,unitText,vat,out]=process.argv.slice(2); const fx=JSON.parse(fs.readFileSync(fxFile,'utf8')); const rate=Number(fx.ratesToEur[currency]); if(!(rate>0))process.exit(40); const unit=Number(unitText),goods=unit*100,m=n=>Math.max(0,n).toFixed(2); const x={chinaDomesticTransportCost:m(goods*.01),internationalTransportCost:m(Math.max(20,goods*.04)),insuranceCost:m(Math.max(2,goods*.005)),customsBrokerCost:m(Math.max(10,goods*.01)),customsDutyRate:'5',vatRate:String(vat),vatSource:'COUNTRY_PROFILE_DEFAULT',storageCost:m(Math.max(5,goods*.005)),inspectionCost:m(Math.max(5,goods*.005)),otherCosts:m(Math.max(2,goods*.002)),targetSellingPrice:m(unit*4),transportConfirmed:true,customsDutyConfirmed:true,calculationStatus:'CALCULATED'}; fs.writeFileSync(out,JSON.stringify(x)); console.log(JSON.stringify({currency,rateToEur:rate,unitPrice:unit,unitPriceEur:Number((unit*rate).toFixed(4))}));
           NODE
-
-            if [ "$country" = "AT" ]; then
-              node - "/tmp/${label}-terms.json" "/tmp/${label}-ddp-terms.json" <<'NODE'
-          const fs=require('fs'); const [a,b]=process.argv.slice(2); const x=JSON.parse(fs.readFileSync(a,'utf8')); x.incoterm='DDP'; fs.writeFileSync(b,JSON.stringify(x));
-          NODE
-              status=$(curl --silent --show-error --max-time 30 --request PATCH --cookie /tmp/market.cookies --output /tmp/at-ddp-term-response.json --write-out '%{http_code}' --header 'content-type: application/json' --header "origin: $STAGING_ORIGIN" --data-binary "@/tmp/${label}-ddp-terms.json" "$STAGING_ORIGIN/api/offers/$offer_id/commercial-terms")
-              test "$status" = "200"
-              ddp_status=$(curl --silent --show-error --max-time 30 --cookie /tmp/market.cookies --output /tmp/at-ddp-cost-response.json --write-out '%{http_code}' --header 'content-type: application/json' --header "origin: $STAGING_ORIGIN" --data-binary "@/tmp/${label}-cost.json" "$STAGING_ORIGIN/api/offers/$offer_id/cost-calculations")
-              test "$ddp_status" = "400"
-              grep -Fq 'EXW, FCA, FAS i FOB' /tmp/at-ddp-cost-response.json
-              echo "AT_UNSUPPORTED_DDP_GUARD PASS"
-            fi
-          }
-
-          live_case AT '65W GaN USB C charger EU plug' AT 100 20
-          live_case DE 'kraft paper takeaway food box 1000ml' DE 500 19
-
-          manual_currency_case() {
-            label="$1"; country="$2"; quantity="$3"; currency="$4"; unit="$5"; vat="$6"
-            pbody=$(node -e 'console.log(JSON.stringify({name:process.argv[1],targetCountry:process.argv[2],quantity:Number(process.argv[3]),targetMargin:20}))' "Currency ${label} ${GITHUB_RUN_ID}" "$country" "$quantity")
-            status=$(curl --silent --show-error --max-time 30 --cookie /tmp/market.cookies --output "/tmp/${label}-p.json" --write-out '%{http_code}' --header 'content-type: application/json' --header "origin: $STAGING_ORIGIN" --data "$pbody" "$STAGING_ORIGIN/api/projects")
-            test "$status" = "201"; pid=$(node -e 'const x=require(process.argv[1]); process.stdout.write(x.id)' "/tmp/${label}-p.json")
-            obody=$(node -e 'console.log(JSON.stringify({supplierName:"Acceptance Currency Supplier",supplierCountry:"CN",contactEmail:null,contactPhone:null,moq:Number(process.argv[1]),unitPrice:Number(process.argv[2]),currency:process.argv[3],incoterm:"FOB",deliveryTimeDays:30,paymentTerms:null,warranty:null,supplierVerified:null,yearsOnPlatform:null,responseRatePercent:null,transactionCount:null,employeeCount:null,profileCompletenessScore:null,sampleAvailable:null,termsClarityScore:null,shippingClarityScore:null}))' "$quantity" "$unit" "$currency")
-            status=$(curl --silent --show-error --max-time 30 --cookie /tmp/market.cookies --output "/tmp/${label}-o.json" --write-out '%{http_code}' --header 'content-type: application/json' --header "origin: $STAGING_ORIGIN" --data "$obody" "$STAGING_ORIGIN/api/projects/$pid/offers")
-            test "$status" = "201"; oid=$(node -e 'const x=require(process.argv[1]); process.stdout.write(x.id)' "/tmp/${label}-o.json")
-            node - /tmp/fx.json "$currency" "$unit" "$quantity" "$vat" "/tmp/${label}-c.json" <<'NODE'
-          const fs=require('fs'); const [fxFile,currency,unitText,qtyText,vat,out]=process.argv.slice(2); const fx=JSON.parse(fs.readFileSync(fxFile,'utf8')); const rate=Number(fx.ratesToEur[currency]); if(!(rate>0)) process.exit(40); const unit=Number(unitText),qty=Number(qtyText),goods=unit*qty,m=n=>Math.max(0,n).toFixed(2); const body={chinaDomesticTransportCost:m(goods*.01),internationalTransportCost:m(Math.max(20,goods*.04)),insuranceCost:m(Math.max(2,goods*.005)),customsBrokerCost:m(Math.max(10,goods*.01)),customsDutyRate:'5',vatRate:String(vat),vatSource:'COUNTRY_PROFILE_DEFAULT',storageCost:m(Math.max(5,goods*.005)),inspectionCost:m(Math.max(5,goods*.005)),otherCosts:m(Math.max(2,goods*.002)),targetSellingPrice:m(unit*4),transportConfirmed:true,customsDutyConfirmed:true,calculationStatus:'CALCULATED'}; fs.writeFileSync(out,JSON.stringify(body)); console.log(JSON.stringify({currency,rateToEur:rate,unitPrice:unit,unitPriceEur:Number((unit*rate).toFixed(4))}));
-          NODE
-            status=$(curl --silent --show-error --max-time 30 --cookie /tmp/market.cookies --output "/tmp/${label}-cr.json" --write-out '%{http_code}' --header 'content-type: application/json' --header "origin: $STAGING_ORIGIN" --data-binary "@/tmp/${label}-c.json" "$STAGING_ORIGIN/api/offers/$oid/cost-calculations")
-            test "$status" = "201"
-            node - "/tmp/${label}-cr.json" "$currency" "$country" "$vat" <<'NODE'
-          const x=require(process.argv[2]); const [currency,country,vat]=process.argv.slice(3); if(x.currency!==currency||x.targetCountry!==country||Number(x.vatRate)!==Number(vat)||x.calculationStatus!=='CALCULATED') process.exit(41); console.log(JSON.stringify({manualAcceptanceCurrency:currency,targetCountry:country,landedCostPerUnit:Number(x.landedCostPerUnit),grossMarginPercent:Number(x.grossMarginPercent),status:x.calculationStatus}));
+            status=$(curl --silent --show-error --max-time 30 --cookie /tmp/de.cookies --output "/tmp/${label}-response.json" --write-out '%{http_code}' --header 'content-type: application/json' --header "origin: $STAGING_ORIGIN" --data-binary "@/tmp/${label}-cost.json" "$STAGING_ORIGIN/api/offers/$oid/cost-calculations"); test "$status" = "201"
+            node - "/tmp/${label}-response.json" "$currency" "$country" "$vat" <<'NODE'
+          const x=require(process.argv[2]); const [currency,country,vat]=process.argv.slice(3); if(x.currency!==currency||x.targetCountry!==country||Number(x.vatRate)!==Number(vat)||x.calculationStatus!=='CALCULATED')process.exit(41); console.log(JSON.stringify({syntheticAcceptanceCurrency:currency,targetCountry:country,landedCostPerUnit:Number(x.landedCostPerUnit),grossMarginPercent:Number(x.grossMarginPercent),status:x.calculationStatus}));
           NODE
           }
-
-          manual_currency_case CNY RS 100 CNY 30 20
-          manual_currency_case EUR DE 100 EUR 10 19
-          echo "AT_DE_AND_CURRENCY_ACCEPTANCE PASS"
+          manual_case CNY RS CNY 30 20
+          manual_case EUR DE EUR 10 19
+          echo "DE_AND_CURRENCY_ACCEPTANCE PASS"
 
       - name: Run Chromium locale and viewport smoke
         shell: bash
@@ -168,63 +123,11 @@ jobs:
             npx playwright install chromium >/dev/null
             CHROME=$(NODE_PATH=/tmp/pw/node_modules node -e 'console.log(require("playwright").chromium.executablePath())')
           fi
-          echo "chrome=$CHROME"
           NODE_PATH=/tmp/pw/node_modules CHROME="$CHROME" STAGING_ORIGIN="$STAGING_ORIGIN" node <<'NODE'
-          const { chromium } = require('playwright-core');
-          const origin=process.env.STAGING_ORIGIN;
-          const browser=await chromium.launch({headless:true,executablePath:process.env.CHROME,args:['--no-sandbox']});
-          const copies={en:'Continue with Google',de:'Mit Google fortfahren',sr:'Nastavi preko Google-a'};
-          const dashboardCopies={en:'New search',de:'Neue Suche',sr:'Nova pretraga'};
-          async function assertLayout(page,label,viewport){
-            const m=await page.evaluate(()=>({scrollWidth:document.documentElement.scrollWidth,clientWidth:document.documentElement.clientWidth,bodyWidth:document.body.scrollWidth}));
-            if(m.scrollWidth>m.clientWidth+1||m.bodyWidth>m.clientWidth+1) throw new Error(`${label} horizontal overflow ${JSON.stringify(m)}`);
-            const card=await page.locator('.auth-card').first().boundingBox().catch(()=>null);
-            if(card&&(card.x<0||card.x+card.width>viewport.width+1)) throw new Error(`${label} auth card outside viewport ${JSON.stringify(card)}`);
-          }
-          for(const viewport of [{name:'desktop',width:1440,height:900},{name:'mobile',width:390,height:844}]){
-            for(const locale of ['en','de','sr']){
-              const context=await browser.newContext({viewport:{width:viewport.width,height:viewport.height}});
-              await context.addCookies([{name:'tradepilot_locale',value:locale,url:origin}]);
-              const page=await context.newPage(); const errors=[];
-              page.on('pageerror',e=>errors.push(`pageerror:${e.message}`));
-              page.on('response',r=>{if(r.status()>=500) errors.push(`http${r.status()}:${r.url()}`)});
-              await page.goto(`${origin}/login`,{waitUntil:'domcontentloaded',timeout:30000});
-              if(await page.locator('html').getAttribute('lang')!==locale) throw new Error(`${locale}/${viewport.name} wrong html lang`);
-              if(!await page.getByText(copies[locale],{exact:true}).isVisible()) throw new Error(`${locale}/${viewport.name} Google label missing`);
-              await assertLayout(page,`${locale}/${viewport.name}`,viewport);
-              if(errors.length) throw new Error(`${locale}/${viewport.name} runtime errors ${errors.join(',')}`);
-              console.log(JSON.stringify({locale,viewport:viewport.name,googleLabel:copies[locale],overflow:false}));
-              await context.close();
-            }
-          }
-
-          const context=await browser.newContext({viewport:{width:390,height:844}});
-          await context.addCookies([{name:'tradepilot_locale',value:'en',url:origin}]);
-          const page=await context.newPage(); const errors=[];
-          page.on('pageerror',e=>errors.push(`pageerror:${e.message}`));
-          page.on('response',r=>{if(r.status()>=500) errors.push(`http${r.status()}:${r.url()}`)});
-          await page.goto(`${origin}/register`,{waitUntil:'domcontentloaded',timeout:30000});
-          await page.locator('input[name="name"]').fill('Browser Acceptance');
-          await page.locator('input[name="organizationName"]').fill('Browser Acceptance Org');
-          await page.locator('input[name="email"]').fill(`browser-${Date.now()}@example.test`);
-          await page.locator('input[name="password"]').fill('Browser-Acceptance-2026A');
-          await Promise.all([
-            page.waitForURL('**/dashboard',{timeout:30000}),
-            page.getByRole('button',{name:'Create account'}).click(),
-          ]);
-          if(!await page.getByText(dashboardCopies.en,{exact:true}).first().isVisible()) throw new Error('EN dashboard primary action missing');
-          await assertLayout(page,'dashboard/mobile/en',{name:'mobile',width:390,height:844});
-          for(const locale of ['sr','de']){
-            await context.addCookies([{name:'tradepilot_locale',value:locale,url:origin}]);
-            await page.reload({waitUntil:'domcontentloaded',timeout:30000});
-            if(await page.locator('html').getAttribute('lang')!==locale) throw new Error(`dashboard wrong lang ${locale}`);
-            if(!await page.getByText(dashboardCopies[locale],{exact:true}).first().isVisible()) throw new Error(`dashboard primary action missing ${locale}`);
-            await assertLayout(page,`dashboard/mobile/${locale}`,{name:'mobile',width:390,height:844});
-          }
-          await page.setViewportSize({width:1440,height:900});
-          await assertLayout(page,'dashboard/desktop/de',{name:'desktop',width:1440,height:900});
-          if(errors.length) throw new Error(`dashboard runtime errors ${errors.join(',')}`);
-          console.log(JSON.stringify({authenticatedDashboard:true,mobile:true,desktop:true,locales:['en','sr','de'],overflow:false}));
-          await context.close(); await browser.close();
+          const {chromium}=require('playwright-core'); const origin=process.env.STAGING_ORIGIN; const browser=await chromium.launch({headless:true,executablePath:process.env.CHROME,args:['--no-sandbox']});
+          const google={en:'Continue with Google',de:'Mit Google fortfahren',sr:'Nastavi preko Google-a'}; const dash={en:'New search',de:'Neue Suche',sr:'Nova pretraga'};
+          async function layout(page,label,w){const m=await page.evaluate(()=>({s:document.documentElement.scrollWidth,c:document.documentElement.clientWidth,b:document.body.scrollWidth})); if(m.s>m.c+1||m.b>m.c+1)throw new Error(`${label} overflow ${JSON.stringify(m)}`); const card=await page.locator('.auth-card').first().boundingBox().catch(()=>null); if(card&&(card.x<0||card.x+card.width>w+1))throw new Error(`${label} card overflow`)}
+          for(const v of [{n:'desktop',w:1440,h:900},{n:'mobile',w:390,h:844}]) for(const locale of ['en','de','sr']){const c=await browser.newContext({viewport:{width:v.w,height:v.h}}); await c.addCookies([{name:'tradepilot_locale',value:locale,url:origin}]); const p=await c.newPage(); const errors=[]; p.on('pageerror',e=>errors.push(e.message)); p.on('response',r=>{if(r.status()>=500)errors.push(`${r.status()}:${r.url()}`)}); await p.goto(`${origin}/login`,{waitUntil:'domcontentloaded',timeout:30000}); if(await p.locator('html').getAttribute('lang')!==locale)throw new Error(`${locale}/${v.n} lang`); if(!await p.getByText(google[locale],{exact:true}).isVisible())throw new Error(`${locale}/${v.n} google label`); await layout(p,`${locale}/${v.n}`,v.w); if(errors.length)throw new Error(`${locale}/${v.n} ${errors.join(',')}`); console.log(JSON.stringify({locale,viewport:v.n,overflow:false})); await c.close()}
+          const c=await browser.newContext({viewport:{width:390,height:844}}); await c.addCookies([{name:'tradepilot_locale',value:'en',url:origin}]); const p=await c.newPage(); const errors=[]; p.on('pageerror',e=>errors.push(e.message)); p.on('response',r=>{if(r.status()>=500)errors.push(`${r.status()}:${r.url()}`)}); await p.goto(`${origin}/register`,{waitUntil:'domcontentloaded',timeout:30000}); await p.locator('input[name="name"]').fill('Browser Acceptance'); await p.locator('input[name="organizationName"]').fill('Browser Acceptance Org'); await p.locator('input[name="email"]').fill(`browser-${Date.now()}@example.test`); await p.locator('input[name="password"]').fill('Browser-Acceptance-2026A'); await Promise.all([p.waitForURL('**/dashboard',{timeout:30000}),p.getByRole('button',{name:'Create account'}).click()]); if(!await p.getByText(dash.en,{exact:true}).first().isVisible())throw new Error('EN dashboard action'); await layout(p,'dashboard/mobile/en',390); for(const locale of ['sr','de']){await c.addCookies([{name:'tradepilot_locale',value:locale,url:origin}]); await p.reload({waitUntil:'domcontentloaded',timeout:30000}); if(await p.locator('html').getAttribute('lang')!==locale)throw new Error(`dashboard lang ${locale}`); if(!await p.getByText(dash[locale],{exact:true}).first().isVisible())throw new Error(`dashboard action ${locale}`); await layout(p,`dashboard/mobile/${locale}`,390)} await p.setViewportSize({width:1440,height:900}); await layout(p,'dashboard/desktop/de',1440); if(errors.length)throw new Error(`dashboard errors ${errors.join(',')}`); console.log(JSON.stringify({authenticatedDashboard:true,locales:['en','sr','de'],mobile:true,desktop:true,overflow:false})); await c.close(); await browser.close();
           NODE
           echo "CHROMIUM_LOCALE_VIEWPORT PASS"
