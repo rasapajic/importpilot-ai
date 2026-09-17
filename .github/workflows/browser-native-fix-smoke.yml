@@ -1,0 +1,67 @@
+name: ImportPilot native auth browser regression
+
+on:
+  push:
+    branches:
+      - verify/importpilot-browser-smoke-native-fix
+
+permissions:
+  contents: read
+
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      STAGING_ORIGIN: https://importpilot-1-0-staging.onrender.com
+    steps:
+      - name: Checkout verification script
+        uses: actions/checkout@v4
+
+      - name: Wait for fixed staging deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 30); do
+            echo "native_fix_probe_attempt=$attempt"
+            health_ok=false
+            marker_ok=false
+            if curl --fail --silent --show-error --max-time 20 "$STAGING_ORIGIN/api/health" -o /tmp/health.json; then
+              if grep -Eq '"status"[[:space:]]*:[[:space:]]*"ok"' /tmp/health.json \
+                && grep -Eq '"database"[[:space:]]*:[[:space:]]*"ok"' /tmp/health.json; then
+                health_ok=true
+              fi
+            fi
+            if curl --fail --silent --show-error --max-time 20 "$STAGING_ORIGIN/register" -o /tmp/register.html; then
+              if grep -Fq 'method="post"' /tmp/register.html \
+                && grep -Fq 'action="/api/auth/register"' /tmp/register.html; then
+                marker_ok=true
+              fi
+            fi
+            echo "health_ok=$health_ok native_form_marker=$marker_ok"
+            if [ "$health_ok" = true ] && [ "$marker_ok" = true ]; then
+              echo "NATIVE_AUTH_DEPLOYMENT_MARKER PASS"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "NATIVE_AUTH_DEPLOYMENT_MARKER BLOCKED" >&2
+          exit 1
+
+      - name: Run Chromium regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/pw && mkdir -p /tmp/pw && cd /tmp/pw
+          npm init -y >/dev/null 2>&1
+          npm install --silent playwright-core@1.55.0
+          CHROME=$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || true)
+          if [ -z "$CHROME" ]; then
+            npm install --silent playwright@1.55.0
+            npx playwright install chromium >/dev/null
+            CHROME=$(NODE_PATH=/tmp/pw/node_modules node -e 'console.log(require("playwright").chromium.executablePath())')
+          fi
+          cd "$GITHUB_WORKSPACE"
+          echo "chrome=$CHROME"
+          NODE_PATH=/tmp/pw/node_modules CHROME="$CHROME" STAGING_ORIGIN="$STAGING_ORIGIN" node scripts/staging-browser-smoke.cjs
+          echo "NATIVE_AUTH_CHROMIUM_REGRESSION PASS"
