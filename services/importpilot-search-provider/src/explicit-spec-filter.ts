@@ -4,7 +4,6 @@ import type { SupplierSearchOutcome, SupplierSearchSource } from "./provider.js"
 export const ExplicitSpecMismatchReasons = {
   CONNECTOR: "CONNECTOR_MISMATCH",
   MULTI_HEAD: "MULTI_HEAD_MISMATCH",
-  PRODUCT_FORM: "PRODUCT_FORM_MISMATCH",
   LENGTH: "LENGTH_MISMATCH",
   POWER: "POWER_BELOW_REQUEST",
 } as const;
@@ -21,8 +20,6 @@ const CONNECTOR_PAIR_PATTERN = new RegExp(
   `\\b(${CONNECTOR_TERM})\\s+(?:to|2)\\s+(${CONNECTOR_TERM})\\b`,
 );
 const MULTI_HEAD_PATTERN = /\b(?:2|3|4|5)\s+in\s+1\b/;
-const EXTENSION_PATTERN = /\b(?:extension|extender)\b|\bmale\s+(?:to|2)\s+female\b|\bfemale\s+(?:to|2)\s+male\b/;
-const MAGNETIC_PATTERN = /\bmagnet(?:ic|ized|ised)?\b/;
 
 function normalizeText(value: string) {
   return value
@@ -61,10 +58,6 @@ function connectorPair(value: string): ConnectorPair | null {
 
 function sameConnectorPair(left: ConnectorPair, right: ConnectorPair) {
   return left[0] === right[0] && left[1] === right[1];
-}
-
-function isUsbCPointToPoint(pair: ConnectorPair | null) {
-  return pair?.[0] === "USB_C" && pair[1] === "USB_C";
 }
 
 function measurements(value: string, unitPattern: string) {
@@ -117,16 +110,6 @@ export function explicitSpecMismatchReasons(
     reasons.push(ExplicitSpecMismatchReasons.MULTI_HEAD);
   }
 
-  if (
-    isUsbCPointToPoint(requestedPair) &&
-    (
-      (!EXTENSION_PATTERN.test(queryText) && EXTENSION_PATTERN.test(titleText)) ||
-      (!MAGNETIC_PATTERN.test(queryText) && MAGNETIC_PATTERN.test(titleText))
-    )
-  ) {
-    reasons.push(ExplicitSpecMismatchReasons.PRODUCT_FORM);
-  }
-
   const requestedLength = requestedSingleMeasurement(
     productQuery,
     "m|meter|meters|metre|metres",
@@ -135,10 +118,9 @@ export function explicitSpecMismatchReasons(
     const offeredLengths = distinctMeasurements(
       measurements(result.title, "m|meter|meters|metre|metres"),
     );
-    // A listing that explicitly advertises several lengths is a variant family,
-    // not evidence that its displayed price and commercial terms belong to the
-    // exact requested length. Keep unknown length eligible, but reject ambiguous
-    // multi-length listings and direct length contradictions.
+    // When the user explicitly requests a length, the displayed price must be
+    // attributable to that exact length. If the user did not specify a length,
+    // all source-grounded length variants stay eligible for comparison.
     if (
       offeredLengths.length > 1 ||
       (offeredLengths.length === 1 && !containsMeasurement(offeredLengths, requestedLength))
@@ -172,7 +154,8 @@ function outcomeParts(outcome: SupplierSearchOutcome) {
 /**
  * Final provider guard. Semantic sources remain trusted for multilingual
  * relevance, but explicit machine-verifiable contradictions are removed.
- * Missing specs remain eligible; only clear conflicts are filtered out.
+ * Missing or unspecified product-form details stay eligible so the UI can show
+ * useful alternatives; only clear conflicts are filtered out.
  */
 export function createExplicitSpecFilteringSource(
   source: SupplierSearchSource,
