@@ -92,6 +92,7 @@ async function main() {
       page.waitForURL('**/dashboard', { timeout: 30_000 }),
       page.getByRole('button', { name: 'Create account' }).click(),
     ]);
+    await page.waitForLoadState('domcontentloaded', { timeout: 30_000 });
 
     const finalUrl = new URL(page.url());
     if (finalUrl.pathname !== '/dashboard' || finalUrl.search) {
