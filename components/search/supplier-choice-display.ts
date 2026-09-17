@@ -2,6 +2,7 @@ import {
   selectSupplierOfferPriceTier,
 } from "@/modules/product-search/domain/marketplace-product-details";
 import type { SupplierOfferSearchResult } from "@/modules/product-search/domain/search";
+import { applySupplierOfferQuantityPrice } from "@/modules/product-search/domain/supplier-quantity-pricing";
 
 export type QuantityPriceSnapshot = {
   quantity: number;
@@ -21,16 +22,8 @@ function uniquePositiveQuantities(values: Array<number | null | undefined>) {
 export function supplierOfferForQuantity(
   result: SupplierOfferSearchResult,
   quantity: number | null | undefined,
-): SupplierOfferSearchResult {
-  const tier = selectSupplierOfferPriceTier(result.marketplaceDetails, quantity);
-  if (!tier) return result;
-  const currency = tier.currency ?? result.currency;
-  if (!currency) return result;
-  return {
-    ...result,
-    price: tier.price,
-    currency,
-  };
+) {
+  return applySupplierOfferQuantityPrice(result, quantity);
 }
 
 export function quantityPriceSnapshots(
