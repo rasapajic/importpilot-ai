@@ -18,7 +18,7 @@ describe("ImportPilot 1.0 simple supplier results", () => {
     expect(resultsSource).toContain("Cena dobavljača");
     expect(resultsSource).toContain("Landed cost");
     expect(resultsSource).toContain("Dobavljač");
-    expect(resultsSource).toContain("Izaberi ponudu");
+    expect(resultsSource).toContain("Dodaj za poređenje");
     expect(resultsSource).toContain("Detalji analize");
   });
 
@@ -57,13 +57,30 @@ describe("ImportPilot 1.0 simple supplier results", () => {
     expect(resultsSource).not.toContain("preparedQueries");
   });
 
-  it("opens the exact selected offer directly in the decision step", () => {
-    expect(resultsSource).toContain("existingOfferId?: string");
-    expect(resultsSource).toContain("selectedOffer=${encodeURIComponent(selectedOfferId)}#workflow-step-decision");
-    expect(projectSource).toContain("selectedOffer?: string");
-    expect(projectSource).toContain("const focusedOfferId = project.offers.some");
-    expect(projectSource).toContain("focusedOfferId={focusedOfferId}");
-    expect(projectSource).toContain("Boolean(selectedCalculationOfferId || focusedOfferId)");
+  it("keeps the simple result list open while multiple offers are selected", () => {
+    const selectStart = resultsSource.indexOf("async function selectOffer");
+    const continueStart = resultsSource.indexOf("function continueWithSelectedOffers");
+    const selectionSource = resultsSource.slice(selectStart, continueStart);
+    expect(selectStart).toBeGreaterThanOrEqual(0);
+    expect(continueStart).toBeGreaterThan(selectStart);
+    expect(selectionSource).toContain("setSelectedOfferIds");
+    expect(selectionSource).not.toContain("router.push(");
+    expect(selectionSource).not.toContain("router.refresh()");
+    expect(resultsSource).toContain('select: "Dodaj za poređenje"');
+    expect(resultsSource).toContain('select: "Zum Vergleich hinzufügen"');
+    expect(resultsSource).toContain('select: "Add for comparison"');
+    expect(resultsSource).toContain("selectedOfferIds.length > 0");
+  });
+
+  it("advances to the decision step only through the explicit continue action", () => {
+    const continueStart = resultsSource.indexOf("function continueWithSelectedOffers");
+    const analysisStart = resultsSource.indexOf("const analysisByUrl", continueStart);
+    const continueSource = resultsSource.slice(continueStart, analysisStart);
+    expect(continueSource).toContain("selectedOfferIds.length === 0");
+    expect(continueSource).toContain("router.push(`/projects/${projectId}#workflow-step-decision`)");
+    expect(continueSource).toContain("router.refresh()");
+    expect(resultsSource).toContain("text.selectionSummary(selectedOfferIds.length)");
+    expect(resultsSource).toContain("text.continueWithSelected");
   });
 
   it("uses the simple results screen in the normal project flow and keeps legacy URL import isolated", () => {

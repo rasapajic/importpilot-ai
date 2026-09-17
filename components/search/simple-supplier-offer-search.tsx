@@ -47,7 +47,12 @@ type Copy = {
   missing: string;
   source: string;
   select: string;
+  selected: string;
   selecting: string;
+  selectionSummary: (count: number) => string;
+  selectionInstructions: string;
+  continueWithSelected: string;
+  continuing: string;
   cached: string;
   unknown: string;
   variants: string;
@@ -80,8 +85,13 @@ const copy: Record<Locale, Copy> = {
     score: "Rezultat analize",
     missing: "Još treba proveriti",
     source: "Otvori izvornu ponudu",
-    select: "Izaberi ponudu",
-    selecting: "Otvaranje...",
+    select: "Dodaj za poređenje",
+    selected: "Dodato za poređenje",
+    selecting: "Dodavanje...",
+    selectionSummary: (count) => `Odabrano za poređenje: ${count}`,
+    selectionInstructions: "Dodajte sve ponude koje želite, pa tek onda nastavite.",
+    continueWithSelected: "Nastavi sa odabranim ponudama",
+    continuing: "Otvaranje sledećeg koraka...",
     cached: "Prikazani su poslednji sačuvani rezultati.",
     unknown: "nije poznato",
     variants: "Varijante",
@@ -112,8 +122,13 @@ const copy: Record<Locale, Copy> = {
     score: "Analyseergebnis",
     missing: "Noch zu prüfen",
     source: "Quellangebot öffnen",
-    select: "Angebot auswählen",
-    selecting: "Wird geöffnet...",
+    select: "Zum Vergleich hinzufügen",
+    selected: "Für den Vergleich hinzugefügt",
+    selecting: "Wird hinzugefügt...",
+    selectionSummary: (count) => `Für den Vergleich ausgewählt: ${count}`,
+    selectionInstructions: "Fügen Sie alle gewünschten Angebote hinzu und fahren Sie erst danach fort.",
+    continueWithSelected: "Mit ausgewählten Angeboten fortfahren",
+    continuing: "Nächster Schritt wird geöffnet...",
     cached: "Die letzten gespeicherten Ergebnisse werden angezeigt.",
     unknown: "unbekannt",
     variants: "Varianten",
@@ -144,8 +159,13 @@ const copy: Record<Locale, Copy> = {
     score: "Analysis score",
     missing: "Still to verify",
     source: "Open source offer",
-    select: "Select offer",
-    selecting: "Opening...",
+    select: "Add for comparison",
+    selected: "Added for comparison",
+    selecting: "Adding...",
+    selectionSummary: (count) => `Selected for comparison: ${count}`,
+    selectionInstructions: "Add every offer you want to compare, then continue when your selection is complete.",
+    continueWithSelected: "Continue with selected offers",
+    continuing: "Opening the next step...",
     cached: "Showing the latest saved results.",
     unknown: "unknown",
     variants: "Variants",
@@ -238,6 +258,9 @@ export function SimpleSupplierOfferSearch({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [selectingUrl, setSelectingUrl] = useState<string | null>(null);
+  const [selectedUrls, setSelectedUrls] = useState<string[]>([]);
+  const [selectedOfferIds, setSelectedOfferIds] = useState<string[]>([]);
+  const [advancing, setAdvancing] = useState(false);
   const [fxSnapshot, setFxSnapshot] = useState<FxSnapshot | null>(null);
   const automaticSearchStarted = useRef(false);
 
@@ -303,6 +326,7 @@ export function SimpleSupplierOfferSearch({
   }, [quantity, results]);
 
   async function selectOffer(result: SupplierOfferSearchResult) {
+    if (selectedUrls.includes(result.productUrl)) return;
     setSelectingUrl(result.productUrl);
     setError("");
     try {
@@ -322,14 +346,24 @@ export function SimpleSupplierOfferSearch({
       const selectedOfferId = response.ok ? payload?.offerId : payload?.existingOfferId;
       if (!selectedOfferId) throw new Error(payload?.error || text.noResultsText);
 
-      router.push(
-        `/projects/${projectId}?selectedOffer=${encodeURIComponent(selectedOfferId)}#workflow-step-decision`,
-      );
-      router.refresh();
+      setSelectedUrls((current) => current.includes(result.productUrl)
+        ? current
+        : [...current, result.productUrl]);
+      setSelectedOfferIds((current) => current.includes(selectedOfferId)
+        ? current
+        : [...current, selectedOfferId]);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : text.noResultsText);
+    } finally {
       setSelectingUrl(null);
     }
+  }
+
+  function continueWithSelectedOffers() {
+    if (selectedOfferIds.length === 0 || advancing) return;
+    setAdvancing(true);
+    router.push(`/projects/${projectId}#workflow-step-decision`);
+    router.refresh();
   }
 
   const analysisByUrl = new Map(analyses.map((analysis) => [analysis.productUrl, analysis]));
@@ -386,6 +420,7 @@ export function SimpleSupplierOfferSearch({
               : null;
             const deliveryEstimate = liveEstimate ?? analysis?.preliminaryCostEstimate ?? null;
             const selecting = selectingUrl === result.productUrl;
+            const selected = selectedUrls.includes(result.productUrl);
             return (
               <article className="search-result-card" key={`${result.source}-${result.productUrl}`}>
                 <SearchResultImage src={result.imageUrl} title={result.title} />
@@ -457,15 +492,30 @@ export function SimpleSupplierOfferSearch({
                 </div>
                 <button
                   className="secondary-button"
-                  disabled={selecting}
+                  disabled={selecting || selected}
                   onClick={() => void selectOffer(effectiveResult)}
                   type="button"
                 >
-                  {selecting ? text.selecting : text.select}
+                  {selected ? text.selected : selecting ? text.selecting : text.select}
                 </button>
               </article>
             );
           })}
+        </div>
+      )}
+
+      {selectedOfferIds.length > 0 && (
+        <div className="empty-state" role="status">
+          <p><strong>{text.selectionSummary(selectedOfferIds.length)}</strong></p>
+          <p>{text.selectionInstructions}</p>
+          <button
+            className="primary-button"
+            disabled={advancing}
+            onClick={continueWithSelectedOffers}
+            type="button"
+          >
+            {advancing ? text.continuing : `${text.continueWithSelected} (${selectedOfferIds.length})`}
+          </button>
         </div>
       )}
     </section>
