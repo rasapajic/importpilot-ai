@@ -10,10 +10,10 @@ const googleCopy = {
   de: 'Mit Google fortfahren',
   sr: 'Nastavi preko Google-a',
 };
-const dashboardCopy = {
-  en: 'Find best offers',
-  de: 'Beste Angebote finden',
-  sr: 'Pronađi najbolje ponude',
+const dashboardHeading = {
+  en: 'Which product are you looking for?',
+  de: 'Welches Produkt suchen Sie?',
+  sr: 'Koji proizvod tražite?',
 };
 const htmlLang = { en: 'en', de: 'de', sr: 'sr-Latn' };
 
@@ -65,8 +65,6 @@ async function main() {
       }
     }
 
-    // Disable JavaScript entirely: this is stronger than a race test and proves the server-rendered
-    // HTML form can never fall back to GET or place credentials in the URL before hydration.
     const context = await browser.newContext({
       viewport: { width: 390, height: 844 },
       javaScriptEnabled: false,
@@ -102,8 +100,8 @@ async function main() {
     if (page.url().includes(email) || page.url().includes(password) || page.url().includes('password=')) {
       throw new Error('Native registration leaked credentials into the URL');
     }
-    if (!await page.getByText(dashboardCopy.en, { exact: true }).first().isVisible()) {
-      throw new Error('EN dashboard primary action missing after native registration');
+    if (!await page.getByRole('heading', { name: dashboardHeading.en, exact: true }).isVisible()) {
+      throw new Error('EN server-rendered dashboard heading missing after native registration');
     }
     await assertNoHorizontalOverflow(page, 'dashboard/mobile/en/native-no-js', 390);
 
@@ -113,8 +111,8 @@ async function main() {
       if (await page.locator('html').getAttribute('lang') !== htmlLang[locale]) {
         throw new Error(`dashboard: wrong html lang ${locale}`);
       }
-      if (!await page.getByText(dashboardCopy[locale], { exact: true }).first().isVisible()) {
-        throw new Error(`dashboard: primary action missing ${locale}`);
+      if (!await page.getByRole('heading', { name: dashboardHeading[locale], exact: true }).isVisible()) {
+        throw new Error(`dashboard: server-rendered heading missing ${locale}`);
       }
       await assertNoHorizontalOverflow(page, `dashboard/mobile/${locale}/native-no-js`, 390);
     }
