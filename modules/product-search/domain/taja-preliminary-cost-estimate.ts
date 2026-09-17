@@ -12,6 +12,7 @@ import {
   type TransportMode,
 } from "../../transport/domain/transport-estimator";
 import type { SupplierOfferSearchResult } from "./search";
+import { applySupplierOfferQuantityPrice } from "./supplier-quantity-pricing";
 
 export const TAJA_PRELIMINARY_COST_ESTIMATE_VERSION =
   "TAJA_PRELIMINARY_LANDED_COST_V3" as const;
@@ -189,6 +190,9 @@ function estimateConfidence(
  * explicitly disclosed EXW planning basis, but can never unlock FINAL status.
  * A known MOQ above the requested quantity blocks the estimate because the
  * displayed unit price is not proven to apply to the user's order quantity.
+ * When the exact product page publishes quantity tiers, the tier covering the
+ * requested quantity is used before landed cost is calculated. Missing tiers
+ * are never interpolated or invented.
  *
  * Passing fxSnapshot=null intentionally disables non-EUR estimates. Omitting
  * fxSnapshot preserves the deterministic reference snapshot used by offline
@@ -201,7 +205,8 @@ export function estimateTajaPreliminaryLandedCost(input: {
   targetMarginPercent: number;
   fxSnapshot?: FxSnapshot | null;
 }): TajaPreliminaryCostEstimate | null {
-  const { result, quantity, targetCountry, targetMarginPercent } = input;
+  const { quantity, targetCountry, targetMarginPercent } = input;
+  const result = applySupplierOfferQuantityPrice(input.result, quantity);
   const profile = getImportCountryProfile(targetCountry);
   const originStatus = chinaOriginStatus(result);
   const basis = pricingBasis(result);
