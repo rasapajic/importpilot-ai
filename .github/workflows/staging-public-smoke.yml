@@ -11,7 +11,7 @@ permissions:
 jobs:
   smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 10
     env:
       STAGING_ORIGIN: https://importpilot-1-0-staging.onrender.com
     steps:
@@ -85,3 +85,135 @@ jobs:
           fi
 
           echo "GOOGLE_START_ROUTE PASS"
+
+      - name: Run authenticated live supplier-search matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          email="staging-acceptance-${GITHUB_RUN_ID}@example.test"
+          password="Staging-Acceptance-2026A"
+          register_body=$(node -e 'console.log(JSON.stringify({name:"Staging Acceptance",organizationName:"ImportPilot Staging Acceptance",email:process.argv[1],password:process.argv[2]}))' "$email" "$password")
+          register_status=$(curl --silent --show-error --max-time 30 \
+            --cookie-jar /tmp/staging.cookies \
+            --output /tmp/register.json \
+            --write-out '%{http_code}' \
+            --header 'content-type: application/json' \
+            --header "origin: $STAGING_ORIGIN" \
+            --data "$register_body" \
+            "$STAGING_ORIGIN/api/auth/register")
+          echo "register_status=$register_status"
+          if [ "$register_status" != "201" ]; then
+            cat /tmp/register.json >&2 || true
+            exit 10
+          fi
+
+          run_case() {
+            label="$1"
+            query="$2"
+            country="$3"
+            quantity="$4"
+            project_name="Acceptance ${label} ${GITHUB_RUN_ID}"
+
+            project_body=$(node -e 'console.log(JSON.stringify({name:process.argv[1],targetCountry:process.argv[2],quantity:Number(process.argv[3]),targetMargin:20}))' "$project_name" "$country" "$quantity")
+            project_file="/tmp/project-${label}.json"
+            project_status=$(curl --silent --show-error --max-time 30 \
+              --cookie /tmp/staging.cookies \
+              --cookie-jar /tmp/staging.cookies \
+              --output "$project_file" \
+              --write-out '%{http_code}' \
+              --header 'content-type: application/json' \
+              --header "origin: $STAGING_ORIGIN" \
+              --data "$project_body" \
+              "$STAGING_ORIGIN/api/projects")
+            echo "case=$label project_status=$project_status target=$country quantity=$quantity"
+            if [ "$project_status" != "201" ]; then
+              cat "$project_file" >&2 || true
+              return 11
+            fi
+
+            project_id=$(node -e 'const fs=require("fs"); const x=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); if(!x.id) process.exit(2); process.stdout.write(x.id)' "$project_file")
+            search_body=$(node -e 'console.log(JSON.stringify({query:process.argv[1],quantity:Number(process.argv[2]),targetCountry:process.argv[3],targetMarginPercent:20}))' "$query" "$quantity" "$country")
+            search_file="/tmp/search-${label}.json"
+            started=$(date +%s)
+            search_status=$(curl --silent --show-error --max-time 75 \
+              --cookie /tmp/staging.cookies \
+              --cookie-jar /tmp/staging.cookies \
+              --output "$search_file" \
+              --write-out '%{http_code}' \
+              --header 'content-type: application/json' \
+              --header "origin: $STAGING_ORIGIN" \
+              --data "$search_body" \
+              "$STAGING_ORIGIN/api/projects/$project_id/supplier-search")
+            duration=$(( $(date +%s) - started ))
+            echo "case=$label search_status=$search_status duration_s=$duration"
+            if [ "$search_status" != "200" ]; then
+              cat "$search_file" >&2 || true
+              return 12
+            fi
+
+            node - "$search_file" "$label" "$country" "$quantity" <<'NODE'
+          const fs = require('fs');
+          const [file, label, country, quantityText] = process.argv.slice(2);
+          const payload = JSON.parse(fs.readFileSync(file, 'utf8'));
+          const results = Array.isArray(payload.results) ? payload.results : [];
+          if (results.length === 0) {
+            console.error(`case=${label} BLOCKED zero_results reason=${payload.reason ?? 'none'}`);
+            process.exit(20);
+          }
+          const invalid = results.filter((result) => {
+            const pairOk = (result.price == null) === (result.currency == null);
+            return typeof result.title !== 'string' || !result.title.trim()
+              || typeof result.supplierName !== 'string' || !result.supplierName.trim()
+              || typeof result.source !== 'string' || !result.source.trim()
+              || typeof result.productUrl !== 'string' || !result.productUrl.startsWith('https://')
+              || !pairOk;
+          });
+          if (invalid.length) {
+            console.error(`case=${label} BLOCKED invalid_results=${invalid.length}`);
+            process.exit(21);
+          }
+          const sourceCounts = {};
+          const originCounts = {};
+          let priced = 0;
+          let moqKnown = 0;
+          let imageKnown = 0;
+          let incotermKnown = 0;
+          let provenanceMismatch = 0;
+          for (const result of results) {
+            sourceCounts[result.source] = (sourceCounts[result.source] ?? 0) + 1;
+            const origin = result.provenance?.resultOrigin ?? 'unknown';
+            originCounts[origin] = (originCounts[origin] ?? 0) + 1;
+            if (result.price != null && result.currency != null) priced += 1;
+            if (result.minimumOrderQuantity != null) moqKnown += 1;
+            if (result.imageUrl != null) imageKnown += 1;
+            if (result.incoterm != null) incotermKnown += 1;
+            if (result.provenance?.targetCountry && result.provenance.targetCountry !== country) provenanceMismatch += 1;
+            if (result.provenance?.quantity && Number(result.provenance.quantity) !== Number(quantityText)) provenanceMismatch += 1;
+          }
+          if (provenanceMismatch) {
+            console.error(`case=${label} BLOCKED provenance_mismatch=${provenanceMismatch}`);
+            process.exit(22);
+          }
+          console.log(JSON.stringify({
+            case: label,
+            targetCountry: country,
+            quantity: Number(quantityText),
+            resultCount: results.length,
+            sourceCounts,
+            originCounts,
+            priced,
+            moqKnown,
+            imageKnown,
+            incotermKnown,
+            candidateAnalyses: Array.isArray(payload.candidateAnalyses) ? payload.candidateAnalyses.length : null,
+            disposition: 'PASS',
+          }));
+          NODE
+          }
+
+          run_case electronics '65W GaN USB C charger EU plug' AT 100
+          run_case packaging 'kraft paper takeaway food box 1000ml' DE 500
+          run_case household 'stainless steel insulated lunch box 1000ml' RS 80
+
+          echo "LIVE_SUPPLIER_MATRIX PASS"
