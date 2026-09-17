@@ -1,0 +1,107 @@
+name: Patch AI usage Prisma schema
+
+on:
+  push:
+    branches:
+      - fix/importpilot-ai-usage-prisma-drift
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/importpilot-ai-usage-prisma-drift
+
+      - name: Patch schema without touching migration history
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("prisma/schema.prisma")
+          schema = path.read_text()
+          if "model AiUsageEvent {" in schema:
+              print("AiUsageEvent already represented; no patch needed.")
+              raise SystemExit(0)
+
+          organization_anchor = "  projectCompletionHistory ProjectCompletionHistory[]\n  createdAt"
+          project_anchor = "  completionHistory ProjectCompletionHistory[]\n  completionStatus"
+          if schema.count(organization_anchor) != 1:
+              raise SystemExit("Organization relation anchor did not match exactly once")
+          if schema.count(project_anchor) != 1:
+              raise SystemExit("ImportProject relation anchor did not match exactly once")
+
+          schema = schema.replace(
+              organization_anchor,
+              "  projectCompletionHistory ProjectCompletionHistory[]\n  aiUsageEvents AiUsageEvent[]\n  createdAt",
+              1,
+          )
+          schema = schema.replace(
+              project_anchor,
+              "  completionHistory ProjectCompletionHistory[]\n  aiUsageEvents AiUsageEvent[]\n  completionStatus",
+              1,
+          )
+
+          model = r'''
+
+model AiUsageEvent {
+  id                         String       @id @db.Uuid
+  organizationId             String       @map("organization_id") @db.Uuid
+  projectId                  String?      @map("project_id") @db.Uuid
+  provider                   String       @db.VarChar(40)
+  operation                  String       @db.VarChar(80)
+  modelName                  String       @map("model") @db.VarChar(120)
+  responseId                 String       @map("response_id") @db.VarChar(200)
+  status                     String       @db.VarChar(30)
+  inputTokens                Int          @map("input_tokens")
+  cachedInputTokens          Int          @default(0) @map("cached_input_tokens")
+  outputTokens               Int          @map("output_tokens")
+  reasoningOutputTokens      Int          @default(0) @map("reasoning_output_tokens")
+  totalTokens                Int          @map("total_tokens")
+  webSearchCalls             Int          @default(0) @map("web_search_calls")
+  durationMs                 Int          @default(0) @map("duration_ms")
+  currency                   String       @default("USD") @db.Char(3)
+  pricingVersion             String       @map("pricing_version") @db.VarChar(80)
+  inputPricePerMillionUsd    Decimal      @map("input_price_per_million_usd") @db.Decimal(20, 12)
+  cachedInputPricePerMillionUsd Decimal   @map("cached_input_price_per_million_usd") @db.Decimal(20, 12)
+  outputPricePerMillionUsd   Decimal      @map("output_price_per_million_usd") @db.Decimal(20, 12)
+  webSearchPricePerCallUsd   Decimal      @map("web_search_price_per_call_usd") @db.Decimal(20, 12)
+  inputCostUsd               Decimal      @map("input_cost_usd") @db.Decimal(20, 12)
+  cachedInputCostUsd         Decimal      @map("cached_input_cost_usd") @db.Decimal(20, 12)
+  outputCostUsd              Decimal      @map("output_cost_usd") @db.Decimal(20, 12)
+  webSearchCostUsd           Decimal      @map("web_search_cost_usd") @db.Decimal(20, 12)
+  estimatedTotalCostUsd      Decimal      @map("estimated_total_cost_usd") @db.Decimal(20, 12)
+  estimated                  Boolean      @default(true)
+  createdAt                  DateTime     @default(now()) @map("created_at")
+  organization               Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  project                    ImportProject? @relation(fields: [projectId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@unique([provider, responseId], map: "ai_usage_events_provider_response_id_key")
+  @@index([organizationId, createdAt], map: "ai_usage_events_organization_id_created_at_idx")
+  @@index([organizationId, projectId, createdAt], map: "ai_usage_events_organization_id_project_id_created_at_idx")
+  @@index([organizationId, operation, modelName], map: "ai_usage_events_organization_id_operation_model_idx")
+  @@map("ai_usage_events")
+}
+'''
+          path.write_text(schema.rstrip() + model + "\n")
+          PY
+
+          git diff --check
+
+      - name: Commit schema representation
+        shell: bash
+        run: |
+          if git diff --quiet -- prisma/schema.prisma; then
+            echo "No schema change to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add prisma/schema.prisma
+          git commit -m "Represent AI usage ledger in Prisma schema"
+          git push origin HEAD:fix/importpilot-ai-usage-prisma-drift
