@@ -14,9 +14,10 @@ const callbackRoute = source("app/api/auth/google/callback/route.ts");
 const authService = source("modules/auth/application/auth-service.ts");
 const productionConfig = source("scripts/check-production-config.mjs");
 const envExample = source(".env.example");
+const stagingBlueprint = source("render.staging.yaml");
 const runbook = source("RELEASE_1_0_RUNBOOK.md");
 
- describe("ImportPilot 1.0 Google auth release contract", () => {
+describe("ImportPilot 1.0 Google auth release contract", () => {
   it("offers Google auth on both login and registration", () => {
     expect(loginPage).toContain('<GoogleAuthButton mode="login"');
     expect(registerPage).toContain('<GoogleAuthButton mode="register"');
@@ -48,8 +49,10 @@ const runbook = source("RELEASE_1_0_RUNBOOK.md");
     ]) {
       expect(envExample).toContain(`${name}=`);
       expect(productionConfig).toContain(`\"${name}\"`);
+      expect(stagingBlueprint).toContain(`key: ${name}`);
     }
     expect(productionConfig).toContain('/api/auth/google/callback');
+    expect(stagingBlueprint).toContain("https://importpilot-1-0-staging.onrender.com/api/auth/google/callback");
     expect(runbook).toContain("Google authentication readiness");
     expect(runbook).toContain("GOOGLE_OAUTH_SETUP.md");
   });
