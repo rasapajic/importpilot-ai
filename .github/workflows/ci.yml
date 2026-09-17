@@ -70,6 +70,9 @@ jobs:
       - name: Apply test database migrations
         run: npm run db:migrate:deploy
 
+      - name: Prisma schema drift gate
+        run: npx prisma migrate diff --exit-code --from-url "$DATABASE_URL" --to-schema prisma/schema.prisma
+
       - name: Lint
         run: npm run lint
 
