@@ -18,7 +18,7 @@ describe("ImportPilot 1.0 simple supplier results", () => {
     expect(resultsSource).toContain("Cena dobavljača");
     expect(resultsSource).toContain("Landed cost");
     expect(resultsSource).toContain("Dobavljač");
-    expect(resultsSource).toContain("Izaberi ponudu");
+    expect(resultsSource).toContain("Dodaj za poređenje");
     expect(resultsSource).toContain("Detalji analize");
   });
 
