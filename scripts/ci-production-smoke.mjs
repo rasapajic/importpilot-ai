@@ -41,8 +41,35 @@ async function waitForServer(child) {
 
 function sessionCookieFrom(response) {
   const raw = response.headers.get("set-cookie");
-  if (!raw) throw new Error("Registration did not return a session cookie.");
+  if (!raw) throw new Error("Auth response did not return a session cookie.");
   return raw.split(";", 1)[0];
+}
+
+function expectRedirect(response, path, label) {
+  if (response.status !== 303) {
+    throw new Error(`${label} returned ${response.status}, expected 303.`);
+  }
+  const location = response.headers.get("location");
+  if (location !== `${baseUrl}${path}`) {
+    throw new Error(`${label} redirected to ${location}, expected ${baseUrl}${path}.`);
+  }
+}
+
+async function assertDashboard(cookie, expectedStatus, label) {
+  const response = await request("/api/dashboard", { headers: { cookie } });
+  if (response.status !== expectedStatus) {
+    throw new Error(`${label} dashboard returned ${response.status}, expected ${expectedStatus}.`);
+  }
+}
+
+async function logout(cookie, label) {
+  const response = await request("/api/auth/logout", {
+    method: "POST",
+    headers: { cookie, origin: baseUrl },
+  });
+  if (response.status !== 200) {
+    throw new Error(`${label} logout returned ${response.status}: ${await response.text()}`);
+  }
 }
 
 async function stopServer(child) {
@@ -108,6 +135,15 @@ try {
   if (!loginHtml.includes("Continue with Google")) {
     throw new Error("Production login page does not render the Google Sign-In action.");
   }
+  if (!loginHtml.includes('method="post"') || !loginHtml.includes('action="/api/auth/login"')) {
+    throw new Error("Production login page is missing the native POST fallback contract.");
+  }
+
+  const registerPage = await request("/register");
+  const registerHtml = await registerPage.text();
+  if (!registerHtml.includes('method="post"') || !registerHtml.includes('action="/api/auth/register"')) {
+    throw new Error("Production registration page is missing the native POST fallback contract.");
+  }
 
   const googleWithoutCredentials = await request("/api/auth/google/start?from=login", {
     redirect: "manual",
@@ -121,6 +157,45 @@ try {
   if (googleLocation !== `${baseUrl}/login?googleError=not-configured`) {
     throw new Error(`Google start route returned unexpected controlled redirect: ${googleLocation}`);
   }
+
+  const nativeEmail = `release-native-${randomUUID()}@example.test`;
+  const nativePassword = "Release-Native-2026A";
+  const nativeRegister = await request("/api/auth/register", {
+    method: "POST",
+    redirect: "manual",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded",
+      origin: baseUrl,
+    },
+    body: new URLSearchParams({
+      name: "Native Release User",
+      organizationName: "Native Release Company",
+      email: nativeEmail,
+      password: nativePassword,
+    }),
+  });
+  expectRedirect(nativeRegister, "/dashboard", "Native registration");
+  const nativeCookie = sessionCookieFrom(nativeRegister);
+  await assertDashboard(nativeCookie, 200, "Native registration");
+  await logout(nativeCookie, "Native registration");
+  await assertDashboard(nativeCookie, 401, "Native registration after logout");
+
+  const nativeLogin = await request("/api/auth/login", {
+    method: "POST",
+    redirect: "manual",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded",
+      origin: baseUrl,
+    },
+    body: new URLSearchParams({
+      email: nativeEmail,
+      password: nativePassword,
+    }),
+  });
+  expectRedirect(nativeLogin, "/dashboard", "Native login");
+  const nativeLoginCookie = sessionCookieFrom(nativeLogin);
+  await assertDashboard(nativeLoginCookie, 200, "Native login");
+  await logout(nativeLoginCookie, "Native login");
 
   const email = `release-smoke-${randomUUID()}@example.test`;
   const register = await request("/api/auth/register", {
@@ -137,33 +212,15 @@ try {
     }),
   });
   if (register.status !== 201) {
-    throw new Error(`Registration returned ${register.status}, expected 201: ${await register.text()}`);
+    throw new Error(`JSON registration returned ${register.status}, expected 201: ${await register.text()}`);
   }
   const cookie = sessionCookieFrom(register);
 
-  const dashboard = await request("/api/dashboard", {
-    headers: { cookie },
-  });
-  if (dashboard.status !== 200) {
-    throw new Error(`Authenticated dashboard API returned ${dashboard.status}.`);
-  }
+  await assertDashboard(cookie, 200, "JSON registration");
+  await logout(cookie, "JSON registration");
+  await assertDashboard(cookie, 401, "JSON registration after logout");
 
-  const logout = await request("/api/auth/logout", {
-    method: "POST",
-    headers: { cookie, origin: baseUrl },
-  });
-  if (logout.status !== 200) {
-    throw new Error(`Logout returned ${logout.status}: ${await logout.text()}`);
-  }
-
-  const afterLogout = await request("/api/dashboard", {
-    headers: { cookie },
-  });
-  if (afterLogout.status !== 401) {
-    throw new Error(`Logged-out dashboard request returned ${afterLogout.status}, expected 401.`);
-  }
-
-  console.log("IMPORTPILOT_PRODUCTION_SMOKE PASS: standalone runtime health, Google auth entry/fail-closed route, public pages, registration, authenticated dashboard and logout lifecycle are healthy.");
+  console.log("IMPORTPILOT_PRODUCTION_SMOKE PASS: standalone runtime health, Google auth entry/fail-closed route, native form registration/login fallback, JSON auth, authenticated dashboard and logout lifecycle are healthy.");
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   if (logs.trim()) console.error(`--- production server log ---\n${logs}`);

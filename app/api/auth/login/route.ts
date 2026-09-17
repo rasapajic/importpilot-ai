@@ -6,23 +6,47 @@ import {
 } from "@/modules/auth/application/auth-service";
 import { loginSchema } from "@/modules/auth/domain/validation";
 import {
+  isNativeAuthFormPost,
+  nativeAuthRedirect,
+  readAuthRequestBody,
+} from "@/modules/auth/infrastructure/native-auth";
+import {
   getRequestContext,
   isSameOrigin,
 } from "@/modules/auth/infrastructure/request-context";
 import { consumeRateLimit } from "@/modules/auth/infrastructure/rate-limit";
 import { setSessionCookie } from "@/modules/auth/infrastructure/session";
 
+function errorResponse(
+  request: NextRequest,
+  nativeForm: boolean,
+  code: string,
+  error: string,
+  status: number,
+  headers?: HeadersInit,
+) {
+  if (nativeForm) return nativeAuthRedirect(request, "/login", code);
+  return NextResponse.json({ error }, { status, headers });
+}
+
 export async function POST(request: NextRequest) {
   const startedAt = Date.now();
+  const nativeForm = isNativeAuthFormPost(request);
 
   try {
     if (!isSameOrigin(request)) {
-      return NextResponse.json({ error: "Zahtev nije dozvoljen." }, { status: 403 });
+      return errorResponse(request, nativeForm, "forbidden", "Zahtev nije dozvoljen.", 403);
     }
 
-    const result = loginSchema.safeParse(await request.json().catch(() => null));
+    const result = loginSchema.safeParse(await readAuthRequestBody(request, nativeForm));
     if (!result.success) {
-      return NextResponse.json({ error: "Email ili lozinka nisu ispravni." }, { status: 400 });
+      return errorResponse(
+        request,
+        nativeForm,
+        "invalid",
+        "Email ili lozinka nisu ispravni.",
+        400,
+      );
     }
 
     const context = getRequestContext(request);
@@ -41,9 +65,13 @@ export async function POST(request: NextRequest) {
     const blocked = limits.find((limit) => !limit.allowed);
 
     if (blocked) {
-      return NextResponse.json(
-        { error: "Previše pokušaja. Pokušajte ponovo kasnije." },
-        { status: 429, headers: { "Retry-After": String(blocked.retryAfterSeconds) } },
+      return errorResponse(
+        request,
+        nativeForm,
+        "rate-limited",
+        "Previše pokušaja. Pokušajte ponovo kasnije.",
+        429,
+        { "Retry-After": String(blocked.retryAfterSeconds) },
       );
     }
 
@@ -57,10 +85,18 @@ export async function POST(request: NextRequest) {
         durationMs: Date.now() - startedAt,
       }));
     }
+
+    if (nativeForm) return nativeAuthRedirect(request, "/dashboard");
     return NextResponse.json({ ok: true });
   } catch (error) {
     if (error instanceof InvalidCredentialsError) {
-      return NextResponse.json({ error: "Email ili lozinka nisu ispravni." }, { status: 401 });
+      return errorResponse(
+        request,
+        nativeForm,
+        "invalid",
+        "Email ili lozinka nisu ispravni.",
+        401,
+      );
     }
 
     if (process.env.NODE_ENV === "development") {
@@ -72,6 +108,6 @@ export async function POST(request: NextRequest) {
         errorMessage: error instanceof Error ? error.message : String(error),
       }));
     }
-    return NextResponse.json({ error: "AUTH_UNAVAILABLE" }, { status: 500 });
+    return errorResponse(request, nativeForm, "unavailable", "AUTH_UNAVAILABLE", 500);
   }
 }

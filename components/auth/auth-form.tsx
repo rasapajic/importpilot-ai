@@ -147,7 +147,12 @@ export function AuthForm({ mode }: AuthFormProps) {
   }
 
   return (
-    <form className="auth-form" onSubmit={submit}>
+    <form
+      action={`/api/auth/${mode}`}
+      className="auth-form"
+      method="post"
+      onSubmit={submit}
+    >
       {isRegister && (
         <>
           <label>

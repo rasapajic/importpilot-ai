@@ -4,12 +4,13 @@ import { redirect } from "next/navigation";
 import { AuthForm } from "@/components/auth/auth-form";
 import { GoogleAuthButton } from "@/components/auth/google-auth-button";
 import { GoogleAuthFeedback } from "@/components/auth/google-auth-feedback";
+import { NativeAuthFeedback } from "@/components/auth/native-auth-feedback";
 import { getCurrentSession } from "@/modules/auth/infrastructure/session";
 import { getServerLocale } from "@/modules/i18n/server";
 import { translateText } from "@/modules/i18n/translations";
 
 type RegisterPageProps = {
-  searchParams?: Promise<{ googleError?: string }>;
+  searchParams?: Promise<{ googleError?: string; authError?: string }>;
 };
 
 export default async function RegisterPage({ searchParams }: RegisterPageProps) {
@@ -24,6 +25,7 @@ export default async function RegisterPage({ searchParams }: RegisterPageProps) 
         <p className="eyebrow">ImportPilot AI</p>
         <h1>{t("Create a company account.")}</h1>
         <GoogleAuthFeedback code={resolvedSearchParams.googleError} />
+        <NativeAuthFeedback code={resolvedSearchParams.authError} />
         <GoogleAuthButton mode="register" />
         <AuthForm mode="register" />
         <p>{t("Already have an account?")} <Link href="/login">{t("Sign in")}</Link></p>
