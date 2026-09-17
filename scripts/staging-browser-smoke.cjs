@@ -101,8 +101,17 @@ async function main() {
     if (page.url().includes(email) || page.url().includes(password) || page.url().includes('password=')) {
       throw new Error('Native registration leaked credentials into the URL');
     }
-    if (!await page.getByRole('heading', { name: dashboardHeading.en, exact: true }).isVisible()) {
-      throw new Error('EN server-rendered dashboard heading missing after native registration');
+
+    const h1 = page.locator('h1').first();
+    await h1.waitFor({ state: 'visible', timeout: 10_000 });
+    const headingText = (await h1.textContent())?.trim() ?? '';
+    console.log(JSON.stringify({
+      nativeRegistrationFinalUrl: page.url(),
+      nativeRegistrationHeading: headingText,
+      credentialsInUrl: false,
+    }));
+    if (headingText !== dashboardHeading.en) {
+      throw new Error(`Unexpected EN server-rendered dashboard heading: ${headingText}`);
     }
     await assertNoHorizontalOverflow(page, 'dashboard/mobile/en/native-no-js', 390);
 
@@ -112,8 +121,11 @@ async function main() {
       if (await page.locator('html').getAttribute('lang') !== htmlLang[locale]) {
         throw new Error(`dashboard: wrong html lang ${locale}`);
       }
-      if (!await page.getByRole('heading', { name: dashboardHeading[locale], exact: true }).isVisible()) {
-        throw new Error(`dashboard: server-rendered heading missing ${locale}`);
+      const localizedH1 = page.locator('h1').first();
+      await localizedH1.waitFor({ state: 'visible', timeout: 10_000 });
+      const localizedHeading = (await localizedH1.textContent())?.trim() ?? '';
+      if (localizedHeading !== dashboardHeading[locale]) {
+        throw new Error(`dashboard: unexpected heading ${locale}: ${localizedHeading}`);
       }
       await assertNoHorizontalOverflow(page, `dashboard/mobile/${locale}/native-no-js`, 390);
     }
