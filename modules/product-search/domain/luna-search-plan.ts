@@ -97,7 +97,11 @@ function uniqueQueries(queries: Array<string | null | undefined>) {
 }
 
 function withEnglishCommercialTerms(query: string, privateLabel: boolean) {
-  return [query, privateLabel ? "OEM private label" : null]
+  return [
+    query,
+    "wholesale manufacturer supplier",
+    privateLabel ? "OEM private label" : null,
+  ]
     .filter(Boolean)
     .join(" ");
 }
