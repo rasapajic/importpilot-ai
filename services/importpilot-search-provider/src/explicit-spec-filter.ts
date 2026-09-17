@@ -4,6 +4,7 @@ import type { SupplierSearchOutcome, SupplierSearchSource } from "./provider.js"
 export const ExplicitSpecMismatchReasons = {
   CONNECTOR: "CONNECTOR_MISMATCH",
   MULTI_HEAD: "MULTI_HEAD_MISMATCH",
+  PRODUCT_FORM: "PRODUCT_FORM_MISMATCH",
   LENGTH: "LENGTH_MISMATCH",
   POWER: "POWER_BELOW_REQUEST",
 } as const;
@@ -20,6 +21,8 @@ const CONNECTOR_PAIR_PATTERN = new RegExp(
   `\\b(${CONNECTOR_TERM})\\s+(?:to|2)\\s+(${CONNECTOR_TERM})\\b`,
 );
 const MULTI_HEAD_PATTERN = /\b(?:2|3|4|5)\s+in\s+1\b/;
+const EXTENSION_PATTERN = /\b(?:extension|extender)\b|\bmale\s+(?:to|2)\s+female\b|\bfemale\s+(?:to|2)\s+male\b/;
+const MAGNETIC_PATTERN = /\bmagnet(?:ic|ized|ised)?\b/;
 
 function normalizeText(value: string) {
   return value
@@ -58,6 +61,10 @@ function connectorPair(value: string): ConnectorPair | null {
 
 function sameConnectorPair(left: ConnectorPair, right: ConnectorPair) {
   return left[0] === right[0] && left[1] === right[1];
+}
+
+function isUsbCPointToPoint(pair: ConnectorPair | null) {
+  return pair?.[0] === "USB_C" && pair[1] === "USB_C";
 }
 
 function measurements(value: string, unitPattern: string) {
@@ -108,6 +115,16 @@ export function explicitSpecMismatchReasons(
     MULTI_HEAD_PATTERN.test(titleText)
   ) {
     reasons.push(ExplicitSpecMismatchReasons.MULTI_HEAD);
+  }
+
+  if (
+    isUsbCPointToPoint(requestedPair) &&
+    (
+      (!EXTENSION_PATTERN.test(queryText) && EXTENSION_PATTERN.test(titleText)) ||
+      (!MAGNETIC_PATTERN.test(queryText) && MAGNETIC_PATTERN.test(titleText))
+    )
+  ) {
+    reasons.push(ExplicitSpecMismatchReasons.PRODUCT_FORM);
   }
 
   const requestedLength = requestedSingleMeasurement(
