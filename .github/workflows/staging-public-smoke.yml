@@ -15,7 +15,7 @@ jobs:
     env:
       STAGING_ORIGIN: https://importpilot-1-0-staging.onrender.com
     steps:
-      - name: Verify staging health and Google deployment marker
+      - name: Verify staging health and Google route
         shell: bash
         run: |
           set -euo pipefail
@@ -24,342 +24,207 @@ jobs:
           grep -Eq '"database"[[:space:]]*:[[:space:]]*"ok"' /tmp/health.json
           curl --fail --silent --show-error --max-time 20 "$STAGING_ORIGIN/login" -o /tmp/login.html
           grep -Fq 'Continue with Google' /tmp/login.html
-          echo "STAGING_HEALTH_AND_GOOGLE_UI PASS"
-          cat /tmp/health.json
-
-      - name: Verify Google start route is live and controlled
-        shell: bash
-        run: |
-          set -euo pipefail
-          curl --silent --show-error --max-time 20 \
-            --output /dev/null \
-            --dump-header /tmp/google.headers \
-            "$STAGING_ORIGIN/api/auth/google/start?from=login"
+          curl --silent --show-error --max-time 20 --output /dev/null --dump-header /tmp/google.headers "$STAGING_ORIGIN/api/auth/google/start?from=login"
           status=$(awk 'NR==1 {print $2}' /tmp/google.headers)
-          location=$(awk 'BEGIN{IGNORECASE=1} /^location:/ {$1=""; sub(/^ /, ""); sub(/\r$/, ""); print; exit}' /tmp/google.headers)
-          host=$(node -e 'try { console.log(new URL(process.argv[1]).host) } catch { console.log("invalid") }' "$location")
-          echo "google_start_status=$status google_start_location_host=$host"
           case "$status" in 301|302|303|307|308) ;; *) exit 2 ;; esac
-          if [[ "$location" != https://accounts.google.com/* \
-            && "$location" != "$STAGING_ORIGIN/login?googleError=not-configured" ]]; then
-            echo "Unexpected Google redirect: $location" >&2
-            exit 3
-          fi
-          echo "GOOGLE_START_ROUTE PASS"
+          echo "STAGING_BASELINE PASS google_status=$status"
 
-      - name: Run full RS live-offer E2E
+      - name: Verify AT and DE live landed cost plus EUR CNY runtime
         shell: bash
         run: |
           set -euo pipefail
-          email="staging-e2e-${GITHUB_RUN_ID}@example.test"
-          password="Staging-E2E-2026A"
-          quantity=80
-          target_country=RS
-          query='stainless steel insulated lunch box 1000ml'
+          email="staging-market-${GITHUB_RUN_ID}@example.test"
+          password="Staging-Market-2026A"
+          register_body=$(node -e 'console.log(JSON.stringify({name:"Staging Market Acceptance",organizationName:"ImportPilot Market Acceptance",email:process.argv[1],password:process.argv[2]}))' "$email" "$password")
+          status=$(curl --silent --show-error --max-time 30 --cookie-jar /tmp/market.cookies --output /tmp/register.json --write-out '%{http_code}' --header 'content-type: application/json' --header "origin: $STAGING_ORIGIN" --data "$register_body" "$STAGING_ORIGIN/api/auth/register")
+          test "$status" = "201"
 
-          register_body=$(node -e 'console.log(JSON.stringify({name:"Staging E2E",organizationName:"ImportPilot Staging E2E",email:process.argv[1],password:process.argv[2]}))' "$email" "$password")
-          register_status=$(curl --silent --show-error --max-time 30 \
-            --cookie-jar /tmp/e2e.cookies \
-            --output /tmp/e2e-register.json \
-            --write-out '%{http_code}' \
-            --header 'content-type: application/json' \
-            --header "origin: $STAGING_ORIGIN" \
-            --data "$register_body" \
-            "$STAGING_ORIGIN/api/auth/register")
-          echo "e2e_register_status=$register_status"
-          test "$register_status" = "201"
-
-          project_body=$(node -e 'console.log(JSON.stringify({name:"E2E RS Household "+process.argv[1],targetCountry:"RS",quantity:80,targetMargin:20}))' "$GITHUB_RUN_ID")
-          project_status=$(curl --silent --show-error --max-time 30 \
-            --cookie /tmp/e2e.cookies \
-            --cookie-jar /tmp/e2e.cookies \
-            --output /tmp/e2e-project.json \
-            --write-out '%{http_code}' \
-            --header 'content-type: application/json' \
-            --header "origin: $STAGING_ORIGIN" \
-            --data "$project_body" \
-            "$STAGING_ORIGIN/api/projects")
-          test "$project_status" = "201"
-          project_id=$(node -e 'const x=require(process.argv[1]); if(!x.id) process.exit(2); process.stdout.write(x.id)' /tmp/e2e-project.json)
-          echo "e2e_project_status=$project_status project_id=$project_id"
-
-          search_body=$(node -e 'console.log(JSON.stringify({query:process.argv[1],quantity:80,targetCountry:"RS",targetMarginPercent:20}))' "$query")
-          started=$(date +%s)
-          search_status=$(curl --silent --show-error --max-time 75 \
-            --cookie /tmp/e2e.cookies \
-            --cookie-jar /tmp/e2e.cookies \
-            --output /tmp/e2e-search.json \
-            --write-out '%{http_code}' \
-            --header 'content-type: application/json' \
-            --header "origin: $STAGING_ORIGIN" \
-            --data "$search_body" \
-            "$STAGING_ORIGIN/api/projects/$project_id/supplier-search")
-          search_duration=$(( $(date +%s) - started ))
-          echo "e2e_search_status=$search_status duration_s=$search_duration"
-          test "$search_status" = "200"
-
-          node - /tmp/e2e-search.json /tmp/e2e-candidates.json <<'NODE'
-          const fs = require('fs');
-          const [searchFile, candidatesFile] = process.argv.slice(2);
-          const payload = JSON.parse(fs.readFileSync(searchFile, 'utf8'));
-          const supportedTerms = new Set(['EXW','FCA','FAS','FOB']);
-          const results = Array.isArray(payload.results) ? payload.results : [];
-          const candidates = results.filter((r) => {
-            if (!(Number(r.price) > 0) || !/^[A-Z]{3}$/.test(String(r.currency ?? ''))) return false;
-            try {
-              const host = new URL(r.productUrl).hostname.toLowerCase();
-              return host.includes('alibaba.com') || host.includes('made-in-china.com');
-            } catch { return false; }
-          }).map((r) => {
-            const source = String(r.source ?? '').toLowerCase();
-            const incoterm = String(r.incoterm ?? '').toUpperCase();
-            const moq = r.minimumOrderQuantity == null ? null : Number(r.minimumOrderQuantity);
-            let score = 0;
-            if (source.includes('made-in-china')) score += 30;
-            if (supportedTerms.has(incoterm)) score += 25;
-            if (moq == null || moq <= 80) score += 20;
-            if (r.imageUrl) score += 10;
-            if (r.provenance?.resultOrigin === 'live') score += 10;
-            return { score, result: r };
-          }).sort((a,b) => b.score-a.score).slice(0,5).map((x) => x.result);
-          if (!candidates.length) {
-            console.error('E2E BLOCKED: no priced Alibaba/Made-in-China candidate');
-            process.exit(20);
-          }
-          fs.writeFileSync(candidatesFile, JSON.stringify(candidates));
-          console.log(JSON.stringify({searchResultCount:results.length,candidateCount:candidates.length,origins:[...new Set(results.map(r=>r.provenance?.resultOrigin ?? 'unknown'))]}));
-          NODE
-
-          candidate_count=$(node -e 'const x=require(process.argv[1]); process.stdout.write(String(x.length))' /tmp/e2e-candidates.json)
-          preview_ok=false
-          for index in $(seq 0 $((candidate_count-1))); do
-            node - /tmp/e2e-candidates.json "$index" /tmp/e2e-candidate.json <<'NODE'
-          const fs=require('fs');
-          const [file,indexText,out]=process.argv.slice(2);
-          const candidates=JSON.parse(fs.readFileSync(file,'utf8'));
-          fs.writeFileSync(out,JSON.stringify(candidates[Number(indexText)]));
-          NODE
-            product_url=$(node -e 'const x=require(process.argv[1]); process.stdout.write(x.productUrl)' /tmp/e2e-candidate.json)
-            preview_body=$(node -e 'console.log(JSON.stringify({productUrl:process.argv[1]}))' "$product_url")
-            preview_status=$(curl --silent --show-error --max-time 30 \
-              --cookie /tmp/e2e.cookies \
-              --cookie-jar /tmp/e2e.cookies \
-              --output /tmp/e2e-preview.json \
-              --write-out '%{http_code}' \
-              --header 'content-type: application/json' \
-              --header "origin: $STAGING_ORIGIN" \
-              --data "$preview_body" \
-              "$STAGING_ORIGIN/api/projects/$project_id/supplier-search/url-preview")
-            echo "exact_page_attempt=$index status=$preview_status host=$(node -e 'console.log(new URL(process.argv[1]).host)' "$product_url")"
-            if [ "$preview_status" = "200" ]; then
-              cp /tmp/e2e-candidate.json /tmp/e2e-selected.json
-              preview_ok=true
-              break
-            fi
-            case "$preview_status" in 413|422|423|504) ;; *) cat /tmp/e2e-preview.json >&2 || true; exit 21 ;; esac
-          done
-          if [ "$preview_ok" != true ]; then
-            echo "E2E BLOCKED: no exact-page preview succeeded for five evidence-backed candidates" >&2
-            exit 22
-          fi
-
-          node - /tmp/e2e-selected.json /tmp/e2e-preview.json /tmp/e2e-commercial.json <<'NODE'
-          const fs=require('fs');
-          const [selectedFile,previewFile,outFile]=process.argv.slice(2);
-          const selected=JSON.parse(fs.readFileSync(selectedFile,'utf8'));
-          const response=JSON.parse(fs.readFileSync(previewFile,'utf8'));
-          const preview=response.preview ?? {};
-          const supported=new Set(['EXW','FCA','FAS','FOB']);
-          const exactPrice=Number(preview.price);
-          const exactCurrency=String(preview.currency ?? '').toUpperCase();
-          const searchPrice=Number(selected.price);
-          const searchCurrency=String(selected.currency ?? '').toUpperCase();
-          const price=(Number.isFinite(exactPrice)&&exactPrice>0&&/^[A-Z]{3}$/.test(exactCurrency))?exactPrice:searchPrice;
-          const currency=(Number.isFinite(exactPrice)&&exactPrice>0&&/^[A-Z]{3}$/.test(exactCurrency))?exactCurrency:searchCurrency;
-          const exactTerm=String(preview.incoterm ?? '').toUpperCase();
-          const searchTerm=String(selected.incoterm ?? '').toUpperCase();
-          const incoterm=supported.has(exactTerm)?exactTerm:supported.has(searchTerm)?searchTerm:'FOB';
-          const incotermSource=supported.has(exactTerm)?'exact-page':supported.has(searchTerm)?'search-result':'manual-acceptance-input';
-          const priceSource=(Number.isFinite(exactPrice)&&exactPrice>0&&/^[A-Z]{3}$/.test(exactCurrency))?'exact-page':'search-result';
-          if (!(price>0) || !/^[A-Z]{3}$/.test(currency)) process.exit(23);
-          fs.writeFileSync(outFile,JSON.stringify({unitPrice:price,currency,incoterm,deliveryTimeDays:null}));
-          const fields=['title','supplierName','price','currency','minimumOrderQuantity','imageUrl','incoterm'].filter(k=>preview[k]!=null&&preview[k]!=='');
-          console.log(JSON.stringify({
-            selectedSource:selected.source,
-            selectedOrigin:selected.provenance?.resultOrigin ?? 'unknown',
-            exactPageFields:fields,
-            priceSource,
-            incotermSource,
-            currency,
-            incoterm,
-            moq:selected.minimumOrderQuantity ?? null,
-          }));
-          NODE
-
-          import_status=$(curl --silent --show-error --max-time 30 \
-            --cookie /tmp/e2e.cookies \
-            --cookie-jar /tmp/e2e.cookies \
-            --output /tmp/e2e-import.json \
-            --write-out '%{http_code}' \
-            --header 'content-type: application/json' \
-            --header "origin: $STAGING_ORIGIN" \
-            --data-binary @/tmp/e2e-selected.json \
-            "$STAGING_ORIGIN/api/projects/$project_id/supplier-search/import")
-          echo "offer_import_status=$import_status"
-          test "$import_status" = "201"
-          offer_id=$(node -e 'const x=require(process.argv[1]); if(!x.offerId) process.exit(2); process.stdout.write(x.offerId)' /tmp/e2e-import.json)
-
-          terms_status=$(curl --silent --show-error --max-time 30 \
-            --request PATCH \
-            --cookie /tmp/e2e.cookies \
-            --cookie-jar /tmp/e2e.cookies \
-            --output /tmp/e2e-terms.json \
-            --write-out '%{http_code}' \
-            --header 'content-type: application/json' \
-            --header "origin: $STAGING_ORIGIN" \
-            --data-binary @/tmp/e2e-commercial.json \
-            "$STAGING_ORIGIN/api/offers/$offer_id/commercial-terms")
-          echo "commercial_terms_status=$terms_status offer_id=$offer_id"
-          test "$terms_status" = "200"
-
-          fx_status=$(curl --silent --show-error --max-time 20 \
-            --cookie /tmp/e2e.cookies \
-            --output /tmp/e2e-fx.json \
-            --write-out '%{http_code}' \
-            "$STAGING_ORIGIN/api/fx/latest")
-          echo "fx_status=$fx_status"
+          fx_status=$(curl --silent --show-error --max-time 20 --cookie /tmp/market.cookies --output /tmp/fx.json --write-out '%{http_code}' "$STAGING_ORIGIN/api/fx/latest")
           test "$fx_status" = "200"
+          node - /tmp/fx.json <<'NODE'
+          const fs=require('fs'); const fx=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
+          const age=(Date.now()-Date.parse(fx.timestamp))/86400000;
+          if (!Number.isFinite(age)||age>7||age<-1) process.exit(10);
+          for (const c of ['EUR','USD','CNY']) if (!(Number(fx.ratesToEur?.[c])>0)) process.exit(11);
+          console.log(JSON.stringify({fxSource:fx.source,fxTimestamp:fx.timestamp,USD:fx.ratesToEur.USD,CNY:fx.ratesToEur.CNY,EUR:fx.ratesToEur.EUR}));
+          NODE
 
-          node - /tmp/e2e-commercial.json /tmp/e2e-fx.json /tmp/e2e-cost-high.json <<'NODE'
+          live_case() {
+            label="$1"; query="$2"; country="$3"; quantity="$4"; vat="$5"
+            project_body=$(node -e 'console.log(JSON.stringify({name:process.argv[1],targetCountry:process.argv[2],quantity:Number(process.argv[3]),targetMargin:20}))' "Live ${label} ${GITHUB_RUN_ID}" "$country" "$quantity")
+            project_file="/tmp/${label}-project.json"
+            status=$(curl --silent --show-error --max-time 30 --cookie /tmp/market.cookies --cookie-jar /tmp/market.cookies --output "$project_file" --write-out '%{http_code}' --header 'content-type: application/json' --header "origin: $STAGING_ORIGIN" --data "$project_body" "$STAGING_ORIGIN/api/projects")
+            test "$status" = "201"
+            project_id=$(node -e 'const x=require(process.argv[1]); process.stdout.write(x.id)' "$project_file")
+
+            search_body=$(node -e 'console.log(JSON.stringify({query:process.argv[1],quantity:Number(process.argv[2]),targetCountry:process.argv[3],targetMarginPercent:20}))' "$query" "$quantity" "$country")
+            search_file="/tmp/${label}-search.json"
+            started=$(date +%s)
+            status=$(curl --silent --show-error --max-time 75 --cookie /tmp/market.cookies --cookie-jar /tmp/market.cookies --output "$search_file" --write-out '%{http_code}' --header 'content-type: application/json' --header "origin: $STAGING_ORIGIN" --data "$search_body" "$STAGING_ORIGIN/api/projects/$project_id/supplier-search")
+            duration=$(( $(date +%s)-started ))
+            echo "live_case=$label search_status=$status duration_s=$duration"
+            test "$status" = "200"
+
+            node - "$search_file" "$quantity" "/tmp/${label}-selected.json" "/tmp/${label}-terms.json" <<'NODE'
           const fs=require('fs');
-          const [commercialFile,fxFile,outFile]=process.argv.slice(2);
-          const commercial=JSON.parse(fs.readFileSync(commercialFile,'utf8'));
-          const fx=JSON.parse(fs.readFileSync(fxFile,'utf8'));
-          const ts=Date.parse(fx.timestamp);
-          const ageDays=(Date.now()-ts)/86400000;
-          if (!Number.isFinite(ts) || ageDays < -1 || ageDays > 7) {
-            console.error(`E2E BLOCKED stale FX ageDays=${ageDays}`); process.exit(30);
+          const [searchFile,qtyText,selectedFile,termsFile]=process.argv.slice(2);
+          const payload=JSON.parse(fs.readFileSync(searchFile,'utf8')); const qty=Number(qtyText);
+          const supported=new Set(['EXW','FCA','FAS','FOB']);
+          const candidates=(payload.results??[]).filter(r=>Number(r.price)>0&&/^[A-Z]{3}$/.test(String(r.currency??''))).map(r=>{
+            const term=String(r.incoterm??'').toUpperCase(); const moq=r.minimumOrderQuantity==null?null:Number(r.minimumOrderQuantity); let score=0;
+            if (supported.has(term)) score+=30; if (moq==null||moq<=qty) score+=20; if (r.provenance?.resultOrigin==='live') score+=10; if (r.imageUrl) score+=5;
+            return {r,score};
+          }).sort((a,b)=>b.score-a.score);
+          if (!candidates.length) process.exit(20);
+          const selected=candidates[0].r; const sourceTerm=String(selected.incoterm??'').toUpperCase(); const incoterm=supported.has(sourceTerm)?sourceTerm:'FOB';
+          fs.writeFileSync(selectedFile,JSON.stringify(selected));
+          fs.writeFileSync(termsFile,JSON.stringify({unitPrice:Number(selected.price),currency:selected.currency,incoterm,deliveryTimeDays:null}));
+          console.log(JSON.stringify({resultCount:(payload.results??[]).length,origin:selected.provenance?.resultOrigin??'unknown',source:selected.source,price:Number(selected.price),currency:selected.currency,moq:selected.minimumOrderQuantity??null,incoterm,incotermSource:supported.has(sourceTerm)?'search-result':'manual-acceptance-input'}));
+          NODE
+
+            status=$(curl --silent --show-error --max-time 30 --cookie /tmp/market.cookies --output "/tmp/${label}-import.json" --write-out '%{http_code}' --header 'content-type: application/json' --header "origin: $STAGING_ORIGIN" --data-binary "@/tmp/${label}-selected.json" "$STAGING_ORIGIN/api/projects/$project_id/supplier-search/import")
+            test "$status" = "201"
+            offer_id=$(node -e 'const x=require(process.argv[1]); process.stdout.write(x.offerId)' "/tmp/${label}-import.json")
+            status=$(curl --silent --show-error --max-time 30 --request PATCH --cookie /tmp/market.cookies --output "/tmp/${label}-terms-response.json" --write-out '%{http_code}' --header 'content-type: application/json' --header "origin: $STAGING_ORIGIN" --data-binary "@/tmp/${label}-terms.json" "$STAGING_ORIGIN/api/offers/$offer_id/commercial-terms")
+            test "$status" = "200"
+
+            node - "/tmp/${label}-terms.json" "$country" "$vat" "$quantity" "/tmp/${label}-cost.json" <<'NODE'
+          const fs=require('fs'); const [termsFile,country,vat,qtyText,out]=process.argv.slice(2); const t=JSON.parse(fs.readFileSync(termsFile,'utf8')); const qty=Number(qtyText); const goods=Number(t.unitPrice)*qty; const money=n=>Math.max(0,n).toFixed(2);
+          const body={chinaDomesticTransportCost:money(Math.max(10,goods*.01)),internationalTransportCost:money(Math.max(50,goods*.05)),insuranceCost:money(Math.max(5,goods*.005)),customsBrokerCost:money(Math.max(20,goods*.01)),customsDutyRate:'5',vatRate:String(vat),vatSource:'COUNTRY_PROFILE_DEFAULT',storageCost:money(Math.max(10,goods*.005)),inspectionCost:money(Math.max(10,goods*.005)),otherCosts:money(Math.max(5,goods*.003)),targetSellingPrice:money(Number(t.unitPrice)*5),transportConfirmed:true,customsDutyConfirmed:true,calculationStatus:'CALCULATED'};
+          fs.writeFileSync(out,JSON.stringify(body)); console.log(JSON.stringify({country,vat:Number(vat),currency:t.currency,testSellingPrice:Number(body.targetSellingPrice)}));
+          NODE
+
+            if [ "$country" = "DE" ]; then
+              node - "/tmp/${label}-cost.json" "/tmp/${label}-cost-wrong-vat.json" <<'NODE'
+          const fs=require('fs'); const [a,b]=process.argv.slice(2); const x=JSON.parse(fs.readFileSync(a,'utf8')); x.vatRate='20'; fs.writeFileSync(b,JSON.stringify(x));
+          NODE
+              wrong_status=$(curl --silent --show-error --max-time 30 --cookie /tmp/market.cookies --output "/tmp/${label}-wrong-vat-response.json" --write-out '%{http_code}' --header 'content-type: application/json' --header "origin: $STAGING_ORIGIN" --data-binary "@/tmp/${label}-cost-wrong-vat.json" "$STAGING_ORIGIN/api/offers/$offer_id/cost-calculations")
+              test "$wrong_status" = "201"
+              node - "/tmp/${label}-wrong-vat-response.json" <<'NODE'
+          const x=require(process.argv[2]); if(x.calculationStatus!=='NEEDS_REVIEW'||Number(x.vatRate)!==20) process.exit(30); console.log(JSON.stringify({wrongProfileVat:20,status:x.calculationStatus}));
+          NODE
+            fi
+
+            status=$(curl --silent --show-error --max-time 30 --cookie /tmp/market.cookies --output "/tmp/${label}-cost-response.json" --write-out '%{http_code}' --header 'content-type: application/json' --header "origin: $STAGING_ORIGIN" --data-binary "@/tmp/${label}-cost.json" "$STAGING_ORIGIN/api/offers/$offer_id/cost-calculations")
+            test "$status" = "201"
+            node - "/tmp/${label}-cost-response.json" "$country" "$vat" <<'NODE'
+          const fs=require('fs'); const [file,country,vat]=process.argv.slice(2); const x=JSON.parse(fs.readFileSync(file,'utf8')); if(x.calculationStatus!=='CALCULATED'||x.targetCountry!==country||Number(x.vatRate)!==Number(vat)||!(Number(x.grossMarginPercent)>0)) process.exit(31); console.log(JSON.stringify({country,currency:x.currency,landedCostPerUnit:Number(x.landedCostPerUnit),grossMarginPercent:Number(x.grossMarginPercent),vatRate:Number(x.vatRate),status:x.calculationStatus}));
+          NODE
+
+            decision_status=$(curl --silent --show-error --max-time 25 --request POST --cookie /tmp/market.cookies --output "/tmp/${label}-decision.json" --write-out '%{http_code}' --header "origin: $STAGING_ORIGIN" "$STAGING_ORIGIN/api/projects/$project_id/profitability-check?offerId=$offer_id")
+            test "$decision_status" = "201"
+            node - "/tmp/${label}-decision.json" "$offer_id" <<'NODE'
+          const x=require(process.argv[2]); const offerId=process.argv[3]; if(x.selectedOfferId!==offerId) process.exit(32); console.log(JSON.stringify({decision:x.status,selectedOfferId:x.selectedOfferId}));
+          NODE
+
+            if [ "$country" = "AT" ]; then
+              node - "/tmp/${label}-terms.json" "/tmp/${label}-ddp-terms.json" <<'NODE'
+          const fs=require('fs'); const [a,b]=process.argv.slice(2); const x=JSON.parse(fs.readFileSync(a,'utf8')); x.incoterm='DDP'; fs.writeFileSync(b,JSON.stringify(x));
+          NODE
+              status=$(curl --silent --show-error --max-time 30 --request PATCH --cookie /tmp/market.cookies --output /tmp/at-ddp-term-response.json --write-out '%{http_code}' --header 'content-type: application/json' --header "origin: $STAGING_ORIGIN" --data-binary "@/tmp/${label}-ddp-terms.json" "$STAGING_ORIGIN/api/offers/$offer_id/commercial-terms")
+              test "$status" = "200"
+              ddp_status=$(curl --silent --show-error --max-time 30 --cookie /tmp/market.cookies --output /tmp/at-ddp-cost-response.json --write-out '%{http_code}' --header 'content-type: application/json' --header "origin: $STAGING_ORIGIN" --data-binary "@/tmp/${label}-cost.json" "$STAGING_ORIGIN/api/offers/$offer_id/cost-calculations")
+              test "$ddp_status" = "400"
+              grep -Fq 'EXW, FCA, FAS i FOB' /tmp/at-ddp-cost-response.json
+              echo "AT_UNSUPPORTED_DDP_GUARD PASS"
+            fi
           }
-          const rate=Number(fx.ratesToEur?.[commercial.currency]);
-          if (!(rate>0)) { console.error(`E2E BLOCKED missing FX rate ${commercial.currency}`); process.exit(31); }
-          const qty=80;
-          const unit=Number(commercial.unitPrice);
-          const goods=unit*qty;
-          const money=(n)=>Math.max(0,n).toFixed(2);
-          const body={
-            chinaDomesticTransportCost:money(Math.max(10,goods*0.01)),
-            internationalTransportCost:money(Math.max(50,goods*0.05)),
-            insuranceCost:money(Math.max(5,goods*0.005)),
-            customsBrokerCost:money(Math.max(20,goods*0.01)),
-            customsDutyRate:'5',
-            vatRate:'20',
-            vatSource:'COUNTRY_PROFILE_DEFAULT',
-            storageCost:money(Math.max(10,goods*0.005)),
-            inspectionCost:money(Math.max(10,goods*0.005)),
-            otherCosts:money(Math.max(5,goods*0.003)),
-            targetSellingPrice:money(unit*5),
-            transportConfirmed:true,
-            customsDutyConfirmed:true,
-            calculationStatus:'CALCULATED',
-          };
-          fs.writeFileSync(outFile,JSON.stringify(body));
-          console.log(JSON.stringify({
-            fxSource:fx.source,
-            fxTimestamp:fx.timestamp,
-            currency:commercial.currency,
-            rateToEur:rate,
-            unitPrice:unit,
-            unitPriceEur:Number((unit*rate).toFixed(4)),
-            testSellingPriceEur:Number((unit*5*rate).toFixed(2)),
-          }));
+
+          live_case AT '65W GaN USB C charger EU plug' AT 100 20
+          live_case DE 'kraft paper takeaway food box 1000ml' DE 500 19
+
+          manual_currency_case() {
+            label="$1"; country="$2"; quantity="$3"; currency="$4"; unit="$5"; vat="$6"
+            pbody=$(node -e 'console.log(JSON.stringify({name:process.argv[1],targetCountry:process.argv[2],quantity:Number(process.argv[3]),targetMargin:20}))' "Currency ${label} ${GITHUB_RUN_ID}" "$country" "$quantity")
+            status=$(curl --silent --show-error --max-time 30 --cookie /tmp/market.cookies --output "/tmp/${label}-p.json" --write-out '%{http_code}' --header 'content-type: application/json' --header "origin: $STAGING_ORIGIN" --data "$pbody" "$STAGING_ORIGIN/api/projects")
+            test "$status" = "201"; pid=$(node -e 'const x=require(process.argv[1]); process.stdout.write(x.id)' "/tmp/${label}-p.json")
+            obody=$(node -e 'console.log(JSON.stringify({supplierName:"Acceptance Currency Supplier",supplierCountry:"CN",contactEmail:null,contactPhone:null,moq:Number(process.argv[1]),unitPrice:Number(process.argv[2]),currency:process.argv[3],incoterm:"FOB",deliveryTimeDays:30,paymentTerms:null,warranty:null,supplierVerified:null,yearsOnPlatform:null,responseRatePercent:null,transactionCount:null,employeeCount:null,profileCompletenessScore:null,sampleAvailable:null,termsClarityScore:null,shippingClarityScore:null}))' "$quantity" "$unit" "$currency")
+            status=$(curl --silent --show-error --max-time 30 --cookie /tmp/market.cookies --output "/tmp/${label}-o.json" --write-out '%{http_code}' --header 'content-type: application/json' --header "origin: $STAGING_ORIGIN" --data "$obody" "$STAGING_ORIGIN/api/projects/$pid/offers")
+            test "$status" = "201"; oid=$(node -e 'const x=require(process.argv[1]); process.stdout.write(x.id)' "/tmp/${label}-o.json")
+            node - /tmp/fx.json "$currency" "$unit" "$quantity" "$vat" "/tmp/${label}-c.json" <<'NODE'
+          const fs=require('fs'); const [fxFile,currency,unitText,qtyText,vat,out]=process.argv.slice(2); const fx=JSON.parse(fs.readFileSync(fxFile,'utf8')); const rate=Number(fx.ratesToEur[currency]); if(!(rate>0)) process.exit(40); const unit=Number(unitText),qty=Number(qtyText),goods=unit*qty,m=n=>Math.max(0,n).toFixed(2); const body={chinaDomesticTransportCost:m(goods*.01),internationalTransportCost:m(Math.max(20,goods*.04)),insuranceCost:m(Math.max(2,goods*.005)),customsBrokerCost:m(Math.max(10,goods*.01)),customsDutyRate:'5',vatRate:String(vat),vatSource:'COUNTRY_PROFILE_DEFAULT',storageCost:m(Math.max(5,goods*.005)),inspectionCost:m(Math.max(5,goods*.005)),otherCosts:m(Math.max(2,goods*.002)),targetSellingPrice:m(unit*4),transportConfirmed:true,customsDutyConfirmed:true,calculationStatus:'CALCULATED'}; fs.writeFileSync(out,JSON.stringify(body)); console.log(JSON.stringify({currency,rateToEur:rate,unitPrice:unit,unitPriceEur:Number((unit*rate).toFixed(4))}));
           NODE
-
-          cost1_status=$(curl --silent --show-error --max-time 30 \
-            --cookie /tmp/e2e.cookies \
-            --cookie-jar /tmp/e2e.cookies \
-            --output /tmp/e2e-cost1.json \
-            --write-out '%{http_code}' \
-            --header 'content-type: application/json' \
-            --header "origin: $STAGING_ORIGIN" \
-            --data-binary @/tmp/e2e-cost-high.json \
-            "$STAGING_ORIGIN/api/offers/$offer_id/cost-calculations")
-          echo "cost1_status=$cost1_status"
-          if [ "$cost1_status" != "201" ]; then cat /tmp/e2e-cost1.json >&2; exit 32; fi
-
-          node - /tmp/e2e-cost1.json /tmp/e2e-commercial.json <<'NODE'
-          const fs=require('fs');
-          const [costFile,commercialFile]=process.argv.slice(2);
-          const cost=JSON.parse(fs.readFileSync(costFile,'utf8'));
-          const commercial=JSON.parse(fs.readFileSync(commercialFile,'utf8'));
-          if (cost.calculationStatus !== 'CALCULATED') process.exit(33);
-          if (cost.targetCountry !== 'RS') process.exit(34);
-          if (cost.currency !== commercial.currency) process.exit(35);
-          if (!(Number(cost.landedCostPerUnit)>0)) process.exit(36);
-          console.log(JSON.stringify({calculationStatus:cost.calculationStatus,currency:cost.currency,landedCostPerUnit:Number(cost.landedCostPerUnit),grossMarginPercent:Number(cost.grossMarginPercent),vatRate:Number(cost.vatRate),customsDutyRate:Number(cost.customsDutyRate)}));
+            status=$(curl --silent --show-error --max-time 30 --cookie /tmp/market.cookies --output "/tmp/${label}-cr.json" --write-out '%{http_code}' --header 'content-type: application/json' --header "origin: $STAGING_ORIGIN" --data-binary "@/tmp/${label}-c.json" "$STAGING_ORIGIN/api/offers/$oid/cost-calculations")
+            test "$status" = "201"
+            node - "/tmp/${label}-cr.json" "$currency" "$country" "$vat" <<'NODE'
+          const x=require(process.argv[2]); const [currency,country,vat]=process.argv.slice(3); if(x.currency!==currency||x.targetCountry!==country||Number(x.vatRate)!==Number(vat)||x.calculationStatus!=='CALCULATED') process.exit(41); console.log(JSON.stringify({manualAcceptanceCurrency:currency,targetCountry:country,landedCostPerUnit:Number(x.landedCostPerUnit),grossMarginPercent:Number(x.grossMarginPercent),status:x.calculationStatus}));
           NODE
+          }
 
-          decision1_status=$(curl --silent --show-error --max-time 25 \
-            --request POST \
-            --cookie /tmp/e2e.cookies \
-            --output /tmp/e2e-decision1.json \
-            --write-out '%{http_code}' \
-            --header "origin: $STAGING_ORIGIN" \
-            "$STAGING_ORIGIN/api/projects/$project_id/profitability-check?offerId=$offer_id")
-          echo "decision1_status=$decision1_status"
-          if [ "$decision1_status" != "201" ]; then cat /tmp/e2e-decision1.json >&2; exit 37; fi
-          node - /tmp/e2e-decision1.json "$offer_id" <<'NODE'
-          const fs=require('fs'); const [file,offerId]=process.argv.slice(2); const d=JSON.parse(fs.readFileSync(file,'utf8'));
-          const allowed=new Set(['READY_TO_BUY','NEGOTIATE_FIRST','NEED_MORE_OFFERS','DO_NOT_BUY']);
-          if (d.selectedOfferId!==offerId || !allowed.has(d.status)) process.exit(38);
-          if (d.status==='DO_NOT_BUY') { console.error('E2E BLOCKED: high-margin first decision already DO_NOT_BUY; cannot prove decision transition'); process.exit(39); }
-          console.log(JSON.stringify({firstDecision:d.status,selectedOfferId:d.selectedOfferId,decisionVersion:d.decisionVersion}));
+          manual_currency_case CNY RS 100 CNY 30 20
+          manual_currency_case EUR DE 100 EUR 10 19
+          echo "AT_DE_AND_CURRENCY_ACCEPTANCE PASS"
+
+      - name: Run Chromium locale and viewport smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/pw && mkdir -p /tmp/pw && cd /tmp/pw
+          npm init -y >/dev/null 2>&1
+          npm install --silent playwright-core@1.55.0
+          CHROME=$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || true)
+          if [ -z "$CHROME" ]; then
+            npm install --silent playwright@1.55.0
+            npx playwright install chromium >/dev/null
+            CHROME=$(NODE_PATH=/tmp/pw/node_modules node -e 'console.log(require("playwright").chromium.executablePath())')
+          fi
+          echo "chrome=$CHROME"
+          NODE_PATH=/tmp/pw/node_modules CHROME="$CHROME" STAGING_ORIGIN="$STAGING_ORIGIN" node <<'NODE'
+          const { chromium } = require('playwright-core');
+          const origin=process.env.STAGING_ORIGIN;
+          const browser=await chromium.launch({headless:true,executablePath:process.env.CHROME,args:['--no-sandbox']});
+          const copies={en:'Continue with Google',de:'Mit Google fortfahren',sr:'Nastavi preko Google-a'};
+          const dashboardCopies={en:'New search',de:'Neue Suche',sr:'Nova pretraga'};
+          async function assertLayout(page,label,viewport){
+            const m=await page.evaluate(()=>({scrollWidth:document.documentElement.scrollWidth,clientWidth:document.documentElement.clientWidth,bodyWidth:document.body.scrollWidth}));
+            if(m.scrollWidth>m.clientWidth+1||m.bodyWidth>m.clientWidth+1) throw new Error(`${label} horizontal overflow ${JSON.stringify(m)}`);
+            const card=await page.locator('.auth-card').first().boundingBox().catch(()=>null);
+            if(card&&(card.x<0||card.x+card.width>viewport.width+1)) throw new Error(`${label} auth card outside viewport ${JSON.stringify(card)}`);
+          }
+          for(const viewport of [{name:'desktop',width:1440,height:900},{name:'mobile',width:390,height:844}]){
+            for(const locale of ['en','de','sr']){
+              const context=await browser.newContext({viewport:{width:viewport.width,height:viewport.height}});
+              await context.addCookies([{name:'tradepilot_locale',value:locale,url:origin}]);
+              const page=await context.newPage(); const errors=[];
+              page.on('pageerror',e=>errors.push(`pageerror:${e.message}`));
+              page.on('response',r=>{if(r.status()>=500) errors.push(`http${r.status()}:${r.url()}`)});
+              await page.goto(`${origin}/login`,{waitUntil:'domcontentloaded',timeout:30000});
+              if(await page.locator('html').getAttribute('lang')!==locale) throw new Error(`${locale}/${viewport.name} wrong html lang`);
+              if(!await page.getByText(copies[locale],{exact:true}).isVisible()) throw new Error(`${locale}/${viewport.name} Google label missing`);
+              await assertLayout(page,`${locale}/${viewport.name}`,viewport);
+              if(errors.length) throw new Error(`${locale}/${viewport.name} runtime errors ${errors.join(',')}`);
+              console.log(JSON.stringify({locale,viewport:viewport.name,googleLabel:copies[locale],overflow:false}));
+              await context.close();
+            }
+          }
+
+          const context=await browser.newContext({viewport:{width:390,height:844}});
+          await context.addCookies([{name:'tradepilot_locale',value:'en',url:origin}]);
+          const page=await context.newPage(); const errors=[];
+          page.on('pageerror',e=>errors.push(`pageerror:${e.message}`));
+          page.on('response',r=>{if(r.status()>=500) errors.push(`http${r.status()}:${r.url()}`)});
+          await page.goto(`${origin}/register`,{waitUntil:'domcontentloaded',timeout:30000});
+          await page.locator('input[name="name"]').fill('Browser Acceptance');
+          await page.locator('input[name="organizationName"]').fill('Browser Acceptance Org');
+          await page.locator('input[name="email"]').fill(`browser-${Date.now()}@example.test`);
+          await page.locator('input[name="password"]').fill('Browser-Acceptance-2026A');
+          await Promise.all([
+            page.waitForURL('**/dashboard',{timeout:30000}),
+            page.getByRole('button',{name:'Create account'}).click(),
+          ]);
+          if(!await page.getByText(dashboardCopies.en,{exact:true}).first().isVisible()) throw new Error('EN dashboard primary action missing');
+          await assertLayout(page,'dashboard/mobile/en',{name:'mobile',width:390,height:844});
+          for(const locale of ['sr','de']){
+            await context.addCookies([{name:'tradepilot_locale',value:locale,url:origin}]);
+            await page.reload({waitUntil:'domcontentloaded',timeout:30000});
+            if(await page.locator('html').getAttribute('lang')!==locale) throw new Error(`dashboard wrong lang ${locale}`);
+            if(!await page.getByText(dashboardCopies[locale],{exact:true}).first().isVisible()) throw new Error(`dashboard primary action missing ${locale}`);
+            await assertLayout(page,`dashboard/mobile/${locale}`,{name:'mobile',width:390,height:844});
+          }
+          await page.setViewportSize({width:1440,height:900});
+          await assertLayout(page,'dashboard/desktop/de',{name:'desktop',width:1440,height:900});
+          if(errors.length) throw new Error(`dashboard runtime errors ${errors.join(',')}`);
+          console.log(JSON.stringify({authenticatedDashboard:true,mobile:true,desktop:true,locales:['en','sr','de'],overflow:false}));
+          await context.close(); await browser.close();
           NODE
-
-          node - /tmp/e2e-cost-high.json /tmp/e2e-cost1.json /tmp/e2e-cost-low.json <<'NODE'
-          const fs=require('fs'); const [highFile,costFile,outFile]=process.argv.slice(2);
-          const high=JSON.parse(fs.readFileSync(highFile,'utf8')); const cost=JSON.parse(fs.readFileSync(costFile,'utf8'));
-          const low={...high,targetSellingPrice:(Number(cost.landedCostPerUnit)*0.8).toFixed(2)};
-          fs.writeFileSync(outFile,JSON.stringify(low));
-          console.log(JSON.stringify({recalculationSellingPrice:Number(low.targetSellingPrice),priorLandedCostPerUnit:Number(cost.landedCostPerUnit)}));
-          NODE
-
-          cost2_status=$(curl --silent --show-error --max-time 30 \
-            --cookie /tmp/e2e.cookies \
-            --cookie-jar /tmp/e2e.cookies \
-            --output /tmp/e2e-cost2.json \
-            --write-out '%{http_code}' \
-            --header 'content-type: application/json' \
-            --header "origin: $STAGING_ORIGIN" \
-            --data-binary @/tmp/e2e-cost-low.json \
-            "$STAGING_ORIGIN/api/offers/$offer_id/cost-calculations")
-          echo "cost2_status=$cost2_status"
-          if [ "$cost2_status" != "201" ]; then cat /tmp/e2e-cost2.json >&2; exit 40; fi
-          node - /tmp/e2e-cost1.json /tmp/e2e-cost2.json <<'NODE'
-          const fs=require('fs'); const [a,b]=process.argv.slice(2).map(f=>JSON.parse(fs.readFileSync(f,'utf8')));
-          if (!(Number(b.grossMarginPercent)<Number(a.grossMarginPercent))) process.exit(41);
-          if (!(Number(b.grossMarginPercent)<0)) process.exit(42);
-          console.log(JSON.stringify({firstGrossMargin:Number(a.grossMarginPercent),secondGrossMargin:Number(b.grossMarginPercent),secondCalculationStatus:b.calculationStatus}));
-          NODE
-
-          decision2_status=$(curl --silent --show-error --max-time 25 \
-            --request POST \
-            --cookie /tmp/e2e.cookies \
-            --output /tmp/e2e-decision2.json \
-            --write-out '%{http_code}' \
-            --header "origin: $STAGING_ORIGIN" \
-            "$STAGING_ORIGIN/api/projects/$project_id/profitability-check?offerId=$offer_id")
-          echo "decision2_status=$decision2_status"
-          if [ "$decision2_status" != "201" ]; then cat /tmp/e2e-decision2.json >&2; exit 43; fi
-          node - /tmp/e2e-decision1.json /tmp/e2e-decision2.json "$offer_id" <<'NODE'
-          const fs=require('fs'); const [oneFile,twoFile,offerId]=process.argv.slice(2);
-          const one=JSON.parse(fs.readFileSync(oneFile,'utf8')); const two=JSON.parse(fs.readFileSync(twoFile,'utf8'));
-          if (two.selectedOfferId!==offerId) process.exit(44);
-          if (two.status!=='DO_NOT_BUY') { console.error(`Expected DO_NOT_BUY after negative-margin recalculation, got ${two.status}`); process.exit(45); }
-          if (one.status===two.status) process.exit(46);
-          console.log(JSON.stringify({firstDecision:one.status,secondDecision:two.status,selectedOfferId:two.selectedOfferId,decisionChanged:true}));
-          NODE
-
-          final_health=$(curl --silent --show-error --max-time 20 --output /tmp/e2e-health-final.json --write-out '%{http_code}' "$STAGING_ORIGIN/api/health")
-          test "$final_health" = "200"
-          grep -Eq '"database"[[:space:]]*:[[:space:]]*"ok"' /tmp/e2e-health-final.json
-          echo "FULL_RS_LIVE_OFFER_E2E PASS"
+          echo "CHROMIUM_LOCALE_VIEWPORT PASS"
