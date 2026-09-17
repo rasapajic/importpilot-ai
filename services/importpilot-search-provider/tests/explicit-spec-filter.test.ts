@@ -66,22 +66,20 @@ describe("explicit supplier spec filter", () => {
     }
   });
 
-  it("rejects a male-to-female extension when a normal USB-C to USB-C cable was requested", () => {
+  it("keeps product-form alternatives when the user did not specify a form", () => {
+    const broadQuery = "USB-C to USB-C";
     expect(
       explicitSpecMismatchReasons(
-        query,
-        result("USB C Extension Cable 20Gbps USB3.2 Gen2x2 Type C Male to Female Extender 240W PD Fast Charging Nylon Braided Cable", 20),
+        broadQuery,
+        result("USB C Extension Cable Type C Male to Female Extender 240W 1m", 20),
       ),
-    ).toContain(ExplicitSpecMismatchReasons.PRODUCT_FORM);
-  });
-
-  it("rejects a magnetic cable when a normal USB-C to USB-C cable was requested", () => {
+    ).toEqual([]);
     expect(
       explicitSpecMismatchReasons(
-        query,
+        broadQuery,
         result("100W USB-C to Type-C PD Magnetic Nylon Braided Charger Cable 1m", 21),
       ),
-    ).toContain(ExplicitSpecMismatchReasons.PRODUCT_FORM);
+    ).toEqual([]);
   });
 
   it("keeps extension and magnetic forms when the user explicitly requests them", () => {
@@ -90,20 +88,29 @@ describe("explicit supplier spec filter", () => {
         "USB-C to USB-C extension cable, 240W, 1 m",
         result("USB C Extension Cable Type C Male to Female Extender 240W 1m", 22),
       ),
-    ).not.toContain(ExplicitSpecMismatchReasons.PRODUCT_FORM);
+    ).toEqual([]);
 
     expect(
       explicitSpecMismatchReasons(
         "magnetic USB-C to USB-C braided charging cable, 100W, 1 m",
         result("100W USB-C to Type-C PD Magnetic Nylon Braided Charger Cable 1m", 23),
       ),
-    ).not.toContain(ExplicitSpecMismatchReasons.PRODUCT_FORM);
+    ).toEqual([]);
   });
 
-  it("rejects a multi-length family even when it includes the requested length", () => {
+  it("rejects a multi-length family when the user explicitly requests one length", () => {
     expect(
       explicitSpecMismatchReasons(query, result("240W USB-C to USB-C Braided Cable 1m 2m", 1)),
     ).toContain(ExplicitSpecMismatchReasons.LENGTH);
+  });
+
+  it("keeps multi-length families when the user did not specify a length", () => {
+    expect(
+      explicitSpecMismatchReasons(
+        "USB-C to USB-C braided charging cable",
+        result("240W USB-C to USB-C Braided Cable 1m 2m 3m", 1),
+      ),
+    ).toEqual([]);
   });
 
   it("keeps a higher power rating when the exact requested length is the only advertised length", () => {

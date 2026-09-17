@@ -5,6 +5,11 @@ import { useRouter } from "next/navigation";
 
 import { useI18n } from "@/components/i18n/i18n-provider";
 import { SearchResultImage } from "@/components/search/search-result-image";
+import {
+  quantityPriceSnapshots,
+  supplierOfferForQuantity,
+  supplierOfferVariantFacts,
+} from "@/components/search/supplier-choice-display";
 import type { FxSnapshot } from "@/modules/fx/euro-display";
 import type { Locale } from "@/modules/i18n/translations";
 import type { SupplierOfferSearchResult } from "@/modules/product-search/domain/search";
@@ -45,6 +50,10 @@ type Copy = {
   selecting: string;
   cached: string;
   unknown: string;
+  variants: string;
+  type: string;
+  quantityPrices: string;
+  pieces: string;
   risk: Record<"LOW" | "MEDIUM" | "HIGH" | "UNKNOWN", string>;
   decision: Record<"BUY" | "NEGOTIATE" | "WATCH" | "SKIP", string>;
 };
@@ -75,6 +84,10 @@ const copy: Record<Locale, Copy> = {
     selecting: "Otvaranje...",
     cached: "Prikazani su poslednji sačuvani rezultati.",
     unknown: "nije poznato",
+    variants: "Varijante",
+    type: "Tip",
+    quantityPrices: "Cene po količini",
+    pieces: "kom",
     risk: { LOW: "nizak rizik", MEDIUM: "srednji rizik", HIGH: "visok rizik", UNKNOWN: "nije provereno" },
     decision: { BUY: "BUY", NEGOTIATE: "NEGOTIATE", WATCH: "WATCH", SKIP: "SKIP" },
   },
@@ -103,6 +116,10 @@ const copy: Record<Locale, Copy> = {
     selecting: "Wird geöffnet...",
     cached: "Die letzten gespeicherten Ergebnisse werden angezeigt.",
     unknown: "unbekannt",
+    variants: "Varianten",
+    type: "Typ",
+    quantityPrices: "Mengenpreise",
+    pieces: "Stk.",
     risk: { LOW: "niedriges Risiko", MEDIUM: "mittleres Risiko", HIGH: "hohes Risiko", UNKNOWN: "nicht geprüft" },
     decision: { BUY: "BUY", NEGOTIATE: "NEGOTIATE", WATCH: "WATCH", SKIP: "SKIP" },
   },
@@ -131,6 +148,10 @@ const copy: Record<Locale, Copy> = {
     selecting: "Opening...",
     cached: "Showing the latest saved results.",
     unknown: "unknown",
+    variants: "Variants",
+    type: "Type",
+    quantityPrices: "Quantity prices",
+    pieces: "pcs",
     risk: { LOW: "low risk", MEDIUM: "medium risk", HIGH: "high risk", UNKNOWN: "not checked" },
     decision: { BUY: "BUY", NEGOTIATE: "NEGOTIATE", WATCH: "WATCH", SKIP: "SKIP" },
   },
@@ -169,12 +190,28 @@ function decisionClass(decision: ReturnType<typeof simpleDecision>) {
   return "provider-status-not_configured";
 }
 
+function numberLocale(locale: Locale) {
+  return locale === "sr" ? "sr-RS" : locale === "de" ? "de-DE" : "en-US";
+}
+
 function formatMoney(value: number, locale: Locale) {
-  return new Intl.NumberFormat(locale === "sr" ? "sr-RS" : locale === "de" ? "de-DE" : "en-US", {
+  return new Intl.NumberFormat(numberLocale(locale), {
     style: "currency",
     currency: "EUR",
     maximumFractionDigits: 2,
   }).format(value);
+}
+
+function formatSupplierPrice(value: number, currency: string, locale: Locale) {
+  return new Intl.NumberFormat(numberLocale(locale), {
+    style: "currency",
+    currency,
+    maximumFractionDigits: 4,
+  }).format(value);
+}
+
+function formatQuantity(value: number, locale: Locale) {
+  return new Intl.NumberFormat(numberLocale(locale), { maximumFractionDigits: 0 }).format(value);
 }
 
 export function SimpleSupplierOfferSearch({
@@ -248,7 +285,10 @@ export function SimpleSupplierOfferSearch({
   }, [autoStart, productName, quantity, runSearch, targetCountry]);
 
   useEffect(() => {
-    const needsFx = Boolean(results?.some((result) => result.currency && result.currency !== "EUR"));
+    const needsFx = Boolean(results?.some((result) => {
+      const effectiveResult = supplierOfferForQuantity(result, quantity);
+      return effectiveResult.currency && effectiveResult.currency !== "EUR";
+    }));
     if (!needsFx) return;
 
     const controller = new AbortController();
@@ -260,7 +300,7 @@ export function SimpleSupplierOfferSearch({
       })
       .catch(() => undefined);
     return () => controller.abort();
-  }, [results]);
+  }, [quantity, results]);
 
   async function selectOffer(result: SupplierOfferSearchResult) {
     setSelectingUrl(result.productUrl);
@@ -301,7 +341,7 @@ export function SimpleSupplierOfferSearch({
     result,
     index,
     analysis: analysisByUrl.get(result.productUrl),
-  }))).slice(0, 5);
+  }))).slice(0, 10);
 
   return (
     <section className="dashboard-card supplier-search">
@@ -332,13 +372,16 @@ export function SimpleSupplierOfferSearch({
         <div className="search-result-list">
           {visible.map(({ result, analysis }, index) => {
             const decision = simpleDecision(analysis);
+            const effectiveResult = supplierOfferForQuantity(result, quantity);
+            const priceSnapshots = quantityPriceSnapshots(result, quantity);
+            const variantFacts = supplierOfferVariantFacts(result);
             const liveEstimate = quantity && targetCountry
               ? estimateTajaPreliminaryLandedCost({
-                  result,
+                  result: effectiveResult,
                   quantity,
                   targetCountry,
                   targetMarginPercent: 0,
-                  fxSnapshot: result.currency === "EUR" ? null : fxSnapshot,
+                  fxSnapshot: effectiveResult.currency === "EUR" ? null : fxSnapshot,
                 })
               : null;
             const deliveryEstimate = liveEstimate ?? analysis?.preliminaryCostEstimate ?? null;
@@ -353,11 +396,15 @@ export function SimpleSupplierOfferSearch({
                   <div className="offer-highlights">
                     <span>
                       {text.supplierPrice}
-                      <strong>{result.price !== null && result.currency ? `${result.price} ${result.currency}` : text.unknown}</strong>
+                      <strong>
+                        {effectiveResult.price !== null && effectiveResult.currency
+                          ? `${formatSupplierPrice(effectiveResult.price, effectiveResult.currency, locale)}${quantity ? ` / ${formatQuantity(quantity, locale)} ${text.pieces}` : ""}`
+                          : text.unknown}
+                      </strong>
                     </span>
                     <span>
                       {text.landedCost}
-                      <strong>{liveEstimate ? `≈ ${formatMoney(liveEstimate.basePerUnitEur, locale)} / kom (${text.landedEstimate})` : text.landedPending}</strong>
+                      <strong>{liveEstimate ? `≈ ${formatMoney(liveEstimate.basePerUnitEur, locale)} / ${text.pieces} (${text.landedEstimate})` : text.landedPending}</strong>
                     </span>
                     <span>
                       {text.delivery}
@@ -369,12 +416,33 @@ export function SimpleSupplierOfferSearch({
                     </span>
                   </div>
 
+                  {(variantFacts.groups.length > 0 || variantFacts.types.length > 0) && (
+                    <p className="muted-text">
+                      {variantFacts.types.length > 0 && (
+                        <><strong>{text.type}:</strong> {variantFacts.types.join(" · ")}</>
+                      )}
+                      {variantFacts.types.length > 0 && variantFacts.groups.length > 0 ? " · " : ""}
+                      {variantFacts.groups.length > 0 && (
+                        <><strong>{text.variants}:</strong> {variantFacts.groups.map((group) => `${group.name}: ${group.values.join(", ")}`).join(" · ")}</>
+                      )}
+                    </p>
+                  )}
+
+                  <p className="muted-text">
+                    <strong>{text.quantityPrices}:</strong>{" "}
+                    {priceSnapshots.map((snapshot) => (
+                      `${formatQuantity(snapshot.quantity, locale)} ${text.pieces}: ${snapshot.price !== null && snapshot.currency
+                        ? formatSupplierPrice(snapshot.price, snapshot.currency, locale)
+                        : text.unknown}`
+                    )).join(" · ")}
+                  </p>
+
                   <details>
                     <summary>{text.details}</summary>
                     <p>{text.moq}: {result.minimumOrderQuantity ?? text.unknown} · {text.incoterm}: {result.incoterm ?? text.unknown}</p>
                     {liveEstimate && (
                       <p>
-                        {text.landedCost}: {formatMoney(liveEstimate.lowPerUnitEur, locale)} – {formatMoney(liveEstimate.highPerUnitEur, locale)} / kom
+                        {text.landedCost}: {formatMoney(liveEstimate.lowPerUnitEur, locale)} – {formatMoney(liveEstimate.highPerUnitEur, locale)} / {text.pieces}
                       </p>
                     )}
                     {analysis && (
@@ -390,7 +458,7 @@ export function SimpleSupplierOfferSearch({
                 <button
                   className="secondary-button"
                   disabled={selecting}
-                  onClick={() => void selectOffer(result)}
+                  onClick={() => void selectOffer(effectiveResult)}
                   type="button"
                 >
                   {selecting ? text.selecting : text.select}

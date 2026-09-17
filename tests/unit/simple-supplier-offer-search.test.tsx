@@ -25,11 +25,21 @@ describe("ImportPilot 1.0 simple supplier results", () => {
   it("recalculates visible non-EUR preliminary landed cost with fresh ECB FX", () => {
     expect(resultsSource).toContain('fetch("/api/fx/latest"');
     expect(resultsSource).toContain("estimateTajaPreliminaryLandedCost");
-    expect(resultsSource).toContain('fxSnapshot: result.currency === "EUR" ? null : fxSnapshot');
+    expect(resultsSource).toContain('fxSnapshot: effectiveResult.currency === "EUR" ? null : fxSnapshot');
     expect(resultsSource).toContain("targetMarginPercent: 0");
     expect(resultsSource).toContain("const liveEstimate = quantity && targetCountry");
     expect(resultsSource).toContain("liveEstimate.basePerUnitEur");
     expect(resultsSource).not.toContain("const estimate = analysis?.preliminaryCostEstimate ?? null");
+  });
+
+  it("uses source quantity tiers and exposes more source-grounded choices", () => {
+    expect(resultsSource).toContain("supplierOfferForQuantity(result, quantity)");
+    expect(resultsSource).toContain("quantityPriceSnapshots(result, quantity)");
+    expect(resultsSource).toContain("supplierOfferVariantFacts(result)");
+    expect(resultsSource).toContain("Cene po količini");
+    expect(resultsSource).toContain("Varijante");
+    expect(resultsSource).toContain(".slice(0, 10)");
+    expect(resultsSource).toContain("selectOffer(effectiveResult)");
   });
 
   it("maps deep analysis to the simple 1.0 decision vocabulary", () => {

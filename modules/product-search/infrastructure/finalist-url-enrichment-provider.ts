@@ -3,7 +3,7 @@ import type {
   SupplierOfferUrlPreview,
 } from "../domain/search";
 
-export const TAJA_FINALIST_EXACT_PAGE_LIMIT = 3;
+export const TAJA_FINALIST_EXACT_PAGE_LIMIT = 10;
 export const TAJA_FINALIST_EXACT_PAGE_TIMEOUT_MS = 3_500;
 
 export class TajaFinalistEnrichmentLimitError extends Error {
@@ -15,11 +15,11 @@ export class TajaFinalistEnrichmentLimitError extends Error {
 
 /**
  * The deep-search provider already returns the full result set. Exact product
- * page parsing is a second, slower verification phase, so it must never block
- * the browser while ten or more offers are fetched one by one. Only the first
- * ranked finalists are allowed through; later cards remain usable with their
- * discovery evidence and can still be verified when the user opens or imports
- * them explicitly.
+ * page parsing is a second, slower verification phase. The auto-enrichment
+ * layer runs a bounded supported-candidate queue concurrently, so allowing up
+ * to ten supported finalists gives the user more source-grounded images,
+ * variants, quantity prices and commercial facts without serially blocking the
+ * browser on unsupported pages.
  */
 export function createFinalistUrlEnrichmentProvider(
   provider: SupplierOfferUrlImportProvider,
