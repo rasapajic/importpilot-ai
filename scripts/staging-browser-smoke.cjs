@@ -20,6 +20,12 @@ const dashboardCopy = {
   sr: 'Nova pretraga',
 };
 
+const htmlLang = {
+  en: 'en',
+  de: 'de',
+  sr: 'sr-Latn',
+};
+
 async function assertNoHorizontalOverflow(page, label, viewportWidth) {
   const metrics = await page.evaluate(() => ({
     scrollWidth: document.documentElement.scrollWidth,
@@ -63,7 +69,7 @@ async function main() {
 
         await page.goto(`${origin}/login`, { waitUntil: 'domcontentloaded', timeout: 30_000 });
 
-        if (await page.locator('html').getAttribute('lang') !== locale) {
+        if (await page.locator('html').getAttribute('lang') !== htmlLang[locale]) {
           throw new Error(`${locale}/${viewport.name}: wrong html lang`);
         }
         if (!await page.getByText(googleCopy[locale], { exact: true }).isVisible()) {
@@ -77,6 +83,7 @@ async function main() {
         const googleControl = page.locator('.auth-google-button').first();
         console.log(JSON.stringify({
           locale,
+          htmlLang: htmlLang[locale],
           viewport: viewport.name,
           googleText: googleCopy[locale],
           googleTag: await googleControl.evaluate((element) => element.tagName),
@@ -114,7 +121,7 @@ async function main() {
     for (const locale of ['sr', 'de']) {
       await context.addCookies([{ name: 'tradepilot_locale', value: locale, url: origin }]);
       await page.reload({ waitUntil: 'domcontentloaded', timeout: 30_000 });
-      if (await page.locator('html').getAttribute('lang') !== locale) {
+      if (await page.locator('html').getAttribute('lang') !== htmlLang[locale]) {
         throw new Error(`dashboard: wrong html lang ${locale}`);
       }
       if (!await page.getByText(dashboardCopy[locale], { exact: true }).first().isVisible()) {
@@ -132,7 +139,7 @@ async function main() {
 
     console.log(JSON.stringify({
       authenticatedRegistrationFlow: true,
-      dashboardLocales: ['en', 'sr', 'de'],
+      dashboardLocales: ['en', 'sr-Latn', 'de'],
       mobileViewport: true,
       desktopViewport: true,
       overflow: false,
