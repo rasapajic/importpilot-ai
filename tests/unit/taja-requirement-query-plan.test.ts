@@ -21,10 +21,10 @@ describe("TAJA requirement-driven query plan", () => {
 
     expect(plan.category).toBe("misting-system");
     expect(plan.providerQueries).toEqual([
-      "patio misting system with pump 20 nozzles",
-      "outdoor mist cooling kit pump 20 nozzles",
-      "terrace misting system 20 nozzles pump kit",
-      "patio misting cooling system",
+      "patio misting system with pump 20 nozzles wholesale manufacturer supplier",
+      "outdoor mist cooling kit pump 20 nozzles wholesale manufacturer supplier",
+      "terrace misting system 20 nozzles pump kit wholesale manufacturer supplier",
+      "patio misting cooling system wholesale manufacturer supplier",
     ]);
     expect(plan.chinese1688Queries).toEqual([
       "露台 喷雾降温系统 水泵 20个喷嘴 厂家 批发",
@@ -41,7 +41,7 @@ describe("TAJA requirement-driven query plan", () => {
     const providerInput = buildLunaProviderSearchInput(plan, request);
 
     expect(providerInput).toEqual({
-      query: "patio misting system with pump 20 nozzles",
+      query: "patio misting system with pump 20 nozzles wholesale manufacturer supplier",
       queryVariants: plan.providerQueries,
       chinese1688QueryVariants: plan.chinese1688Queries,
       quantity: 100,
