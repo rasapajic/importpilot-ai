@@ -13,7 +13,7 @@ export type QuantityPriceSnapshot = {
 function uniquePositiveQuantities(values: Array<number | null | undefined>) {
   return [...new Set(
     values.filter((value): value is number =>
-      Number.isInteger(value) && Number(value) > 0,
+      typeof value === "number" && Number.isInteger(value) && value > 0,
     ),
   )];
 }
