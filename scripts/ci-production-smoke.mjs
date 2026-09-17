@@ -103,6 +103,25 @@ try {
     if (response.status !== 200) throw new Error(`${path} returned ${response.status}.`);
   }
 
+  const loginPage = await request("/login");
+  const loginHtml = await loginPage.text();
+  if (!loginHtml.includes("Continue with Google")) {
+    throw new Error("Production login page does not render the Google Sign-In action.");
+  }
+
+  const googleWithoutCredentials = await request("/api/auth/google/start?from=login", {
+    redirect: "manual",
+  });
+  if (googleWithoutCredentials.status !== 307) {
+    throw new Error(
+      `Google start route without credentials returned ${googleWithoutCredentials.status}, expected controlled redirect.`,
+    );
+  }
+  const googleLocation = googleWithoutCredentials.headers.get("location");
+  if (googleLocation !== `${baseUrl}/login?googleError=not-configured`) {
+    throw new Error(`Google start route returned unexpected controlled redirect: ${googleLocation}`);
+  }
+
   const email = `release-smoke-${randomUUID()}@example.test`;
   const register = await request("/api/auth/register", {
     method: "POST",
@@ -144,7 +163,7 @@ try {
     throw new Error(`Logged-out dashboard request returned ${afterLogout.status}, expected 401.`);
   }
 
-  console.log("IMPORTPILOT_PRODUCTION_SMOKE PASS: standalone runtime health, public pages, registration, authenticated dashboard and logout lifecycle are healthy.");
+  console.log("IMPORTPILOT_PRODUCTION_SMOKE PASS: standalone runtime health, Google auth entry/fail-closed route, public pages, registration, authenticated dashboard and logout lifecycle are healthy.");
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   if (logs.trim()) console.error(`--- production server log ---\n${logs}`);
