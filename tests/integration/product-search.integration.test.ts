@@ -121,10 +121,10 @@ describeWithDatabase("supplier search result import and tenant isolation", () =>
     });
 
     expect(received).toEqual({
-      query: "fan",
+      query: "fan wholesale manufacturer supplier",
       quantity: 275,
       targetCountry: "AT",
-      queryVariants: ["fan"],
+      queryVariants: ["fan wholesale manufacturer supplier"],
       chinese1688QueryVariants: [],
     });
     expect(outcome.results).toHaveLength(1);
