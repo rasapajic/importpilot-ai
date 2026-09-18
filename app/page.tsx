@@ -48,9 +48,9 @@ const copy: Record<Locale, LandingCopy> = {
     step1Title: "1. Recite šta vam treba",
     step1Text: "Unesite proizvod, količinu i destinaciju.",
     step2Title: "2. Uporedite najbolje ponude",
-    step2Text: "Vidite cenu dobavljača, procenjeni landed cost, rok isporuke i rizik dobavljača.",
+    step2Text: "Vidite cenu dobavljača, procenjeni ukupni trošak uvoza, rok isporuke i rizik dobavljača.",
     step3Title: "3. Dobijte jasnu odluku",
-    step3Text: "Proverite isplativost i dobijte BUY, NEGOTIATE, WATCH ili SKIP.",
+    step3Text: "Proverite isplativost i dobijte odluku: KUPI, PREGOVARAJ, PRATI ili PRESKOČI.",
     googleDataNote: "Google prijava koristi samo ime i potvrđenu email adresu sa vašeg Google naloga da kreira ili poveže vaš ImportPilot nalog.",
   },
 };
