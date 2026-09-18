@@ -43,7 +43,7 @@ export async function POST(
     if (error instanceof UnsupportedLandedCostIncotermError) {
       return NextResponse.json(
         {
-          error: `ImportPilot 1.0 za potvrđeni ukupni trošak uvoza podržava uslove EXW, FCA, FAS i FOB. Ponuda koristi ${error.incoterm}; za taj uslov nećemo prikazati potencijalno pogrešnu računicu.`,
+          error: `ImportPilot 1.0 za potvrđeni ukupan trošak uvoza podržava uslove EXW, FCA, FAS i FOB. Ponuda koristi ${error.incoterm}; za taj uslov nećemo prikazati potencijalno pogrešnu računicu.`,
         },
         { status: 400 },
       );
