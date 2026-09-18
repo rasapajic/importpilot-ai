@@ -188,10 +188,10 @@ export function calculateSupplierRisk(
       10,
       moqRatio !== null,
       moqRatio === null
-        ? "MOQ nije poznat."
+        ? "Minimalna količina (MOQ) nije poznata."
         : moqRatio > 1
-          ? "MOQ je viši od planirane količine."
-          : "MOQ odgovara planiranoj količini.",
+          ? "Minimalna količina (MOQ) je viša od planirane količine."
+          : "Minimalna količina (MOQ) odgovara planiranoj količini.",
     ),
     riskComponent(
       "transactionCount",
@@ -279,7 +279,7 @@ export function calculateOfferQuality(offer: AssessmentOfferInput) {
               : 0;
 
   const components: ScoreComponent[] = [
-    qualityComponent("landedCostAndMargin", marginScore, 30, offer.grossMarginPercent !== null, offer.grossMarginPercent === null ? "Landed cost kalkulacija nije dostupna." : `Bruto marža je ${offer.grossMarginPercent}%.`),
+    qualityComponent("landedCostAndMargin", marginScore, 30, offer.grossMarginPercent !== null, offer.grossMarginPercent === null ? "Kalkulacija ukupnog troška uvoza nije dostupna." : `Bruto marža je ${offer.grossMarginPercent}%.`),
     qualityComponent("shippingClarity", offer.shippingClarityScore === null ? 5 : Math.round(offer.shippingClarityScore / 10), 10, offer.shippingClarityScore !== null, offer.shippingClarityScore === null ? "Jasnoća transporta nije ocenjena." : `Jasnoća transporta: ${offer.shippingClarityScore}/100.`),
     qualityComponent("deliveryTime", deliveryScore, 15, offer.deliveryTimeDays !== null, offer.deliveryTimeDays === null ? "Rok isporuke nije poznat." : `Rok isporuke je ${offer.deliveryTimeDays} dana.`),
     qualityComponent("moqFit", moqRatio === null ? 5 : moqRatio <= 0.5 ? 10 : moqRatio <= 1 ? 8 : moqRatio <= 1.5 ? 4 : 0, 10, moqRatio !== null, moqRatio === null ? "MOQ nije poznat." : moqRatio <= 1 ? "MOQ odgovara projektu." : "MOQ je viši od količine projekta."),
