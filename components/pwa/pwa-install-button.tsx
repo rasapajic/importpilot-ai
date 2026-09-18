@@ -37,8 +37,10 @@ export function PwaInstallButton() {
   if (!promptEvent) return null;
 
   async function install() {
-    await promptEvent.prompt();
-    await promptEvent.userChoice.catch(() => null);
+    const event = promptEvent;
+    if (!event) return;
+    await event.prompt();
+    await event.userChoice.catch(() => null);
     setPromptEvent(null);
   }
 
