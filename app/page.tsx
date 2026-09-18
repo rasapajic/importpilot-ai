@@ -6,6 +6,7 @@ import { translateText, type Locale } from "@/modules/i18n/translations";
 type LandingCopy = {
   title: string;
   lede: string;
+  howEyebrow: string;
   howTitle: string;
   step1Title: string;
   step1Text: string;
@@ -19,7 +20,8 @@ type LandingCopy = {
 const copy: Record<Locale, LandingCopy> = {
   en: {
     title: "Find the best real procurement — not just the cheapest listing.",
-    lede: "Enter the product, quantity and destination. ImportPilot compares offers, real import cost and supplier risk for you.",
+    lede: "Enter the product, quantity and destination. JAKOV360 compares offers, real import cost and supplier risk for you.",
+    howEyebrow: "How JAKOV360 works",
     howTitle: "From product search to a clear buying decision.",
     step1Title: "1. Tell us what you need",
     step1Text: "Enter the product, quantity and destination.",
@@ -27,11 +29,12 @@ const copy: Record<Locale, LandingCopy> = {
     step2Text: "See supplier price, estimated landed cost, delivery and supplier risk.",
     step3Title: "3. Get a clear decision",
     step3Text: "Review profitability and get BUY, NEGOTIATE, WATCH or SKIP.",
-    googleDataNote: "Google Sign-In uses your Google account name and verified email only to create or link your ImportPilot account.",
+    googleDataNote: "Google Sign-In uses your Google account name and verified email only to create or link your JAKOV360 account.",
   },
   de: {
     title: "Finden Sie die beste reale Beschaffung — nicht nur das billigste Angebot.",
-    lede: "Geben Sie Produkt, Menge und Zielland ein. ImportPilot vergleicht Angebote, reale Importkosten und Lieferantenrisiko.",
+    lede: "Geben Sie Produkt, Menge und Zielland ein. JAKOV360 vergleicht Angebote, reale Importkosten und Lieferantenrisiko.",
+    howEyebrow: "So funktioniert JAKOV360",
     howTitle: "Von der Produktsuche zu einer klaren Kaufentscheidung.",
     step1Title: "1. Sagen Sie uns, was Sie brauchen",
     step1Text: "Geben Sie Produkt, Menge und Zielland ein.",
@@ -39,11 +42,12 @@ const copy: Record<Locale, LandingCopy> = {
     step2Text: "Sehen Sie Lieferantenpreis, geschätzte Landed Cost, Lieferzeit und Lieferantenrisiko.",
     step3Title: "3. Erhalten Sie eine klare Entscheidung",
     step3Text: "Prüfen Sie die Rentabilität und erhalten Sie BUY, NEGOTIATE, WATCH oder SKIP.",
-    googleDataNote: "Google Sign-In verwendet nur den Namen und die bestätigte E-Mail-Adresse Ihres Google-Kontos, um Ihr ImportPilot-Konto anzulegen oder zu verknüpfen.",
+    googleDataNote: "Google Sign-In verwendet nur den Namen und die bestätigte E-Mail-Adresse Ihres Google-Kontos, um Ihr JAKOV360-Konto anzulegen oder zu verknüpfen.",
   },
   sr: {
     title: "Pronađite najbolju stvarnu nabavku — ne samo najjeftiniju oglašenu cenu.",
-    lede: "Unesite proizvod, količinu i destinaciju. ImportPilot za vas poredi ponude, stvarni trošak uvoza i rizik dobavljača.",
+    lede: "Unesite proizvod, količinu i destinaciju. JAKOV360 za vas poredi ponude, stvarni trošak uvoza i rizik dobavljača.",
+    howEyebrow: "Kako JAKOV360 radi",
     howTitle: "Od pretrage proizvoda do jasne odluke o kupovini.",
     step1Title: "1. Recite šta vam treba",
     step1Text: "Unesite proizvod, količinu i destinaciju.",
@@ -51,7 +55,7 @@ const copy: Record<Locale, LandingCopy> = {
     step2Text: "Vidite cenu dobavljača, procenjeni ukupan trošak uvoza, rok isporuke i rizik dobavljača.",
     step3Title: "3. Dobijte jasnu odluku",
     step3Text: "Proverite isplativost i dobijte odluku: KUPI, PREGOVARAJ, PRATI ili PRESKOČI.",
-    googleDataNote: "Google prijava koristi samo ime i potvrđenu email adresu sa vašeg Google naloga da kreira ili poveže vaš ImportPilot nalog.",
+    googleDataNote: "Google prijava koristi samo ime i potvrđenu email adresu sa vašeg Google naloga da kreira ili poveže vaš JAKOV360 nalog.",
   },
 };
 
@@ -63,7 +67,7 @@ export default async function HomePage() {
   return (
     <main className="home-shell">
       <section className="hero">
-        <p className="eyebrow">ImportPilot AI</p>
+        <p className="eyebrow">JAKOV360</p>
         <h1>{text.title}</h1>
         <p className="lede">{text.lede}</p>
         <div className="actions">
@@ -73,7 +77,7 @@ export default async function HomePage() {
         <p className="privacy-note">{text.googleDataNote}</p>
       </section>
       <section className="how-it-works">
-        <p className="eyebrow">{t("How ImportPilot works")}</p>
+        <p className="eyebrow">{text.howEyebrow}</p>
         <h2>{text.howTitle}</h2>
         <div className="onboarding-grid">
           <article><strong>{text.step1Title}</strong><p>{text.step1Text}</p></article>
