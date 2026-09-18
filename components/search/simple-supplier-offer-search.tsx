@@ -425,7 +425,17 @@ export function SimpleSupplierOfferSearch({
               <article className="search-result-card" key={`${result.source}-${result.productUrl}`}>
                 <SearchResultImage src={result.imageUrl} title={result.title} />
                 <div>
-                  <p className="eyebrow">#{index + 1} · {result.supplierName}</p>
+                  <p className="eyebrow">
+                    <a
+                      className="supplier-source-link"
+                      href={result.productUrl}
+                      rel="noreferrer"
+                      target="_blank"
+                      aria-label={`${text.source}: ${result.supplierName}`}
+                    >
+                      #{index + 1} · {result.supplierName}
+                    </a>
+                  </p>
                   <span className={`provider-status ${decisionClass(decision)}`}>{text.decision[decision]}</span>
                   <h3>{result.title}</h3>
                   <div className="offer-highlights">
