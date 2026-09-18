@@ -966,3 +966,17 @@ button:disabled {
     padding: 1.25rem;
   }
 }
+
+
+.supplier-source-link {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
+
+.supplier-source-link:hover,
+.supplier-source-link:focus-visible {
+  color: #0b5f41;
+  text-decoration-thickness: 2px;
+}
