@@ -90,16 +90,16 @@ export function DeleteSearchButton({
       >
         <span aria-hidden="true">×</span>
       </button>
-      <dialog className="confirm-dialog" ref={dialogRef}>
+      <dialog className="project-delete-dialog" ref={dialogRef}>
         <form method="dialog">
           <h2>{text.confirmTitle}</h2>
           <p>{text.confirmText(projectName)}</p>
           {error && <p className="form-error" role="alert">{error}</p>}
-          <div className="dialog-actions">
+          <div className="project-delete-dialog-actions">
             <button className="secondary-button" disabled={pending} type="submit">
               {text.cancel}
             </button>
-            <button className="danger-button" disabled={pending} onClick={remove} type="button">
+            <button className="project-delete-confirm-button" disabled={pending} onClick={remove} type="button">
               {pending ? text.deleting : text.confirm}
             </button>
           </div>
