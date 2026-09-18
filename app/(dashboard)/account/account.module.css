@@ -1,0 +1,59 @@
+.shell {
+  display: block;
+  min-height: 100vh;
+  padding: 6rem 1rem 3rem;
+}
+
+.card {
+  background: white;
+  border: 1px solid #dce7e1;
+  border-radius: 1rem;
+  margin: 0 auto;
+  max-width: 38rem;
+  padding: 2rem;
+}
+
+.card h1 {
+  font-size: clamp(2.4rem, 6vw, 4rem);
+  line-height: 1;
+  max-width: none;
+}
+
+.signedInAs {
+  color: #60766c;
+  margin-bottom: 0.4rem;
+}
+
+.email {
+  display: block;
+  font-size: 1.25rem;
+  overflow-wrap: anywhere;
+}
+
+.details {
+  display: grid;
+  gap: 0;
+  margin: 2rem 0;
+}
+
+.details div {
+  border-top: 1px solid #dce7e1;
+  display: grid;
+  gap: 0.35rem;
+  padding: 1rem 0;
+}
+
+.details div:last-child {
+  border-bottom: 1px solid #dce7e1;
+}
+
+.details dt {
+  color: #60766c;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
