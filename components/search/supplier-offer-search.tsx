@@ -83,7 +83,7 @@ const comparisonCopy = {
 const recommendationCopy = {
   sr: {
     exactTitle: "Ponude koje potpuno odgovaraju zahtevu",
-    exactDescription: "Ove ponude trenutno potvrđuju traženu vrstu proizvoda, sve ključne osobine i količinski uslov. Konačna odluka i dalje zahteva landed-cost i proveru dobavljača.",
+    exactDescription: "Ove ponude trenutno potvrđuju traženu vrstu proizvoda, sve ključne osobine i količinski uslov. Konačna odluka i dalje zahteva obračun ukupnog troška uvoza i proveru dobavljača.",
     noExactTitle: "Nijedna ponuda trenutno ne potvrđuje sve tražene osobine",
     noExactDescription: "Ispod su najbolje dostupne alternative. Nepotvrđene osobine su jasno označene i ne tretiraju se kao dokazane.",
     rankPreliminary: (rank: number) => `#${rank} preliminarna preporuka`,
@@ -133,7 +133,7 @@ const analysisCopy = {
     risk: { LOW: "nizak", MEDIUM: "srednji", HIGH: "visok", UNKNOWN: "nepoznat" },
     landedCost: { UNAVAILABLE: "nije obračunat", ESTIMATED: "procena", CONFIRMED: "potvrđen" },
     missing: {
-      LANDED_COST: "potvrđen landed cost",
+      LANDED_COST: "potvrđen ukupni trošak uvoza",
       SUPPLIER_VERIFICATION: "verifikacija dobavljača",
       SUPPLIER_RISK_DATA: "dovoljno podataka o riziku",
       DELIVERY_TIME: "rok isporuke",
@@ -147,7 +147,7 @@ const analysisCopy = {
     score: "Taja rezultat",
     confidence: "Pouzdanost podataka",
     riskLabel: "Rizik dobavljača",
-    landedCostLabel: "Landed cost",
+    landedCostLabel: "Ukupni trošak uvoza",
     missingLabel: "Nedostaje za konačnu odluku",
     preliminary: "preliminarna analiza",
     incompleteData: "NEPOTPUNI PODACI",
