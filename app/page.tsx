@@ -13,6 +13,7 @@ type LandingCopy = {
   step2Text: string;
   step3Title: string;
   step3Text: string;
+  googleDataNote: string;
 };
 
 const copy: Record<Locale, LandingCopy> = {
@@ -26,6 +27,7 @@ const copy: Record<Locale, LandingCopy> = {
     step2Text: "See supplier price, estimated landed cost, delivery and supplier risk.",
     step3Title: "3. Get a clear decision",
     step3Text: "Review profitability and get BUY, NEGOTIATE, WATCH or SKIP.",
+    googleDataNote: "Google Sign-In uses your Google account name and verified email only to create or link your ImportPilot account.",
   },
   de: {
     title: "Finden Sie die beste reale Beschaffung — nicht nur das billigste Angebot.",
@@ -37,6 +39,7 @@ const copy: Record<Locale, LandingCopy> = {
     step2Text: "Sehen Sie Lieferantenpreis, geschätzte Landed Cost, Lieferzeit und Lieferantenrisiko.",
     step3Title: "3. Erhalten Sie eine klare Entscheidung",
     step3Text: "Prüfen Sie die Rentabilität und erhalten Sie BUY, NEGOTIATE, WATCH oder SKIP.",
+    googleDataNote: "Google Sign-In verwendet nur den Namen und die bestätigte E-Mail-Adresse Ihres Google-Kontos, um Ihr ImportPilot-Konto anzulegen oder zu verknüpfen.",
   },
   sr: {
     title: "Pronađite najbolju stvarnu nabavku — ne samo najjeftiniju oglašenu cenu.",
@@ -48,6 +51,7 @@ const copy: Record<Locale, LandingCopy> = {
     step2Text: "Vidite cenu dobavljača, procenjeni landed cost, rok isporuke i rizik dobavljača.",
     step3Title: "3. Dobijte jasnu odluku",
     step3Text: "Proverite isplativost i dobijte BUY, NEGOTIATE, WATCH ili SKIP.",
+    googleDataNote: "Google prijava koristi samo ime i potvrđenu email adresu sa vašeg Google naloga da kreira ili poveže vaš ImportPilot nalog.",
   },
 };
 
@@ -66,6 +70,7 @@ export default async function HomePage() {
           <Link className="primary-link" href="/register">{t("Get started")}</Link>
           <Link href="/login">{t("Sign in")}</Link>
         </div>
+        <p className="privacy-note">{text.googleDataNote}</p>
       </section>
       <section className="how-it-works">
         <p className="eyebrow">{t("How ImportPilot works")}</p>
