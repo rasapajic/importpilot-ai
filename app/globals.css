@@ -1027,7 +1027,7 @@ textarea {
   }
 
   .home-shell .hero h1 {
-    font-size: clamp(2.15rem, 9.5vw, 2.9rem);
+    font-size: clamp(2rem, 8.5vw, 2.6rem);
     line-height: 1.03;
     max-width: none;
   }
