@@ -15,7 +15,7 @@ import "./taja-requirement-match.css";
 import "./marketplace-evidence.css";
 
 export const metadata: Metadata = {
-  title: "ImportPilot AI",
+  title: "JAKOV360",
   description: "Platforma za sigurnije poređenje ponuda i međunarodnu nabavku.",
   other: {
     google: "notranslate",
@@ -24,23 +24,28 @@ export const metadata: Metadata = {
 
 export default async function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   const locale = resolveLocale((await cookies()).get(LOCALE_COOKIE)?.value);
+  const legalCopy = {
+    sr: { privacy: "Politika privatnosti", terms: "Uslovi korišćenja" },
+    de: { privacy: "Datenschutz", terms: "Nutzungsbedingungen" },
+    en: { privacy: "Privacy Policy", terms: "Terms of Service" },
+  }[locale];
 
   return (
     <html lang={locale === "sr" ? "sr-Latn" : locale} translate="no">
       <body className="notranslate">
         <I18nProvider initialLocale={locale}>
           <header className="global-header">
-            <strong className="global-brand">ImportPilot AI</strong>
+            <strong className="global-brand">JAKOV360</strong>
             <GlobalHeaderActions />
           </header>
           {children}
           <footer className="global-footer">
             <nav aria-label="Legal and privacy">
-              <Link href="/privacy">Privacy Policy</Link>
-              <Link href="/terms">Terms of Service</Link>
+              <Link href="/privacy">{legalCopy.privacy}</Link>
+              <Link href="/terms">{legalCopy.terms}</Link>
               <a href="mailto:privacy@jakov360.com">privacy@jakov360.com</a>
             </nav>
-            <p>© 2026 JAKOV360 · ImportPilot AI</p>
+            <p>© 2026 JAKOV360</p>
           </footer>
         </I18nProvider>
       </body>

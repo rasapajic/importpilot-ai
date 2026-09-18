@@ -15,6 +15,11 @@ describe("ImportPilot 1.0 landing page", () => {
     expect(source).toContain("procenjeni ukupan trošak uvoza");
   });
 
+  it("uses the JAKOV360 public brand without the old ImportPilot name", () => {
+    expect(source).toContain("JAKOV360");
+    expect(source).not.toContain("ImportPilot");
+  });
+
   it("does not advertise 2.0 workspace features on the 1.0 landing page", () => {
     expect(source).not.toContain("Manage supplier offers, real costs, risks and documents in one place.");
     expect(source).not.toContain("Add a project and offers");
