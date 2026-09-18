@@ -96,7 +96,7 @@ const copyByLocale: Record<Locale, SummaryCopy> = {
     exactNozzleCount: (count) => `Tačno ${count} mlaznica`,
     displayedPrice: "Prikazana cena",
     moq: "Minimalna količina",
-    landedCost: "Landed cost",
+    landedCost: "Ukupni trošak uvoza",
     nextStep: "Sledeći korak",
     supplierQuestion: "Predloženo pitanje dobavljaču",
     formComplete: "kompletan sistem / kit",
@@ -133,7 +133,7 @@ const copyByLocale: Record<Locale, SummaryCopy> = {
     actionNegotiateMoq: "Pregovarati o manjoj minimalnoj količini ili promeniti planiranu količinu.",
     actionConfirmIncoterm: "Potvrditi Incoterm i polaznu tačku transporta.",
     actionConfirmPackaging: "Potvrditi dimenzije, bruto težinu i broj komada po kartonu.",
-    actionReady: "Dodati ponudu za poređenje i pokrenuti preliminarni landed-cost obračun.",
+    actionReady: "Dodati ponudu za poređenje i pokrenuti preliminarni obračun ukupnog troška uvoza.",
     questionConfirmPrice: (price) => price
       ? `Da li prikazana cena ${price} važi za jednu mlaznicu, paket delova ili kompletan sistem? Molimo navedite tačan sadržaj prodajne jedinice.`
       : "Šta tačno obuhvata jedna prodajna jedinica i koja je cena za kompletan proizvod?",

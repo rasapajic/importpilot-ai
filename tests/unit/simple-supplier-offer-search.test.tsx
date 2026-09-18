@@ -16,7 +16,7 @@ describe("ImportPilot 1.0 simple supplier results", () => {
   it("keeps the main result card focused on the buying decision", () => {
     expect(resultsSource).toContain("Najbolje ponude");
     expect(resultsSource).toContain("Cena dobavljača");
-    expect(resultsSource).toContain("Landed cost");
+    expect(resultsSource).toContain("Ukupni trošak uvoza");
     expect(resultsSource).toContain("Dobavljač");
     expect(resultsSource).toContain("Dodaj za poređenje");
     expect(resultsSource).toContain("Detalji analize");
@@ -43,6 +43,7 @@ describe("ImportPilot 1.0 simple supplier results", () => {
   });
 
   it("maps deep analysis to the simple 1.0 decision vocabulary", () => {
+    expect(resultsSource).toContain('decision: { BUY: "KUPI", NEGOTIATE: "PREGOVARAJ", WATCH: "PRATI", SKIP: "PRESKOČI" }');
     expect(resultsSource).toContain('return "BUY" as const');
     expect(resultsSource).toContain('return "NEGOTIATE" as const');
     expect(resultsSource).toContain('return "SKIP" as const');

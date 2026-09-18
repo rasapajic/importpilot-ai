@@ -36,14 +36,14 @@ export async function POST(
     }
     if (error instanceof IncompleteOfferError) {
       return NextResponse.json(
-        { error: "Ponuda mora imati cenu, valutu i Incoterm." },
+        { error: "Ponuda mora imati cenu, valutu i uslov isporuke (Incoterm)." },
         { status: 400 },
       );
     }
     if (error instanceof UnsupportedLandedCostIncotermError) {
       return NextResponse.json(
         {
-          error: `ImportPilot 1.0 potvrđeni landed cost podržava EXW, FCA, FAS i FOB. Ponuda koristi ${error.incoterm}; za taj uslov nećemo prikazati potencijalno pogrešnu računicu.`,
+          error: `ImportPilot 1.0 za potvrđeni ukupni trošak uvoza podržava uslove EXW, FCA, FAS i FOB. Ponuda koristi ${error.incoterm}; za taj uslov nećemo prikazati potencijalno pogrešnu računicu.`,
         },
         { status: 400 },
       );
