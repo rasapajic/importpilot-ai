@@ -32,6 +32,7 @@ import { mergeTajaCandidateEnrichment } from "../domain/taja-candidate-enrichmen
 import { estimateTajaPreliminaryLandedCost } from "../domain/taja-preliminary-cost-estimate";
 import { applyTajaProductFormPolicy } from "../domain/taja-product-form-policy";
 import { canonicalSupplierProductUrl } from "../domain/supplier-product-url";
+import { hasUsableSupplierOfferPrice } from "../domain/supplier-quantity-pricing";
 import {
   createBrowserAssisted1688Preview,
   createSupplierOfferSourceMetadata,
@@ -260,6 +261,13 @@ async function buildSearchPresentation(input: SearchPresentationInput) {
     autoEnrichmentSummary = autoEnrichment.summary;
   }
 
+  // ImportPilot 1.0 is a commercial comparison tool, not a generic web-result
+  // list. Discovery hits without any usable unit price cannot participate in
+  // landed-cost or profitability comparison, so do not present them as offers.
+  candidateResults = candidateResults.filter((result) =>
+    hasUsableSupplierOfferPrice(result, effectiveRequest.quantity),
+  );
+
   const candidateContext = await findCandidateContext(
     projectId,
     organizationId,
@@ -365,9 +373,10 @@ export async function searchProjectSupplierOffers(
 }
 
 /**
- * Restores the last successful result set from the persistent cache and runs
- * only deterministic local ranking and analysis. It never calls the live
- * supplier-search provider or records a paid AI search event.
+ * Restores the last successful result set from the persistent cache. It never
+ * calls the live supplier-search provider or records a paid AI search event.
+ * Supported cached marketplace finalists may be re-checked against their exact
+ * pages to recover missing commercial fields such as price or image.
  */
 export async function loadCachedProjectSupplierOffers(
   projectId: string,
@@ -391,6 +400,10 @@ export async function loadCachedProjectSupplierOffers(
     sourceResults: cached.results,
     resultOrigin: "cache",
     fetchedAt: cached.createdAt.toISOString(),
+    // Re-check cached marketplace finalists against supported exact pages.
+    // This does not run a paid supplier search, but it gives stale cached
+    // results another bounded chance to recover missing price/image fields.
+    urlImportProvider: getSupplierOfferUrlImportProvider(),
   });
 
   return {

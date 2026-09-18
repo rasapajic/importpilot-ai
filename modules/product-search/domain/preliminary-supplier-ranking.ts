@@ -65,7 +65,7 @@ function preliminaryScore(
 
   if (result.incoterm !== null) score += 15;
   if (result.supplierCountry !== null) score += 5;
-  if (result.imageUrl !== null) score += 5;
+  if (result.imageUrl !== null) score += 15;
   if (!isPartialLunaSearchResult(result)) score += 10;
   if (context.productQuery) {
     score += evaluateTajaRequirementMatch(
