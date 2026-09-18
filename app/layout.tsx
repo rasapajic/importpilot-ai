@@ -1,10 +1,11 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { cookies } from "next/headers";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { I18nProvider } from "@/components/i18n/i18n-provider";
 import { GlobalHeaderActions } from "@/components/layout/global-header-actions";
+import { PwaInstallButton } from "@/components/pwa/pwa-install-button";
 import { LOCALE_COOKIE, resolveLocale } from "@/modules/i18n/translations";
 
 import "./globals.css";
@@ -16,10 +17,32 @@ import "./marketplace-evidence.css";
 
 export const metadata: Metadata = {
   title: "ImportPilot AI",
+  applicationName: "JAKOV360",
   description: "Platforma za sigurnije poređenje ponuda i međunarodnu nabavku.",
+  manifest: "/manifest.webmanifest",
+  icons: {
+    icon: [
+      { url: "/pwa-icon-192", sizes: "192x192", type: "image/png" },
+      { url: "/pwa-icon-512", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/pwa-icon-192", sizes: "192x192", type: "image/png" }],
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "JAKOV360",
+  },
   other: {
     google: "notranslate",
   },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#0b5f41",
+  colorScheme: "light",
 };
 
 export default async function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
@@ -40,7 +63,10 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
               <Link href="/terms">Terms of Service</Link>
               <a href="mailto:privacy@jakov360.com">privacy@jakov360.com</a>
             </nav>
-            <p>© 2026 JAKOV360 · ImportPilot AI</p>
+            <div className="global-footer-actions">
+              <PwaInstallButton />
+              <p>© 2026 JAKOV360 · ImportPilot AI</p>
+            </div>
           </footer>
         </I18nProvider>
       </body>
