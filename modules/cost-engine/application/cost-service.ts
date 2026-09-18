@@ -21,7 +21,7 @@ export class CostOfferNotFoundError extends Error {}
 export class IncompleteOfferError extends Error {}
 export class UnsupportedLandedCostIncotermError extends Error {
   constructor(readonly incoterm: string) {
-    super(`ImportPilot 1.0 ne računa potvrđeni ukupni trošak uvoza za uslov isporuke ${incoterm}.`);
+    super(`ImportPilot 1.0 ne računa potvrđeni ukupan trošak uvoza za uslov isporuke ${incoterm}.`);
   }
 }
 
@@ -134,7 +134,7 @@ export async function createCostCalculation(
       type: ProjectActivityType.LANDED_COST_CALCULATED,
       title: profile
         ? `Stvarna cena do magacina (${profile.countryCode}) je izračunata`
-        : "Ukupni trošak uvoza je izračunat",
+        : "Ukupan trošak uvoza je izračunat",
       description: offer.supplierName,
       metadata: {
         calculationId: calculation.id,
