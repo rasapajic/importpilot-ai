@@ -4,11 +4,13 @@ import { authenticateRequest } from "@/modules/auth/infrastructure/request-auth"
 import {
   deleteDemoProject,
   deleteEmptySearchProject,
+  deleteSearchProject,
   DemoProjectNotFoundError,
   EmptySearchProjectDeletionNotAllowedError,
   EmptySearchProjectNotFoundError,
   getProject,
   ProductionProjectDeletionNotAllowedError,
+  SearchProjectNotFoundError,
 } from "@/modules/projects/application/project-service";
 
 export async function GET(
@@ -33,14 +35,17 @@ export async function DELETE(
 
   try {
     const projectId = (await params).projectId;
-    if (request.nextUrl.searchParams.get("mode") === "empty-search") {
+    const mode = request.nextUrl.searchParams.get("mode");
+    if (mode === "empty-search") {
       await deleteEmptySearchProject(projectId, auth.membership.organizationId);
+    } else if (mode === "search") {
+      await deleteSearchProject(projectId, auth.membership.organizationId);
     } else {
       await deleteDemoProject(projectId, auth.membership.organizationId);
     }
     return NextResponse.json({ ok: true });
   } catch (error) {
-    if (error instanceof EmptySearchProjectNotFoundError) {
+    if (error instanceof EmptySearchProjectNotFoundError || error instanceof SearchProjectNotFoundError) {
       return NextResponse.json({ error: "Pretraga nije pronađena." }, { status: 404 });
     }
     if (error instanceof EmptySearchProjectDeletionNotAllowedError) {
