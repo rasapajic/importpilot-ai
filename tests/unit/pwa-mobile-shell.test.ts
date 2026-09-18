@@ -38,5 +38,7 @@ describe("JAKOV360 PWA and mobile shell", () => {
     expect(css).toContain("min-height: 2.75rem");
     expect(css).toContain("font-size: 16px");
     expect(css).toContain("env(safe-area-inset-bottom)");
+    expect(css).toContain(".home-shell .hero h1");
+    expect(css).toContain("clamp(2.15rem, 9.5vw, 2.9rem)");
   });
 });
