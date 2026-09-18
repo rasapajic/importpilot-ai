@@ -96,7 +96,7 @@ const copyByLocale: Record<Locale, SummaryCopy> = {
     exactNozzleCount: (count) => `Tačno ${count} mlaznica`,
     displayedPrice: "Prikazana cena",
     moq: "Minimalna količina",
-    landedCost: "Ukupni trošak uvoza",
+    landedCost: "Ukupan trošak uvoza",
     nextStep: "Sledeći korak",
     supplierQuestion: "Predloženo pitanje dobavljaču",
     formComplete: "kompletan sistem / kit",
