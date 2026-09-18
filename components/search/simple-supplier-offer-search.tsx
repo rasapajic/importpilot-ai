@@ -73,7 +73,7 @@ const copy: Record<Locale, Copy> = {
     noResults: "Nema dovoljno pouzdanih ponuda",
     noResultsText: "Pokušajte ponovo. ImportPilot neće prikazati nepouzdanu ponudu samo da bi popunio listu.",
     supplierPrice: "Cena dobavljača",
-    landedCost: "Ukupni trošak uvoza",
+    landedCost: "Ukupan trošak uvoza",
     landedEstimate: "procena",
     landedPending: "računa se nakon izbora",
     delivery: "Rok",

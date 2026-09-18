@@ -152,7 +152,7 @@ function buildChecklist(
     checklist.push({
       key: "VERIFY_CUSTOMS",
       label: "Proveri carinu",
-      reason: "Carinska pretpostavka ili ukupni trošak uvoza zahtevaju proveru.",
+      reason: "Carinska pretpostavka ili ukupan trošak uvoza zahtevaju proveru.",
     });
   }
   if (comparableOfferCount < 3) {

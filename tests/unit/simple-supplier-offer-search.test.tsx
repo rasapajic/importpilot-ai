@@ -16,7 +16,7 @@ describe("ImportPilot 1.0 simple supplier results", () => {
   it("keeps the main result card focused on the buying decision", () => {
     expect(resultsSource).toContain("Najbolje ponude");
     expect(resultsSource).toContain("Cena dobavljača");
-    expect(resultsSource).toContain("Ukupni trošak uvoza");
+    expect(resultsSource).toContain("Ukupan trošak uvoza");
     expect(resultsSource).toContain("Dobavljač");
     expect(resultsSource).toContain("Dodaj za poređenje");
     expect(resultsSource).toContain("Detalji analize");

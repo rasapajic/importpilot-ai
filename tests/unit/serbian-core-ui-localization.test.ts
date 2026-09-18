@@ -13,10 +13,10 @@ describe("Serbian core UI localization", () => {
     const advanced = source("components/search/supplier-offer-search.tsx");
     const preview = source("components/search/taja-preview-business-summary.tsx");
 
-    expect(simple).toContain('landedCost: "Ukupni trošak uvoza"');
-    expect(advanced).toContain('landedCostLabel: "Ukupni trošak uvoza"');
-    expect(advanced).toContain('LANDED_COST: "potvrđen ukupni trošak uvoza"');
-    expect(preview).toContain('landedCost: "Ukupni trošak uvoza"');
+    expect(simple).toContain('landedCost: "Ukupan trošak uvoza"');
+    expect(advanced).toContain('landedCostLabel: "Ukupan trošak uvoza"');
+    expect(advanced).toContain('LANDED_COST: "potvrđen ukupan trošak uvoza"');
+    expect(preview).toContain('landedCost: "Ukupan trošak uvoza"');
   });
 
   it("localizes visible decision labels in Serbian while keeping internal statuses unchanged", () => {
