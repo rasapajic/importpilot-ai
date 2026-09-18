@@ -130,8 +130,8 @@ function buildChecklist(
   if (!best?.incoterm) {
     checklist.push({
       key: "CONFIRM_INCOTERM",
-      label: "Potvrdi Incoterm",
-      reason: "Incoterm nije potvrđen.",
+      label: "Potvrdi uslov isporuke",
+      reason: "Uslov isporuke (Incoterm) nije potvrđen.",
     });
   }
   if (!best || best.shippingClarityScore === null || best.shippingClarityScore < 70) {
@@ -144,15 +144,15 @@ function buildChecklist(
   if (best?.moqExceedsProjectQuantity === true) {
     checklist.push({
       key: "NEGOTIATE_MOQ",
-      label: "Pregovaraj MOQ",
-      reason: "Potvrdite da MOQ odgovara finalnoj količini i uslovima kupovine.",
+      label: "Pregovaraj minimalnu količinu",
+      reason: "Potvrdite da minimalna količina (MOQ) odgovara finalnoj količini i uslovima kupovine.",
     });
   }
   if (!best || best.calculationNeedsReview || best.landedCostTotal === null) {
     checklist.push({
       key: "VERIFY_CUSTOMS",
       label: "Proveri carinu",
-      reason: "Carinska pretpostavka ili landed cost zahtevaju proveru.",
+      reason: "Carinska pretpostavka ili ukupni trošak uvoza zahtevaju proveru.",
     });
   }
   if (comparableOfferCount < 3) {
