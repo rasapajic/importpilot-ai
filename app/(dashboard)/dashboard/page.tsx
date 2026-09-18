@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { DashboardPrimaryActions } from "@/components/dashboard/dashboard-primary-actions";
+import { DeleteSearchButton } from "@/components/projects/delete-search-button";
 import { requireSession } from "@/modules/auth/infrastructure/session";
 import { getCountryDisplayName } from "@/modules/i18n/country-names";
 import { getServerLocale } from "@/modules/i18n/server";
@@ -153,6 +154,7 @@ export default async function DashboardPage({
                     </span>
                   </span>
                 </Link>
+                <DeleteSearchButton projectId={project.id} projectName={project.name} />
               </article>
             ))}
             {result.projects.length === 0 && (
