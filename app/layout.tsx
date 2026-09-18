@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { cookies } from "next/headers";
 import Link from "next/link";
 import type { ReactNode } from "react";
@@ -13,6 +13,11 @@ import "./taja-search-progress.css";
 import "./search-result-actions.css";
 import "./taja-requirement-match.css";
 import "./marketplace-evidence.css";
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+};
 
 export const metadata: Metadata = {
   title: "JAKOV360",
