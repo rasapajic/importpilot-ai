@@ -93,15 +93,30 @@ body {
 }
 
 .home-shell {
-  gap: 5rem;
+  display: block;
+  min-height: 100vh;
+  padding: 8.5rem 2rem 5rem;
 }
 
 .how-it-works {
-  max-width: 64rem;
+  margin: 6rem auto 0;
+  max-width: 72rem;
   width: 100%;
 }
 
-.how-it-works h2,
+.how-it-works > .eyebrow {
+  text-align: center;
+}
+
+.how-it-works h2 {
+  font-size: clamp(1.8rem, 3vw, 2.5rem);
+  line-height: 1.15;
+  margin: 0.5rem auto 2rem;
+  max-width: 32ch;
+  text-align: center;
+  text-wrap: balance;
+}
+
 .onboarding-card h2,
 .empty-state h2 {
   max-width: none;
@@ -116,10 +131,11 @@ body {
 }
 
 .onboarding-grid article {
-  border: 1px solid #dce7e1;
-  border-radius: 0.75rem;
   background: white;
-  padding: 1.25rem;
+  border: 1px solid #dce7e1;
+  border-radius: 0.9rem;
+  min-height: 10.5rem;
+  padding: 1.5rem;
 }
 
 .onboarding-grid p {
@@ -178,6 +194,35 @@ main {
 }
 
 .hero {
+  margin: 0 auto;
+  max-width: 74rem;
+  text-align: center;
+  width: 100%;
+}
+
+.hero h1 {
+  font-size: clamp(3.5rem, 5.8vw, 5.9rem);
+  letter-spacing: -0.045em;
+  line-height: 1.02;
+  margin: 0.75rem auto 1.5rem;
+  max-width: 20ch;
+  text-wrap: balance;
+}
+
+.hero .lede {
+  font-size: clamp(1.08rem, 1.5vw, 1.3rem);
+  margin: 0 auto;
+  max-width: 50rem;
+  text-wrap: balance;
+}
+
+.hero .actions {
+  justify-content: center;
+}
+
+.hero .privacy-note {
+  margin-left: auto;
+  margin-right: auto;
   max-width: 48rem;
 }
 
@@ -786,6 +831,24 @@ button:disabled {
 @media (max-width: 760px) {
   main {
     padding: 1rem;
+  }
+
+  .home-shell {
+    padding: 6.5rem 1rem 3rem;
+  }
+
+  .hero h1 {
+    font-size: clamp(2.65rem, 12vw, 4rem);
+    letter-spacing: -0.035em;
+    max-width: 15ch;
+  }
+
+  .hero .actions {
+    flex-wrap: wrap;
+  }
+
+  .how-it-works {
+    margin-top: 4rem;
   }
 
   .global-header {
