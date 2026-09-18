@@ -38,7 +38,7 @@ describe("ImportPilot 1.0 landed-cost Incoterm guard", () => {
 
   it("returns a clear client-facing error instead of a misleading number", () => {
     expect(routeSource).toContain("UnsupportedLandedCostIncotermError");
-    expect(routeSource).toContain("podržava EXW, FCA, FAS i FOB");
+    expect(routeSource).toContain("podržava uslove EXW, FCA, FAS i FOB");
     expect(routeSource).toContain("potencijalno pogrešnu računicu");
   });
 });
