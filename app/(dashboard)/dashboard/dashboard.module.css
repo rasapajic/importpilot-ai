@@ -63,8 +63,19 @@
 
 @media (max-width: 920px) {
   .layout {
-    grid-template-columns: 1fr;
+    gap: 1.5rem;
+    grid-template-columns: minmax(0, 1fr);
     padding-top: 4rem;
+  }
+
+  .demandColumn {
+    order: 1;
+    width: 100%;
+  }
+
+  .searchesColumn {
+    order: 2;
+    width: 100%;
   }
 
   .searchesColumn :global(.project-list) {

@@ -15,6 +15,14 @@ const newProjectSource = readFileSync(
   join(process.cwd(), "app/(dashboard)/projects/new/page.tsx"),
   "utf8",
 );
+const dashboardCss = readFileSync(
+  join(process.cwd(), "app/(dashboard)/dashboard/dashboard.module.css"),
+  "utf8",
+);
+const layoutSource = readFileSync(
+  join(process.cwd(), "app/layout.tsx"),
+  "utf8",
+);
 
 describe("ImportPilot 1.0 core search intake", () => {
   it("asks only for product, quantity and destination", () => {
@@ -37,6 +45,21 @@ describe("ImportPilot 1.0 core search intake", () => {
     expect(dashboardSource).toContain("searchesColumn");
     expect(dashboardSource).toContain("Moje pretrage");
     expect(dashboardSource).toContain("Unesite proizvod, količinu i destinaciju");
+  });
+
+  it("stacks saved searches below the intake on mobile with a real device viewport", () => {
+    expect(layoutSource).toContain('width: "device-width"');
+    expect(layoutSource).toContain("initialScale: 1");
+    expect(dashboardCss).toContain("@media (max-width: 920px)");
+    expect(dashboardCss).toContain(".demandColumn {");
+    expect(dashboardCss).toContain("order: 1");
+    expect(dashboardCss).toContain(".searchesColumn {");
+    expect(dashboardCss).toContain("order: 2");
+  });
+
+  it("uses JAKOV360 public copy on the dashboard", () => {
+    expect(dashboardSource).toContain("JAKOV360 radi ostalo.");
+    expect(dashboardSource).not.toContain("ImportPilot radi ostalo.");
   });
 
   it("uses the same simple search intake on the new-search page", () => {

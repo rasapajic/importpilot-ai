@@ -29,7 +29,7 @@ type DashboardCopy = {
 const dashboardCopy: Record<Locale, DashboardCopy> = {
   sr: {
     title: "Koji proizvod tražite?",
-    subtitle: "Unesite proizvod, količinu i destinaciju. ImportPilot radi ostalo.",
+    subtitle: "Unesite proizvod, količinu i destinaciju. JAKOV360 radi ostalo.",
     searchesTitle: "Moje pretrage",
     searchPlaceholder: "Pretražite moje pretrage",
     emptyTitle: "Još nema pretraga.",
@@ -38,7 +38,7 @@ const dashboardCopy: Record<Locale, DashboardCopy> = {
   },
   de: {
     title: "Welches Produkt suchen Sie?",
-    subtitle: "Geben Sie Produkt, Menge und Zielland ein. ImportPilot übernimmt den Rest.",
+    subtitle: "Geben Sie Produkt, Menge und Zielland ein. JAKOV360 übernimmt den Rest.",
     searchesTitle: "Meine Suchen",
     searchPlaceholder: "Meine Suchen durchsuchen",
     emptyTitle: "Noch keine Suchen vorhanden.",
@@ -47,7 +47,7 @@ const dashboardCopy: Record<Locale, DashboardCopy> = {
   },
   en: {
     title: "Which product are you looking for?",
-    subtitle: "Enter the product, quantity, and destination. ImportPilot handles the rest.",
+    subtitle: "Enter the product, quantity, and destination. JAKOV360 handles the rest.",
     searchesTitle: "My searches",
     searchPlaceholder: "Search my searches",
     emptyTitle: "No searches yet.",
