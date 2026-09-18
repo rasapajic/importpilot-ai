@@ -99,4 +99,10 @@ describe("ImportPilot 1.0 simple supplier results", () => {
     expect(projectSource).not.toContain("OffersPanel");
     expect(projectSource).toContain("Unesite svoju prodajnu cenu");
   });
+  it("links the supplier result header directly to the source offer", () => {
+    expect(resultsSource).toContain('className="supplier-source-link"');
+    expect(resultsSource).toContain('href={result.productUrl}');
+    expect(resultsSource).toContain('target="_blank"');
+  });
+
 });
