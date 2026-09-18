@@ -133,7 +133,7 @@ const analysisCopy = {
     risk: { LOW: "nizak", MEDIUM: "srednji", HIGH: "visok", UNKNOWN: "nepoznat" },
     landedCost: { UNAVAILABLE: "nije obračunat", ESTIMATED: "procena", CONFIRMED: "potvrđen" },
     missing: {
-      LANDED_COST: "potvrđen ukupni trošak uvoza",
+      LANDED_COST: "potvrđen ukupan trošak uvoza",
       SUPPLIER_VERIFICATION: "verifikacija dobavljača",
       SUPPLIER_RISK_DATA: "dovoljno podataka o riziku",
       DELIVERY_TIME: "rok isporuke",
@@ -147,7 +147,7 @@ const analysisCopy = {
     score: "Taja rezultat",
     confidence: "Pouzdanost podataka",
     riskLabel: "Rizik dobavljača",
-    landedCostLabel: "Ukupni trošak uvoza",
+    landedCostLabel: "Ukupan trošak uvoza",
     missingLabel: "Nedostaje za konačnu odluku",
     preliminary: "preliminarna analiza",
     incompleteData: "NEPOTPUNI PODACI",
