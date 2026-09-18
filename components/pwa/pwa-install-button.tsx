@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 
+import { useI18n } from "@/components/i18n/i18n-provider";
+
 type InstallPromptEvent = Event & {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
@@ -13,21 +15,11 @@ const labels = {
   sr: "Instaliraj aplikaciju",
 } as const;
 
-function currentLabel() {
-  if (typeof document === "undefined") return labels.en;
-  const lang = document.documentElement.lang.toLowerCase();
-  if (lang.startsWith("de")) return labels.de;
-  if (lang.startsWith("sr")) return labels.sr;
-  return labels.en;
-}
-
 export function PwaInstallButton() {
+  const { locale } = useI18n();
   const [promptEvent, setPromptEvent] = useState<InstallPromptEvent | null>(null);
-  const [label, setLabel] = useState(labels.en);
 
   useEffect(() => {
-    setLabel(currentLabel());
-
     const onBeforeInstallPrompt = (event: Event) => {
       event.preventDefault();
       setPromptEvent(event as InstallPromptEvent);
@@ -52,7 +44,7 @@ export function PwaInstallButton() {
 
   return (
     <button className="pwa-install-button" onClick={install} type="button">
-      {label}
+      {labels[locale]}
     </button>
   );
 }
