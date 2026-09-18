@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
+import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { I18nProvider } from "@/components/i18n/i18n-provider";
@@ -33,6 +34,14 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
             <GlobalHeaderActions />
           </header>
           {children}
+          <footer className="global-footer">
+            <nav aria-label="Legal and privacy">
+              <Link href="/privacy">Privacy Policy</Link>
+              <Link href="/terms">Terms of Service</Link>
+              <a href="mailto:privacy@jakov360.com">privacy@jakov360.com</a>
+            </nav>
+            <p>© 2026 JAKOV360 · ImportPilot AI</p>
+          </footer>
         </I18nProvider>
       </body>
     </html>
