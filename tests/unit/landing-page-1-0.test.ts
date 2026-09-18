@@ -12,7 +12,7 @@ describe("ImportPilot 1.0 landing page", () => {
     expect(source).toContain("Compare the best offers");
     expect(source).toContain("BUY, NEGOTIATE, WATCH or SKIP");
     expect(source).toContain("KUPI, PREGOVARAJ, PRATI ili PRESKOČI");
-    expect(source).toContain("procenjeni ukupni trošak uvoza");
+    expect(source).toContain("procenjeni ukupan trošak uvoza");
   });
 
   it("does not advertise 2.0 workspace features on the 1.0 landing page", () => {
