@@ -25,6 +25,7 @@ export class DemoProjectNotFoundError extends Error {}
 export class ProductionProjectDeletionNotAllowedError extends Error {}
 export class EmptySearchProjectNotFoundError extends Error {}
 export class EmptySearchProjectDeletionNotAllowedError extends Error {}
+export class SearchProjectNotFoundError extends Error {}
 
 export function createProject(
   input: CreateProjectInput,
@@ -179,6 +180,29 @@ export async function deleteDemoProject(
     },
   });
   if (deleted.count !== 1) throw new DemoProjectNotFoundError();
+}
+
+
+export async function deleteSearchProject(
+  projectId: string,
+  organizationId: string,
+  deleteObject: (storageKey: string) => Promise<void> = deleteStoredObject,
+) {
+  const project = await prisma.importProject.findFirst({
+    where: { id: projectId, organizationId },
+    select: {
+      id: true,
+      files: { select: { storageKey: true } },
+    },
+  });
+  if (!project) throw new SearchProjectNotFoundError();
+
+  for (const file of project.files) await deleteObject(file.storageKey);
+
+  const deleted = await prisma.importProject.deleteMany({
+    where: { id: project.id, organizationId },
+  });
+  if (deleted.count !== 1) throw new SearchProjectNotFoundError();
 }
 
 export async function deleteEmptySearchProject(projectId: string, organizationId: string) {

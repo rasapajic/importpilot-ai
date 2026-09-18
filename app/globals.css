@@ -980,3 +980,93 @@ button:disabled {
   color: #0b5f41;
   text-decoration-thickness: 2px;
 }
+
+
+.project-list-row {
+  position: relative;
+}
+
+.project-list-row .project-row-link {
+  padding-right: 3.25rem;
+}
+
+.project-delete-icon {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  color: #7a3a3a;
+  display: inline-flex;
+  font-size: 1.25rem;
+  height: 2.25rem;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+  position: absolute;
+  right: 0.55rem;
+  top: 0.55rem;
+  width: 2.25rem;
+  z-index: 2;
+}
+
+.project-delete-icon:hover,
+.project-delete-icon:focus-visible {
+  background: #fdecec;
+  color: #8f1f1f;
+}
+
+.project-delete-dialog {
+  border: 0;
+  border-radius: 0.9rem;
+  box-shadow: 0 1.2rem 3rem rgb(20 34 27 / 24%);
+  max-width: min(30rem, calc(100vw - 2rem));
+  padding: 1.5rem;
+}
+
+.project-delete-dialog::backdrop {
+  background: rgb(20 34 27 / 38%);
+}
+
+.project-delete-dialog h2 {
+  margin-top: 0;
+}
+
+.project-delete-dialog-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  margin-top: 1.25rem;
+}
+
+.project-delete-confirm-button {
+  background: #a32121;
+}
+
+.project-delete-confirm-button:hover {
+  background: #861919;
+}
+
+@media (max-width: 760px) {
+  .project-delete-icon {
+    height: 2.75rem;
+    right: 0.35rem;
+    top: 0.35rem;
+    width: 2.75rem;
+  }
+
+  .project-list-row .project-row-link {
+    padding-right: 3.5rem;
+  }
+
+  .project-delete-dialog {
+    padding: 1.25rem;
+  }
+
+  .project-delete-dialog-actions {
+    flex-direction: column-reverse;
+  }
+
+  .project-delete-dialog-actions button {
+    width: 100%;
+  }
+}
