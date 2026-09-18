@@ -19,22 +19,22 @@ type DecisionDisplayCopy = {
 
 const decisionDisplay: Record<DecisionStatus, Record<Locale, DecisionDisplayCopy>> = {
   READY_TO_BUY: {
-    sr: { title: "BUY", summary: "Ponuda prolazi osnovne provere" },
+    sr: { title: "KUPI", summary: "Ponuda prolazi osnovne provere" },
     de: { title: "BUY", summary: "Das Angebot besteht die Grundprüfungen" },
     en: { title: "BUY", summary: "The offer passes the core checks" },
   },
   NEGOTIATE_FIRST: {
-    sr: { title: "NEGOTIATE", summary: "Traži bolje uslove pre kupovine" },
+    sr: { title: "PREGOVARAJ", summary: "Traži bolje uslove pre kupovine" },
     de: { title: "NEGOTIATE", summary: "Vor dem Kauf bessere Konditionen verhandeln" },
     en: { title: "NEGOTIATE", summary: "Negotiate better terms before buying" },
   },
   NEED_MORE_OFFERS: {
-    sr: { title: "WATCH", summary: "Još nema dovoljno podataka za odluku" },
+    sr: { title: "PRATI", summary: "Još nema dovoljno podataka za odluku" },
     de: { title: "WATCH", summary: "Noch nicht genügend Daten für eine Entscheidung" },
     en: { title: "WATCH", summary: "There is not enough data for a decision yet" },
   },
   DO_NOT_BUY: {
-    sr: { title: "SKIP", summary: "Odnos cene i rizika nije dovoljno dobar" },
+    sr: { title: "PRESKOČI", summary: "Odnos cene i rizika nije dovoljno dobar" },
     de: { title: "SKIP", summary: "Preis und Risiko sind nicht attraktiv genug" },
     en: { title: "SKIP", summary: "The price-to-risk tradeoff is not good enough" },
   },
