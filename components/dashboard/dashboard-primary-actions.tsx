@@ -22,6 +22,8 @@ type IntakeCopy = {
   create: string;
   creating: string;
   createFailed: string;
+  quotaUsage: (plan: string, used: number, limit: number) => string;
+  quotaExhausted: string;
 };
 
 const copy: Record<Locale, IntakeCopy> = {
@@ -37,6 +39,8 @@ const copy: Record<Locale, IntakeCopy> = {
     create: "Pronađi najbolje ponude",
     creating: "Pretraga se pokreće...",
     createFailed: "Pretraga nije kreirana. Pokušajte ponovo.",
+    quotaUsage: (plan, used, limit) => `${plan} · ${used}/${limit} živih pretraga iskorišćeno ovog meseca`,
+    quotaExhausted: "Mesečni limit je potrošen. Sačuvane pretrage ostaju dostupne.",
   },
   de: {
     productLabel: "Produkt",
@@ -50,6 +54,8 @@ const copy: Record<Locale, IntakeCopy> = {
     create: "Beste Angebote finden",
     creating: "Suche wird gestartet...",
     createFailed: "Die Suche wurde nicht erstellt. Bitte versuchen Sie es erneut.",
+    quotaUsage: (plan, used, limit) => `${plan} · ${used}/${limit} Live-Suchen in diesem Monat verwendet`,
+    quotaExhausted: "Das monatliche Limit ist erreicht. Gespeicherte Suchen bleiben verfügbar.",
   },
   en: {
     productLabel: "Product",
@@ -63,10 +69,23 @@ const copy: Record<Locale, IntakeCopy> = {
     create: "Find best offers",
     creating: "Starting search...",
     createFailed: "The search was not created. Please try again.",
+    quotaUsage: (plan, used, limit) => `${plan} · ${used}/${limit} live searches used this month`,
+    quotaExhausted: "The monthly limit is reached. Saved searches remain available.",
   },
 };
 
-export function DashboardPrimaryActions() {
+type SearchQuotaView = {
+  plan: "FREE" | "PLUS" | "PRO";
+  used: number;
+  limit: number;
+  remaining: number;
+};
+
+export function DashboardPrimaryActions({
+  quota,
+}: {
+  quota?: SearchQuotaView | null;
+} = {}) {
   const { locale } = useI18n();
   const text = copy[locale];
   const router = useRouter();
@@ -75,6 +94,10 @@ export function DashboardPrimaryActions() {
 
   async function createSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (quota && quota.remaining <= 0) {
+      setError(text.quotaExhausted);
+      return;
+    }
     setPending(true);
     setError("");
 
@@ -136,11 +159,22 @@ export function DashboardPrimaryActions() {
         </label>
       </div>
 
+      {quota && (
+        <div className={styles.quotaStatus}>
+          <strong>{text.quotaUsage(quota.plan, quota.used, quota.limit)}</strong>
+          {quota.remaining <= 0 && <span>{text.quotaExhausted}</span>}
+        </div>
+      )}
+
       {error && <p className={styles.error} role="alert">{error}</p>}
 
       <div className={styles.footerActions}>
         <span />
-        <button className={styles.primaryAction} disabled={pending} type="submit">
+        <button
+          className={styles.primaryAction}
+          disabled={pending || Boolean(quota && quota.remaining <= 0)}
+          type="submit"
+        >
           {pending ? text.creating : text.create}
         </button>
       </div>

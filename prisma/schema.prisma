@@ -13,6 +13,12 @@ enum OrganizationRole {
   MEMBER
 }
 
+enum SubscriptionPlan {
+  FREE
+  PLUS
+  PRO
+}
+
 enum OAuthProvider {
   GOOGLE
   MICROSOFT
@@ -162,6 +168,7 @@ model User {
 model Organization {
   id        String               @id @default(uuid()) @db.Uuid
   name      String               @db.VarChar(160)
+  subscriptionPlan SubscriptionPlan @default(FREE) @map("subscription_plan")
   members   OrganizationMember[]
   sessions  Session[]
   auditEvents AuditEvent[]
@@ -177,6 +184,7 @@ model Organization {
   recommendationFeedback RecommendationFeedback[]
   projectCompletionHistory ProjectCompletionHistory[]
   aiUsageEvents AiUsageEvent[]
+  supplierSearchQuotaUsage SupplierSearchQuotaUsage[]
   createdAt DateTime             @default(now()) @map("created_at")
   updatedAt DateTime             @updatedAt @map("updated_at")
 
@@ -254,6 +262,19 @@ model RateLimitBucket {
 
   @@index([windowEndsAt])
   @@map("rate_limit_buckets")
+}
+
+model SupplierSearchQuotaUsage {
+  organizationId String       @map("organization_id") @db.Uuid
+  periodStart    DateTime     @map("period_start") @db.Date
+  used           Int          @default(0)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @default(now()) @updatedAt @map("updated_at")
+
+  @@id([organizationId, periodStart])
+  @@index([periodStart])
+  @@map("supplier_search_quota_usage")
 }
 
 model SupplierSearchCache {
