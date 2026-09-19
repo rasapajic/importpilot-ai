@@ -336,7 +336,7 @@ export function estimateTajaPreliminaryLandedCost(input: {
         : `Pricing basis: ${basis.incoterm}.`,
       ...(chinaDomestic.applies
         ? [
-            `Domestic China transport: ${round(chinaDomestic.chinaDomesticTransportEur)} EUR (planning estimate, not a carrier quote).`,
+            `Estimated domestic China transport: ${round(chinaDomestic.chinaDomesticTransportEur)} EUR (planning estimate, not a carrier quote).`,
             ...(chinaDomestic.sourcingAgentFeeEur > 0
               ? [`1688 sourcing/warehouse agent: ${round(chinaDomestic.sourcingAgentFeeEur)} EUR (5% of goods, minimum 35 EUR planning assumption).`]
               : []),
