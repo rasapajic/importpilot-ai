@@ -32,7 +32,6 @@ import { mergeTajaCandidateEnrichment } from "../domain/taja-candidate-enrichmen
 import { estimateTajaPreliminaryLandedCost } from "../domain/taja-preliminary-cost-estimate";
 import { applyTajaProductFormPolicy } from "../domain/taja-product-form-policy";
 import { canonicalSupplierProductUrl } from "../domain/supplier-product-url";
-import { hasUsableSupplierOfferPrice } from "../domain/supplier-quantity-pricing";
 import {
   createBrowserAssisted1688Preview,
   createSupplierOfferSourceMetadata,
@@ -261,12 +260,10 @@ async function buildSearchPresentation(input: SearchPresentationInput) {
     autoEnrichmentSummary = autoEnrichment.summary;
   }
 
-  // ImportPilot 1.0 is a commercial comparison tool, not a generic web-result
-  // list. Discovery hits without any usable unit price cannot participate in
-  // landed-cost or profitability comparison, so do not present them as offers.
-  candidateResults = candidateResults.filter((result) =>
-    hasUsableSupplierOfferPrice(result, effectiveRequest.quantity),
-  );
+  // B2B suppliers often hide price until RFQ, especially at larger quantities.
+  // Keep relevant direct product pages even when price is missing. Ranking and
+  // later decision steps still prefer priced offers, while unpriced offers stay
+  // visible as sourcing leads and require commercial terms before calculation.
 
   const candidateContext = await findCandidateContext(
     projectId,
