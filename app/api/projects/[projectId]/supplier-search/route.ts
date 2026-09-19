@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { authenticateRequest } from "@/modules/auth/infrastructure/request-auth";
+import { getServerLocale } from "@/modules/i18n/server";
 import {
   ProductSearchProjectNotFoundError,
   searchProjectSupplierOffers,
@@ -18,6 +19,13 @@ import {
   SupplierSearchProviderError,
   SupplierSearchProviderUnavailableError,
 } from "@/modules/product-search/infrastructure/http-provider";
+import {
+  releaseMonthlySupplierSearchQuotaReservation,
+  reserveMonthlySupplierSearchQuota,
+  SupplierSearchQuotaExceededError,
+  SupplierSearchQuotaProjectNotFoundError,
+  type SupplierSearchQuotaStatus,
+} from "@/modules/subscriptions/application/supplier-search-quota-service";
 
 const SUPPLIER_SEARCH_REQUEST_TIMEOUT_MS = 60_000;
 
@@ -35,6 +43,29 @@ function developmentStatus(status: "connected" | "not_configured" | "error") {
 function developmentLog(event: string, details: Record<string, unknown>) {
   if (process.env.NODE_ENV !== "development") return;
   console.info(JSON.stringify({ service: "importpilot-app", event, ...details }));
+}
+
+
+function serializedQuota(quota: SupplierSearchQuotaStatus) {
+  return {
+    plan: quota.plan,
+    used: quota.used,
+    limit: quota.limit,
+    remaining: quota.remaining,
+    periodStart: quota.periodStart.toISOString(),
+    periodEnd: quota.periodEnd.toISOString(),
+  };
+}
+
+async function quotaExceededMessage(quota: SupplierSearchQuotaStatus) {
+  const locale = await getServerLocale();
+  if (locale === "de") {
+    return `Monatliches Suchlimit erreicht (${quota.used}/${quota.limit}). Gespeicherte Projekte und Ergebnisse bleiben verfügbar.`;
+  }
+  if (locale === "en") {
+    return `Monthly search limit reached (${quota.used}/${quota.limit}). Saved projects and results remain available.`;
+  }
+  return `Mesečni limit pretraga je potrošen (${quota.used}/${quota.limit}). Sačuvani projekti i rezultati ostaju dostupni.`;
 }
 
 function withSearchDeadline<T>(operation: Promise<T>) {
@@ -67,23 +98,33 @@ export async function POST(
   }
 
   const startedAt = Date.now();
-  const exactPageProvider = createFinalistUrlEnrichmentProvider(
-    createDetailedSupplierOfferUrlImportProvider({
-      requestedQuantity: parsed.data.quantity,
-      timeoutMs: TAJA_FINALIST_EXACT_PAGE_TIMEOUT_MS,
-    }),
-    TAJA_FINALIST_EXACT_PAGE_LIMIT,
-  );
-
-  developmentLog("supplier_search_request_started", {
-    project_id: (await params).projectId,
-    exact_page_finalist_limit: TAJA_FINALIST_EXACT_PAGE_LIMIT,
-    exact_page_timeout_ms: TAJA_FINALIST_EXACT_PAGE_TIMEOUT_MS,
-    request_timeout_ms: SUPPLIER_SEARCH_REQUEST_TIMEOUT_MS,
-  });
+  const projectId = (await params).projectId;
+  let quotaReservation: SupplierSearchQuotaStatus | null = null;
 
   try {
-    const projectId = (await params).projectId;
+    quotaReservation = await reserveMonthlySupplierSearchQuota({
+      organizationId: auth.membership.organizationId,
+      projectId,
+    });
+
+    const exactPageProvider = createFinalistUrlEnrichmentProvider(
+      createDetailedSupplierOfferUrlImportProvider({
+        requestedQuantity: parsed.data.quantity,
+        timeoutMs: TAJA_FINALIST_EXACT_PAGE_TIMEOUT_MS,
+      }),
+      TAJA_FINALIST_EXACT_PAGE_LIMIT,
+    );
+
+    developmentLog("supplier_search_request_started", {
+      project_id: projectId,
+      quota_plan: quotaReservation.plan,
+      quota_used: quotaReservation.used,
+      quota_limit: quotaReservation.limit,
+      exact_page_finalist_limit: TAJA_FINALIST_EXACT_PAGE_LIMIT,
+      exact_page_timeout_ms: TAJA_FINALIST_EXACT_PAGE_TIMEOUT_MS,
+      request_timeout_ms: SUPPLIER_SEARCH_REQUEST_TIMEOUT_MS,
+    });
+
     const outcome = await withSearchDeadline(
       searchProjectSupplierOffers(
         projectId,
@@ -101,17 +142,43 @@ export async function POST(
     });
     return NextResponse.json({
       ...outcome,
+      quota: serializedQuota(quotaReservation),
       ...developmentStatus(
         process.env.SUPPLIER_SEARCH_PROVIDER_URL ? "connected" : "not_configured",
       ),
     });
   } catch (error) {
-    const projectId = (await params).projectId;
     developmentLog("supplier_search_request_failed", {
       project_id: projectId,
       duration_ms: Date.now() - startedAt,
       error_name: error instanceof Error ? error.name : "UnknownError",
     });
+    if (error instanceof SupplierSearchQuotaExceededError) {
+      return NextResponse.json(
+        {
+          code: "SEARCH_LIMIT_REACHED",
+          error: await quotaExceededMessage(error.quota),
+          quota: serializedQuota(error.quota),
+        },
+        { status: 429 },
+      );
+    }
+    if (error instanceof SupplierSearchQuotaProjectNotFoundError) {
+      return NextResponse.json({ error: "Projekat nije pronađen." }, { status: 404 });
+    }
+
+    if (quotaReservation) {
+      await releaseMonthlySupplierSearchQuotaReservation({
+        organizationId: auth.membership.organizationId,
+        periodStart: quotaReservation.periodStart,
+      }).catch((releaseError: unknown) => {
+        developmentLog("supplier_search_quota_release_failed", {
+          project_id: projectId,
+          error_name: releaseError instanceof Error ? releaseError.name : "UnknownError",
+        });
+      });
+    }
+
     if (error instanceof ProductSearchProjectNotFoundError) {
       return NextResponse.json({ error: "Projekat nije pronađen." }, { status: 404 });
     }
