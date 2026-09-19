@@ -144,6 +144,36 @@ describe("TAJA Deep Search phase 1", () => {
     });
   });
 
+
+  it("keeps a forty-candidate default pool before the app shortlists ten", async () => {
+    const calls: string[] = [];
+    const many = (sourceName: string, offset: number) =>
+      Array.from({ length: 15 }, (_, index) => result(
+        `Foldable car trunk organizer model ${offset + index}`,
+        `${sourceName} Supplier ${offset + index}`,
+        `https://${sourceName}.example.com/product/organizer-${offset + index}`,
+        sourceName,
+      ));
+
+    const source = createAggregatingSupplierSearchSource([
+      trustedSource("source-a", many("source-a", 0), calls),
+      trustedSource("source-b", many("source-b", 100), calls),
+      trustedSource("source-c", many("source-c", 200), calls),
+      trustedSource("source-d", many("source-d", 300), calls),
+    ]);
+
+    const outcome = await source.search(input, new AbortController().signal);
+    expect(Array.isArray(outcome)).toBe(false);
+    if (Array.isArray(outcome)) throw new Error("Expected structured outcome.");
+
+    expect(outcome.results).toHaveLength(40);
+    expect(outcome.summary).toMatchObject({
+      parsedResults: 60,
+      relevantCandidates: 60,
+      returnedResults: 40,
+    });
+  });
+
   it("keeps useful results when one source fails", async () => {
     const source = createAggregatingSupplierSearchSource([
       {
