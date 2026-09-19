@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { DashboardPrimaryActions } from "@/components/dashboard/dashboard-primary-actions";
+import { SearchHistoryLink } from "@/components/dashboard/search-history-link";
 import { DeleteSearchButton } from "@/components/projects/delete-search-button";
 import { requireSession } from "@/modules/auth/infrastructure/session";
 import { getCountryDisplayName } from "@/modules/i18n/country-names";
@@ -144,7 +145,7 @@ export default async function DashboardPage({
           <section className="project-list">
             {result.projects.map((project) => (
               <article className="project-row project-list-row" key={project.id}>
-                <Link className="project-row-link" href={`/projects/${project.id}`}>
+                <SearchHistoryLink href={`/projects/${project.id}`} locale={locale}>
                   <span className="project-card-content">
                     <strong>{translateText(project.name, locale)}</strong>
                     <span className="project-card-meta">
@@ -153,7 +154,7 @@ export default async function DashboardPage({
                       <small className="project-stage">{projectStage(project)}</small>
                     </span>
                   </span>
-                </Link>
+                </SearchHistoryLink>
                 <DeleteSearchButton projectId={project.id} projectName={project.name} />
               </article>
             ))}
