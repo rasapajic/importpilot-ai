@@ -156,6 +156,7 @@ export default async function BillingPage({
     : null;
 
   const plans = [JAKOV360_PLANS.FREE, JAKOV360_PLANS.PLUS, JAKOV360_PLANS.PRO];
+  const planRank = { FREE: 0, PLUS: 1, PRO: 2 } as const;
 
   return (
     <main className={`dashboard-shell ${styles.shell}`}>
@@ -198,6 +199,7 @@ export default async function BillingPage({
       <section className={styles.planGrid}>
         {plans.map((plan) => {
           const active = billing.plan === plan.code;
+          const upgrade = planRank[plan.code] > planRank[billing.plan];
           return (
             <article className={styles.planCard} key={plan.code}>
               <div>
@@ -212,7 +214,7 @@ export default async function BillingPage({
               <p>{text.searches(plan.monthlySupplierSearchLimit)}</p>
               {active ? (
                 <span className={styles.currentBadge}>{text.current}</span>
-              ) : plan.code === "FREE" ? null : (
+              ) : plan.code === "FREE" || !upgrade ? null : (
                 <BillingCheckoutButton
                   disabled={!checkoutConfigured || !canManage}
                   kind="SUBSCRIPTION"
