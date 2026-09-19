@@ -98,10 +98,6 @@ export function DashboardPrimaryActions({
 
   async function createSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (quota && quota.remaining <= 0) {
-      setError(text.quotaExhausted);
-      return;
-    }
     setPending(true);
     setError("");
 
@@ -177,7 +173,7 @@ export function DashboardPrimaryActions({
         <span />
         <button
           className={styles.primaryAction}
-          disabled={pending || Boolean(quota && quota.remaining <= 0)}
+          disabled={pending}
           type="submit"
         >
           {pending ? text.creating : text.create}
