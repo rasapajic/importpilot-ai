@@ -11,6 +11,10 @@ const projectSource = readFileSync(
   join(process.cwd(), "app/(dashboard)/projects/[projectId]/page.tsx"),
   "utf8",
 );
+const resultCss = readFileSync(
+  join(process.cwd(), "app/search-result-actions.css"),
+  "utf8",
+);
 
 describe("ImportPilot 1.0 simple supplier results", () => {
   it("keeps the main result card focused on the buying decision", () => {
@@ -100,6 +104,19 @@ describe("ImportPilot 1.0 simple supplier results", () => {
     expect(projectSource).not.toContain("OffersPanel");
     expect(projectSource).toContain("Unesite svoju prodajnu cenu");
   });
+  it("keeps supplier images bounded on phones instead of rendering source dimensions", () => {
+    expect(resultCss).toContain(".search-result-image {");
+    expect(resultCss).toContain("object-fit: contain");
+    expect(resultCss).toContain("height: 13rem");
+    expect(resultCss).toContain("max-width: 100%");
+  });
+
+  it("lets cached results be replaced with a new live search", () => {
+    expect(resultsSource).toContain('liveRefresh: "Ponovi živu pretragu"');
+    expect(resultsSource).toContain('className="cached-result-notice"');
+    expect(resultsSource).toContain("onClick={() => void runSearch()}");
+  });
+
   it("links the supplier result header directly to the source offer", () => {
     expect(resultsSource).toContain('className="supplier-source-link"');
     expect(resultsSource).toContain('href={result.productUrl}');
