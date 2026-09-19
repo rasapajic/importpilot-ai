@@ -30,6 +30,28 @@ import {
   getProductStepDisplay,
 } from "@/modules/projects/domain/workflow-step-display";
 
+async function loadCachedSupplierSearchSafely(
+  projectId: string,
+  organizationId: string,
+  input: {
+    query: string;
+    quantity: number;
+    targetCountry: string;
+    avoidComplexCompliance: boolean;
+    privateLabel: boolean;
+  },
+) {
+  try {
+    return await loadCachedProjectSupplierOffers(projectId, organizationId, input);
+  } catch (error) {
+    console.error("JAKOV360 cached supplier search restore failed", {
+      projectId,
+      error: error instanceof Error ? error.message : "unknown",
+    });
+    return null;
+  }
+}
+
 export default async function ProjectPage({
   params,
   searchParams,
@@ -56,7 +78,7 @@ export default async function ProjectPage({
   const autoStartSupplierSearch = resolvedSearchParams.autoSearch === "1";
   const initialSupplierSearch = autoStartSupplierSearch
     ? null
-    : await loadCachedProjectSupplierOffers(
+    : await loadCachedSupplierSearchSafely(
         projectId,
         auth.membership.organizationId,
         {
