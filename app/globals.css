@@ -1472,3 +1472,62 @@ details.workflow-step > summary::-webkit-details-marker {
     width: 100%;
   }
 }
+
+
+.project-row-link-loading {
+  opacity: 0.72;
+  pointer-events: none;
+}
+
+.search-navigation-overlay {
+  align-items: center;
+  background: rgb(244 247 245 / 92%);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 1.25rem;
+  position: fixed;
+  z-index: 200;
+}
+
+.search-navigation-card {
+  align-items: center;
+  background: white;
+  border: 1px solid #dce7e1;
+  border-radius: 1rem;
+  box-shadow: 0 1rem 2.5rem rgb(20 34 27 / 12%);
+  display: grid;
+  gap: 0.65rem;
+  justify-items: center;
+  max-width: 28rem;
+  padding: 1.75rem;
+  text-align: center;
+  width: 100%;
+}
+
+.search-navigation-card .loading-indicator {
+  margin: 0 0 0.35rem;
+}
+
+.search-navigation-card strong {
+  font-size: 1.2rem;
+}
+
+.search-navigation-card span {
+  color: #60766c;
+  line-height: 1.5;
+}
+
+@media (max-width: 760px) {
+  .search-navigation-overlay {
+    padding:
+      max(1rem, env(safe-area-inset-top))
+      max(1rem, env(safe-area-inset-right))
+      max(1rem, env(safe-area-inset-bottom))
+      max(1rem, env(safe-area-inset-left));
+  }
+
+  .search-navigation-card {
+    padding: 1.5rem 1.25rem;
+  }
+}
