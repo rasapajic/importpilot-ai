@@ -12,7 +12,7 @@ import {
 } from "@/components/search/supplier-choice-display";
 import type { FxSnapshot } from "@/modules/fx/euro-display";
 import type { Locale } from "@/modules/i18n/translations";
-import type { SupplierOfferSearchResult } from "@/modules/product-search/domain/search";
+import type { SupplierOfferSearchResult, SupplierOfferSearchSummary } from "@/modules/product-search/domain/search";
 import { estimateTajaPreliminaryLandedCost } from "@/modules/product-search/domain/taja-preliminary-cost-estimate";
 import type { TajaCandidateAnalysisWithProductForm } from "@/modules/product-search/domain/taja-product-form-policy";
 
@@ -24,6 +24,7 @@ type SimpleSupplierSearchInitialOutcome = {
   resultOrigin: ResultOrigin;
   fetchedAt: string;
   unfilteredResultCount?: number;
+  summary?: SupplierOfferSearchSummary;
 };
 
 type Copy = {
@@ -57,6 +58,7 @@ type Copy = {
   cached: string;
   liveRefresh: string;
   selectionOverview: (reviewed: number, shown: number) => string;
+  liveSelectionOverview: (found: number, relevant: number, shown: number) => string;
   selectionCriteria: string;
   whySelected: string;
   reasonProductMatch: string;
@@ -107,6 +109,7 @@ const copy: Record<Locale, Copy> = {
     cached: "Prikazani su poslednji sačuvani rezultati.",
     liveRefresh: "Ponovi živu pretragu",
     selectionOverview: (reviewed, shown) => `JAKOV360 je pregledao ${reviewed} kandidata i izdvojio ${shown} za prikaz.`,
+    liveSelectionOverview: (found, relevant, shown) => `Pronađeno ${found} kandidata → ${relevant} prošlo osnovnu proveru → prikazano најбољих ${shown}.`,
     selectionCriteria: "Izdvajanje se zasniva na podudaranju proizvoda, količini i MOQ-u, ceni/uslovima i kvalitetu dostupnih podataka.",
     whySelected: "Zašto je izdvojena",
     reasonProductMatch: "Proizvod odgovara traženom tipu ili specifikaciji.",
@@ -155,6 +158,7 @@ const copy: Record<Locale, Copy> = {
     cached: "Die letzten gespeicherten Ergebnisse werden angezeigt.",
     liveRefresh: "Live-Suche wiederholen",
     selectionOverview: (reviewed, shown) => `JAKOV360 hat ${reviewed} Kandidaten geprüft und ${shown} zur Anzeige ausgewählt.`,
+    liveSelectionOverview: (found, relevant, shown) => `${found} Kandidaten gefunden → ${relevant} haben die Grundprüfung bestanden → die besten ${shown} werden angezeigt.`,
     selectionCriteria: "Die Auswahl berücksichtigt Produktübereinstimmung, Menge und MOQ, Preis/Konditionen sowie die Qualität der verfügbaren Daten.",
     whySelected: "Warum ausgewählt",
     reasonProductMatch: "Das Produkt entspricht dem gesuchten Typ oder der Spezifikation.",
@@ -203,6 +207,7 @@ const copy: Record<Locale, Copy> = {
     cached: "Showing the latest saved results.",
     liveRefresh: "Run live search again",
     selectionOverview: (reviewed, shown) => `JAKOV360 reviewed ${reviewed} candidates and selected ${shown} to display.`,
+    liveSelectionOverview: (found, relevant, shown) => `${found} candidates found → ${relevant} passed the basic check → the best ${shown} are displayed.`,
     selectionCriteria: "Selection considers product fit, requested quantity and MOQ, price/terms, and the quality of available data.",
     whySelected: "Why it was selected",
     reasonProductMatch: "The product matches the requested type or specification.",
@@ -341,6 +346,9 @@ export function SimpleSupplierOfferSearch({
   const [reviewedCount, setReviewedCount] = useState(
     initialOutcome?.unfilteredResultCount ?? initialOutcome?.results.length ?? 0,
   );
+  const [searchSummary, setSearchSummary] = useState<SupplierOfferSearchSummary | null>(
+    initialOutcome?.summary ?? null,
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [selectingUrl, setSelectingUrl] = useState<string | null>(null);
@@ -371,6 +379,7 @@ export function SimpleSupplierOfferSearch({
         candidateAnalyses?: TajaCandidateAnalysisWithProductForm[];
         resultOrigin?: ResultOrigin | null;
         unfilteredResultCount?: number;
+        summary?: SupplierOfferSearchSummary;
         error?: string;
       } | null;
       if (!response.ok) throw new Error(payload?.error || text.noResultsText);
@@ -378,12 +387,14 @@ export function SimpleSupplierOfferSearch({
       setAnalyses(payload?.candidateAnalyses ?? []);
       setOrigin(payload?.resultOrigin ?? null);
       setReviewedCount(payload?.unfilteredResultCount ?? payload?.results?.length ?? 0);
+      setSearchSummary(payload?.summary ?? null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : text.noResultsText);
       setResults([]);
       setAnalyses([]);
       setOrigin(null);
       setReviewedCount(0);
+      setSearchSummary(null);
     } finally {
       setLoading(false);
     }
@@ -501,7 +512,15 @@ export function SimpleSupplierOfferSearch({
       {visible.length > 0 && (
         <>
           <section className="supplier-selection-summary" aria-label={text.whySelected}>
-            <strong>{text.selectionOverview(Math.max(reviewedCount, visible.length), visible.length)}</strong>
+            <strong>
+              {searchSummary
+                ? text.liveSelectionOverview(
+                    searchSummary.parsedResults,
+                    searchSummary.relevantCandidates,
+                    visible.length,
+                  )
+                : text.selectionOverview(Math.max(reviewedCount, visible.length), visible.length)}
+            </strong>
             <p>{text.selectionCriteria}</p>
           </section>
           <div className="search-result-list">
