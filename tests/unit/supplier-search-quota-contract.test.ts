@@ -40,11 +40,17 @@ describe("JAKOV360 supplier-search quota contract", () => {
   });
 
   it("refunds quota when a technical live-search request fails", () => {
-    expect(route).toContain("releaseMonthlySupplierSearchQuotaReservation");
+    expect(route).toContain("releaseSupplierSearchQuotaReservation");
     expect(service).toContain('GREATEST("used" - 1, 0)');
   });
 
-  it("returns a structured 429 when the monthly quota is exhausted", () => {
+  it("uses a paid Full Import Analysis entitlement only after monthly quota is exhausted", () => {
+    expect(service).toContain('"product" = \'FULL_IMPORT_ANALYSIS\'::"BillingPurchaseProduct"');
+    expect(service).toContain('"live_searches_remaining" = "live_searches_remaining" - 1');
+    expect(service).toContain('source: "FULL_IMPORT_ANALYSIS"');
+  });
+
+  it("returns a structured 429 when no monthly or project entitlement remains", () => {
     expect(route).toContain('code: "SEARCH_LIMIT_REACHED"');
     expect(route).toContain("{ status: 429 }");
     expect(route).toContain("serializedQuota(error.quota)");
