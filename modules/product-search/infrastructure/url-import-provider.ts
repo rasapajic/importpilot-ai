@@ -37,6 +37,7 @@ export class UrlImportFetchError extends Error {}
 export class UrlImportUnsupportedUrlError extends Error {}
 export class UrlImportMissingProductIdentifierError extends Error {}
 export class UrlImportBlockedError extends Error {}
+export class UrlImportUnavailableError extends Error {}
 export class UrlImportParsingError extends Error {}
 export class UrlImportExternalProviderError extends UrlImportFetchError {}
 
@@ -88,6 +89,17 @@ export function hasUrlProductIdentifier(provider: UrlImportProviderName, url: UR
 
 export function isBlockedHtml(html: string) {
   return /captcha|anti[-\s]?bot|robot check|verify you are human|access denied|unusual traffic|security check/i.test(html);
+}
+
+export function isUnavailableProductHtml(html: string) {
+  const visibleText = html
+    .replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>|<[^>]+>/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return /\b(?:this\s+product\s+is\s+(?:no\s+longer|not)\s+available|product\s+is\s+no\s+longer\s+available|product\s+has\s+been\s+removed|listing\s+is\s+no\s+longer\s+available)\b/i.test(visibleText) ||
+    /\b(?:dieses\s+produkt|produkt)\s+ist\s+nicht\s+mehr\s+verf(?:ü|u)gbar\b/i.test(visibleText) ||
+    /\b(?:producto|art[ií]culo)\s+ya\s+no\s+est[aá]\s+disponible\b/i.test(visibleText) ||
+    /(?:商品已下架|商品不存在|该商品已下架)/.test(visibleText);
 }
 
 function isPrivateHost(hostname: string) {
@@ -268,6 +280,9 @@ function imageText(value: unknown) {
 
 export function extractSupplierOfferFromHtml(html: string, productUrl: string): SupplierOfferUrlPreview {
   if (isBlockedHtml(html)) throw new UrlImportBlockedError("Blocked or CAPTCHA page.");
+  if (isUnavailableProductHtml(html)) {
+    throw new UrlImportUnavailableError("Supplier product is no longer available.");
+  }
   const objects = jsonLdObjects(html);
   const product = objects.find((item) => item["@type"] === "Product") ?? {};
   const offerValue = Array.isArray(product.offers) ? product.offers[0] : product.offers;
@@ -515,6 +530,7 @@ export function createSupplierOfferUrlImportProvider(options: {
         if (
           error instanceof UrlImportFetchError ||
           error instanceof UrlImportBlockedError ||
+          error instanceof UrlImportUnavailableError ||
           error instanceof UrlImportParsingError
         ) throw error;
         if (controller.signal.aborted) {
@@ -599,7 +615,13 @@ export function createExternalSupplierOfferUrlImportProvider(options: {
           errorPresent: Boolean(payloadRecord && "error" in payloadRecord && payloadRecord.error),
         });
         if (!response.ok) {
-          if (response.status === 423 || (payload && typeof payload === "object" && "reason" in payload && String(payload.reason).toLowerCase().includes("block"))) {
+          const reason = payload && typeof payload === "object" && "reason" in payload
+            ? String(payload.reason).toUpperCase()
+            : "";
+          if (response.status === 410 || reason === "UNAVAILABLE") {
+            throw new UrlImportUnavailableError("Supplier product is no longer available.");
+          }
+          if (response.status === 423 || reason.includes("BLOCK")) {
             throw new UrlImportBlockedError("External URL import provider reported block.");
           }
           throw new UrlImportExternalProviderError(`External URL import provider failed with HTTP ${response.status}.`);
@@ -622,7 +644,7 @@ export function createExternalSupplierOfferUrlImportProvider(options: {
         });
         return preview;
       } catch (error) {
-        if (error instanceof UrlImportBlockedError || error instanceof UrlImportUnsupportedUrlError || error instanceof UrlImportMissingProductIdentifierError) {
+        if (error instanceof UrlImportBlockedError || error instanceof UrlImportUnavailableError || error instanceof UrlImportUnsupportedUrlError || error instanceof UrlImportMissingProductIdentifierError) {
           throw error;
         }
         if (controller.signal.aborted) throw new UrlImportTimeoutError();
