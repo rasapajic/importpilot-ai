@@ -295,10 +295,10 @@ export function estimateTajaPreliminaryLandedCost(input: {
     );
   }
   if (chinaDomestic.applies) {
-    warnings.push(
-      "CHINA_DOMESTIC_TRANSPORT_ASSUMED",
-      "SOURCING_AGENT_FEE_ASSUMED",
-    );
+    warnings.push("CHINA_DOMESTIC_TRANSPORT_ASSUMED");
+    if (chinaDomestic.sourcingAgentFeeEur > 0) {
+      warnings.push("SOURCING_AGENT_FEE_ASSUMED");
+    }
   }
   if (confidence === "LOW") warnings.push("LOW_LOGISTICS_CONFIDENCE");
 
@@ -336,7 +336,7 @@ export function estimateTajaPreliminaryLandedCost(input: {
         : `Pricing basis: ${basis.incoterm}.`,
       ...(chinaDomestic.applies
         ? [
-            `China domestic origin transport: ${round(chinaDomestic.chinaDomesticTransportEur)} EUR (planning estimate, not a carrier quote).`,
+            `Domestic China transport: ${round(chinaDomestic.chinaDomesticTransportEur)} EUR (planning estimate, not a carrier quote).`,
             ...(chinaDomestic.sourcingAgentFeeEur > 0
               ? [`1688 sourcing/warehouse agent: ${round(chinaDomestic.sourcingAgentFeeEur)} EUR (5% of goods, minimum 35 EUR planning assumption).`]
               : []),
