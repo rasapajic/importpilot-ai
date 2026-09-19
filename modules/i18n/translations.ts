@@ -115,6 +115,7 @@ const entries: Translation[] = [
   { en: "Add shipping, taxes and costs to get the real purchase price.", de: "Fügen Sie Transport, Steuern und Kosten hinzu, um den realen Einkaufspreis zu erhalten.", sr: "Dodajte transport, poreze i troškove da biste dobili realnu cenu." },
   { en: "Does it pay off?", de: "Lohnt es sich?", sr: "Da li se isplati?" },
   { en: "Check profitability", de: "Rentabilität prüfen", sr: "Proveri isplativost" },
+  { en: "Enter your selling price, review the real cost and get a clear decision.", de: "Geben Sie Ihren Verkaufspreis ein, prüfen Sie die tatsächlichen Kosten und erhalten Sie eine klare Entscheidung.", sr: "Unesite svoju prodajnu cenu, proverite stvarni trošak i dobijte jasnu odluku." },
   { en: "See the real purchase price, supplier risk and expected profit.", de: "Sehen Sie den realen Einkaufspreis, das Lieferantenrisiko und den erwarteten Gewinn.", sr: "Pogledajte realnu nabavnu cenu, rizik dobavljača i očekivanu zaradu." },
   { en: "Show details", de: "Details anzeigen", sr: "Prikaži detalje" },
   { en: "Real purchase price", de: "Realer Einkaufspreis", sr: "Realna nabavna cena" },
