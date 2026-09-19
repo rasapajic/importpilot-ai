@@ -197,7 +197,7 @@ describe("TAJA preliminary landed-cost estimate", () => {
     ]));
     expect(estimate!.warnings).not.toContain("SOURCING_AGENT_FEE_ASSUMED");
     expect(estimate!.assumptions.join(" ")).toContain("no explicit Incoterm");
-    expect(estimate!.assumptions.join(" ")).toContain("China domestic origin transport");
+    expect(estimate!.assumptions.join(" ")).toContain("domestic China transport");
   });
 
   it("includes transparent domestic China and agent planning costs for a 1688 EXW quote", () => {
