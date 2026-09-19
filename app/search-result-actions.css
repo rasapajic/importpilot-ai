@@ -149,3 +149,56 @@
   margin: 0;
 }
 
+
+
+.supplier-selection-summary {
+  background: #eef6f2;
+  border: 1px solid #d2e4da;
+  border-radius: 0.8rem;
+  margin: 1rem 0 1.25rem;
+  padding: 1rem;
+}
+
+.supplier-selection-summary strong {
+  display: block;
+  font-size: 1rem;
+  line-height: 1.4;
+}
+
+.supplier-selection-summary p {
+  color: #496158;
+  line-height: 1.5;
+  margin: 0.4rem 0 0;
+}
+
+.selection-reasons {
+  background: #f8fbf9;
+  border-left: 3px solid #7db19a;
+  margin: 0.9rem 0;
+  padding: 0.75rem 0.85rem;
+}
+
+.selection-reasons > strong {
+  display: block;
+  margin-bottom: 0.35rem;
+}
+
+.selection-reasons ul {
+  color: #496158;
+  margin: 0;
+  padding-left: 1.15rem;
+}
+
+.selection-reasons li + li {
+  margin-top: 0.25rem;
+}
+
+@media (max-width: 760px) {
+  .supplier-selection-summary {
+    padding: 0.9rem;
+  }
+
+  .selection-reasons {
+    margin: 0.75rem 0;
+  }
+}
