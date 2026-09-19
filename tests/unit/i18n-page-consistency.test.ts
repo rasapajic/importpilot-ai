@@ -43,6 +43,7 @@ const pageStrings = {
     "Kopiraj poruku",
     "Izmeni poruku",
     "Pošalji e-mail",
+    "Unesite svoju prodajnu cenu, proverite stvarni trošak i dobijte jasnu odluku.",
   ],
   dashboard: [
     "Nova pretraga",
