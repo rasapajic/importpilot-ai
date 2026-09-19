@@ -25,12 +25,12 @@ function offer(overrides: Partial<SupplierOfferSearchResult> = {}): SupplierOffe
   };
 }
 
-describe("supplier commercial quality gate", () => {
+describe("supplier commercial price signal", () => {
   it("accepts a positive priced offer", () => {
     expect(hasUsableSupplierOfferPrice(offer(), 100)).toBe(true);
   });
 
-  it("rejects offers without any price or currency", () => {
+  it("marks offers without any price or currency as not yet commercially priced", () => {
     expect(hasUsableSupplierOfferPrice(offer({ price: null, currency: null }), 100)).toBe(false);
     expect(hasUsableSupplierOfferPrice(offer({ price: 0, currency: "USD" }), 100)).toBe(false);
   });
@@ -51,12 +51,23 @@ describe("supplier commercial quality gate", () => {
     expect(hasUsableSupplierOfferPrice(tiered, 100)).toBe(true);
   });
 
-  it("keeps the price gate and cached exact-page refresh in the presentation pipeline", () => {
+  it("does not hide relevant supplier pages just because price is missing", () => {
     const service = readFileSync(
       join(process.cwd(), "modules/product-search/application/product-search-service.ts"),
       "utf8",
     );
-    expect(service).toContain("hasUsableSupplierOfferPrice");
+    expect(service).not.toContain("candidateResults = candidateResults.filter((result) =>");
+    expect(service).not.toContain("hasUsableSupplierOfferPrice(result");
     expect(service).toContain("urlImportProvider: getSupplierOfferUrlImportProvider()");
+  });
+
+  it("labels missing supplier price as an RFQ instead of an unusable result", () => {
+    const simpleSearch = readFileSync(
+      join(process.cwd(), "components/search/simple-supplier-offer-search.tsx"),
+      "utf8",
+    );
+    expect(simpleSearch).toContain('priceOnRequest: "Cena na upit"');
+    expect(simpleSearch).toContain("text.priceOnRequest");
+    expect(simpleSearch).toContain('landedPending: "čeka potvrđenu cenu dobavljača"');
   });
 });

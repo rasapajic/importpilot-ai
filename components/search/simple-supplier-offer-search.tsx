@@ -55,6 +55,7 @@ type Copy = {
   continuing: string;
   cached: string;
   unknown: string;
+  priceOnRequest: string;
   variants: string;
   type: string;
   quantityPrices: string;
@@ -75,7 +76,7 @@ const copy: Record<Locale, Copy> = {
     supplierPrice: "Cena dobavljača",
     landedCost: "Ukupan trošak uvoza",
     landedEstimate: "procena",
-    landedPending: "računa se nakon izbora",
+    landedPending: "čeka potvrđenu cenu dobavljača",
     delivery: "Rok",
     supplierRisk: "Dobavljač",
     moq: "Minimalna količina (MOQ)",
@@ -94,6 +95,7 @@ const copy: Record<Locale, Copy> = {
     continuing: "Otvaranje sledećeg koraka...",
     cached: "Prikazani su poslednji sačuvani rezultati.",
     unknown: "nije poznato",
+    priceOnRequest: "Cena na upit",
     variants: "Varijante",
     type: "Tip",
     quantityPrices: "Cene po količini",
@@ -112,7 +114,7 @@ const copy: Record<Locale, Copy> = {
     supplierPrice: "Lieferantenpreis",
     landedCost: "Landed Cost",
     landedEstimate: "Schätzung",
-    landedPending: "wird nach Auswahl berechnet",
+    landedPending: "wartet auf bestätigten Lieferantenpreis",
     delivery: "Lieferzeit",
     supplierRisk: "Lieferant",
     moq: "MOQ",
@@ -131,6 +133,7 @@ const copy: Record<Locale, Copy> = {
     continuing: "Nächster Schritt wird geöffnet...",
     cached: "Die letzten gespeicherten Ergebnisse werden angezeigt.",
     unknown: "unbekannt",
+    priceOnRequest: "Preis auf Anfrage",
     variants: "Varianten",
     type: "Typ",
     quantityPrices: "Mengenpreise",
@@ -149,7 +152,7 @@ const copy: Record<Locale, Copy> = {
     supplierPrice: "Supplier price",
     landedCost: "Landed cost",
     landedEstimate: "estimate",
-    landedPending: "calculated after selection",
+    landedPending: "waiting for confirmed supplier price",
     delivery: "Delivery",
     supplierRisk: "Supplier",
     moq: "MOQ",
@@ -168,6 +171,7 @@ const copy: Record<Locale, Copy> = {
     continuing: "Opening the next step...",
     cached: "Showing the latest saved results.",
     unknown: "unknown",
+    priceOnRequest: "Price on request",
     variants: "Variants",
     type: "Type",
     quantityPrices: "Quantity prices",
@@ -444,7 +448,7 @@ export function SimpleSupplierOfferSearch({
                       <strong>
                         {effectiveResult.price !== null && effectiveResult.currency
                           ? `${formatSupplierPrice(effectiveResult.price, effectiveResult.currency, locale)}${quantity ? ` / ${formatQuantity(quantity, locale)} ${text.pieces}` : ""}`
-                          : text.unknown}
+                          : text.priceOnRequest}
                       </strong>
                     </span>
                     <span>
