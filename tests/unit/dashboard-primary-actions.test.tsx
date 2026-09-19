@@ -64,8 +64,17 @@ describe("ImportPilot 1.0 core search intake", () => {
     expect(dashboardSource).not.toContain("ImportPilot radi ostalo.");
   });
 
-  it("uses the same simple search intake on the new-search page", () => {
-    expect(newProjectSource).toContain("<DashboardPrimaryActions />");
+  it("uses the same quota-aware search intake on the new-search page", () => {
+    expect(newProjectSource).toContain("<DashboardPrimaryActions quota={{");
+    expect(newProjectSource).toContain("getMonthlySupplierSearchQuotaStatus");
     expect(newProjectSource).toContain("proizvod, količinu i destinaciju");
+  });
+
+  it("shows and blocks exhausted monthly search quota in the intake UI", () => {
+    expect(intakeSource).toContain("quota.remaining <= 0");
+    expect(intakeSource).toContain("quotaUsage");
+    expect(intakeSource).toContain("Mesečni limit je potrošen");
+    expect(dashboardSource).toContain("getMonthlySupplierSearchQuotaStatus");
+    expect(dashboardSource).toContain("<DashboardPrimaryActions quota={{");
   });
 });
