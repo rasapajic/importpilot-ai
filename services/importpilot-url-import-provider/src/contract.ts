@@ -392,7 +392,7 @@ export type ProductPreview = z.infer<typeof productPreviewSchema>;
 export type MarketplaceProductDetails = z.infer<typeof marketplaceProductDetailsSchema>;
 export type ProductAttributeCategory = z.infer<typeof productAttributeCategorySchema>;
 
-export type ErrorReason = "NETWORK_ERROR" | "BLOCKED" | "PARSING_FAILED" | "INVALID_URL" | "TIMEOUT";
+export type ErrorReason = "NETWORK_ERROR" | "BLOCKED" | "UNAVAILABLE" | "PARSING_FAILED" | "INVALID_URL" | "TIMEOUT";
 
 export type PreviewSuccess = { preview: ProductPreview };
 export type PreviewFailure = { error: string; reason: ErrorReason };

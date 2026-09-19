@@ -29,6 +29,18 @@ export function isBlockedHtml(html: string) {
   return /captcha|anti[-\s]?bot|robot check|verify you are human|access denied|unusual traffic|security check/i.test(html);
 }
 
+export function isUnavailableProductHtml(html: string) {
+  const visibleText = html
+    .replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>|<[^>]+>/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return /\b(?:this\s+product\s+is\s+(?:no\s+longer|not)\s+available|product\s+is\s+no\s+longer\s+available|product\s+has\s+been\s+removed|listing\s+is\s+no\s+longer\s+available)\b/i.test(visibleText) ||
+    /\b(?:dieses\s+produkt|produkt)\s+ist\s+nicht\s+mehr\s+verf(?:ü|u)gbar\b/i.test(visibleText) ||
+    /\b(?:producto|art[ií]culo)\s+ya\s+no\s+est[aá]\s+disponible\b/i.test(visibleText) ||
+    /(?:商品已下架|商品不存在|该商品已下架)/.test(visibleText);
+}
+
 function decodeHtml(value: string | null | undefined) {
   return value
     ?.replaceAll("&amp;", "&")
@@ -691,6 +703,7 @@ export function inspectPreviewExtraction(html: string, productUrl?: string): Pre
 }
 
 export function parseProductPreview(html: string, productUrl: string): ProductPreview {
+  if (isUnavailableProductHtml(html)) throw new Error("UNAVAILABLE");
   const snapshot = inspectPreviewExtraction(html, productUrl);
   if (snapshot.blocked) throw new Error("BLOCKED");
   const value = (field: string) =>

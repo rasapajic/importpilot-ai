@@ -182,6 +182,22 @@ describe("URL import provider API", () => {
     await expect(response.json()).resolves.toMatchObject({ reason: "INVALID_URL" });
   });
 
+  it("returns UNAVAILABLE when a product page says the listing is gone", async () => {
+    const baseUrl = await start({
+      fetcher: async () => htmlResponse("<html><body>Dieses Produkt ist nicht mehr verfügbar.</body></html>"),
+    });
+    const response = await fetch(`${baseUrl}/preview`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        productUrl: "https://www.alibaba.com/product-detail/2025-GaN-Charger_1600000000999.html",
+      }),
+    });
+
+    expect(response.status).toBe(410);
+    await expect(response.json()).resolves.toMatchObject({ reason: "UNAVAILABLE" });
+  });
+
   it("returns BLOCKED as an upstream failure when the page is CAPTCHA or anti-bot", async () => {
     const baseUrl = await start({
       fetcher: async () => htmlResponse(fixture("blocked-page.html")),

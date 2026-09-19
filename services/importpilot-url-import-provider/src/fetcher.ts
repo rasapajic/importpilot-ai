@@ -2,12 +2,12 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-import { detectProvider, hasProductIdentifier, inspectPreviewExtraction, parseProductPreview, type PreviewExtractionSnapshot } from "./parser.js";
+import { detectProvider, hasProductIdentifier, inspectPreviewExtraction, isUnavailableProductHtml, parseProductPreview, type PreviewExtractionSnapshot } from "./parser.js";
 import { previewRequestSchema, type ProductPreview } from "./contract.js";
 import { classifyFetchError, rememberFetchError, rememberPreviewDiagnostics } from "./diagnostics.js";
 
 export class UrlImportProviderError extends Error {
-  constructor(public readonly reason: "NETWORK_ERROR" | "BLOCKED" | "PARSING_FAILED" | "INVALID_URL" | "TIMEOUT", message: string = reason) {
+  constructor(public readonly reason: "NETWORK_ERROR" | "BLOCKED" | "UNAVAILABLE" | "PARSING_FAILED" | "INVALID_URL" | "TIMEOUT", message: string = reason) {
     super(message);
   }
 }
@@ -124,6 +124,9 @@ export async function previewProductUrl(productUrl: string, options: FetchOption
       });
       throw new UrlImportProviderError("NETWORK_ERROR", `HTTP ${response.status}`);
     }
+    if (isUnavailableProductHtml(html)) {
+      throw new UrlImportProviderError("UNAVAILABLE", "Supplier product is no longer available.");
+    }
     const preview = parseProductPreview(html, parsed.data.productUrl);
     rememberPreviewDiagnostics({
       provider,
@@ -156,7 +159,7 @@ export async function previewProductUrl(productUrl: string, options: FetchOption
         productUrl: parsed.data.productUrl,
         httpStatus: upstreamStatus,
         finalUrl,
-        finalReason: error.reason === "BLOCKED" ? "BLOCKED" : error.reason === "PARSING_FAILED" ? "PARSING_FAILED" : error.reason === "INVALID_URL" ? "INVALID_URL" : error.reason === "TIMEOUT" ? "TIMEOUT" : "NETWORK_ERROR",
+        finalReason: error.reason === "BLOCKED" ? "BLOCKED" : error.reason === "UNAVAILABLE" ? "UNAVAILABLE" : error.reason === "PARSING_FAILED" ? "PARSING_FAILED" : error.reason === "INVALID_URL" ? "INVALID_URL" : error.reason === "TIMEOUT" ? "TIMEOUT" : "NETWORK_ERROR",
         htmlLength: lastSnapshot?.htmlLength,
         pageTitle: lastSnapshot?.pageTitle,
         detectedProvider: provider,

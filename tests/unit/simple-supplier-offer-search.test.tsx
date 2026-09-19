@@ -120,6 +120,13 @@ describe("ImportPilot 1.0 simple supplier results", () => {
     expect(projectSource).not.toContain("OffersPanel");
     expect(projectSource).toContain("Unesite svoju prodajnu cenu");
   });
+  it("keeps supplier decision facts separated and readable on phones", () => {
+    expect(resultCss).toContain(".offer-highlights {");
+    expect(resultCss).toContain("grid-template-columns: repeat(2, minmax(0, 1fr))");
+    expect(resultCss).toContain(".offer-highlights > span");
+    expect(resultCss).toContain("grid-template-columns: 1fr");
+  });
+
   it("keeps supplier images bounded on phones instead of rendering source dimensions", () => {
     expect(resultCss).toContain(".search-result-image {");
     expect(resultCss).toContain("object-fit: contain");

@@ -62,9 +62,11 @@ function failure(error: unknown): { status: number; body: PreviewFailure } {
       ? 400
       : error.reason === "BLOCKED"
         ? 502
-        : error.reason === "PARSING_FAILED"
-          ? 422
-          : 502;
+        : error.reason === "UNAVAILABLE"
+          ? 410
+          : error.reason === "PARSING_FAILED"
+            ? 422
+            : 502;
     return { status, body: { error: error.message, reason: error.reason } };
   }
   return { status: 502, body: { error: "URL import provider failed.", reason: "NETWORK_ERROR" } };

@@ -28,7 +28,7 @@ type LastPreviewDiagnostics = {
   urlHost: string;
   httpStatus?: number;
   finalUrl?: string;
-  finalReason: "OK" | "BLOCKED" | "PARSING_FAILED" | "NETWORK_ERROR" | "TIMEOUT" | "INVALID_URL";
+  finalReason: "OK" | "BLOCKED" | "UNAVAILABLE" | "PARSING_FAILED" | "NETWORK_ERROR" | "TIMEOUT" | "INVALID_URL";
   htmlLength?: number;
   pageTitle?: string | null;
   detectedProvider?: string;

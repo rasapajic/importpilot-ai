@@ -4,6 +4,7 @@ import {
   autoEnrichTajaCandidates,
   TajaAutoEnrichmentStatuses,
 } from "../../modules/product-search/application/taja-auto-enrichment";
+import { UrlImportUnavailableError } from "../../modules/product-search/infrastructure/url-import-provider";
 import type {
   SupplierOfferSearchResult,
   SupplierOfferUrlImportProvider,
@@ -81,6 +82,39 @@ describe("TAJA finalist auto-enrichment", () => {
       ]),
       fieldsCorrected: [],
     });
+  });
+
+  it("drops a candidate when exact-page verification proves the product is unavailable", async () => {
+    const deadUrl = "https://www.alibaba.com/product-detail/dead-charger_1600000000999.html";
+    const liveUrl = "https://www.alibaba.com/product-detail/live-charger_1600000001000.html";
+    const provider = previewProvider(vi.fn(async (productUrl: string) => {
+      if (productUrl === deadUrl) {
+        throw new UrlImportUnavailableError("Supplier product is no longer available.");
+      }
+      return {
+        title: "Live charger",
+        supplierName: "Live Supplier",
+        supplierCountry: "CN",
+        price: 5,
+        currency: "USD",
+        minimumOrderQuantity: 100,
+        incoterm: "FOB",
+        productUrl,
+        imageUrl: null,
+        source: "alibaba.com",
+        isPartial: false,
+        titleFromSlug: false,
+      };
+    }));
+
+    const outcome = await autoEnrichTajaCandidates([
+      result(deadUrl),
+      result(liveUrl),
+    ], provider, { maxCandidates: 2, concurrency: 2 });
+
+    expect(outcome.results.map((candidate) => candidate.productUrl)).toEqual([liveUrl]);
+    expect(outcome.summary.failedCandidates).toBe(1);
+    expect(outcome.summary.reports[0]?.failureCode).toBe("UrlImportUnavailableError");
   });
 
   it("isolates provider failures and skips unsupported or over-limit candidates", async () => {
