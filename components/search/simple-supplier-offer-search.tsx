@@ -54,6 +54,7 @@ type Copy = {
   continueWithSelected: string;
   continuing: string;
   cached: string;
+  liveRefresh: string;
   unknown: string;
   priceOnRequest: string;
   variants: string;
@@ -94,6 +95,7 @@ const copy: Record<Locale, Copy> = {
     continueWithSelected: "Nastavi sa odabranim ponudama",
     continuing: "Otvaranje sledećeg koraka...",
     cached: "Prikazani su poslednji sačuvani rezultati.",
+    liveRefresh: "Ponovi živu pretragu",
     unknown: "nije poznato",
     priceOnRequest: "Cena na upit",
     variants: "Varijante",
@@ -132,6 +134,7 @@ const copy: Record<Locale, Copy> = {
     continueWithSelected: "Mit ausgewählten Angeboten fortfahren",
     continuing: "Nächster Schritt wird geöffnet...",
     cached: "Die letzten gespeicherten Ergebnisse werden angezeigt.",
+    liveRefresh: "Live-Suche wiederholen",
     unknown: "unbekannt",
     priceOnRequest: "Preis auf Anfrage",
     variants: "Varianten",
@@ -170,6 +173,7 @@ const copy: Record<Locale, Copy> = {
     continueWithSelected: "Continue with selected offers",
     continuing: "Opening the next step...",
     cached: "Showing the latest saved results.",
+    liveRefresh: "Run live search again",
     unknown: "unknown",
     priceOnRequest: "Price on request",
     variants: "Variants",
@@ -391,7 +395,14 @@ export function SimpleSupplierOfferSearch({
       </header>
 
       {loading && <p className="muted-text" role="status">{text.searching}</p>}
-      {origin === "cache" && !loading && <p className="muted-text" role="status">{text.cached}</p>}
+      {origin === "cache" && !loading && (
+        <div className="cached-result-notice" role="status">
+          <p className="muted-text">{text.cached}</p>
+          <button className="secondary-button" onClick={() => void runSearch()} type="button">
+            {text.liveRefresh}
+          </button>
+        </div>
+      )}
       {error && <p className="form-error" role="alert">{error}</p>}
 
       {results === null && !loading && (
