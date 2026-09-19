@@ -7,7 +7,7 @@ import type {
   SupplierOfferUrlPreview,
 } from "../domain/search";
 import { canonicalSupplierProductUrl } from "../domain/supplier-product-url";
-import { detectUrlImportProvider } from "../infrastructure/url-import-provider";
+import { detectUrlImportProvider, UrlImportUnavailableError } from "../infrastructure/url-import-provider";
 
 export const TajaAutoEnrichmentStatuses = {
   ENRICHED: "ENRICHED",
@@ -241,6 +241,7 @@ export async function autoEnrichTajaCandidates(
   const maxCandidates = boundedInteger(options.maxCandidates, 10, 15);
   const concurrency = boundedInteger(options.concurrency, 4, 5);
   const enrichedResults = [...results];
+  const unavailableIndexes = new Set<number>();
 
   // The enrichment budget is for pages we can actually inspect. Unsupported
   // manufacturer/direct-site candidates must not consume slots and prevent a
@@ -281,6 +282,9 @@ export async function autoEnrichTajaCandidates(
           fieldsCorrected: merged.fieldsCorrected,
         };
       } catch (error) {
+        if (error instanceof UrlImportUnavailableError) {
+          unavailableIndexes.add(current.index);
+        }
         reports[current.index] = {
           productUrl: current.result.productUrl,
           status: TajaAutoEnrichmentStatuses.FAILED,
@@ -297,7 +301,7 @@ export async function autoEnrichTajaCandidates(
   );
 
   return {
-    results: enrichedResults,
+    results: enrichedResults.filter((_result, index) => !unavailableIndexes.has(index)),
     summary: {
       requestedCandidates: results.length,
       attemptedCandidates: work.length,
