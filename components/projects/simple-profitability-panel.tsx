@@ -21,6 +21,7 @@ import {
 } from "@/modules/decisions/application/decision-step-summary";
 import type { ProjectDecisionResult } from "@/modules/decisions/domain/project-decision";
 import { getEuroDisplay, type FxSnapshot } from "@/modules/fx/euro-display";
+import { getCountryDisplayName } from "@/modules/i18n/country-names";
 import type { Locale } from "@/modules/i18n/translations";
 import type { SupplierOfferSearchResult } from "@/modules/product-search/domain/search";
 import { estimateTajaPreliminaryLandedCost } from "@/modules/product-search/domain/taja-preliminary-cost-estimate";
@@ -50,6 +51,7 @@ type SimpleCopy = {
   incoterm: string;
   delivery: string;
   days: string;
+  unit: string;
   offerDetail: string;
   sourceOffer: string;
   commercialDataMissing: string;
@@ -101,6 +103,7 @@ const copy: Record<Locale, SimpleCopy> = {
     incoterm: "Uslov isporuke (Incoterm)",
     delivery: "Rok isporuke",
     days: "dana",
+    unit: "kom",
     offerDetail: "Izabrana ponuda",
     sourceOffer: "Otvori izvornu ponudu",
     commercialDataMissing: "Nedostaju cena ili valuta potrebni za računicu.",
@@ -150,6 +153,7 @@ const copy: Record<Locale, SimpleCopy> = {
     incoterm: "Incoterm",
     delivery: "Lieferzeit",
     days: "Tage",
+    unit: "Stk.",
     offerDetail: "Ausgewähltes Angebot",
     sourceOffer: "Quellangebot öffnen",
     commercialDataMissing: "Für die Kalkulation fehlen Preis oder Währung.",
@@ -199,6 +203,7 @@ const copy: Record<Locale, SimpleCopy> = {
     incoterm: "Incoterm",
     delivery: "Delivery time",
     days: "days",
+    unit: "pcs",
     offerDetail: "Selected offer",
     sourceOffer: "Open source offer",
     commercialDataMissing: "A supplier price or currency is missing for the calculation.",
@@ -520,6 +525,9 @@ export function SimpleProfitabilityPanel({
                 : null;
               const displayedIncoterm = offer.incoterm ??
                 (preliminaryEstimate?.pricingBasisAssumed ? text.assumedIncoterm : text.unknown);
+              const displayedSupplierCountry = offer.supplierCountry
+                ? getCountryDisplayName(offer.supplierCountry, locale)
+                : text.unknown;
               const displayedDelivery = offer.deliveryTimeDays === null
                 ? preliminaryEstimate
                   ? `${preliminaryEstimate.deliveryTimeDays} (${text.estimatedTransportTime})`
@@ -544,7 +552,7 @@ export function SimpleProfitabilityPanel({
                     <span>{text.moq}<strong>{offer.moq ?? text.unknown}</strong></span>
                     <span>{text.incoterm}<strong>{displayedIncoterm}</strong></span>
                     <span>{text.delivery}<strong>{displayedDelivery}</strong></span>
-                    <span>{text.supplierCountry}<strong>{offer.supplierCountry ?? text.unknown}</strong></span>
+                    <span>{text.supplierCountry}<strong>{displayedSupplierCountry}</strong></span>
                   </div>
 
                   {sourceUrl && (
@@ -578,12 +586,12 @@ export function SimpleProfitabilityPanel({
                           <div className="offer-highlights">
                             <span>
                               {text.preliminaryBase}
-                              <strong>≈ {money(preliminaryEstimate.basePerUnitEur, "EUR")} / kom</strong>
+                              <strong>≈ {money(preliminaryEstimate.basePerUnitEur, "EUR")} / {text.unit}</strong>
                             </span>
                             <span>
                               {text.preliminaryRange}
                               <strong>
-                                {money(preliminaryEstimate.lowPerUnitEur, "EUR")} – {money(preliminaryEstimate.highPerUnitEur, "EUR")} / kom
+                                {money(preliminaryEstimate.lowPerUnitEur, "EUR")} – {money(preliminaryEstimate.highPerUnitEur, "EUR")} / {text.unit}
                               </strong>
                             </span>
                             <span>
