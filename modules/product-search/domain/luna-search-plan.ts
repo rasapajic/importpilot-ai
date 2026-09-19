@@ -41,6 +41,21 @@ const LUNA_SEARCH_CATALOG: LunaCatalogEntry[] = [
     chineseQuery: "汽车创意用品",
   },
   {
+    category: "food-packaging",
+    keywords: [
+      "pakovanja za hranu",
+      "pakovanje za hranu",
+      "posude za hranu",
+      "ambalaza za hranu",
+      "food packaging",
+      "food container",
+      "food containers",
+      "takeaway container",
+    ],
+    englishQuery: "food containers packaging",
+    chineseQuery: "食品容器 餐盒 包装盒",
+  },
+  {
     category: "kitchen-gadgets",
     keywords: ["kuhinjski gadzeti", "kuhinjski gedzeti", "kuhinjske sitnice", "kitchen gadgets"],
     englishQuery: "creative kitchen gadgets",
@@ -110,6 +125,47 @@ function withChineseCommercialTerms(query: string, privateLabel: boolean) {
   return [query, "厂家 批发", privateLabel ? "OEM 贴牌" : null]
     .filter(Boolean)
     .join(" ");
+}
+
+function requestedMlVolumes(query: string) {
+  const values = [...query.matchAll(/\b(\d{2,5})\s*ml\b/gi)]
+    .map((match) => Number(match[1]))
+    .filter((value) => Number.isFinite(value) && value > 0);
+  return [...new Set(values)].sort((left, right) => left - right);
+}
+
+function requirementDrivenFoodPackagingQueries(
+  originalQuery: string,
+  fallbackEnglishQuery: string,
+  fallbackChineseQuery: string,
+) {
+  const volumes = requestedMlVolumes(originalQuery);
+  const minVolume = volumes[0] ?? null;
+  const maxVolume = volumes.at(-1) ?? null;
+  const volumePair = minVolume !== null && maxVolume !== null
+    ? minVolume === maxVolume
+      ? `${minVolume}ml`
+      : `${minVolume}ml ${maxVolume}ml`
+    : null;
+  const volumeRange = minVolume !== null && maxVolume !== null
+    ? minVolume === maxVolume
+      ? `${minVolume}ml`
+      : `${minVolume}-${maxVolume}ml`
+    : null;
+
+  return {
+    english: uniqueQueries([
+      [volumePair, "disposable food containers"].filter(Boolean).join(" "),
+      [volumeRange, "takeaway food containers"].filter(Boolean).join(" "),
+      [volumePair, "food storage containers with lids"].filter(Boolean).join(" "),
+      fallbackEnglishQuery,
+    ]),
+    chinese: uniqueQueries([
+      [volumePair, "一次性餐盒 食品容器"].filter(Boolean).join(" "),
+      [volumeRange, "外卖餐盒 食品包装盒"].filter(Boolean).join(" "),
+      fallbackChineseQuery,
+    ]),
+  };
 }
 
 function requirementDrivenMistingQueries(
@@ -201,7 +257,9 @@ export function createLunaSearchPlan(input: ProjectSupplierSearchRequest): LunaS
   const chineseBaseQuery = catalogEntry?.chineseQuery ?? null;
   const requirementQueries = catalogEntry?.category === "misting-system" && chineseBaseQuery
     ? requirementDrivenMistingQueries(input.query, englishQuery, chineseBaseQuery)
-    : null;
+    : catalogEntry?.category === "food-packaging" && chineseBaseQuery
+      ? requirementDrivenFoodPackagingQueries(input.query, englishQuery, chineseBaseQuery)
+      : null;
   const baseEnglishQueries = requirementQueries?.english ?? [englishQuery];
   const providerQueries = uniqueQueries([
     ...baseEnglishQueries.map((query) => withEnglishCommercialTerms(query, input.privateLabel)),
