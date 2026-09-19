@@ -23,6 +23,7 @@ type SimpleSupplierSearchInitialOutcome = {
   candidateAnalyses: TajaCandidateAnalysisWithProductForm[];
   resultOrigin: ResultOrigin;
   fetchedAt: string;
+  unfilteredResultCount?: number;
 };
 
 type Copy = {
@@ -55,6 +56,15 @@ type Copy = {
   continuing: string;
   cached: string;
   liveRefresh: string;
+  selectionOverview: (reviewed: number, shown: number) => string;
+  selectionCriteria: string;
+  whySelected: string;
+  reasonProductMatch: string;
+  reasonProductLikely: string;
+  reasonMoqFits: string;
+  reasonPriceKnown: string;
+  reasonPriceOnRequest: string;
+  reasonDataConfidence: string;
   unknown: string;
   priceOnRequest: string;
   variants: string;
@@ -96,6 +106,15 @@ const copy: Record<Locale, Copy> = {
     continuing: "Otvaranje sledećeg koraka...",
     cached: "Prikazani su poslednji sačuvani rezultati.",
     liveRefresh: "Ponovi živu pretragu",
+    selectionOverview: (reviewed, shown) => `JAKOV360 je pregledao ${reviewed} kandidata i izdvojio ${shown} za prikaz.`,
+    selectionCriteria: "Izdvajanje se zasniva na podudaranju proizvoda, količini i MOQ-u, ceni/uslovima i kvalitetu dostupnih podataka.",
+    whySelected: "Zašto je izdvojena",
+    reasonProductMatch: "Proizvod odgovara traženom tipu ili specifikaciji.",
+    reasonProductLikely: "Ponuda je relevantna za traženi proizvod, ali deo specifikacije još treba potvrditi.",
+    reasonMoqFits: "MOQ odgovara traženoj količini.",
+    reasonPriceKnown: "Cena dobavljača je dostupna za poređenje.",
+    reasonPriceOnRequest: "Cena nije javna; ponuda ostaje relevantna kao RFQ kandidat.",
+    reasonDataConfidence: "Dostupni podaci imaju dobru pouzdanost.",
     unknown: "nije poznato",
     priceOnRequest: "Cena na upit",
     variants: "Varijante",
@@ -135,6 +154,15 @@ const copy: Record<Locale, Copy> = {
     continuing: "Nächster Schritt wird geöffnet...",
     cached: "Die letzten gespeicherten Ergebnisse werden angezeigt.",
     liveRefresh: "Live-Suche wiederholen",
+    selectionOverview: (reviewed, shown) => `JAKOV360 hat ${reviewed} Kandidaten geprüft und ${shown} zur Anzeige ausgewählt.`,
+    selectionCriteria: "Die Auswahl berücksichtigt Produktübereinstimmung, Menge und MOQ, Preis/Konditionen sowie die Qualität der verfügbaren Daten.",
+    whySelected: "Warum ausgewählt",
+    reasonProductMatch: "Das Produkt entspricht dem gesuchten Typ oder der Spezifikation.",
+    reasonProductLikely: "Das Angebot ist relevant, ein Teil der Spezifikation muss jedoch noch bestätigt werden.",
+    reasonMoqFits: "Das MOQ passt zur gewünschten Menge.",
+    reasonPriceKnown: "Der Lieferantenpreis ist für den Vergleich verfügbar.",
+    reasonPriceOnRequest: "Kein öffentlicher Preis; das Angebot bleibt als RFQ-Kandidat relevant.",
+    reasonDataConfidence: "Die verfügbaren Daten haben eine gute Zuverlässigkeit.",
     unknown: "unbekannt",
     priceOnRequest: "Preis auf Anfrage",
     variants: "Varianten",
@@ -174,6 +202,15 @@ const copy: Record<Locale, Copy> = {
     continuing: "Opening the next step...",
     cached: "Showing the latest saved results.",
     liveRefresh: "Run live search again",
+    selectionOverview: (reviewed, shown) => `JAKOV360 reviewed ${reviewed} candidates and selected ${shown} to display.`,
+    selectionCriteria: "Selection considers product fit, requested quantity and MOQ, price/terms, and the quality of available data.",
+    whySelected: "Why it was selected",
+    reasonProductMatch: "The product matches the requested type or specification.",
+    reasonProductLikely: "The offer is relevant, but part of the specification still needs confirmation.",
+    reasonMoqFits: "The MOQ fits the requested quantity.",
+    reasonPriceKnown: "A supplier price is available for comparison.",
+    reasonPriceOnRequest: "No public price; the offer remains relevant as an RFQ candidate.",
+    reasonDataConfidence: "The available data has good confidence.",
     unknown: "unknown",
     priceOnRequest: "Price on request",
     variants: "Variants",
@@ -242,6 +279,44 @@ function formatQuantity(value: number, locale: Locale) {
   return new Intl.NumberFormat(numberLocale(locale), { maximumFractionDigits: 0 }).format(value);
 }
 
+function selectionReasons(
+  result: SupplierOfferSearchResult,
+  analysis: TajaCandidateAnalysisWithProductForm | undefined,
+  quantity: number | null,
+  text: Copy,
+) {
+  const reasons: string[] = [];
+
+  if (analysis?.productForm.matchStatus === "MATCH" || analysis?.requirementMatch.status === "FULL") {
+    reasons.push(text.reasonProductMatch);
+  } else if (
+    analysis?.productForm.matchStatus === "UNCLEAR" ||
+    analysis?.requirementMatch.status === "PARTIAL"
+  ) {
+    reasons.push(text.reasonProductLikely);
+  }
+
+  if (
+    quantity &&
+    result.minimumOrderQuantity !== null &&
+    result.minimumOrderQuantity <= quantity
+  ) {
+    reasons.push(text.reasonMoqFits);
+  }
+
+  if (result.price !== null && result.currency) {
+    reasons.push(text.reasonPriceKnown);
+  } else {
+    reasons.push(text.reasonPriceOnRequest);
+  }
+
+  if (analysis && analysis.confidenceScore >= 70) {
+    reasons.push(text.reasonDataConfidence);
+  }
+
+  return reasons.slice(0, 3);
+}
+
 export function SimpleSupplierOfferSearch({
   projectId,
   productName,
@@ -263,6 +338,9 @@ export function SimpleSupplierOfferSearch({
   const [results, setResults] = useState<SupplierOfferSearchResult[] | null>(initialOutcome?.results ?? null);
   const [analyses, setAnalyses] = useState<TajaCandidateAnalysisWithProductForm[]>(initialOutcome?.candidateAnalyses ?? []);
   const [origin, setOrigin] = useState<ResultOrigin | null>(initialOutcome?.resultOrigin ?? null);
+  const [reviewedCount, setReviewedCount] = useState(
+    initialOutcome?.unfilteredResultCount ?? initialOutcome?.results.length ?? 0,
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [selectingUrl, setSelectingUrl] = useState<string | null>(null);
@@ -292,17 +370,20 @@ export function SimpleSupplierOfferSearch({
         results?: SupplierOfferSearchResult[];
         candidateAnalyses?: TajaCandidateAnalysisWithProductForm[];
         resultOrigin?: ResultOrigin | null;
+        unfilteredResultCount?: number;
         error?: string;
       } | null;
       if (!response.ok) throw new Error(payload?.error || text.noResultsText);
       setResults(payload?.results ?? []);
       setAnalyses(payload?.candidateAnalyses ?? []);
       setOrigin(payload?.resultOrigin ?? null);
+      setReviewedCount(payload?.unfilteredResultCount ?? payload?.results?.length ?? 0);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : text.noResultsText);
       setResults([]);
       setAnalyses([]);
       setOrigin(null);
+      setReviewedCount(0);
     } finally {
       setLoading(false);
     }
@@ -418,7 +499,12 @@ export function SimpleSupplierOfferSearch({
       )}
 
       {visible.length > 0 && (
-        <div className="search-result-list">
+        <>
+          <section className="supplier-selection-summary" aria-label={text.whySelected}>
+            <strong>{text.selectionOverview(Math.max(reviewedCount, visible.length), visible.length)}</strong>
+            <p>{text.selectionCriteria}</p>
+          </section>
+          <div className="search-result-list">
           {visible.map(({ result, analysis }, index) => {
             const decision = simpleDecision(analysis);
             const effectiveResult = supplierOfferForQuantity(result, quantity);
@@ -436,6 +522,7 @@ export function SimpleSupplierOfferSearch({
             const deliveryEstimate = liveEstimate ?? analysis?.preliminaryCostEstimate ?? null;
             const selecting = selectingUrl === result.productUrl;
             const selected = selectedUrls.includes(result.productUrl);
+            const reasons = selectionReasons(result, analysis, quantity, text);
             return (
               <article className="search-result-card" key={`${result.source}-${result.productUrl}`}>
                 <SearchResultImage src={result.imageUrl} title={result.title} />
@@ -497,6 +584,15 @@ export function SimpleSupplierOfferSearch({
                     )).join(" · ")}
                   </p>
 
+                  {reasons.length > 0 && (
+                    <div className="selection-reasons">
+                      <strong>{text.whySelected}</strong>
+                      <ul>
+                        {reasons.map((reason) => <li key={reason}>{reason}</li>)}
+                      </ul>
+                    </div>
+                  )}
+
                   <details>
                     <summary>{text.details}</summary>
                     <p>{text.moq}: {result.minimumOrderQuantity ?? text.unknown} · {text.incoterm}: {result.incoterm ?? text.unknown}</p>
@@ -526,7 +622,8 @@ export function SimpleSupplierOfferSearch({
               </article>
             );
           })}
-        </div>
+          </div>
+        </>
       )}
 
       {selectedOfferIds.length > 0 && (
