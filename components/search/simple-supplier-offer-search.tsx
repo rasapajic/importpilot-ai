@@ -109,7 +109,7 @@ const copy: Record<Locale, Copy> = {
     cached: "Prikazani su poslednji sačuvani rezultati.",
     liveRefresh: "Ponovi živu pretragu",
     selectionOverview: (reviewed, shown) => `JAKOV360 je pregledao ${reviewed} kandidata i izdvojio ${shown} za prikaz.`,
-    liveSelectionOverview: (found, relevant, shown) => `Pronađeno ${found} kandidata → ${relevant} prošlo osnovnu proveru → prikazano најбољих ${shown}.`,
+    liveSelectionOverview: (found, relevant, shown) => `Pronađeno ${found} kandidata → ${relevant} prošlo osnovnu proveru → prikazano najboljih ${shown}.`,
     selectionCriteria: "Izdvajanje se zasniva na podudaranju proizvoda, količini i MOQ-u, ceni/uslovima i kvalitetu dostupnih podataka.",
     whySelected: "Zašto je izdvojena",
     reasonProductMatch: "Proizvod odgovara traženom tipu ili specifikaciji.",
