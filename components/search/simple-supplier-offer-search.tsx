@@ -58,6 +58,7 @@ type Copy = {
   cached: string;
   liveRefresh: string;
   selectionOverview: (reviewed: number, shown: number) => string;
+  cachedSelectionOverview: (shown: number) => string;
   liveSelectionOverview: (found: number, relevant: number, shown: number) => string;
   selectionCriteria: string;
   whySelected: string;
@@ -109,6 +110,7 @@ const copy: Record<Locale, Copy> = {
     cached: "Prikazani su poslednji sačuvani rezultati.",
     liveRefresh: "Ponovi živu pretragu",
     selectionOverview: (reviewed, shown) => `JAKOV360 je pregledao ${reviewed} kandidata i izdvojio ${shown} za prikaz.`,
+    cachedSelectionOverview: (shown) => `Prikazano je ${shown} sačuvanih ponuda iz prethodne pretrage. Ovo nije ukupan broj kandidata nove pretrage.`,
     liveSelectionOverview: (found, relevant, shown) => `Pronađeno ${found} kandidata → ${relevant} prošlo osnovnu proveru → prikazano najboljih ${shown}.`,
     selectionCriteria: "Izdvajanje se zasniva na podudaranju proizvoda, količini i MOQ-u, ceni/uslovima i kvalitetu dostupnih podataka.",
     whySelected: "Zašto je izdvojena",
@@ -158,6 +160,7 @@ const copy: Record<Locale, Copy> = {
     cached: "Die letzten gespeicherten Ergebnisse werden angezeigt.",
     liveRefresh: "Live-Suche wiederholen",
     selectionOverview: (reviewed, shown) => `JAKOV360 hat ${reviewed} Kandidaten geprüft und ${shown} zur Anzeige ausgewählt.`,
+    cachedSelectionOverview: (shown) => `${shown} gespeicherte Angebote aus der vorherigen Suche werden angezeigt. Dies ist nicht die Gesamtzahl der Kandidaten einer neuen Suche.`,
     liveSelectionOverview: (found, relevant, shown) => `${found} Kandidaten gefunden → ${relevant} haben die Grundprüfung bestanden → die besten ${shown} werden angezeigt.`,
     selectionCriteria: "Die Auswahl berücksichtigt Produktübereinstimmung, Menge und MOQ, Preis/Konditionen sowie die Qualität der verfügbaren Daten.",
     whySelected: "Warum ausgewählt",
@@ -207,6 +210,7 @@ const copy: Record<Locale, Copy> = {
     cached: "Showing the latest saved results.",
     liveRefresh: "Run live search again",
     selectionOverview: (reviewed, shown) => `JAKOV360 reviewed ${reviewed} candidates and selected ${shown} to display.`,
+    cachedSelectionOverview: (shown) => `Showing ${shown} saved offers from the previous search. This is not the total candidate count for a new search.`,
     liveSelectionOverview: (found, relevant, shown) => `${found} candidates found → ${relevant} passed the basic check → the best ${shown} are displayed.`,
     selectionCriteria: "Selection considers product fit, requested quantity and MOQ, price/terms, and the quality of available data.",
     whySelected: "Why it was selected",
@@ -513,13 +517,15 @@ export function SimpleSupplierOfferSearch({
         <>
           <section className="supplier-selection-summary" aria-label={text.whySelected}>
             <strong>
-              {searchSummary
-                ? text.liveSelectionOverview(
-                    searchSummary.parsedResults,
-                    searchSummary.relevantCandidates,
-                    visible.length,
-                  )
-                : text.selectionOverview(Math.max(reviewedCount, visible.length), visible.length)}
+              {origin === "cache"
+                ? text.cachedSelectionOverview(visible.length)
+                : searchSummary
+                  ? text.liveSelectionOverview(
+                      searchSummary.parsedResults,
+                      searchSummary.relevantCandidates,
+                      visible.length,
+                    )
+                  : text.selectionOverview(Math.max(reviewedCount, visible.length), visible.length)}
             </strong>
             <p>{text.selectionCriteria}</p>
           </section>

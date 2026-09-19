@@ -25,6 +25,9 @@ describe("ImportPilot 1.0 simple supplier results", () => {
     expect(resultsSource).toContain('liveSelectionOverview: (found, relevant, shown)');
     expect(resultsSource).toContain("Pronađeno");
     expect(resultsSource).toContain("JAKOV360 je pregledao");
+    expect(resultsSource).toContain('cachedSelectionOverview: (shown)');
+    expect(resultsSource).toContain("Ovo nije ukupan broj kandidata nove pretrage.");
+    expect(resultsSource).toContain('origin === "cache"');
     expect(resultsSource).toContain('whySelected: "Zašto je izdvojena"');
     expect(resultsSource).toContain("selectionReasons(result, analysis, quantity, text)");
     expect(resultsSource).toContain('className="supplier-selection-summary"');
