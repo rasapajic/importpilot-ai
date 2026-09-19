@@ -1,7 +1,23 @@
 .search-result-card {
+  align-items: flex-start;
+  display: flex;
+  gap: 1rem;
   min-height: 9rem;
   padding-right: 13.75rem;
   position: relative;
+}
+
+.search-result-image {
+  background: white;
+  border: 1px solid #e2ebe6;
+  border-radius: 0.75rem;
+  display: block;
+  flex: 0 0 10rem;
+  height: 8rem;
+  max-width: 10rem;
+  object-fit: contain;
+  object-position: center;
+  width: 10rem;
 }
 
 .search-result-card > div {
@@ -104,5 +120,32 @@
 
   .search-result-image {
     align-self: center;
+    flex-basis: auto;
+    height: 13rem;
+    max-height: 13rem;
+    max-width: 100%;
+    width: 100%;
+  }
+
+  .cached-result-notice {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .cached-result-notice button {
+    width: 100%;
   }
 }
+
+.cached-result-notice {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+  margin: 0.75rem 0 1rem;
+}
+
+.cached-result-notice p {
+  margin: 0;
+}
+
