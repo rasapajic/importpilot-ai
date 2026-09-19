@@ -253,11 +253,13 @@ a {
 }
 
 .project-back-link {
+  align-items: center;
   display: inline-flex;
   font-weight: 700;
+  min-height: 2.75rem;
   padding: 0.75rem 0;
   position: relative;
-  z-index: 1;
+  z-index: 20;
 }
 
 button,
@@ -1375,7 +1377,17 @@ details.workflow-step > summary::-webkit-details-marker {
 
 @media (max-width: 760px) {
   .dashboard-shell {
-    padding-top: 4.75rem;
+    padding-top: 8.25rem;
+  }
+
+  .dashboard-shell > nav:first-child {
+    position: relative;
+    z-index: 20;
+  }
+
+  .project-back-link {
+    min-height: 3rem;
+    touch-action: manipulation;
   }
 
   .dashboard-header {
