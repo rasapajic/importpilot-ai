@@ -31,7 +31,17 @@ All blocking items below must be confirmed on one exact release candidate commit
 - [ ] Previous known-good application commit/image is recorded and deployable.
 - [ ] Operator has reviewed `RELEASE_1_0_RUNBOOK.md`.
 
-## C. Authentication, Google Sign-In, session and tenant boundary
+## C. Public domain, DNS and TLS
+
+- [ ] Public domain is `jakov360.com` and resolves to the intended production service.
+- [ ] Namecheap Registrant/WHOIS contact verification for `jakov360.com` is completed before GO.
+- [ ] Namecheap account shows no pending contact-verification, suspension or hold state for `jakov360.com`.
+- [ ] `jakov360.com` and `www.jakov360.com` are verified by the hosting provider.
+- [ ] HTTPS certificate is issued and valid for the public production domain.
+- [ ] Production Google OAuth origin/callback uses the verified `https://jakov360.com` origin.
+- [ ] Domain/DNS/SSL state is rechecked immediately after the final production deploy.
+
+## D. Authentication, Google Sign-In, session and tenant boundary
 
 - [ ] New email/password registration succeeds.
 - [ ] Email/password login succeeds.
@@ -50,14 +60,14 @@ All blocking items below must be confirmed on one exact release candidate commit
 - [ ] Organization A cannot calculate Organization B offer.
 - [ ] Organization A cannot generate/read Organization B decision.
 
-## D. Runtime health
+## E. Runtime health
 
 - [ ] Candidate `/api/health` returns 200 and DB `ok`.
 - [ ] Controlled DB-readiness failure returns `/api/health` 503.
 - [ ] Cold start reaches healthy state within an acceptable bounded time.
 - [ ] No false healthy status while DB is unavailable.
 
-## E. Supplier search / TAJA live matrix
+## F. Supplier search / TAJA live matrix
 
 From an environment holding the real provider bearer tokens:
 
@@ -79,7 +89,7 @@ From an environment holding the real provider bearer tokens:
 
 Use `npm run test:live-acceptance` for the provider-level matrix, with real environment secrets and `IMPORTPILOT_ACCEPTANCE_PRODUCT_URL` set to a currently valid supported supplier product page.
 
-## F. Exact-page enrichment
+## G. Exact-page enrichment
 
 - [ ] Known supported product URL reaches URL-import provider.
 - [ ] Title/product identity is evidence-based.
@@ -92,7 +102,7 @@ Use `npm run test:live-acceptance` for the provider-level matrix, with real envi
 - [ ] Unsupported pages do not consume the supported enrichment budget.
 - [ ] No missing commercial field is fabricated.
 
-## G. Landed cost / profitability live matrix
+## H. Landed cost / profitability live matrix
 
 - [ ] Serbia (`RS`) scenario.
 - [ ] Austria (`AT`) scenario.
@@ -112,7 +122,7 @@ Use `npm run test:live-acceptance` for the provider-level matrix, with real envi
 - [ ] Negative/poor-margin case behaves correctly.
 - [ ] Recalculation after commercial-term changes updates results.
 
-## H. Final decision safety
+## I. Final decision safety
 
 - [ ] BUY refers to current selected offer and latest calculation.
 - [ ] NEGOTIATE refers to current selected offer and latest calculation.
@@ -122,7 +132,7 @@ Use `npm run test:live-acceptance` for the provider-level matrix, with real envi
 - [ ] Incomplete commercial data cannot become a false final recommendation.
 - [ ] Recalculation changes the decision when economics materially change.
 
-## I. UX and localization
+## J. UX and localization
 
 - [ ] SR Latin complete core flow, including Google auth labels/errors.
 - [ ] DE complete core flow, including Google auth labels/errors.
@@ -138,7 +148,7 @@ Use `npm run test:live-acceptance` for the provider-level matrix, with real envi
 - [ ] Partial offer recovery opens exact commercial-term form.
 - [ ] Multiple offers can be selected before explicit continuation.
 
-## J. Final live E2E
+## K. Final live E2E
 
 On the exact deployed candidate:
 
@@ -158,7 +168,7 @@ On the exact deployed candidate:
 
 - [ ] Final E2E PASS recorded with candidate SHA and date.
 
-## K. GO / HOLD rule
+## L. GO / HOLD rule
 
 **GO** only when every blocking item above is checked on the same exact candidate and recovery evidence exists.
 
