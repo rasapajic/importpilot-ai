@@ -172,6 +172,34 @@ describe("TAJA preliminary landed-cost estimate", () => {
     expect(estimate!.sourcingAgentFeeEur).toBe(0);
   });
 
+  it("uses a conservative EXW planning basis for an Alibaba offer without Incoterm", () => {
+    const estimate = estimateTajaPreliminaryLandedCost({
+      result: offer({
+        incoterm: null,
+        productUrl: "https://www.alibaba.com/product-detail/65W-GaN-Charger_1600000000999.html",
+      }),
+      quantity: 100,
+      targetCountry: "AT",
+      targetMarginPercent: 30,
+      fxSnapshot: freshFx,
+    });
+
+    expect(estimate).not.toBeNull();
+    expect(estimate).toMatchObject({
+      pricingBasisIncoterm: "EXW",
+      pricingBasisAssumed: true,
+      chinaDomesticTransportEur: 30,
+      sourcingAgentFeeEur: 0,
+    });
+    expect(estimate!.warnings).toEqual(expect.arrayContaining([
+      "INCOTERM_ASSUMED_EXW_FOR_PLANNING",
+      "CHINA_DOMESTIC_TRANSPORT_ASSUMED",
+    ]));
+    expect(estimate!.warnings).not.toContain("SOURCING_AGENT_FEE_ASSUMED");
+    expect(estimate!.assumptions.join(" ")).toContain("no explicit Incoterm");
+    expect(estimate!.assumptions.join(" ")).toContain("China domestic origin transport");
+  });
+
   it("includes transparent domestic China and agent planning costs for a 1688 EXW quote", () => {
     const estimate = estimateTajaPreliminaryLandedCost({
       result: offer({
