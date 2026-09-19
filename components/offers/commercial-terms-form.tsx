@@ -18,6 +18,7 @@ type Copy = {
   save: string;
   saving: string;
   error: string;
+  planningHint: (incoterm: string) => string;
 };
 
 const copy: Record<Locale, Copy> = {
@@ -32,6 +33,7 @@ const copy: Record<Locale, Copy> = {
     save: "Potvrdi i nastavi",
     saving: "Čuvanje...",
     error: "Podaci ponude nisu sačuvani.",
+    planningHint: (incoterm) => `Za preliminarnu procenu JAKOV360 koristi ${incoterm} kao konzervativnu pretpostavku. Ne čuvamo ga kao potvrđen uslov dok ga vi ne potvrdite.`,
   },
   de: {
     title: "Angebotsdaten bestätigen",
@@ -44,6 +46,7 @@ const copy: Record<Locale, Copy> = {
     save: "Bestätigen und weiter",
     saving: "Wird gespeichert...",
     error: "Die Angebotsdaten wurden nicht gespeichert.",
+    planningHint: (incoterm) => `Für die vorläufige Schätzung verwendet JAKOV360 ${incoterm} als konservative Annahme. Sie wird nicht als bestätigte Lieferantenbedingung gespeichert, bis Sie sie bestätigen.`,
   },
   en: {
     title: "Confirm offer details",
@@ -56,6 +59,7 @@ const copy: Record<Locale, Copy> = {
     save: "Confirm and continue",
     saving: "Saving...",
     error: "The offer details were not saved.",
+    planningHint: (incoterm) => `For the preliminary estimate JAKOV360 uses ${incoterm} as a conservative assumption. It is not saved as a confirmed supplier term until you confirm it.`,
   },
 };
 
@@ -65,12 +69,14 @@ export function CommercialTermsForm({
   currency,
   incoterm,
   deliveryTimeDays,
+  planningIncoterm = null,
 }: {
   offerId: string;
   unitPrice: string | null;
   currency: string | null;
   incoterm: string | null;
   deliveryTimeDays: number | null;
+  planningIncoterm?: string | null;
 }) {
   const { locale } = useI18n();
   const text = copy[locale];
@@ -143,6 +149,9 @@ export function CommercialTermsForm({
           placeholder="EXW / FOB / FCA"
           required
         />
+        {planningIncoterm && !incoterm && (
+          <small className="muted-text">{text.planningHint(planningIncoterm)}</small>
+        )}
         <datalist id={`incoterm-options-${offerId}`}>
           <option value="EXW" />
           <option value="FCA" />
