@@ -28,6 +28,7 @@ export type TajaPreliminaryCostWarning =
   | "GENERIC_HANDLING_ASSUMPTIONS"
   | "SUPPLIER_ORIGIN_ASSUMED_CHINA"
   | "INCOTERM_ASSUMED_EXW_FOR_1688"
+  | "INCOTERM_ASSUMED_EXW_FOR_PLANNING"
   | "CHINA_DOMESTIC_TRANSPORT_ASSUMED"
   | "SOURCING_AGENT_FEE_ASSUMED"
   | "LOW_LOGISTICS_CONFIDENCE";
@@ -115,21 +116,6 @@ function is1688Result(result: SupplierOfferSearchResult) {
   }
 }
 
-function pricingBasis(result: SupplierOfferSearchResult) {
-  if (
-    result.incoterm === "EXW" ||
-    result.incoterm === "FCA" ||
-    result.incoterm === "FAS" ||
-    result.incoterm === "FOB"
-  ) {
-    return { incoterm: result.incoterm, assumed: false } as const;
-  }
-  if (result.incoterm === null && is1688Result(result)) {
-    return { incoterm: "EXW", assumed: true } as const;
-  }
-  return null;
-}
-
 function isChinaMarketplaceResult(result: SupplierOfferSearchResult) {
   try {
     const host = new URL(result.productUrl).hostname.toLowerCase().replace(/^www\./, "");
@@ -139,6 +125,21 @@ function isChinaMarketplaceResult(result: SupplierOfferSearchResult) {
   } catch {
     return false;
   }
+}
+
+function pricingBasis(result: SupplierOfferSearchResult) {
+  if (
+    result.incoterm === "EXW" ||
+    result.incoterm === "FCA" ||
+    result.incoterm === "FAS" ||
+    result.incoterm === "FOB"
+  ) {
+    return { incoterm: result.incoterm, assumed: false } as const;
+  }
+  if (result.incoterm === null && isChinaMarketplaceResult(result)) {
+    return { incoterm: "EXW", assumed: true } as const;
+  }
+  return null;
 }
 
 function chinaOriginStatus(result: SupplierOfferSearchResult) {
@@ -282,7 +283,13 @@ export function estimateTajaPreliminaryLandedCost(input: {
   if (originStatus === "ASSUMED_MARKETPLACE") {
     warnings.push("SUPPLIER_ORIGIN_ASSUMED_CHINA");
   }
-  if (basis.assumed) warnings.push("INCOTERM_ASSUMED_EXW_FOR_1688");
+  if (basis.assumed) {
+    warnings.push(
+      is1688Result(result)
+        ? "INCOTERM_ASSUMED_EXW_FOR_1688"
+        : "INCOTERM_ASSUMED_EXW_FOR_PLANNING",
+    );
+  }
   if (chinaDomestic.applies) {
     warnings.push(
       "CHINA_DOMESTIC_TRANSPORT_ASSUMED",
@@ -319,7 +326,9 @@ export function estimateTajaPreliminaryLandedCost(input: {
         ? "Supplier country is missing; China is assumed only because the offer is on a China marketplace."
         : "Supplier origin: China.",
       basis.assumed
-        ? "1688 domestic quote has no explicit Incoterm; EXW is used only as a preliminary planning basis."
+        ? is1688Result(result)
+          ? "1688 domestic quote has no explicit Incoterm; EXW is used only as a preliminary planning basis."
+          : "Supplier offer has no explicit Incoterm; EXW is used conservatively only as a preliminary planning basis."
         : `Pricing basis: ${basis.incoterm}.`,
       ...(chinaDomestic.applies
         ? [
