@@ -13,7 +13,7 @@ describe("supplier search query variants", () => {
 
   it("translates Serbian food packaging queries with requested volumes", () => {
     expect(createSupplierSearchQueryVariants("Pakovanja za hranu 400ml - 500ml")).toEqual([
-      "400 500 food containers",
+      "400ml 500ml food containers",
       "Pakovanja za hranu 400ml 500ml",
       "food containers 400ml 500ml",
     ]);
