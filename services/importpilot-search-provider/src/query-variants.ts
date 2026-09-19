@@ -1,4 +1,7 @@
 const phraseReplacements: Array<[RegExp, string]> = [
+  [/\bpakovanj(?:e|a)\s+za\s+hranu\b/gi, "food containers"],
+  [/\bposud(?:a|e)\s+za\s+hranu\b/gi, "food containers"],
+  [/\bambala[zž]a\s+za\s+hranu\b/gi, "food packaging"],
   [/\bvodena\s+magla\b/gi, "misting system"],
   [/\bteras(?:a|u|e|i)\b/gi, "patio"],
   [/\bpump(?:a|om|u|e)\b/gi, "pump"],
@@ -29,6 +32,13 @@ function focusedProductQuery(value: string) {
   const normalized = clean(value).toLowerCase();
   const carTrunkOrganizer = /\b(?:(?:foldable|folding|collapsible|expandable)\s+)?(?:car|vehicle|automotive)\s+(?:trunk|boot|cargo)\s+(?:storage\s+)?(?:organizer|organiser|box|bag)\b/i;
   if (carTrunkOrganizer.test(normalized)) return "car trunk organizer";
+
+  if (/\b(?:food containers?|food packaging|takeaway food containers?)\b/.test(normalized)) {
+    const volumes = [...normalized.matchAll(/\b(\d{2,5})\s*ml\b/g)]
+      .map((match) => match[1])
+      .filter(Boolean);
+    return [...new Set(volumes.map((volume) => `${volume}ml`)), "food containers"].join(" ");
+  }
 
   const nozzleCount = normalized.match(/\b(\d{1,4})\s+nozzles?\b/)?.[1] ?? null;
   if (/\b(?:misting|mist cooling|fogging)\s+system\b/.test(normalized)) {
