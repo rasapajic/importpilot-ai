@@ -1531,3 +1531,20 @@ details.workflow-step > summary::-webkit-details-marker {
     padding: 1.5rem 1.25rem;
   }
 }
+
+
+.preliminary-import-estimate {
+  background: #f7faf8;
+  border: 1px solid #dce7e1;
+  border-radius: 0.85rem;
+  margin: 1rem 0;
+  padding: 1rem;
+}
+
+.preliminary-import-estimate h3 {
+  margin-top: 0;
+}
+
+.preliminary-import-estimate > p:last-child {
+  margin-bottom: 0;
+}
