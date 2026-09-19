@@ -16,6 +16,7 @@ import {
   UrlImportMissingProductIdentifierError,
   UrlImportParsingError,
   UrlImportTimeoutError,
+  UrlImportUnavailableError,
   UrlImportUnsupportedUrlError,
 } from "./url-import-provider";
 
@@ -160,6 +161,7 @@ function providerError(payload: unknown, status: number) {
     ? record.error
     : `External URL import provider failed with HTTP ${status}.`;
   if (reason === "BLOCKED") return new UrlImportBlockedError(message);
+  if (reason === "UNAVAILABLE") return new UrlImportUnavailableError(message);
   if (reason === "TIMEOUT") return new UrlImportTimeoutError();
   if (reason === "PARSING_FAILED") return new UrlImportParsingError(message);
   if (reason === "INVALID_URL") return new UrlImportUnsupportedUrlError(message);
@@ -216,6 +218,7 @@ export function createDetailedSupplierOfferUrlImportProvider(
       } catch (error) {
         if (
           error instanceof UrlImportBlockedError ||
+          error instanceof UrlImportUnavailableError ||
           error instanceof UrlImportTimeoutError ||
           error instanceof UrlImportParsingError ||
           error instanceof UrlImportUnsupportedUrlError ||
