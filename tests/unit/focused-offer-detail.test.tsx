@@ -46,6 +46,9 @@ describe("focused ImportPilot 1.0 offer detail", () => {
     expect(formSource).toContain('name="currency"');
     expect(formSource).toContain('name="incoterm"');
     expect(formSource).toContain("Potvrdite podatke ponude");
+    expect(panelSource).toContain("planningIncoterm");
+    expect(formSource).toContain("planningHint");
+    expect(formSource).toContain("Ne čuvamo ga kao potvrđen uslov");
     expect(formSource).not.toContain("supplierVerified");
     expect(formSource).not.toContain("paymentTerms");
   });
