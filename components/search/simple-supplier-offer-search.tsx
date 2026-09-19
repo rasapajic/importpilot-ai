@@ -74,6 +74,7 @@ type Copy = {
   type: string;
   quantityPrices: string;
   pieces: string;
+  limitReachedAction: string;
   risk: Record<"LOW" | "MEDIUM" | "HIGH" | "UNKNOWN", string>;
   decision: Record<"BUY" | "NEGOTIATE" | "WATCH" | "SKIP", string>;
 };
@@ -126,6 +127,7 @@ const copy: Record<Locale, Copy> = {
     type: "Tip",
     quantityPrices: "Cene po količini",
     pieces: "kom",
+    limitReachedAction: "Pogledaj Plus/Pro ili Full Import Analysis 1,99 €",
     risk: { LOW: "nizak rizik", MEDIUM: "srednji rizik", HIGH: "visok rizik", UNKNOWN: "nije provereno" },
     decision: { BUY: "KUPI", NEGOTIATE: "PREGOVARAJ", WATCH: "PRATI", SKIP: "PRESKOČI" },
   },
@@ -176,6 +178,7 @@ const copy: Record<Locale, Copy> = {
     type: "Typ",
     quantityPrices: "Mengenpreise",
     pieces: "Stk.",
+    limitReachedAction: "Plus/Pro oder Full Import Analysis für 1,99 € ansehen",
     risk: { LOW: "niedriges Risiko", MEDIUM: "mittleres Risiko", HIGH: "hohes Risiko", UNKNOWN: "nicht geprüft" },
     decision: { BUY: "BUY", NEGOTIATE: "NEGOTIATE", WATCH: "WATCH", SKIP: "SKIP" },
   },
@@ -226,6 +229,7 @@ const copy: Record<Locale, Copy> = {
     type: "Type",
     quantityPrices: "Quantity prices",
     pieces: "pcs",
+    limitReachedAction: "View Plus/Pro or Full Import Analysis for €1.99",
     risk: { LOW: "low risk", MEDIUM: "medium risk", HIGH: "high risk", UNKNOWN: "not checked" },
     decision: { BUY: "BUY", NEGOTIATE: "NEGOTIATE", WATCH: "WATCH", SKIP: "SKIP" },
   },
@@ -355,6 +359,7 @@ export function SimpleSupplierOfferSearch({
   );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [limitReached, setLimitReached] = useState(false);
   const [selectingUrl, setSelectingUrl] = useState<string | null>(null);
   const [selectedUrls, setSelectedUrls] = useState<string[]>([]);
   const [selectedOfferIds, setSelectedOfferIds] = useState<string[]>([]);
@@ -366,6 +371,7 @@ export function SimpleSupplierOfferSearch({
     if (!quantity || !targetCountry) return;
     setLoading(true);
     setError("");
+    setLimitReached(false);
     try {
       const response = await fetch(`/api/projects/${projectId}/supplier-search`, {
         method: "POST",
@@ -384,9 +390,13 @@ export function SimpleSupplierOfferSearch({
         resultOrigin?: ResultOrigin | null;
         unfilteredResultCount?: number;
         summary?: SupplierOfferSearchSummary;
+        code?: string;
         error?: string;
       } | null;
-      if (!response.ok) throw new Error(payload?.error || text.noResultsText);
+      if (!response.ok) {
+        if (payload?.code === "SEARCH_LIMIT_REACHED") setLimitReached(true);
+        throw new Error(payload?.error || text.noResultsText);
+      }
       setResults(payload?.results ?? []);
       setAnalyses(payload?.candidateAnalyses ?? []);
       setOrigin(payload?.resultOrigin ?? null);
@@ -500,6 +510,16 @@ export function SimpleSupplierOfferSearch({
         </div>
       )}
       {error && <p className="form-error" role="alert">{error}</p>}
+      {limitReached && (
+        <p>
+          <a
+            className="primary-link"
+            href={`/billing?projectId=${encodeURIComponent(projectId)}`}
+          >
+            {text.limitReachedAction}
+          </a>
+        </p>
+      )}
 
       {results === null && !loading && (
         <button className="primary-button" onClick={() => void runSearch()} type="button">{text.search}</button>
@@ -509,7 +529,9 @@ export function SimpleSupplierOfferSearch({
         <div className="empty-state">
           <h3>{text.noResults}</h3>
           <p>{text.noResultsText}</p>
-          <button className="secondary-button" onClick={() => void runSearch()} type="button">{text.retry}</button>
+          {!limitReached && (
+            <button className="secondary-button" onClick={() => void runSearch()} type="button">{text.retry}</button>
+          )}
         </div>
       )}
 
