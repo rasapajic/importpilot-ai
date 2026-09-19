@@ -1228,3 +1228,235 @@ textarea {
     flex-direction: column;
   }
 }
+
+
+/* JAKOV360 project workflow */
+.project-workflow {
+  display: grid;
+  gap: 1rem;
+  margin: 1.5rem 0 3rem;
+  width: 100%;
+}
+
+.workflow-step {
+  background: rgb(255 255 255 / 78%);
+  border: 1px solid #dce7e1;
+  border-radius: 1rem;
+  overflow: hidden;
+  scroll-margin-top: 6rem;
+}
+
+details.workflow-step > summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+details.workflow-step > summary::-webkit-details-marker {
+  display: none;
+}
+
+.workflow-step-summary {
+  align-items: center;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: 2.25rem minmax(0, 1fr) auto;
+  min-width: 0;
+  padding: 1rem 1.1rem;
+}
+
+.workflow-step-number {
+  align-items: center;
+  align-self: start;
+  background: #eef6f2;
+  border-radius: 999px;
+  color: #0b5f41;
+  display: inline-flex;
+  font-size: 0.9rem;
+  font-weight: 800;
+  height: 2.25rem;
+  justify-content: center;
+  width: 2.25rem;
+}
+
+.workflow-step-heading {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.workflow-step-heading strong {
+  font-size: 1.05rem;
+  line-height: 1.25;
+}
+
+.workflow-step-heading small {
+  color: #60766c;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.workflow-product-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+}
+
+.workflow-step-badge {
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1.1;
+  padding: 0.45rem 0.65rem;
+  white-space: nowrap;
+}
+
+.workflow-step-badge-completed {
+  background: #e5f5ed;
+  color: #0b5f41;
+}
+
+.workflow-step-badge-active {
+  background: #eef6f2;
+  color: #0b5f41;
+}
+
+.workflow-step-badge-locked {
+  background: #eef1ef;
+  color: #60766c;
+}
+
+.workflow-step-content {
+  border-top: 1px solid #e6eeea;
+  padding: 1rem;
+}
+
+.workflow-step-content > :first-child {
+  margin-top: 0;
+}
+
+.workflow-helper-text,
+.workflow-locked-text {
+  color: #60766c;
+  line-height: 1.5;
+}
+
+.workflow-helper-text {
+  margin: 0 0 1rem;
+}
+
+.workflow-locked-text {
+  margin: 0;
+  padding: 0 1rem 1rem 4.1rem;
+}
+
+.section-header {
+  align-items: flex-start;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.section-header > div {
+  min-width: 0;
+}
+
+.section-header h2,
+.section-header h3,
+.section-header p {
+  overflow-wrap: anywhere;
+}
+
+.section-header .actions {
+  margin-top: 0;
+}
+
+@media (max-width: 760px) {
+  .dashboard-shell {
+    padding-top: 4.75rem;
+  }
+
+  .dashboard-header {
+    margin-top: 1rem;
+  }
+
+  .dashboard-header h1 {
+    font-size: clamp(2rem, 8.5vw, 2.7rem);
+    line-height: 1.05;
+    margin: 0.35rem 0 0.75rem;
+    overflow-wrap: anywhere;
+  }
+
+  .project-workflow {
+    gap: 0.75rem;
+    margin: 1rem 0 2rem;
+  }
+
+  .workflow-step-summary {
+    align-items: start;
+    gap: 0.6rem;
+    grid-template-columns: 2rem minmax(0, 1fr);
+    padding: 0.9rem;
+  }
+
+  .workflow-step-number {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    height: 2rem;
+    width: 2rem;
+  }
+
+  .workflow-step-heading {
+    grid-column: 2;
+  }
+
+  .workflow-step-heading strong {
+    font-size: 1rem;
+  }
+
+  .workflow-step-heading small {
+    font-size: 0.86rem;
+  }
+
+  .workflow-step-badge {
+    grid-column: 2;
+    justify-self: start;
+    margin-top: 0.15rem;
+  }
+
+  .workflow-step-content {
+    padding: 0.85rem;
+  }
+
+  .workflow-locked-text {
+    padding: 0 0.9rem 0.9rem 3.5rem;
+  }
+
+  .section-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .section-header .actions {
+    width: 100%;
+  }
+
+  .section-header .actions > * {
+    max-width: 100%;
+  }
+
+  .dashboard-card {
+    margin: 1rem 0;
+    padding: 1rem;
+  }
+
+  .empty-search-delete-panel {
+    justify-content: stretch;
+  }
+
+  .empty-search-delete-panel button {
+    width: 100%;
+  }
+}
