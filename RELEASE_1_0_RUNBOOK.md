@@ -28,7 +28,20 @@ Before any production release:
 
 Do not release from an unrecorded moving branch head.
 
-## 2. Production configuration gate
+## 2. Public domain verification gate
+
+Before any public production release:
+
+1. Sign in to Namecheap and confirm that `jakov360.com` has no pending Registrant/WHOIS contact verification.
+2. Complete the Namecheap contact-verification email flow when required.
+3. Treat any pending verification, suspension or registrar hold as **HOLD / NOT RELEASED**.
+4. Confirm `jakov360.com` and `www.jakov360.com` are attached to the intended production hosting service.
+5. Confirm HTTPS certificate issuance is complete and both public hostnames resolve correctly.
+6. Only then finalize Google OAuth production origin and callback against `https://jakov360.com`.
+
+The domain must not be considered production-ready merely because DNS currently resolves. Registrar contact verification is a separate blocking requirement.
+
+## 3. Production configuration gate
 
 Run the production config preflight in the target environment without printing secret values:
 
@@ -56,7 +69,7 @@ Secrets belong in the hosting provider secret store. Never commit real Google/pr
 
 For Google Cloud Console configuration and the required positive smoke cases, follow `GOOGLE_OAUTH_SETUP.md`.
 
-## 3. PostgreSQL backup before release
+## 4. PostgreSQL backup before release
 
 Create a fresh custom-format dump immediately before a production deploy:
 
@@ -77,7 +90,7 @@ sha256sum importpilot-predeploy-*.dump
 The backup must be stored outside the same runtime failure domain as the production database.
 A backup that has never been restored successfully is not sufficient recovery evidence.
 
-## 4. Restore drill before 1.0 release
+## 5. Restore drill before 1.0 release
 
 Restore the fresh backup to an empty temporary PostgreSQL database, never over the live database:
 
@@ -104,7 +117,7 @@ Against the restored database verify at minimum:
 
 Delete the temporary restore database after the verification result has been recorded.
 
-## 5. Migration rules
+## 6. Migration rules
 
 Before deployment:
 
@@ -127,7 +140,7 @@ Never run any of the following against production:
 
 Migrations are treated as forward-only. If the new application fails after deployment, roll back the application first. Restore the database only if a migration demonstrably changed or damaged data in a way the previous application cannot safely read.
 
-## 6. Google authentication readiness
+## 7. Google authentication readiness
 
 Before final acceptance:
 
@@ -143,7 +156,7 @@ Before final acceptance:
 
 ImportPilot uses Authorization Code + PKCE, random state, short-lived HttpOnly/SameSite cookies, and accepts only `email_verified=true` identities.
 
-## 7. Provider readiness
+## 8. Provider readiness
 
 Before final acceptance, from an environment that holds the real bearer tokens:
 
@@ -155,7 +168,7 @@ Before final acceptance, from an environment that holds the real bearer tokens:
 
 Provider health endpoints must remain authenticated. Do not weaken provider authentication for monitoring or testing.
 
-## 8. Application health
+## 9. Application health
 
 Immediately before and after deployment:
 
@@ -174,7 +187,7 @@ Fail-closed requirement:
 - if the database readiness query fails, `/api/health` returns HTTP 503 with `database: "error"`;
 - no false healthy status is allowed when the application cannot use its database.
 
-## 9. Final live acceptance
+## 10. Final live acceptance
 
 Perform the final acceptance on the exact candidate commit after deployment to the candidate environment.
 At minimum verify:
@@ -230,7 +243,7 @@ Verify SR Latin, DE and EN on desktop and narrow viewport:
 - partial offer can be completed;
 - multiple offers can be selected before explicit continuation.
 
-## 10. Rollback procedure
+## 11. Rollback procedure
 
 If health or final smoke fails after deployment:
 
@@ -244,7 +257,7 @@ If health or final smoke fails after deployment:
 
 After rollback, do not retry production deployment until the failure is reproduced, fixed, and the complete release gate is green again.
 
-## 11. Release decision
+## 12. Release decision
 
 ImportPilot 1.0 has only two states for this project phase:
 
