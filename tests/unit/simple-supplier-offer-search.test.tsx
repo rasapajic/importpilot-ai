@@ -17,6 +17,18 @@ const resultCss = readFileSync(
 );
 
 describe("ImportPilot 1.0 simple supplier results", () => {
+  it("shows how many candidates were reviewed and why offers were selected", () => {
+    expect(resultsSource).toContain("unfilteredResultCount");
+    expect(resultsSource).toContain('selectionOverview: (reviewed, shown)');
+    expect(resultsSource).toContain("JAKOV360 je pregledao");
+    expect(resultsSource).toContain('whySelected: "Zašto je izdvojena"');
+    expect(resultsSource).toContain("selectionReasons(result, analysis, quantity, text)");
+    expect(resultsSource).toContain('className="supplier-selection-summary"');
+    expect(resultsSource).toContain('className="selection-reasons"');
+    expect(resultCss).toContain(".supplier-selection-summary");
+    expect(resultCss).toContain(".selection-reasons");
+  });
+
   it("keeps the main result card focused on the buying decision", () => {
     expect(resultsSource).toContain("Najbolje ponude");
     expect(resultsSource).toContain("Cena dobavljača");
