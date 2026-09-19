@@ -50,3 +50,45 @@ describe("TAJA requirement-driven query plan", () => {
     });
   });
 });
+
+
+describe("food packaging search plan", () => {
+  const foodPackagingRequest: ProjectSupplierSearchRequest = {
+    query: "Pakovanja za hranu 400ml - 500ml",
+    quantity: 10000,
+    targetCountry: "RS",
+    strictPriceLimit: false,
+    avoidComplexCompliance: true,
+    privateLabel: false,
+  };
+
+  it("translates Serbian food packaging intent and preserves the requested volume range", () => {
+    const plan = createLunaSearchPlan(foodPackagingRequest);
+
+    expect(plan.category).toBe("food-packaging");
+    expect(plan.englishQuery).toBe("food containers packaging");
+    expect(plan.providerQueries).toEqual([
+      "400ml 500ml disposable food containers wholesale manufacturer supplier",
+      "400-500ml takeaway food containers wholesale manufacturer supplier",
+      "400ml 500ml food storage containers with lids wholesale manufacturer supplier",
+      "food containers packaging wholesale manufacturer supplier",
+      "food containers packaging",
+    ]);
+    expect(plan.chinese1688Queries).toEqual([
+      "400ml 500ml 一次性餐盒 食品容器 厂家 批发",
+      "400-500ml 外卖餐盒 食品包装盒 厂家 批发",
+      "食品容器 餐盒 包装盒 厂家 批发",
+    ]);
+  });
+
+  it("passes the food packaging variants to the supplier-search provider", () => {
+    const plan = createLunaSearchPlan(foodPackagingRequest);
+    const providerInput = buildLunaProviderSearchInput(plan, foodPackagingRequest);
+
+    expect(providerInput.query).toBe(plan.providerQueries[0]);
+    expect(providerInput.queryVariants).toEqual(plan.providerQueries);
+    expect(providerInput.chinese1688QueryVariants).toEqual(plan.chinese1688Queries);
+    expect(providerInput.quantity).toBe(10000);
+    expect(providerInput.targetCountry).toBe("RS");
+  });
+});
