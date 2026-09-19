@@ -114,6 +114,11 @@ type AggregatingSourceOptions = {
   maxResultsPerSource?: number;
 };
 
+type FallbackSourceOptions = {
+  maxResults?: number;
+  maxTrustedResults?: number;
+};
+
 type SourceAttempt = {
   source: SupplierSearchSource;
   parsedResultCount: number;
@@ -176,10 +181,10 @@ export function createAggregatingSupplierSearchSource(
   options: AggregatingSourceOptions = {},
   logger: DevelopmentLogger = createDevelopmentLogger(),
 ): SupplierSearchSource {
-  const maxResults = positiveInteger(options.maxResults, 30, 100);
+  const maxResults = positiveInteger(options.maxResults, 40, 100);
   const maxResultsPerSource = positiveInteger(
     options.maxResultsPerSource,
-    Math.min(15, maxResults),
+    Math.min(20, maxResults),
     maxResults,
   );
 
@@ -318,7 +323,15 @@ export function createAggregatingSupplierSearchSource(
 export function createFallbackSupplierSearchSource(
   sources: SupplierSearchSource[],
   logger: DevelopmentLogger = createDevelopmentLogger(),
+  options: FallbackSourceOptions = {},
 ): SupplierSearchSource {
+  const maxResults = positiveInteger(options.maxResults, 5, 100);
+  const maxTrustedResults = positiveInteger(
+    options.maxTrustedResults,
+    Math.max(10, maxResults),
+    100,
+  );
+
   return {
     name: sources.map((source) => source.name).join(" -> "),
     implemented: sources.some((source) => source.implemented),
@@ -340,11 +353,11 @@ export function createFallbackSupplierSearchSource(
           const outcome = outcomeParts(await source.search(input, signal));
           if (outcome.aiUsage?.length) accumulatedAiUsage.push(...outcome.aiUsage);
           const relevantResults = source.trustedRelevance
-            ? outcome.results.slice(0, 10)
+            ? outcome.results.slice(0, maxTrustedResults)
             : rankRelevantSupplierResults(
                 input.productQuery,
                 outcome.results,
-                5,
+                maxResults,
               );
           logger("provider_attempt", {
             provider_name: source.name,
