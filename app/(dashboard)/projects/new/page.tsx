@@ -5,6 +5,7 @@ import { CreateProjectFromUrlForm } from "@/components/projects/create-project-f
 import { requireSession } from "@/modules/auth/infrastructure/session";
 import { getServerLocale } from "@/modules/i18n/server";
 import type { Locale } from "@/modules/i18n/translations";
+import { getMonthlySupplierSearchQuotaStatus } from "@/modules/subscriptions/application/supplier-search-quota-service";
 
 type NewProjectCopy = {
   back: string;
@@ -17,19 +18,19 @@ const newProjectCopy: Record<Locale, NewProjectCopy> = {
   sr: {
     back: "Nazad na moje pretrage",
     title: "Koji proizvod tražite?",
-    searchIntro: "Unesite proizvod, količinu i destinaciju. ImportPilot će zatim pronaći i uporediti ponude.",
+    searchIntro: "Unesite proizvod, količinu i destinaciju. JAKOV360 će zatim pronaći i uporediti ponude.",
     urlIntro: "Proverite link proizvoda. Nakon pregleda unosite podatke potrebne za računicu.",
   },
   de: {
     back: "Zurück zu meinen Suchen",
     title: "Welches Produkt suchen Sie?",
-    searchIntro: "Geben Sie Produkt, Menge und Zielland ein. ImportPilot sucht und vergleicht anschließend passende Angebote.",
+    searchIntro: "Geben Sie Produkt, Menge und Zielland ein. JAKOV360 sucht und vergleicht anschließend passende Angebote.",
     urlIntro: "Prüfen Sie den Produktlink. Danach geben Sie die für die Kalkulation nötigen Angaben ein.",
   },
   en: {
     back: "Back to my searches",
     title: "Which product are you looking for?",
-    searchIntro: "Enter the product, quantity, and destination. ImportPilot will then find and compare suitable offers.",
+    searchIntro: "Enter the product, quantity, and destination. JAKOV360 will then find and compare suitable offers.",
     urlIntro: "Review the product link. After review, enter the details needed for the calculation.",
   },
 };
@@ -43,10 +44,13 @@ export default async function NewProjectPage({
     description?: string;
   }>;
 }) {
-  await requireSession();
+  const { membership } = await requireSession();
   const locale = await getServerLocale();
   const copy = newProjectCopy[locale];
-  const resolvedSearchParams = await searchParams;
+  const [resolvedSearchParams, quota] = await Promise.all([
+    searchParams,
+    getMonthlySupplierSearchQuotaStatus(membership.organizationId),
+  ]);
   const mode = resolvedSearchParams.mode === "url" ? "url" : "search";
   const initialProductUrl = typeof resolvedSearchParams.productUrl === "string"
     ? resolvedSearchParams.productUrl
@@ -70,7 +74,12 @@ export default async function NewProjectPage({
           />
         </section>
       ) : (
-        <DashboardPrimaryActions />
+        <DashboardPrimaryActions quota={{
+          plan: quota.plan,
+          used: quota.used,
+          limit: quota.limit,
+          remaining: quota.remaining,
+        }} />
       )}
     </main>
   );
