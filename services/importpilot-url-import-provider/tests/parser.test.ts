@@ -7,6 +7,7 @@ import {
   extractMadeInChinaProductDetails,
   extractPriceTiers,
   inspectPreviewExtraction,
+  isUnavailableProductHtml,
   parseProductPreview,
 } from "../src/parser.js";
 
@@ -212,6 +213,21 @@ describe("URL import provider parser", () => {
     });
     expect(snapshot.candidates.some((candidate) => candidate.value === "English")).toBe(false);
     expect(snapshot.candidates.some((candidate) => /chat button-block|J-sr|Supplier-chat/i.test(candidate.value))).toBe(false);
+  });
+
+  it("detects unavailable Alibaba product pages in localized markup", () => {
+    const html = `
+      <html>
+        <head><title>Alibaba.com</title></head>
+        <body><main>Dieses Produkt ist nicht mehr verfügbar.</main></body>
+      </html>
+    `;
+
+    expect(isUnavailableProductHtml(html)).toBe(true);
+    expect(() => parseProductPreview(
+      html,
+      "https://www.alibaba.com/product-detail/2025-GaN-Charger_1600000000999.html",
+    )).toThrow("UNAVAILABLE");
   });
 
   it("detects blocked pages clearly", () => {
