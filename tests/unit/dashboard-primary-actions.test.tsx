@@ -47,14 +47,16 @@ describe("ImportPilot 1.0 core search intake", () => {
     expect(dashboardSource).toContain("Unesite proizvod, količinu i destinaciju");
   });
 
-  it("stacks saved searches below the intake on mobile with a real device viewport", () => {
+  it("uses a mobile-first single-column dashboard and only enables two columns on wide screens", () => {
     expect(layoutSource).toContain('width: "device-width"');
     expect(layoutSource).toContain("initialScale: 1");
-    expect(dashboardCss).toContain("@media (max-width: 920px)");
+    expect(dashboardCss).toContain("grid-template-columns: minmax(0, 1fr)");
     expect(dashboardCss).toContain(".demandColumn {");
     expect(dashboardCss).toContain("order: 1");
     expect(dashboardCss).toContain(".searchesColumn {");
     expect(dashboardCss).toContain("order: 2");
+    expect(dashboardCss).toContain("@media (min-width: 70rem)");
+    expect(dashboardCss).toContain("minmax(0, 1.15fr) minmax(22rem, 0.85fr)");
   });
 
   it("uses JAKOV360 public copy on the dashboard", () => {

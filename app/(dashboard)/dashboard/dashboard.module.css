@@ -1,18 +1,32 @@
 .shell {
   max-width: 78rem;
+  width: 100%;
 }
 
 .layout {
   align-items: start;
   display: grid;
-  gap: 2rem;
-  grid-template-columns: minmax(0, 1.15fr) minmax(22rem, 0.85fr);
-  padding-top: 4.5rem;
+  gap: 1.5rem;
+  grid-template-columns: minmax(0, 1fr);
+  padding-top: 4rem;
 }
 
 .demandColumn,
 .searchesColumn {
   min-width: 0;
+  width: 100%;
+}
+
+.demandColumn {
+  order: 1;
+}
+
+.searchesColumn {
+  background: rgb(255 255 255 / 58%);
+  border: 1px solid #dce7e1;
+  border-radius: 1rem;
+  order: 2;
+  padding: 1.15rem;
 }
 
 .hero {
@@ -31,13 +45,6 @@
   max-width: 38rem;
 }
 
-.searchesColumn {
-  background: rgb(255 255 255 / 58%);
-  border: 1px solid #dce7e1;
-  border-radius: 1rem;
-  padding: 1.15rem;
-}
-
 .searchesTitle {
   margin: 0 0 0.75rem;
 }
@@ -51,9 +58,9 @@
 }
 
 .searchesColumn :global(.project-list) {
-  max-height: calc(100vh - 14rem);
-  overflow-y: auto;
-  padding-right: 0.2rem;
+  max-height: none;
+  overflow: visible;
+  padding-right: 0;
 }
 
 .searchesColumn :global(.pagination) {
@@ -61,25 +68,22 @@
   margin-bottom: 0;
 }
 
-@media (max-width: 920px) {
+@media (min-width: 70rem) {
   .layout {
-    gap: 1.5rem;
-    grid-template-columns: minmax(0, 1fr);
-    padding-top: 4rem;
+    gap: 2rem;
+    grid-template-columns: minmax(0, 1.15fr) minmax(22rem, 0.85fr);
+    padding-top: 4.5rem;
   }
 
-  .demandColumn {
-    order: 1;
-    width: 100%;
-  }
-
+  .demandColumn,
   .searchesColumn {
-    order: 2;
-    width: 100%;
+    order: initial;
+    width: auto;
   }
 
   .searchesColumn :global(.project-list) {
-    max-height: none;
-    overflow: visible;
+    max-height: calc(100vh - 14rem);
+    overflow-y: auto;
+    padding-right: 0.2rem;
   }
 }
