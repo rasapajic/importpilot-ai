@@ -156,8 +156,9 @@ function chinaDomesticPlanningCosts(input: {
   goodsCostEur: number;
   logistics: ProductLogisticsEstimate;
 }) {
-  const applies = is1688Result(input.result) && input.basis.incoterm === "EXW";
-  if (!applies) {
+  const exwChinaMarketplace = input.basis.incoterm === "EXW" &&
+    isChinaMarketplaceResult(input.result);
+  if (!exwChinaMarketplace) {
     return {
       applies: false,
       chinaDomesticTransportEur: 0,
@@ -165,6 +166,7 @@ function chinaDomesticPlanningCosts(input: {
     } as const;
   }
 
+  const requires1688Agent = is1688Result(input.result);
   return {
     applies: true,
     chinaDomesticTransportEur: Math.max(
@@ -172,7 +174,9 @@ function chinaDomesticPlanningCosts(input: {
       input.logistics.estimatedWeightKg * 0.12,
       input.logistics.estimatedVolumeCbm * 45,
     ),
-    sourcingAgentFeeEur: Math.max(35, input.goodsCostEur * 0.05),
+    sourcingAgentFeeEur: requires1688Agent
+      ? Math.max(35, input.goodsCostEur * 0.05)
+      : 0,
   } as const;
 }
 
@@ -332,8 +336,10 @@ export function estimateTajaPreliminaryLandedCost(input: {
         : `Pricing basis: ${basis.incoterm}.`,
       ...(chinaDomestic.applies
         ? [
-            `1688 domestic China transport: ${round(chinaDomestic.chinaDomesticTransportEur)} EUR (planning estimate, not a carrier quote).`,
-            `1688 sourcing/warehouse agent: ${round(chinaDomestic.sourcingAgentFeeEur)} EUR (5% of goods, minimum 35 EUR planning assumption).`,
+            `China domestic origin transport: ${round(chinaDomestic.chinaDomesticTransportEur)} EUR (planning estimate, not a carrier quote).`,
+            ...(chinaDomestic.sourcingAgentFeeEur > 0
+              ? [`1688 sourcing/warehouse agent: ${round(chinaDomestic.sourcingAgentFeeEur)} EUR (5% of goods, minimum 35 EUR planning assumption).`]
+              : []),
           ]
         : []),
       `Export/consolidation handling: ${round(originHandlingEur)} EUR.`,
