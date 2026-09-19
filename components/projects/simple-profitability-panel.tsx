@@ -260,6 +260,21 @@ function preliminarySearchResult(
   const productUrl = sourceOfferUrl(offer.sourceMetadata);
   const price = numberValue(offer.unitPrice);
   if (!productUrl || price === null || !offer.currency) return null;
+  const extractedLogistics = extractSupplierLogisticsData(offer.sourceMetadata);
+  const supplierLogistics = extractedLogistics &&
+    (extractedLogistics.evidence === "PRODUCT_PAGE" || extractedLogistics.evidence === "SEARCH_SNIPPET")
+    ? {
+        grossWeightKg: extractedLogistics.grossWeightKg ?? null,
+        netWeightKg: extractedLogistics.netWeightKg ?? null,
+        cartonLengthCm: extractedLogistics.cartonLengthCm ?? null,
+        cartonWidthCm: extractedLogistics.cartonWidthCm ?? null,
+        cartonHeightCm: extractedLogistics.cartonHeightCm ?? null,
+        piecesPerCarton: extractedLogistics.piecesPerCarton ?? null,
+        unitWeightKg: extractedLogistics.unitWeightKg ?? null,
+        unitVolumeCbm: extractedLogistics.unitVolumeCbm ?? null,
+        evidence: extractedLogistics.evidence,
+      }
+    : undefined;
 
   return {
     title: metadataText(offer.sourceMetadata, "title") ?? projectName,
@@ -274,7 +289,7 @@ function preliminarySearchResult(
     source: metadataText(offer.sourceMetadata, "providerSource") ??
       metadataText(offer.sourceMetadata, "sourceHost") ??
       "saved supplier offer",
-    supplierLogistics: extractSupplierLogisticsData(offer.sourceMetadata) ?? undefined,
+    supplierLogistics,
   };
 }
 
