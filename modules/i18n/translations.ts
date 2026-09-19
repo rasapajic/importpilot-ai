@@ -375,7 +375,7 @@ const entries: Translation[] = [
   { en: "All events", de: "Alle Ereignisse", sr: "Svi događaji" },
   { en: "Something went wrong", de: "Etwas ist schiefgelaufen", sr: "Nešto nije uspelo" },
   { en: "Try again", de: "Erneut versuchen", sr: "Pokušaj ponovo" },
-  { en: "Loading ImportPilot data...", de: "ImportPilot-Daten werden geladen...", sr: "Učitavanje ImportPilot podataka..." },
+  { en: "Loading JAKOV360 data...", de: "JAKOV360-Daten werden geladen...", sr: "Učitavanje JAKOV360 podataka..." },
   { en: "How did the project end?", de: "Wie ist das Projekt ausgegangen?", sr: "Kako se projekat završio?" },
   { en: "Was this recommendation helpful?", de: "War diese Empfehlung hilfreich?", sr: "Da li vam je ova preporuka bila korisna?" },
   { en: "Optional comment", de: "Optionaler Kommentar", sr: "Opcioni komentar" },
