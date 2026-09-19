@@ -70,8 +70,12 @@ async function applySubscriptionActive(
       provider: event.provider,
       providerSubscriptionId: event.providerSubscriptionId,
     },
-    select: { id: true },
+    select: { id: true, organizationId: true },
   });
+
+  if (existing && existing.organizationId !== event.organizationId) {
+    throw new BillingEventApplicationError("Billing subscription is already linked to another organization.");
+  }
 
   const data = {
     organizationId: event.organizationId,
