@@ -1133,3 +1133,98 @@ button:disabled {
     width: 100%;
   }
 }
+
+
+/* JAKOV360 PWA/mobile shell */
+.global-footer-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+}
+
+.pwa-install-button {
+  background: white;
+  border: 1px solid #137752;
+  color: #137752;
+  min-height: 2.75rem;
+  padding: 0.65rem 0.9rem;
+}
+
+.pwa-install-button:hover,
+.pwa-install-button:focus-visible {
+  background: #eef6f2;
+}
+
+button,
+.primary-link,
+.header-account-actions a,
+.header-secondary-action {
+  min-height: 2.75rem;
+}
+
+input,
+select,
+textarea {
+  max-width: 100%;
+}
+
+@media (max-width: 760px) {
+  body {
+    overflow-x: hidden;
+  }
+
+  main:not(.legal-shell) {
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+  }
+
+  .global-header {
+    left: env(safe-area-inset-left);
+    padding-top: max(0.75rem, env(safe-area-inset-top));
+    right: env(safe-area-inset-right);
+  }
+
+  .language-selector button {
+    min-height: 2.75rem;
+    min-width: 2.75rem;
+  }
+
+  .header-account-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .auth-form input,
+  .project-form input,
+  .filters input,
+  .filters select,
+  textarea {
+    font-size: 16px;
+  }
+
+  .dashboard-card,
+  .offer-card,
+  .calculation-card {
+    min-width: 0;
+  }
+
+  .offer-table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    width: 100%;
+  }
+
+  .global-footer {
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+  }
+
+  .global-footer-actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
