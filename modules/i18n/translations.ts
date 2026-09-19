@@ -152,6 +152,8 @@ const entries: Translation[] = [
   { en: "Risk", de: "Risiko", sr: "Rizik" },
   { en: "Main reason", de: "Hauptgrund", sr: "Glavni razlog" },
   { en: "Supplier offers", de: "Lieferantenangebote", sr: "Ponude dobavljača" },
+  { en: "No offer selected yet.", de: "Noch kein Angebot ausgewählt.", sr: "Još nema izabrane ponude." },
+  { en: "An offer has been selected.", de: "Ein Angebot wurde ausgewählt.", sr: "Ponuda je izabrana." },
   { en: "Offer search", de: "Angebotssuche", sr: "Pretraga ponuda" },
   { en: "Provider connected", de: "Provider verbunden", sr: "Provider povezan" },
   { en: "Provider not configured", de: "Provider nicht konfiguriert", sr: "Provider nije podešen" },
