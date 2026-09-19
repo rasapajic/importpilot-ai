@@ -19,7 +19,11 @@ const resultCss = readFileSync(
 describe("ImportPilot 1.0 simple supplier results", () => {
   it("shows how many candidates were reviewed and why offers were selected", () => {
     expect(resultsSource).toContain("unfilteredResultCount");
-    expect(resultsSource).toContain('selectionOverview: (reviewed, shown)');
+    expect(resultsSource).toContain("SupplierOfferSearchSummary");
+    expect(resultsSource).toContain("searchSummary.parsedResults");
+    expect(resultsSource).toContain("searchSummary.relevantCandidates");
+    expect(resultsSource).toContain('liveSelectionOverview: (found, relevant, shown)');
+    expect(resultsSource).toContain("Pronađeno");
     expect(resultsSource).toContain("JAKOV360 je pregledao");
     expect(resultsSource).toContain('whySelected: "Zašto je izdvojena"');
     expect(resultsSource).toContain("selectionReasons(result, analysis, quantity, text)");

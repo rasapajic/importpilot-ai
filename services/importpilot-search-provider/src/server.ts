@@ -112,22 +112,25 @@ const alibabaSource = createFallbackSupplierSearchSource([
       5,
       MAX_QUERY_VARIANTS_PER_DIRECT_SOURCE,
     ),
-    maxResults: Number(process.env.TAJA_DEEP_SEARCH_MAX_PER_SOURCE ?? 15),
+    maxResults: Number(process.env.TAJA_DEEP_SEARCH_MAX_PER_SOURCE ?? 20),
     logger,
   }),
   createOpenAIAlibabaSearchSource({
     ...openAiSourceOptions,
-    maxResults: Number(process.env.OPENAI_ALIBABA_MAX_RESULTS ?? 5),
+    maxResults: Number(process.env.OPENAI_ALIBABA_MAX_RESULTS ?? 10),
   }),
-], logger);
+], logger, {
+  maxResults: Number(process.env.TAJA_DEEP_SEARCH_MAX_PER_SOURCE ?? 20),
+  maxTrustedResults: Number(process.env.OPENAI_ALIBABA_MAX_RESULTS ?? 10),
+});
 const aggregatedSource = createAggregatingSupplierSearchSource([
   createOpenAIWebSearchSource({
     ...openAiSourceOptions,
-    maxResults: Number(process.env.OPENAI_SEARCH_MAX_RESULTS ?? 10),
+    maxResults: Number(process.env.OPENAI_SEARCH_MAX_RESULTS ?? 15),
   }),
   createOpenAI1688SearchSource({
     ...openAiSourceOptions,
-    maxResults: Number(process.env.OPENAI_1688_MAX_RESULTS ?? 10),
+    maxResults: Number(process.env.OPENAI_1688_MAX_RESULTS ?? 15),
     enrichmentMaxResults: Number(process.env.OPENAI_1688_ENRICH_MAX_RESULTS ?? 5),
     enrichmentTimeoutMs: boundedTimeout(
       process.env.OPENAI_1688_ENRICH_TIMEOUT_MS,
@@ -142,12 +145,12 @@ const aggregatedSource = createAggregatingSupplierSearchSource([
       5,
       MAX_QUERY_VARIANTS_PER_DIRECT_SOURCE,
     ),
-    maxResults: Number(process.env.TAJA_DEEP_SEARCH_MAX_PER_SOURCE ?? 15),
+    maxResults: Number(process.env.TAJA_DEEP_SEARCH_MAX_PER_SOURCE ?? 20),
     logger,
   }),
 ], {
-  maxResults: Number(process.env.TAJA_DEEP_SEARCH_MAX_RESULTS ?? 30),
-  maxResultsPerSource: Number(process.env.TAJA_DEEP_SEARCH_MAX_PER_SOURCE ?? 15),
+  maxResults: Number(process.env.TAJA_DEEP_SEARCH_MAX_RESULTS ?? 40),
+  maxResultsPerSource: Number(process.env.TAJA_DEEP_SEARCH_MAX_PER_SOURCE ?? 20),
 }, logger);
 const source = createExplicitSpecFilteringSource(aggregatedSource);
 
