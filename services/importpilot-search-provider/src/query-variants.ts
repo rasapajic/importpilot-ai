@@ -37,7 +37,7 @@ function focusedProductQuery(value: string) {
     const volumes = [...normalized.matchAll(/\b(\d{2,5})\s*ml\b/g)]
       .map((match) => match[1])
       .filter(Boolean);
-    return [...new Set(volumes), "food containers"].join(" ");
+    return [...new Set(volumes.map((volume) => `${volume}ml`)), "food containers"].join(" ");
   }
 
   const nozzleCount = normalized.match(/\b(\d{1,4})\s+nozzles?\b/)?.[1] ?? null;
