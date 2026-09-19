@@ -21,7 +21,11 @@ import {
 } from "@/modules/decisions/application/decision-step-summary";
 import type { ProjectDecisionResult } from "@/modules/decisions/domain/project-decision";
 import { getEuroDisplay, type FxSnapshot } from "@/modules/fx/euro-display";
+import { getCountryDisplayName } from "@/modules/i18n/country-names";
 import type { Locale } from "@/modules/i18n/translations";
+import type { SupplierOfferSearchResult } from "@/modules/product-search/domain/search";
+import { estimateTajaPreliminaryLandedCost } from "@/modules/product-search/domain/taja-preliminary-cost-estimate";
+import { extractSupplierLogisticsData } from "@/modules/transport/domain/transport-estimator";
 
 type DecisionView = ProjectDecisionResult & { id: string; createdAt: Date };
 
@@ -47,9 +51,17 @@ type SimpleCopy = {
   incoterm: string;
   delivery: string;
   days: string;
+  unit: string;
   offerDetail: string;
   sourceOffer: string;
   commercialDataMissing: string;
+  preliminaryEstimateTitle: string;
+  preliminaryEstimateBody: string;
+  preliminaryBase: string;
+  preliminaryRange: string;
+  assumedIncoterm: string;
+  estimatedTransportTime: string;
+  confirmActualTerms: string;
   costPerUnit: string;
   estimatedCostPerUnit: string;
   profitPerUnit: string;
@@ -91,9 +103,17 @@ const copy: Record<Locale, SimpleCopy> = {
     incoterm: "Uslov isporuke (Incoterm)",
     delivery: "Rok isporuke",
     days: "dana",
+    unit: "kom",
     offerDetail: "Izabrana ponuda",
     sourceOffer: "Otvori izvornu ponudu",
-    commercialDataMissing: "Nedostaju podaci potrebni za računicu.",
+    commercialDataMissing: "Nedostaju cena ili valuta potrebni za računicu.",
+    preliminaryEstimateTitle: "Preliminarna procena uvoza",
+    preliminaryEstimateBody: "JAKOV360 može da napravi konzervativnu procenu i pre potvrde Incoterm-a. Nepotvrđeni podaci su jasno označeni i ne predstavljaju uslov dobavljača.",
+    preliminaryBase: "Osnovna procena",
+    preliminaryRange: "Raspon procene",
+    assumedIncoterm: "EXW — pretpostavka za procenu",
+    estimatedTransportTime: "procena transporta",
+    confirmActualTerms: "Potvrdite stvarni Incoterm kod dobavljača pre konačne odluke ili narudžbine.",
     costPerUnit: "Potvrđena cena po komadu",
     estimatedCostPerUnit: "Procenjena cena po komadu",
     profitPerUnit: "Zarada po komadu",
@@ -133,9 +153,17 @@ const copy: Record<Locale, SimpleCopy> = {
     incoterm: "Incoterm",
     delivery: "Lieferzeit",
     days: "Tage",
+    unit: "Stk.",
     offerDetail: "Ausgewähltes Angebot",
     sourceOffer: "Quellangebot öffnen",
-    commercialDataMissing: "Für die Kalkulation fehlen erforderliche Angebotsdaten.",
+    commercialDataMissing: "Für die Kalkulation fehlen Preis oder Währung.",
+    preliminaryEstimateTitle: "Vorläufige Importkostenschätzung",
+    preliminaryEstimateBody: "JAKOV360 kann vor der Bestätigung des Incoterms eine konservative Schätzung erstellen. Unbestätigte Angaben sind klar gekennzeichnet und gelten nicht als Lieferantenkonditionen.",
+    preliminaryBase: "Basisschätzung",
+    preliminaryRange: "Schätzbereich",
+    assumedIncoterm: "EXW — Annahme für die Schätzung",
+    estimatedTransportTime: "Transport-Schätzung",
+    confirmActualTerms: "Bestätigen Sie den tatsächlichen Incoterm beim Lieferanten vor der endgültigen Entscheidung oder Bestellung.",
     costPerUnit: "Bestätigte Stückkosten",
     estimatedCostPerUnit: "Geschätzte Stückkosten",
     profitPerUnit: "Gewinn pro Stück",
@@ -175,9 +203,17 @@ const copy: Record<Locale, SimpleCopy> = {
     incoterm: "Incoterm",
     delivery: "Delivery time",
     days: "days",
+    unit: "pcs",
     offerDetail: "Selected offer",
     sourceOffer: "Open source offer",
-    commercialDataMissing: "Required commercial data is missing for the calculation.",
+    commercialDataMissing: "A supplier price or currency is missing for the calculation.",
+    preliminaryEstimateTitle: "Preliminary import estimate",
+    preliminaryEstimateBody: "JAKOV360 can produce a conservative estimate before the Incoterm is confirmed. Unconfirmed values are clearly labeled and are not supplier terms.",
+    preliminaryBase: "Base estimate",
+    preliminaryRange: "Estimated range",
+    assumedIncoterm: "EXW — planning assumption",
+    estimatedTransportTime: "transport estimate",
+    confirmActualTerms: "Confirm the actual Incoterm with the supplier before a final decision or order.",
     costPerUnit: "Confirmed cost per unit",
     estimatedCostPerUnit: "Estimated cost per unit",
     profitPerUnit: "Profit per unit",
@@ -214,6 +250,52 @@ function sourceOfferUrl(metadata: unknown) {
   const source = metadata as Record<string, unknown>;
   const value = source.sourceUrl ?? source.productUrl;
   return typeof value === "string" && value.startsWith("https://") ? value : null;
+}
+
+function metadataText(metadata: unknown, key: string) {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  const value = (metadata as Record<string, unknown>)[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function preliminarySearchResult(
+  offer: OfferWithDetails,
+  projectName: string,
+): SupplierOfferSearchResult | null {
+  const productUrl = sourceOfferUrl(offer.sourceMetadata);
+  const price = numberValue(offer.unitPrice);
+  if (!productUrl || price === null || !offer.currency) return null;
+  const extractedLogistics = extractSupplierLogisticsData(offer.sourceMetadata);
+  const supplierLogistics = extractedLogistics &&
+    (extractedLogistics.evidence === "PRODUCT_PAGE" || extractedLogistics.evidence === "SEARCH_SNIPPET")
+    ? {
+        grossWeightKg: extractedLogistics.grossWeightKg ?? null,
+        netWeightKg: extractedLogistics.netWeightKg ?? null,
+        cartonLengthCm: extractedLogistics.cartonLengthCm ?? null,
+        cartonWidthCm: extractedLogistics.cartonWidthCm ?? null,
+        cartonHeightCm: extractedLogistics.cartonHeightCm ?? null,
+        piecesPerCarton: extractedLogistics.piecesPerCarton ?? null,
+        unitWeightKg: extractedLogistics.unitWeightKg ?? null,
+        unitVolumeCbm: extractedLogistics.unitVolumeCbm ?? null,
+        evidence: extractedLogistics.evidence,
+      }
+    : undefined;
+
+  return {
+    title: metadataText(offer.sourceMetadata, "title") ?? projectName,
+    supplierName: offer.supplierName,
+    supplierCountry: offer.supplierCountry,
+    price,
+    currency: offer.currency,
+    minimumOrderQuantity: offer.moq,
+    incoterm: offer.incoterm,
+    productUrl,
+    imageUrl: metadataText(offer.sourceMetadata, "imageUrl"),
+    source: metadataText(offer.sourceMetadata, "providerSource") ??
+      metadataText(offer.sourceMetadata, "sourceHost") ??
+      "saved supplier offer",
+    supplierLogistics,
+  };
 }
 
 function riskLabel(score: number | null, locale: Locale) {
@@ -427,9 +509,30 @@ export function SimpleProfitabilityPanel({
             {offersForInput.map((offer) => {
               const latest = offer.costCalculations[0];
               const sourceUrl = sourceOfferUrl(offer.sourceMetadata);
+              const priceDataComplete = Boolean(offer.unitPrice && offer.currency);
               const commercialTermsComplete = Boolean(
                 offer.unitPrice && offer.currency && offer.incoterm,
               );
+              const planningResult = preliminarySearchResult(offer, projectName);
+              const preliminaryEstimate = planningResult
+                ? estimateTajaPreliminaryLandedCost({
+                    result: planningResult,
+                    quantity: projectQuantity,
+                    targetCountry,
+                    targetMarginPercent: 0,
+                    fxSnapshot: planningResult.currency === "EUR" ? undefined : fxSnapshot,
+                  })
+                : null;
+              const displayedIncoterm = offer.incoterm ??
+                (preliminaryEstimate?.pricingBasisAssumed ? text.assumedIncoterm : text.unknown);
+              const displayedSupplierCountry = offer.supplierCountry
+                ? getCountryDisplayName(offer.supplierCountry, locale)
+                : text.unknown;
+              const displayedDelivery = offer.deliveryTimeDays === null
+                ? preliminaryEstimate
+                  ? `${preliminaryEstimate.deliveryTimeDays} (${text.estimatedTransportTime})`
+                  : text.unknown
+                : `${offer.deliveryTimeDays} ${text.days}`;
               const offerCostNeedsReview = Boolean(
                 latest && importCostNeedsReview(offer.latestCostAssumptions),
               );
@@ -447,9 +550,9 @@ export function SimpleProfitabilityPanel({
                   <div className="offer-highlights">
                     <span>{text.supplierPrice}<strong>{offer.unitPrice && offer.currency ? money(offer.unitPrice, offer.currency) : text.unknown}</strong></span>
                     <span>{text.moq}<strong>{offer.moq ?? text.unknown}</strong></span>
-                    <span>{text.incoterm}<strong>{offer.incoterm ?? text.unknown}</strong></span>
-                    <span>{text.delivery}<strong>{offer.deliveryTimeDays === null ? text.unknown : `${offer.deliveryTimeDays} ${text.days}`}</strong></span>
-                    <span>{text.supplierCountry}<strong>{offer.supplierCountry ?? text.unknown}</strong></span>
+                    <span>{text.incoterm}<strong>{displayedIncoterm}</strong></span>
+                    <span>{text.delivery}<strong>{displayedDelivery}</strong></span>
+                    <span>{text.supplierCountry}<strong>{displayedSupplierCountry}</strong></span>
                   </div>
 
                   {sourceUrl && (
@@ -473,13 +576,43 @@ export function SimpleProfitabilityPanel({
                     </>
                   ) : !commercialTermsComplete ? (
                     <>
-                      <p className="warning-text">{text.commercialDataMissing}</p>
+                      {!priceDataComplete && (
+                        <p className="warning-text">{text.commercialDataMissing}</p>
+                      )}
+                      {priceDataComplete && preliminaryEstimate && (
+                        <section className="preliminary-import-estimate">
+                          <h3>{text.preliminaryEstimateTitle}</h3>
+                          <p>{text.preliminaryEstimateBody}</p>
+                          <div className="offer-highlights">
+                            <span>
+                              {text.preliminaryBase}
+                              <strong>≈ {money(preliminaryEstimate.basePerUnitEur, "EUR")} / {text.unit}</strong>
+                            </span>
+                            <span>
+                              {text.preliminaryRange}
+                              <strong>
+                                {money(preliminaryEstimate.lowPerUnitEur, "EUR")} – {money(preliminaryEstimate.highPerUnitEur, "EUR")} / {text.unit}
+                              </strong>
+                            </span>
+                            <span>
+                              {text.incoterm}
+                              <strong>{preliminaryEstimate.pricingBasisAssumed ? text.assumedIncoterm : preliminaryEstimate.pricingBasisIncoterm}</strong>
+                            </span>
+                            <span>
+                              {text.delivery}
+                              <strong>{preliminaryEstimate.deliveryTimeDays} ({text.estimatedTransportTime})</strong>
+                            </span>
+                          </div>
+                          <p className="warning-text">{text.confirmActualTerms}</p>
+                        </section>
+                      )}
                       <CommercialTermsForm
                         offerId={offer.id}
                         unitPrice={offer.unitPrice?.toString() ?? null}
                         currency={offer.currency}
                         incoterm={offer.incoterm}
                         deliveryTimeDays={offer.deliveryTimeDays}
+                        planningIncoterm={preliminaryEstimate?.pricingBasisAssumed ? "EXW" : null}
                       />
                     </>
                   ) : (

@@ -28,6 +28,7 @@ export type TajaPreliminaryCostWarning =
   | "GENERIC_HANDLING_ASSUMPTIONS"
   | "SUPPLIER_ORIGIN_ASSUMED_CHINA"
   | "INCOTERM_ASSUMED_EXW_FOR_1688"
+  | "INCOTERM_ASSUMED_EXW_FOR_PLANNING"
   | "CHINA_DOMESTIC_TRANSPORT_ASSUMED"
   | "SOURCING_AGENT_FEE_ASSUMED"
   | "LOW_LOGISTICS_CONFIDENCE";
@@ -115,21 +116,6 @@ function is1688Result(result: SupplierOfferSearchResult) {
   }
 }
 
-function pricingBasis(result: SupplierOfferSearchResult) {
-  if (
-    result.incoterm === "EXW" ||
-    result.incoterm === "FCA" ||
-    result.incoterm === "FAS" ||
-    result.incoterm === "FOB"
-  ) {
-    return { incoterm: result.incoterm, assumed: false } as const;
-  }
-  if (result.incoterm === null && is1688Result(result)) {
-    return { incoterm: "EXW", assumed: true } as const;
-  }
-  return null;
-}
-
 function isChinaMarketplaceResult(result: SupplierOfferSearchResult) {
   try {
     const host = new URL(result.productUrl).hostname.toLowerCase().replace(/^www\./, "");
@@ -139,6 +125,21 @@ function isChinaMarketplaceResult(result: SupplierOfferSearchResult) {
   } catch {
     return false;
   }
+}
+
+function pricingBasis(result: SupplierOfferSearchResult) {
+  if (
+    result.incoterm === "EXW" ||
+    result.incoterm === "FCA" ||
+    result.incoterm === "FAS" ||
+    result.incoterm === "FOB"
+  ) {
+    return { incoterm: result.incoterm, assumed: false } as const;
+  }
+  if (result.incoterm === null && isChinaMarketplaceResult(result)) {
+    return { incoterm: "EXW", assumed: true } as const;
+  }
+  return null;
 }
 
 function chinaOriginStatus(result: SupplierOfferSearchResult) {
@@ -155,8 +156,9 @@ function chinaDomesticPlanningCosts(input: {
   goodsCostEur: number;
   logistics: ProductLogisticsEstimate;
 }) {
-  const applies = is1688Result(input.result) && input.basis.incoterm === "EXW";
-  if (!applies) {
+  const exwChinaMarketplace = input.basis.incoterm === "EXW" &&
+    isChinaMarketplaceResult(input.result);
+  if (!exwChinaMarketplace) {
     return {
       applies: false,
       chinaDomesticTransportEur: 0,
@@ -164,6 +166,7 @@ function chinaDomesticPlanningCosts(input: {
     } as const;
   }
 
+  const requires1688Agent = is1688Result(input.result);
   return {
     applies: true,
     chinaDomesticTransportEur: Math.max(
@@ -171,7 +174,9 @@ function chinaDomesticPlanningCosts(input: {
       input.logistics.estimatedWeightKg * 0.12,
       input.logistics.estimatedVolumeCbm * 45,
     ),
-    sourcingAgentFeeEur: Math.max(35, input.goodsCostEur * 0.05),
+    sourcingAgentFeeEur: requires1688Agent
+      ? Math.max(35, input.goodsCostEur * 0.05)
+      : 0,
   } as const;
 }
 
@@ -282,12 +287,18 @@ export function estimateTajaPreliminaryLandedCost(input: {
   if (originStatus === "ASSUMED_MARKETPLACE") {
     warnings.push("SUPPLIER_ORIGIN_ASSUMED_CHINA");
   }
-  if (basis.assumed) warnings.push("INCOTERM_ASSUMED_EXW_FOR_1688");
-  if (chinaDomestic.applies) {
+  if (basis.assumed) {
     warnings.push(
-      "CHINA_DOMESTIC_TRANSPORT_ASSUMED",
-      "SOURCING_AGENT_FEE_ASSUMED",
+      is1688Result(result)
+        ? "INCOTERM_ASSUMED_EXW_FOR_1688"
+        : "INCOTERM_ASSUMED_EXW_FOR_PLANNING",
     );
+  }
+  if (chinaDomestic.applies) {
+    warnings.push("CHINA_DOMESTIC_TRANSPORT_ASSUMED");
+    if (chinaDomestic.sourcingAgentFeeEur > 0) {
+      warnings.push("SOURCING_AGENT_FEE_ASSUMED");
+    }
   }
   if (confidence === "LOW") warnings.push("LOW_LOGISTICS_CONFIDENCE");
 
@@ -319,12 +330,16 @@ export function estimateTajaPreliminaryLandedCost(input: {
         ? "Supplier country is missing; China is assumed only because the offer is on a China marketplace."
         : "Supplier origin: China.",
       basis.assumed
-        ? "1688 domestic quote has no explicit Incoterm; EXW is used only as a preliminary planning basis."
+        ? is1688Result(result)
+          ? "1688 domestic quote has no explicit Incoterm; EXW is used only as a preliminary planning basis."
+          : "Supplier offer has no explicit Incoterm; EXW is used conservatively only as a preliminary planning basis."
         : `Pricing basis: ${basis.incoterm}.`,
       ...(chinaDomestic.applies
         ? [
-            `1688 domestic China transport: ${round(chinaDomestic.chinaDomesticTransportEur)} EUR (planning estimate, not a carrier quote).`,
-            `1688 sourcing/warehouse agent: ${round(chinaDomestic.sourcingAgentFeeEur)} EUR (5% of goods, minimum 35 EUR planning assumption).`,
+            `Estimated domestic China transport: ${round(chinaDomestic.chinaDomesticTransportEur)} EUR (planning estimate, not a carrier quote).`,
+            ...(chinaDomestic.sourcingAgentFeeEur > 0
+              ? [`1688 sourcing/warehouse agent: ${round(chinaDomestic.sourcingAgentFeeEur)} EUR (5% of goods, minimum 35 EUR planning assumption).`]
+              : []),
           ]
         : []),
       `Export/consolidation handling: ${round(originHandlingEur)} EUR.`,

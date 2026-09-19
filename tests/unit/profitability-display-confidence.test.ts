@@ -15,6 +15,16 @@ describe("ImportPilot 1.0 profitability display confidence", () => {
     expect(source).toContain("getEuroDisplay(numeric, currency, fxSnapshot ?? undefined)");
   });
 
+  it("shows a preliminary estimate when price is known but Incoterm is missing", () => {
+    expect(source).toContain("preliminarySearchResult");
+    expect(source).toContain("estimateTajaPreliminaryLandedCost");
+    expect(source).toContain('preliminaryEstimateTitle: "Preliminarna procena uvoza"');
+    expect(source).toContain('assumedIncoterm: "EXW — pretpostavka za procenu"');
+    expect(source).toContain("preliminaryEstimate.deliveryTimeDays");
+    expect(source).toContain("pricingBasisAssumed");
+    expect(source).toContain("Potvrdite stvarni Incoterm");
+  });
+
   it("labels unconfirmed transport or customs costs as estimates", () => {
     expect(source).toContain("!assumptions.transportConfirmed || !assumptions.customsDutyConfirmed");
     expect(source).toContain('estimatedCostPerUnit: "Procenjena cena po komadu"');
