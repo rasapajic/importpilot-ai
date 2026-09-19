@@ -15,8 +15,8 @@ import type {
 } from "./provider.js";
 
 const DEFAULT_MODEL = "gpt-5-mini";
-const DEFAULT_MAX_RESULTS = 3;
-const MAX_RESULTS = 10;
+const DEFAULT_MAX_RESULTS = 5;
+const MAX_RESULTS = 20;
 const DEFAULT_REQUEST_TIMEOUT_MS = 45_000;
 const MIN_REQUEST_TIMEOUT_MS = 5_000;
 const MAX_REQUEST_TIMEOUT_MS = 80_000;
