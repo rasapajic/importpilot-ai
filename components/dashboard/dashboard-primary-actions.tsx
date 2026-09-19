@@ -24,6 +24,7 @@ type IntakeCopy = {
   createFailed: string;
   quotaUsage: (plan: string, used: number, limit: number) => string;
   quotaExhausted: string;
+  managePlan: string;
 };
 
 const copy: Record<Locale, IntakeCopy> = {
@@ -41,6 +42,7 @@ const copy: Record<Locale, IntakeCopy> = {
     createFailed: "Pretraga nije kreirana. Pokušajte ponovo.",
     quotaUsage: (plan, used, limit) => `${plan} · ${used}/${limit} živih pretraga iskorišćeno ovog meseca`,
     quotaExhausted: "Mesečni limit je potrošen. Sačuvane pretrage ostaju dostupne.",
+    managePlan: "Plan i naplata",
   },
   de: {
     productLabel: "Produkt",
@@ -56,6 +58,7 @@ const copy: Record<Locale, IntakeCopy> = {
     createFailed: "Die Suche wurde nicht erstellt. Bitte versuchen Sie es erneut.",
     quotaUsage: (plan, used, limit) => `${plan} · ${used}/${limit} Live-Suchen in diesem Monat verwendet`,
     quotaExhausted: "Das monatliche Limit ist erreicht. Gespeicherte Suchen bleiben verfügbar.",
+    managePlan: "Tarif und Abrechnung",
   },
   en: {
     productLabel: "Product",
@@ -71,6 +74,7 @@ const copy: Record<Locale, IntakeCopy> = {
     createFailed: "The search was not created. Please try again.",
     quotaUsage: (plan, used, limit) => `${plan} · ${used}/${limit} live searches used this month`,
     quotaExhausted: "The monthly limit is reached. Saved searches remain available.",
+    managePlan: "Plan and billing",
   },
 };
 
@@ -163,6 +167,7 @@ export function DashboardPrimaryActions({
         <div className={styles.quotaStatus}>
           <strong>{text.quotaUsage(quota.plan, quota.used, quota.limit)}</strong>
           {quota.remaining <= 0 && <span>{text.quotaExhausted}</span>}
+          <a href="/billing">{text.managePlan}</a>
         </div>
       )}
 
