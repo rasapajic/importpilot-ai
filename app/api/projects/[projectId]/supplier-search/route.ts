@@ -20,10 +20,11 @@ import {
   SupplierSearchProviderUnavailableError,
 } from "@/modules/product-search/infrastructure/http-provider";
 import {
-  releaseMonthlySupplierSearchQuotaReservation,
+  releaseSupplierSearchQuotaReservation,
   reserveMonthlySupplierSearchQuota,
   SupplierSearchQuotaExceededError,
   SupplierSearchQuotaProjectNotFoundError,
+  type SupplierSearchQuotaReservation,
   type SupplierSearchQuotaStatus,
 } from "@/modules/subscriptions/application/supplier-search-quota-service";
 
@@ -99,7 +100,7 @@ export async function POST(
 
   const startedAt = Date.now();
   const projectId = (await params).projectId;
-  let quotaReservation: SupplierSearchQuotaStatus | null = null;
+  let quotaReservation: SupplierSearchQuotaReservation | null = null;
 
   try {
     quotaReservation = await reserveMonthlySupplierSearchQuota({
@@ -120,6 +121,7 @@ export async function POST(
       quota_plan: quotaReservation.plan,
       quota_used: quotaReservation.used,
       quota_limit: quotaReservation.limit,
+      quota_source: quotaReservation.source,
       exact_page_finalist_limit: TAJA_FINALIST_EXACT_PAGE_LIMIT,
       exact_page_timeout_ms: TAJA_FINALIST_EXACT_PAGE_TIMEOUT_MS,
       request_timeout_ms: SUPPLIER_SEARCH_REQUEST_TIMEOUT_MS,
@@ -168,9 +170,9 @@ export async function POST(
     }
 
     if (quotaReservation) {
-      await releaseMonthlySupplierSearchQuotaReservation({
+      await releaseSupplierSearchQuotaReservation({
         organizationId: auth.membership.organizationId,
-        periodStart: quotaReservation.periodStart,
+        reservation: quotaReservation,
       }).catch((releaseError: unknown) => {
         developmentLog("supplier_search_quota_release_failed", {
           project_id: projectId,

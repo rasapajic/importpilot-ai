@@ -107,6 +107,30 @@ if (present("URL_IMPORT_PROVIDER_URL")) {
   }
 }
 
+
+const billingVariables = [
+  "BILLING_CHECKOUT_PROVIDER_URL",
+  "BILLING_CHECKOUT_PROVIDER_TOKEN",
+  "BILLING_EVENT_TOKEN",
+];
+const billingConfigured = billingVariables.some(present);
+if (billingConfigured) {
+  for (const name of billingVariables) {
+    if (!present(name)) problems.push(`${name}: required when billing is enabled`);
+  }
+  if (
+    present("BILLING_CHECKOUT_PROVIDER_URL") &&
+    !validUrl(process.env.BILLING_CHECKOUT_PROVIDER_URL, ["https:"])
+  ) {
+    problems.push("BILLING_CHECKOUT_PROVIDER_URL: production endpoint must use HTTPS");
+  }
+  for (const name of ["BILLING_CHECKOUT_PROVIDER_TOKEN", "BILLING_EVENT_TOKEN"]) {
+    const value = process.env[name]?.trim() ?? "";
+    if (value && value.length < 16) problems.push(`${name}: too short for production`);
+    if (value && placeholderPattern.test(value)) problems.push(`${name}: placeholder value`);
+  }
+}
+
 const uniqueProblems = [...new Set(problems)];
 if (uniqueProblems.length > 0) {
   console.error("IMPORTPILOT_PRODUCTION_CONFIG BLOCKED");
@@ -122,4 +146,5 @@ console.log(JSON.stringify({
   supplierSearchConfigured: true,
   urlImportConfigured: true,
   databaseConfigured: true,
+  billingConfigured,
 }, null, 2));

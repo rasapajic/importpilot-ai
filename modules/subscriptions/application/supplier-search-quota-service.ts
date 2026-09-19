@@ -15,6 +15,11 @@ export type SupplierSearchQuotaStatus = {
   periodEnd: Date;
 };
 
+export type SupplierSearchQuotaReservation = SupplierSearchQuotaStatus & {
+  source: "MONTHLY" | "FULL_IMPORT_ANALYSIS";
+  entitlementId: string | null;
+};
+
 export class SupplierSearchQuotaExceededError extends Error {
   constructor(public readonly quota: SupplierSearchQuotaStatus) {
     super("Monthly supplier search limit reached.");
@@ -30,6 +35,7 @@ export class SupplierSearchQuotaProjectNotFoundError extends Error {
 }
 
 type UsageRow = { used: number };
+type EntitlementRow = { id: string };
 
 function planCode(plan: SubscriptionPlan): Jakov360PlanCode {
   switch (plan) {
@@ -104,7 +110,7 @@ export async function reserveMonthlySupplierSearchQuota(input: {
   organizationId: string;
   projectId: string;
   now?: Date;
-}): Promise<SupplierSearchQuotaStatus> {
+}): Promise<SupplierSearchQuotaReservation> {
   const project = await prisma.importProject.findFirst({
     where: {
       id: input.projectId,
@@ -143,13 +149,43 @@ export async function reserveMonthlySupplierSearchQuota(input: {
 
   const reserved = rows[0];
   if (reserved) {
-    return statusFrom({
-      plan,
-      used: reserved.used,
-      periodStart,
-      periodEnd,
-    });
+    return {
+      ...statusFrom({
+        plan,
+        used: reserved.used,
+        periodStart,
+        periodEnd,
+      }),
+      source: "MONTHLY",
+      entitlementId: null,
+    };
   }
+
+  const entitlementRows = await prisma.$queryRaw<EntitlementRow[]>(Prisma.sql`
+    UPDATE "project_entitlements"
+    SET
+      "live_searches_remaining" = "live_searches_remaining" - 1,
+      "status" = CASE
+        WHEN "live_searches_remaining" - 1 = 0 AND "analyses_remaining" = 0
+          THEN 'CONSUMED'::"ProjectEntitlementStatus"
+        ELSE "status"
+      END,
+      "updated_at" = CURRENT_TIMESTAMP
+    WHERE "id" = (
+      SELECT "id"
+      FROM "project_entitlements"
+      WHERE
+        "organization_id" = CAST(${input.organizationId} AS UUID)
+        AND "project_id" = CAST(${input.projectId} AS UUID)
+        AND "product" = 'FULL_IMPORT_ANALYSIS'::"BillingPurchaseProduct"
+        AND "status" = 'ACTIVE'::"ProjectEntitlementStatus"
+        AND "live_searches_remaining" > 0
+      ORDER BY "created_at" ASC
+      FOR UPDATE SKIP LOCKED
+      LIMIT 1
+    )
+    RETURNING "id"
+  `);
 
   const current = await prisma.supplierSearchQuotaUsage.findUnique({
     where: {
@@ -161,12 +197,51 @@ export async function reserveMonthlySupplierSearchQuota(input: {
     select: { used: true },
   });
 
-  throw new SupplierSearchQuotaExceededError(statusFrom({
+  const monthlyStatus = statusFrom({
     plan,
     used: current?.used ?? limit,
     periodStart,
     periodEnd,
-  }));
+  });
+
+  if (entitlementRows[0]) {
+    return {
+      ...monthlyStatus,
+      source: "FULL_IMPORT_ANALYSIS",
+      entitlementId: entitlementRows[0].id,
+    };
+  }
+
+  throw new SupplierSearchQuotaExceededError(monthlyStatus);
+}
+
+export async function releaseSupplierSearchQuotaReservation(input: {
+  organizationId: string;
+  reservation: SupplierSearchQuotaReservation;
+}) {
+  if (input.reservation.source === "FULL_IMPORT_ANALYSIS" && input.reservation.entitlementId) {
+    await prisma.$executeRaw(Prisma.sql`
+      UPDATE "project_entitlements"
+      SET
+        "live_searches_remaining" = "live_searches_remaining" + 1,
+        "status" = CASE
+          WHEN "status" = 'REVOKED'::"ProjectEntitlementStatus"
+            THEN "status"
+          ELSE 'ACTIVE'::"ProjectEntitlementStatus"
+        END,
+        "updated_at" = CURRENT_TIMESTAMP
+      WHERE
+        "id" = CAST(${input.reservation.entitlementId} AS UUID)
+        AND "organization_id" = CAST(${input.organizationId} AS UUID)
+        AND "status" <> 'REVOKED'::"ProjectEntitlementStatus"
+    `);
+    return;
+  }
+
+  await releaseMonthlySupplierSearchQuotaReservation({
+    organizationId: input.organizationId,
+    periodStart: input.reservation.periodStart,
+  });
 }
 
 export async function releaseMonthlySupplierSearchQuotaReservation(input: {
@@ -183,4 +258,37 @@ export async function releaseMonthlySupplierSearchQuotaReservation(input: {
       AND "period_start" = ${input.periodStart}::date
       AND "used" > 0
   `);
+}
+
+export async function consumeFullImportAnalysisEntitlement(input: {
+  organizationId: string;
+  projectId: string;
+}) {
+  const rows = await prisma.$queryRaw<EntitlementRow[]>(Prisma.sql`
+    UPDATE "project_entitlements"
+    SET
+      "analyses_remaining" = "analyses_remaining" - 1,
+      "status" = CASE
+        WHEN "analyses_remaining" - 1 = 0 AND "live_searches_remaining" = 0
+          THEN 'CONSUMED'::"ProjectEntitlementStatus"
+        ELSE "status"
+      END,
+      "updated_at" = CURRENT_TIMESTAMP
+    WHERE "id" = (
+      SELECT "id"
+      FROM "project_entitlements"
+      WHERE
+        "organization_id" = CAST(${input.organizationId} AS UUID)
+        AND "project_id" = CAST(${input.projectId} AS UUID)
+        AND "product" = 'FULL_IMPORT_ANALYSIS'::"BillingPurchaseProduct"
+        AND "status" = 'ACTIVE'::"ProjectEntitlementStatus"
+        AND "analyses_remaining" > 0
+      ORDER BY "created_at" ASC
+      FOR UPDATE SKIP LOCKED
+      LIMIT 1
+    )
+    RETURNING "id"
+  `);
+
+  return rows[0]?.id ?? null;
 }
