@@ -19,6 +19,31 @@ enum SubscriptionPlan {
   PRO
 }
 
+enum BillingSubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  EXPIRED
+}
+
+enum BillingPurchaseProduct {
+  FULL_IMPORT_ANALYSIS
+}
+
+enum BillingPurchaseStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+  CANCELED
+}
+
+enum ProjectEntitlementStatus {
+  ACTIVE
+  CONSUMED
+  REVOKED
+}
+
 enum OAuthProvider {
   GOOGLE
   MICROSOFT
@@ -185,6 +210,9 @@ model Organization {
   projectCompletionHistory ProjectCompletionHistory[]
   aiUsageEvents AiUsageEvent[]
   supplierSearchQuotaUsage SupplierSearchQuotaUsage[]
+  billingSubscriptions BillingSubscription[]
+  billingPurchases BillingPurchase[]
+  projectEntitlements ProjectEntitlement[]
   createdAt DateTime             @default(now()) @map("created_at")
   updatedAt DateTime             @updatedAt @map("updated_at")
 
@@ -277,6 +305,84 @@ model SupplierSearchQuotaUsage {
   @@map("supplier_search_quota_usage")
 }
 
+
+model BillingSubscription {
+  id                     String                    @id @default(uuid()) @db.Uuid
+  organizationId         String                    @map("organization_id") @db.Uuid
+  provider               String                    @db.VarChar(40)
+  providerCustomerId     String?                   @map("provider_customer_id") @db.VarChar(200)
+  providerSubscriptionId String?                   @map("provider_subscription_id") @db.VarChar(200)
+  plan                   SubscriptionPlan
+  status                 BillingSubscriptionStatus
+  currentPeriodStart     DateTime?                 @map("current_period_start")
+  currentPeriodEnd       DateTime?                 @map("current_period_end")
+  cancelAtPeriodEnd      Boolean                   @default(false) @map("cancel_at_period_end")
+  organization           Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt              DateTime                  @default(now()) @map("created_at")
+  updatedAt              DateTime                  @updatedAt @map("updated_at")
+
+  @@unique([provider, providerSubscriptionId], map: "billing_subscriptions_provider_subscription_id_key")
+  @@index([organizationId, status, currentPeriodEnd], map: "billing_subscriptions_org_status_period_idx")
+  @@map("billing_subscriptions")
+}
+
+model BillingPurchase {
+  id                 String                 @id @default(uuid()) @db.Uuid
+  organizationId     String                 @map("organization_id") @db.Uuid
+  projectId          String?                @map("project_id") @db.Uuid
+  provider           String                 @db.VarChar(40)
+  providerCheckoutId String?                @map("provider_checkout_id") @db.VarChar(200)
+  providerPaymentId  String?                @map("provider_payment_id") @db.VarChar(200)
+  product            BillingPurchaseProduct
+  status             BillingPurchaseStatus
+  amountEurCents     Int                    @map("amount_eur_cents")
+  currency           String                 @default("EUR") @db.Char(3)
+  paidAt             DateTime?              @map("paid_at")
+  refundedAt         DateTime?              @map("refunded_at")
+  organization       Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project            ImportProject?         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  entitlement        ProjectEntitlement?
+  createdAt          DateTime               @default(now()) @map("created_at")
+  updatedAt          DateTime               @updatedAt @map("updated_at")
+
+  @@unique([provider, providerPaymentId], map: "billing_purchases_provider_payment_id_key")
+  @@index([organizationId, projectId, status, createdAt], map: "billing_purchases_org_project_status_idx")
+  @@map("billing_purchases")
+}
+
+model ProjectEntitlement {
+  id                       String                   @id @default(uuid()) @db.Uuid
+  organizationId           String                   @map("organization_id") @db.Uuid
+  projectId                String                   @map("project_id") @db.Uuid
+  sourcePurchaseId         String                   @unique @map("source_purchase_id") @db.Uuid
+  product                  BillingPurchaseProduct
+  status                   ProjectEntitlementStatus @default(ACTIVE)
+  liveSearchesRemaining    Int                      @default(1) @map("live_searches_remaining")
+  analysesRemaining        Int                      @default(1) @map("analyses_remaining")
+  organization             Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project                  ImportProject            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sourcePurchase           BillingPurchase          @relation(fields: [sourcePurchaseId], references: [id], onDelete: Cascade)
+  createdAt                DateTime                 @default(now()) @map("created_at")
+  updatedAt                DateTime                 @updatedAt @map("updated_at")
+
+  @@index([organizationId, projectId, status, createdAt], map: "project_entitlements_org_project_status_idx")
+  @@map("project_entitlements")
+}
+
+model BillingWebhookEvent {
+  id              String   @id @default(uuid()) @db.Uuid
+  provider        String   @db.VarChar(40)
+  providerEventId String   @map("provider_event_id") @db.VarChar(200)
+  eventType       String   @map("event_type") @db.VarChar(80)
+  payload         Json
+  processedAt     DateTime? @map("processed_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@unique([provider, providerEventId], map: "billing_webhook_events_provider_event_id_key")
+  @@index([createdAt])
+  @@map("billing_webhook_events")
+}
+
 model SupplierSearchCache {
   id              String   @id @default(uuid()) @db.Uuid
   query           String   @db.VarChar(200)
@@ -316,6 +422,8 @@ model ImportProject {
   recommendationFeedback RecommendationFeedback[]
   completionHistory ProjectCompletionHistory[]
   aiUsageEvents AiUsageEvent[]
+  billingPurchases BillingPurchase[]
+  projectEntitlements ProjectEntitlement[]
   completionStatus ProjectCompletionStatus @default(ACTIVE) @map("completion_status")
   createdAt      DateTime       @default(now()) @map("created_at")
   updatedAt      DateTime       @updatedAt @map("updated_at")
