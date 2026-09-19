@@ -12,6 +12,7 @@ import {
   type Locale,
 } from "@/modules/i18n/translations";
 import { getDashboardProjectStage } from "@/modules/projects/application/dashboard-project-stage";
+import { getMonthlySupplierSearchQuotaStatus } from "@/modules/subscriptions/application/supplier-search-quota-service";
 import { listProjects } from "@/modules/projects/application/project-service";
 import { listProjectsSchema } from "@/modules/projects/domain/validation";
 
@@ -80,7 +81,10 @@ export default async function DashboardPage({
     page: typeof raw.page === "string" ? raw.page : 1,
     pageSize: 10,
   });
-  const result = await listProjects(query, membership.organizationId);
+  const [result, quota] = await Promise.all([
+    listProjects(query, membership.organizationId),
+    getMonthlySupplierSearchQuotaStatus(membership.organizationId),
+  ]);
   const hasActiveFilters = Boolean(
     query.search || query.status || query.completionStatus || query.targetCountry,
   );
@@ -114,7 +118,12 @@ export default async function DashboardPage({
             <h1>{copy.title}</h1>
             <p>{copy.subtitle}</p>
           </header>
-          <DashboardPrimaryActions />
+          <DashboardPrimaryActions quota={{
+            plan: quota.plan,
+            used: quota.used,
+            limit: quota.limit,
+            remaining: quota.remaining,
+          }} />
         </section>
 
         <section className={styles.searchesColumn} aria-labelledby="my-searches-title">
