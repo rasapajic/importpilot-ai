@@ -190,10 +190,13 @@ export function DashboardPrimaryActions({
   const voiceCommittedTranscriptRef = useRef("");
   const voiceSessionTranscriptRef = useRef("");
   const voiceRestartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const voiceGenerationRef = useRef(0);
+  const voiceSkipFinalizeRef = useRef(false);
 
   useEffect(() => {
     return () => {
       voiceShouldListenRef.current = false;
+      voiceGenerationRef.current += 1;
       if (voiceRestartTimerRef.current) clearTimeout(voiceRestartTimerRef.current);
       recognitionRef.current?.abort();
       recognitionRef.current = null;
@@ -257,8 +260,11 @@ export function DashboardPrimaryActions({
     applyVoiceTranscript(transcript);
   }
 
-  function beginVoiceRecognitionSession(Recognition: BrowserSpeechRecognitionConstructor) {
-    if (!voiceShouldListenRef.current) return;
+  function beginVoiceRecognitionSession(
+    Recognition: BrowserSpeechRecognitionConstructor,
+    generation: number,
+  ) {
+    if (!voiceShouldListenRef.current || generation !== voiceGenerationRef.current) return;
 
     const recognition = new Recognition();
     recognition.lang = speechLocale(locale);
@@ -268,6 +274,7 @@ export function DashboardPrimaryActions({
     voiceSessionTranscriptRef.current = "";
 
     recognition.onresult = (event) => {
+      if (generation !== voiceGenerationRef.current) return;
       let sessionTranscript = "";
       for (let index = 0; index < event.results.length; index += 1) {
         sessionTranscript += `${event.results[index]?.[0]?.transcript ?? ""} `;
@@ -277,19 +284,28 @@ export function DashboardPrimaryActions({
     };
 
     recognition.onerror = (event) => {
+      if (generation !== voiceGenerationRef.current) return;
       const recoverable = event.error === "no-speech" || event.error === "aborted";
       if (recoverable && voiceShouldListenRef.current) return;
 
       voiceShouldListenRef.current = false;
       setVoiceListening(false);
       recognitionRef.current = null;
-      if (event.error !== "aborted") setVoiceError(text.voiceError);
+      if (event.error !== "aborted") {
+        voiceSkipFinalizeRef.current = true;
+        setVoiceError(text.voiceError);
+      }
     };
 
     recognition.onend = () => {
+      if (generation !== voiceGenerationRef.current) return;
       recognitionRef.current = null;
 
       if (!voiceShouldListenRef.current) {
+        if (voiceSkipFinalizeRef.current) {
+          voiceSkipFinalizeRef.current = false;
+          return;
+        }
         finishVoiceInput();
         return;
       }
@@ -300,7 +316,7 @@ export function DashboardPrimaryActions({
 
       voiceRestartTimerRef.current = setTimeout(() => {
         voiceRestartTimerRef.current = null;
-        beginVoiceRecognitionSession(Recognition);
+        beginVoiceRecognitionSession(Recognition, generation);
       }, 150);
     };
 
@@ -318,6 +334,7 @@ export function DashboardPrimaryActions({
   function stopVoiceInput() {
     if (!voiceListening) return;
     voiceShouldListenRef.current = false;
+    voiceSkipFinalizeRef.current = false;
     if (voiceRestartTimerRef.current) {
       clearTimeout(voiceRestartTimerRef.current);
       voiceRestartTimerRef.current = null;
@@ -345,14 +362,19 @@ export function DashboardPrimaryActions({
       return;
     }
 
+    voiceShouldListenRef.current = false;
+    voiceGenerationRef.current += 1;
+    const generation = voiceGenerationRef.current;
+    voiceSkipFinalizeRef.current = false;
     recognitionRef.current?.abort();
+    recognitionRef.current = null;
     if (voiceRestartTimerRef.current) clearTimeout(voiceRestartTimerRef.current);
     voiceCommittedTranscriptRef.current = "";
     voiceSessionTranscriptRef.current = "";
     setVoiceTranscript("");
     voiceShouldListenRef.current = true;
     setVoiceListening(true);
-    beginVoiceRecognitionSession(Recognition);
+    beginVoiceRecognitionSession(Recognition, generation);
   }
 
   async function createSearch(event: FormEvent<HTMLFormElement>) {
