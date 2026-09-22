@@ -419,3 +419,19 @@
   gap: 0.7rem;
   padding: 0.85rem 1rem;
 }
+
+
+.fieldError {
+  color: #a32121;
+  font-size: 0.88rem;
+  font-weight: 700;
+  line-height: 1.4;
+  margin: 0.15rem 0 0;
+}
+
+.description[aria-invalid="true"],
+.fieldLabel input[aria-invalid="true"],
+.fieldLabel select[aria-invalid="true"] {
+  border-color: #a32121;
+  box-shadow: 0 0 0 3px rgb(163 33 33 / 10%);
+}
