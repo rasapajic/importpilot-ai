@@ -39,10 +39,19 @@ describe("ImportPilot 1.0 simple supplier results", () => {
   it("keeps the main result card focused on the buying decision", () => {
     expect(resultsSource).toContain("Najbolje ponude");
     expect(resultsSource).toContain("Cena dobavljača");
-    expect(resultsSource).toContain("Ukupan trošak uvoza");
+    expect(resultsSource).toContain("Ukupno sa cenom uvoza");
     expect(resultsSource).toContain("Dobavljač");
     expect(resultsSource).toContain("Dodaj za poređenje");
     expect(resultsSource).toContain("Detalji analize");
+  });
+
+  it("shows supplier price per piece and a separate total for the requested quantity", () => {
+    expect(resultsSource).toContain('supplierOrderTotal: (quantity) => `Za ${quantity} kom`');
+    expect(resultsSource).toContain('formatSupplierPrice(effectiveResult.price, effectiveResult.currency, locale)} / ${text.pieces}');
+    expect(resultsSource).toContain("effectiveResult.price * quantity");
+    expect(resultsSource).toContain('className="supplier-order-total"');
+    expect(resultsSource).toContain('formatSupplierPrice(snapshot.price, snapshot.currency, locale)} / ${text.pieces}');
+    expect(resultsSource).not.toContain('/ ${formatQuantity(quantity, locale)} ${text.pieces}');
   });
 
   it("recalculates visible non-EUR preliminary landed cost with fresh ECB FX", () => {

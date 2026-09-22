@@ -51,6 +51,13 @@
   overflow-wrap: anywhere;
 }
 
+.supplier-order-total {
+  color: #496158;
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
 .search-result-image-placeholder {
   align-items: center;
   background: #f3f6f4;
