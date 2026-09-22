@@ -160,8 +160,8 @@ const QUANTITY_UNIT = /^(?:kom|komada|komad|komade|komadi|pcs|pc|pieces|piece|un
 
 function quantityFromDigits(text: string): QuantityMatch | null {
   const patterns = [
-    /\b(?:koli[cč]ina|quantity|menge)\s*(?:je|is|ist|:|-)?\s*([0-9][0-9\s.,]{0,12})\b/iu,
-    /\b([0-9][0-9\s.,]{0,12})\s*(?:kom(?:ada|ad|ade|adi)?|pcs?|pieces?|units?|st(?:ü|u|ue)ck(?:e)?)\b/iu,
+    /\b(?:koli[cč]ina|количина|quantity|menge)\s*(?:je|је|is|ist|:|-)?\s*([0-9][0-9\s.,]{0,12})\b/iu,
+    /\b([0-9][0-9\s.,]{0,12})\s*(?:kom(?:ada|ad|ade|adi)?|ком(?:ада|ад|аде|ади)?|pcs?|pieces?|units?|st(?:ü|u|ue)ck(?:e)?)\b/iu,
   ];
 
   for (const pattern of patterns) {
@@ -210,15 +210,15 @@ const COUNTRY_PATTERNS: Array<{
 }> = [
   {
     value: "AT",
-    pattern: /\b(?:(?:za|u|destinacija|zemlja|für|fuer|nach|zielland|land|to|for|destination|country)\s*(?::|-)?\s*)?(?:austrij(?:a|u|i|e)|аустриј(?:а|у|и|е)|austria|österreich|oesterreich)\b/iu,
+    pattern: /\b(?:(?:za|за|u|у|destinacija|дестинација|zemlja|земља|für|fuer|nach|zielland|land|to|for|destination|country)\s*(?::|-)?\s*)?(?:austrij(?:a|u|i|e)|аустриј(?:а|у|и|е)|austria|österreich|oesterreich)\b/iu,
   },
   {
     value: "DE",
-    pattern: /\b(?:(?:za|u|destinacija|zemlja|für|fuer|nach|zielland|land|to|for|destination|country)\s*(?::|-)?\s*)?(?:nema[cč]k(?:a|u|oj|e)|немачк(?:а|у|ој|е)|njema[cč]k(?:a|u|oj|e)|deutschland|germany)\b/iu,
+    pattern: /\b(?:(?:za|за|u|у|destinacija|дестинација|zemlja|земља|für|fuer|nach|zielland|land|to|for|destination|country)\s*(?::|-)?\s*)?(?:nema[cč]k(?:a|u|oj|e)|немачк(?:а|у|ој|е)|njema[cč]k(?:a|u|oj|e)|deutschland|germany)\b/iu,
   },
   {
     value: "RS",
-    pattern: /\b(?:(?:za|u|destinacija|zemlja|für|fuer|nach|zielland|land|to|for|destination|country)\s*(?::|-)?\s*)?(?:srbij(?:a|u|i|e)|србиј(?:а|у|и|е)|serbia|serbien)\b/iu,
+    pattern: /\b(?:(?:za|за|u|у|destinacija|дестинација|zemlja|земља|für|fuer|nach|zielland|land|to|for|destination|country)\s*(?::|-)?\s*)?(?:srbij(?:a|u|i|e)|србиј(?:а|у|и|е)|serbia|serbien)\b/iu,
   },
 ];
 
