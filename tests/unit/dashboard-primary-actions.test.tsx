@@ -42,6 +42,11 @@ describe("ImportPilot 1.0 core search intake", () => {
     expect(intakeSource).toContain("countryInputRef");
     expect(intakeSource).toContain("voiceReview");
     expect(intakeSource).toContain('recognition.lang = speechLocale(locale)');
+    expect(intakeSource).toContain("recognition.continuous = true");
+    expect(intakeSource).toContain("voiceTranscript");
+    expect(intakeSource).toContain("Zaustavi i popuni");
+    expect(intakeSource).toContain("beginVoiceRecognitionSession");
+    expect(intakeSource).toContain("finishVoiceInput");
     expect(intakeSource).not.toContain("router.push(" + '"/api');
   });
 
