@@ -45,6 +45,7 @@ export function resolveSupplierProviderEndpoints(
     endpoint:
       resolvedEnvironment.SUPPLIER_SEARCH_PROVIDER_URL?.trim() ||
       (baseUrl ? `${baseUrl}/search` : undefined),
+    voiceEndpoint: baseUrl ? `${baseUrl}/voice-intake` : undefined,
     healthEndpoint:
       resolvedEnvironment.SUPPLIER_SEARCH_PROVIDER_HEALTH_URL?.trim() ||
       (baseUrl ? `${baseUrl}/health` : undefined),
