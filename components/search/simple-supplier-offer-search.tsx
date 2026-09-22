@@ -11,7 +11,7 @@ import {
   supplierOfferForQuantity,
   supplierOfferVariantFacts,
 } from "@/components/search/supplier-choice-display";
-import type { FxSnapshot } from "@/modules/fx/euro-display";
+import { convertToEur, type FxSnapshot } from "@/modules/fx/euro-display";
 import type { Locale } from "@/modules/i18n/translations";
 import type { SupplierOfferSearchResult, SupplierOfferSearchSummary } from "@/modules/product-search/domain/search";
 import { estimateTajaPreliminaryLandedCost } from "@/modules/product-search/domain/taja-preliminary-cost-estimate";
@@ -38,6 +38,7 @@ type Copy = {
   noResultsText: string;
   supplierPrice: string;
   supplierOrderTotal: (quantity: string) => string;
+  fxConversionNote: string;
   landedCost: string;
   landedEstimate: string;
   landedPending: string;
@@ -96,6 +97,7 @@ const copy: Record<Locale, Copy> = {
     noResultsText: "Pokušajte ponovo. JAKOV360 neće prikazati nepouzdanu ponudu samo da bi popunio listu.",
     supplierPrice: "Cena dobavljača",
     supplierOrderTotal: (quantity) => `Za ${quantity} kom`,
+    fxConversionNote: "Preračunato po kursu korišćenom za obračun uvoza.",
     landedCost: "Ukupno sa cenom uvoza",
     landedEstimate: "procena",
     landedPending: "čeka potvrđenu cenu dobavljača",
@@ -152,6 +154,7 @@ const copy: Record<Locale, Copy> = {
     noResultsText: "Versuchen Sie es erneut. JAKOV360 zeigt kein unzuverlässiges Angebot nur um die Liste zu füllen.",
     supplierPrice: "Lieferantenpreis",
     supplierOrderTotal: (quantity) => `Für ${quantity} Stk.`,
+    fxConversionNote: "Umgerechnet mit dem für die Importkalkulation verwendeten Wechselkurs.",
     landedCost: "Gesamt inkl. Warenpreis und Importkosten",
     landedEstimate: "Schätzung",
     landedPending: "wartet auf bestätigten Lieferantenpreis",
@@ -208,6 +211,7 @@ const copy: Record<Locale, Copy> = {
     noResultsText: "Try again. JAKOV360 will not show an unreliable offer just to fill the list.",
     supplierPrice: "Supplier price",
     supplierOrderTotal: (quantity) => `For ${quantity} pcs`,
+    fxConversionNote: "Converted using the exchange rate applied to the import estimate.",
     landedCost: "Total incl. product price and import costs",
     landedEstimate: "estimate",
     landedPending: "waiting for confirmed supplier price",
@@ -316,6 +320,32 @@ function formatSupplierOrderTotal(value: number, currency: string, locale: Local
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   }).format(value);
+}
+
+export function formatSupplierPriceWithEuro(
+  value: number,
+  currency: string,
+  locale: Locale,
+  fxSnapshot: FxSnapshot | null,
+) {
+  const original = formatSupplierPrice(value, currency, locale);
+  if (currency.toUpperCase() === "EUR" || !fxSnapshot) return original;
+  const euroValue = convertToEur(value, currency, fxSnapshot);
+  return euroValue === null ? original : `${original} ≈ ${formatMoney(euroValue, locale)}`;
+}
+
+export function formatSupplierOrderTotalWithEuro(
+  value: number,
+  currency: string,
+  locale: Locale,
+  fxSnapshot: FxSnapshot | null,
+) {
+  const original = formatSupplierOrderTotal(value, currency, locale);
+  if (currency.toUpperCase() === "EUR" || !fxSnapshot) return original;
+  const euroValue = convertToEur(value, currency, fxSnapshot);
+  return euroValue === null
+    ? original
+    : `${original} ≈ ${formatSupplierOrderTotal(euroValue, "EUR", locale)}`;
 }
 
 function formatQuantity(value: number, locale: Locale) {
@@ -665,19 +695,32 @@ export function SimpleSupplierOfferSearch({
                       {text.supplierPrice}
                       <strong>
                         {effectiveResult.price !== null && effectiveResult.currency
-                          ? `${formatSupplierPrice(effectiveResult.price, effectiveResult.currency, locale)} / ${text.pieces}`
+                          ? `${formatSupplierPriceWithEuro(
+                              effectiveResult.price,
+                              effectiveResult.currency,
+                              locale,
+                              fxSnapshot,
+                            )} / ${text.pieces}`
                           : text.priceOnRequest}
                       </strong>
                       {effectiveResult.price !== null && effectiveResult.currency && quantity && (
                         <small className="supplier-order-total">
                           {text.supplierOrderTotal(formatQuantity(quantity, locale))}:{" "}
-                          {formatSupplierOrderTotal(
+                          {formatSupplierOrderTotalWithEuro(
                             effectiveResult.price * quantity,
                             effectiveResult.currency,
                             locale,
+                            fxSnapshot,
                           )}
                         </small>
                       )}
+                      {effectiveResult.price !== null &&
+                        effectiveResult.currency &&
+                        effectiveResult.currency !== "EUR" &&
+                        fxSnapshot &&
+                        convertToEur(effectiveResult.price, effectiveResult.currency, fxSnapshot) !== null && (
+                          <small className="supplier-fx-note">{text.fxConversionNote}</small>
+                        )}
                     </span>
                     <span>
                       {text.landedCost}
@@ -718,11 +761,21 @@ export function SimpleSupplierOfferSearch({
                       ? priceTierSnapshots.map((tier) => (
                           `${formatQuantity(tier.minQuantity, locale)}${tier.maxQuantity === null
                             ? "+"
-                            : `–${formatQuantity(tier.maxQuantity, locale)}`} ${text.pieces}: ${formatSupplierPrice(tier.price, tier.currency, locale)} / ${text.pieces}`
+                            : `–${formatQuantity(tier.maxQuantity, locale)}`} ${text.pieces}: ${formatSupplierPriceWithEuro(
+                              tier.price,
+                              tier.currency,
+                              locale,
+                              fxSnapshot,
+                            )} / ${text.pieces}`
                         )).join(" · ")
                       : priceSnapshots.map((snapshot) => (
                           `${formatQuantity(snapshot.quantity, locale)} ${text.pieces}: ${snapshot.price !== null && snapshot.currency
-                            ? `${formatSupplierPrice(snapshot.price, snapshot.currency, locale)} / ${text.pieces}`
+                            ? `${formatSupplierPriceWithEuro(
+                                snapshot.price,
+                                snapshot.currency,
+                                locale,
+                                fxSnapshot,
+                              )} / ${text.pieces}`
                             : text.unknown}`
                         )).join(" · ")}
                   </p>

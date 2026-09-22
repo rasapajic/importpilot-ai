@@ -65,11 +65,22 @@ describe("ImportPilot 1.0 simple supplier results", () => {
 
   it("shows supplier price per piece and a separate total for the requested quantity", () => {
     expect(resultsSource).toContain('supplierOrderTotal: (quantity) => `Za ${quantity} kom`');
-    expect(resultsSource).toContain('formatSupplierPrice(effectiveResult.price, effectiveResult.currency, locale)} / ${text.pieces}');
+    expect(resultsSource).toContain("formatSupplierPriceWithEuro(");
+    expect(resultsSource).toContain("formatSupplierOrderTotalWithEuro(");
     expect(resultsSource).toContain("effectiveResult.price * quantity");
     expect(resultsSource).toContain('className="supplier-order-total"');
-    expect(resultsSource).toContain('formatSupplierPrice(snapshot.price, snapshot.currency, locale)} / ${text.pieces}');
+    expect(resultsSource).toContain('fxConversionNote: "Preračunato po kursu korišćenom za obračun uvoza."');
+    expect(resultsSource).toContain('className="supplier-fx-note"');
+    expect(resultCss).toContain(".supplier-fx-note");
     expect(resultsSource).not.toContain('/ ${formatQuantity(quantity, locale)} ${text.pieces}');
+  });
+
+  it("uses the same fresh FX snapshot for the main price, order total, and quantity tiers", () => {
+    expect(resultsSource).toContain("convertToEur(value, currency, fxSnapshot)");
+    expect(resultsSource).toContain("tier.currency,");
+    expect(resultsSource).toContain("snapshot.currency,");
+    expect(resultsSource).toContain("fxSnapshot,");
+    expect(resultsSource).toContain('currency.toUpperCase() === "EUR" || !fxSnapshot');
   });
 
   it("recalculates visible non-EUR preliminary landed cost with fresh ECB FX", () => {
