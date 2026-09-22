@@ -168,7 +168,6 @@ export function DashboardPrimaryActions({
   const [error, setError] = useState("");
   const [voiceError, setVoiceError] = useState("");
   const [voiceListening, setVoiceListening] = useState(false);
-  const [voiceSupported, setVoiceSupported] = useState(false);
   const [voiceReviewVisible, setVoiceReviewVisible] = useState(false);
   const productInputRef = useRef<HTMLTextAreaElement | null>(null);
   const quantityInputRef = useRef<HTMLInputElement | null>(null);
@@ -176,7 +175,6 @@ export function DashboardPrimaryActions({
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
 
   useEffect(() => {
-    setVoiceSupported(Boolean(speechRecognitionConstructor()));
     return () => {
       recognitionRef.current?.abort();
       recognitionRef.current = null;
@@ -192,7 +190,6 @@ export function DashboardPrimaryActions({
     setVoiceError("");
     const Recognition = speechRecognitionConstructor();
     if (!Recognition) {
-      setVoiceSupported(false);
       setVoiceError(text.voiceUnavailable);
       return;
     }
@@ -300,19 +297,17 @@ export function DashboardPrimaryActions({
           <label className={styles.mainLabel} htmlFor="jakov360-product-search">
             {text.productLabel}
           </label>
-          {voiceSupported && (
-            <button
-              aria-label={voiceListening ? text.voiceStop : text.voiceStart}
-              aria-pressed={voiceListening}
-              className={styles.voiceButton}
-              disabled={pending}
-              onClick={voiceListening ? stopVoiceInput : startVoiceInput}
-              type="button"
-            >
-              <span aria-hidden="true">{voiceListening ? "■" : "🎙"}</span>
-              {voiceListening ? text.voiceListening : text.voiceStart}
-            </button>
-          )}
+          <button
+            aria-label={voiceListening ? text.voiceStop : text.voiceStart}
+            aria-pressed={voiceListening}
+            className={styles.voiceButton}
+            disabled={pending}
+            onClick={voiceListening ? stopVoiceInput : startVoiceInput}
+            type="button"
+          >
+            <span aria-hidden="true">{voiceListening ? "■" : "🎙"}</span>
+            {voiceListening ? text.voiceListening : text.voiceStart}
+          </button>
         </div>
         <textarea
           className={styles.description}
