@@ -45,6 +45,14 @@ describe("ImportPilot 1.0 simple supplier results", () => {
     expect(resultsSource).toContain("Detalji analize");
   });
 
+  it("shows a clear delivery-time unit in every supported language", () => {
+    expect(resultsSource).toContain('delivery: "Rok isporuke"');
+    expect(resultsSource).toContain('display === "1" ? "dan" : "dana"');
+    expect(resultsSource).toContain('display === "1" ? "Tag" : "Tage"');
+    expect(resultsSource).toContain('display === "1" ? "day" : "days"');
+    expect(resultsSource).toContain("formatDeliveryTimeDays(deliveryEstimate.deliveryTimeDays, locale)");
+  });
+
   it("shows supplier price per piece and a separate total for the requested quantity", () => {
     expect(resultsSource).toContain('supplierOrderTotal: (quantity) => `Za ${quantity} kom`');
     expect(resultsSource).toContain('formatSupplierPrice(effectiveResult.price, effectiveResult.currency, locale)} / ${text.pieces}');

@@ -95,7 +95,7 @@ const copy: Record<Locale, Copy> = {
     landedCost: "Ukupno sa cenom uvoza",
     landedEstimate: "procena",
     landedPending: "čeka potvrđenu cenu dobavljača",
-    delivery: "Rok",
+    delivery: "Rok isporuke",
     supplierRisk: "Dobavljač",
     moq: "Minimalna količina (MOQ)",
     incoterm: "Uslov isporuke (Incoterm)",
@@ -304,6 +304,13 @@ function formatSupplierOrderTotal(value: number, currency: string, locale: Local
 
 function formatQuantity(value: number, locale: Locale) {
   return new Intl.NumberFormat(numberLocale(locale), { maximumFractionDigits: 0 }).format(value);
+}
+
+export function formatDeliveryTimeDays(value: string | number, locale: Locale) {
+  const display = String(value).trim().replace(/\s*-\s*/g, "–");
+  if (locale === "sr") return `${display} ${display === "1" ? "dan" : "dana"}`;
+  if (locale === "de") return `${display} ${display === "1" ? "Tag" : "Tage"}`;
+  return `${display} ${display === "1" ? "day" : "days"}`;
 }
 
 function selectionReasons(
@@ -627,7 +634,9 @@ export function SimpleSupplierOfferSearch({
                     </span>
                     <span>
                       {text.delivery}
-                      <strong>{deliveryEstimate?.deliveryTimeDays ?? text.unknown}</strong>
+                      <strong>{deliveryEstimate
+                        ? formatDeliveryTimeDays(deliveryEstimate.deliveryTimeDays, locale)
+                        : text.unknown}</strong>
                     </span>
                     <span>
                       {text.supplierRisk}
