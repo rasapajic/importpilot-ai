@@ -20,8 +20,15 @@ type CountryMatch = Span & {
 };
 
 function normalizeWord(value: string) {
+  const cyrillicToLatin: Record<string, string> = {
+    а: "a", б: "b", в: "v", г: "g", д: "d", ђ: "dj", е: "e", ж: "z", з: "z",
+    и: "i", ј: "j", к: "k", л: "l", љ: "lj", м: "m", н: "n", њ: "nj", о: "o",
+    п: "p", р: "r", с: "s", т: "t", ћ: "c", у: "u", ф: "f", х: "h", ц: "c",
+    ч: "c", џ: "dz", ш: "s",
+  };
   return value
     .toLocaleLowerCase()
+    .replace(/[а-шђјљњћџ]/g, (letter) => cyrillicToLatin[letter] ?? letter)
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/ß/g, "ss");
@@ -203,15 +210,15 @@ const COUNTRY_PATTERNS: Array<{
 }> = [
   {
     value: "AT",
-    pattern: /\b(?:(?:za|u|destinacija|zemlja|für|fuer|nach|zielland|land|to|for|destination|country)\s*(?::|-)?\s*)?(?:austrij(?:a|u|i|e)|austria|österreich|oesterreich)\b/iu,
+    pattern: /\b(?:(?:za|u|destinacija|zemlja|für|fuer|nach|zielland|land|to|for|destination|country)\s*(?::|-)?\s*)?(?:austrij(?:a|u|i|e)|аустриј(?:а|у|и|е)|austria|österreich|oesterreich)\b/iu,
   },
   {
     value: "DE",
-    pattern: /\b(?:(?:za|u|destinacija|zemlja|für|fuer|nach|zielland|land|to|for|destination|country)\s*(?::|-)?\s*)?(?:nema[cč]k(?:a|u|oj|e)|njema[cč]k(?:a|u|oj|e)|deutschland|germany)\b/iu,
+    pattern: /\b(?:(?:za|u|destinacija|zemlja|für|fuer|nach|zielland|land|to|for|destination|country)\s*(?::|-)?\s*)?(?:nema[cč]k(?:a|u|oj|e)|немачк(?:а|у|ој|е)|njema[cč]k(?:a|u|oj|e)|deutschland|germany)\b/iu,
   },
   {
     value: "RS",
-    pattern: /\b(?:(?:za|u|destinacija|zemlja|für|fuer|nach|zielland|land|to|for|destination|country)\s*(?::|-)?\s*)?(?:srbij(?:a|u|i|e)|serbia|serbien)\b/iu,
+    pattern: /\b(?:(?:za|u|destinacija|zemlja|für|fuer|nach|zielland|land|to|for|destination|country)\s*(?::|-)?\s*)?(?:srbij(?:a|u|i|e)|србиј(?:а|у|и|е)|serbia|serbien)\b/iu,
   },
 ];
 
@@ -244,8 +251,8 @@ function cleanProduct(text: string, locale: Locale) {
 
   const prefixes: Record<Locale, RegExp[]> = {
     sr: [
-      /^(?:tra[zž]im|treba mi|prona[dđ]i(?: mi)?|na[dđ]i(?: mi)?|[zž]elim)\s+/iu,
-      /^(?:proizvod)\s*(?::|-)\s*/iu,
+      /^(?:tra[zž]im|тражим|treba mi|треба ми|prona[dđ]i(?: mi)?|пронађи(?: ми)?|na[dđ]i(?: mi)?|нађи(?: ми)?|[zž]elim|желим)\s+/iu,
+      /^(?:proizvod|производ)\s*(?::|-)\s*/iu,
     ],
     de: [
       /^(?:ich suche|ich brauche|finde mir|suche|ich m[oö]chte)\s+/iu,
