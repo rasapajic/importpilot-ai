@@ -36,6 +36,7 @@ type Copy = {
   noResults: string;
   noResultsText: string;
   supplierPrice: string;
+  supplierOrderTotal: (quantity: string) => string;
   landedCost: string;
   landedEstimate: string;
   landedPending: string;
@@ -89,7 +90,8 @@ const copy: Record<Locale, Copy> = {
     noResults: "Nema dovoljno pouzdanih ponuda",
     noResultsText: "Pokušajte ponovo. JAKOV360 neće prikazati nepouzdanu ponudu samo da bi popunio listu.",
     supplierPrice: "Cena dobavljača",
-    landedCost: "Ukupan trošak uvoza",
+    supplierOrderTotal: (quantity) => `Za ${quantity} kom`,
+    landedCost: "Ukupno sa cenom uvoza",
     landedEstimate: "procena",
     landedPending: "čeka potvrđenu cenu dobavljača",
     delivery: "Rok",
@@ -140,7 +142,8 @@ const copy: Record<Locale, Copy> = {
     noResults: "Keine ausreichend verlässlichen Angebote",
     noResultsText: "Versuchen Sie es erneut. JAKOV360 zeigt kein unzuverlässiges Angebot nur um die Liste zu füllen.",
     supplierPrice: "Lieferantenpreis",
-    landedCost: "Landed Cost",
+    supplierOrderTotal: (quantity) => `Für ${quantity} Stk.`,
+    landedCost: "Gesamt inkl. Warenpreis und Importkosten",
     landedEstimate: "Schätzung",
     landedPending: "wartet auf bestätigten Lieferantenpreis",
     delivery: "Lieferzeit",
@@ -191,7 +194,8 @@ const copy: Record<Locale, Copy> = {
     noResults: "No sufficiently reliable offers",
     noResultsText: "Try again. JAKOV360 will not show an unreliable offer just to fill the list.",
     supplierPrice: "Supplier price",
-    landedCost: "Landed cost",
+    supplierOrderTotal: (quantity) => `For ${quantity} pcs`,
+    landedCost: "Total incl. product price and import costs",
     landedEstimate: "estimate",
     landedPending: "waiting for confirmed supplier price",
     delivery: "Delivery",
@@ -285,6 +289,15 @@ function formatSupplierPrice(value: number, currency: string, locale: Locale) {
     style: "currency",
     currency,
     maximumFractionDigits: 4,
+  }).format(value);
+}
+
+function formatSupplierOrderTotal(value: number, currency: string, locale: Locale) {
+  return new Intl.NumberFormat(numberLocale(locale), {
+    style: "currency",
+    currency,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
   }).format(value);
 }
 
@@ -592,9 +605,19 @@ export function SimpleSupplierOfferSearch({
                       {text.supplierPrice}
                       <strong>
                         {effectiveResult.price !== null && effectiveResult.currency
-                          ? `${formatSupplierPrice(effectiveResult.price, effectiveResult.currency, locale)}${quantity ? ` / ${formatQuantity(quantity, locale)} ${text.pieces}` : ""}`
+                          ? `${formatSupplierPrice(effectiveResult.price, effectiveResult.currency, locale)} / ${text.pieces}`
                           : text.priceOnRequest}
                       </strong>
+                      {effectiveResult.price !== null && effectiveResult.currency && quantity && (
+                        <small className="supplier-order-total">
+                          {text.supplierOrderTotal(formatQuantity(quantity, locale))}:{" "}
+                          {formatSupplierOrderTotal(
+                            effectiveResult.price * quantity,
+                            effectiveResult.currency,
+                            locale,
+                          )}
+                        </small>
+                      )}
                     </span>
                     <span>
                       {text.landedCost}
@@ -626,7 +649,7 @@ export function SimpleSupplierOfferSearch({
                     <strong>{text.quantityPrices}:</strong>{" "}
                     {priceSnapshots.map((snapshot) => (
                       `${formatQuantity(snapshot.quantity, locale)} ${text.pieces}: ${snapshot.price !== null && snapshot.currency
-                        ? formatSupplierPrice(snapshot.price, snapshot.currency, locale)
+                        ? `${formatSupplierPrice(snapshot.price, snapshot.currency, locale)} / ${text.pieces}`
                         : text.unknown}`
                     )).join(" · ")}
                   </p>
