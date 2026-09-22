@@ -4,7 +4,9 @@ import { createOpenAIVoiceIntake } from "../src/openai-voice-intake.js";
 
 describe("OpenAI voice intake", () => {
   it("transcribes audio then extracts product, quantity and destination", async () => {
-    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+    const calls: Array<{ input: unknown; init: RequestInit | undefined }> = [];
+    const fetcher: typeof fetch = async (input, init) => {
+      calls.push({ input, init });
       const url = String(input);
       if (url.endsWith("/audio/transcriptions")) {
         return new Response(JSON.stringify({
@@ -12,7 +14,7 @@ describe("OpenAI voice intake", () => {
         }), {
           status: 200,
           headers: { "content-type": "application/json" },
-        });
+        };
       }
 
       return new Response(JSON.stringify({
@@ -31,7 +33,7 @@ describe("OpenAI voice intake", () => {
       apiKey: "sk-test-voice",
       transcriptionModel: "gpt-4o-mini-transcribe",
       extractionModel: "gpt-5.6-luna",
-      fetcher: fetcher as typeof fetch,
+      fetcher,
     });
 
     const result = await parse({
@@ -46,10 +48,11 @@ describe("OpenAI voice intake", () => {
       quantity: 100,
       targetCountry: "AT",
     });
-    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(calls).toHaveLength(2);
 
-    const secondInit = fetcher.mock.calls[1]?.[1] as RequestInit;
-    const body = JSON.parse(String(secondInit.body)) as {
+    const secondInit = calls[1]?.init;
+    expect(secondInit).toBeDefined();
+    const body = JSON.parse(String(secondInit?.body)) as {
       model: string;
       store: boolean;
       text: { format: { type: string; name: string } };
