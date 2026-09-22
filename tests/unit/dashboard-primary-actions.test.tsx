@@ -35,6 +35,16 @@ describe("ImportPilot 1.0 core search intake", () => {
     expect(intakeSource).not.toContain('type="url"');
   });
 
+  it("supports one voice request that fills product, quantity and destination before submit", () => {
+    expect(intakeSource).toContain("speechRecognitionConstructor");
+    expect(intakeSource).toContain("parseVoiceSearchIntake");
+    expect(intakeSource).toContain("quantityInputRef");
+    expect(intakeSource).toContain("countryInputRef");
+    expect(intakeSource).toContain("voiceReview");
+    expect(intakeSource).toContain('recognition.lang = speechLocale(locale)');
+    expect(intakeSource).not.toContain("router.push(" + '"/api');
+  });
+
   it("starts supplier search immediately after creation", () => {
     expect(intakeSource).toContain('getProjectCreationDestination(project.id, "search")');
     expect(intakeSource).not.toContain("targetMargin: form.get");
