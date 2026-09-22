@@ -13,6 +13,7 @@ import {
   openAISearchContextSize,
 } from "./openai-search-config.js";
 import { createOpenAIWebSearchSource } from "./openai-web-search-source.js";
+import { createOpenAIVoiceIntake } from "./openai-voice-intake.js";
 import {
   createAggregatingSupplierSearchSource,
   createFallbackSupplierSearchSource,
@@ -153,6 +154,18 @@ const aggregatedSource = createAggregatingSupplierSearchSource([
   maxResultsPerSource: Number(process.env.TAJA_DEEP_SEARCH_MAX_PER_SOURCE ?? 20),
 }, logger);
 const source = createExplicitSpecFilteringSource(aggregatedSource);
+const voiceIntake = process.env.OPENAI_API_KEY
+  ? createOpenAIVoiceIntake({
+      apiKey: process.env.OPENAI_API_KEY,
+      transcriptionModel: process.env.OPENAI_VOICE_TRANSCRIPTION_MODEL ?? "gpt-4o-mini-transcribe",
+      extractionModel: process.env.OPENAI_VOICE_EXTRACTION_MODEL ?? "gpt-5.6-luna",
+      timeoutMs: boundedTimeout(
+        process.env.OPENAI_VOICE_TIMEOUT_MS,
+        30_000,
+        45_000,
+      ),
+    })
+  : undefined;
 
 const server = createServer(createSearchProviderApp({
   token,
@@ -166,6 +179,8 @@ const server = createServer(createSearchProviderApp({
   rateLimitMax: Number(process.env.SEARCH_RATE_LIMIT_MAX ?? 30),
   rateLimitWindowMs: Number(process.env.SEARCH_RATE_LIMIT_WINDOW_MS ?? 60_000),
   idempotencyTtlMs: Number(process.env.SEARCH_IDEMPOTENCY_TTL_MS ?? 120_000),
+  voiceIntake,
+  maxVoiceRequestBytes: 8_000_000,
 }));
 
 server.listen(port, () => {
