@@ -49,6 +49,17 @@ describe("ImportPilot 1.0 core search intake", () => {
     expect(intakeSource).not.toContain("router.push(" + '"/api');
   });
 
+  it("uses app-localized validation instead of browser-language validation popups", () => {
+    expect(intakeSource).toContain("noValidate");
+    expect(intakeSource).toContain("validateSearchForm");
+    expect(intakeSource).toContain('productRequired: "Unesite proizvod koji tražite."');
+    expect(intakeSource).toContain('productRequired: "Geben Sie das gesuchte Produkt ein."');
+    expect(intakeSource).toContain('productRequired: "Enter the product you are looking for."');
+    expect(intakeSource).toContain("aria-invalid={Boolean(fieldErrors.product)}");
+    expect(intakeSource).toContain("aria-invalid={Boolean(fieldErrors.quantity)}");
+    expect(intakeSource).toContain("aria-invalid={Boolean(fieldErrors.destination)}");
+  });
+
   it("starts supplier search immediately after creation", () => {
     expect(intakeSource).toContain('getProjectCreationDestination(project.id, "search")');
     expect(intakeSource).not.toContain("targetMargin: form.get");
