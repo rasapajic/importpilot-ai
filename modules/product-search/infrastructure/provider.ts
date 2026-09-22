@@ -41,11 +41,25 @@ export function resolveSupplierProviderEndpoints(
     ?.trim()
     .replace(/\/+$/, "");
 
+  const explicitEndpoint = resolvedEnvironment.SUPPLIER_SEARCH_PROVIDER_URL?.trim();
+  let derivedBaseUrl = baseUrl;
+  if (!derivedBaseUrl && explicitEndpoint) {
+    try {
+      const url = new URL(explicitEndpoint);
+      url.pathname = "";
+      url.search = "";
+      url.hash = "";
+      derivedBaseUrl = url.href.replace(/\/+$/, "");
+    } catch {
+      derivedBaseUrl = undefined;
+    }
+  }
+
   return {
     endpoint:
-      resolvedEnvironment.SUPPLIER_SEARCH_PROVIDER_URL?.trim() ||
+      explicitEndpoint ||
       (baseUrl ? `${baseUrl}/search` : undefined),
-    voiceEndpoint: baseUrl ? `${baseUrl}/voice-intake` : undefined,
+    voiceEndpoint: derivedBaseUrl ? `${derivedBaseUrl}/voice-intake` : undefined,
     healthEndpoint:
       resolvedEnvironment.SUPPLIER_SEARCH_PROVIDER_HEALTH_URL?.trim() ||
       (baseUrl ? `${baseUrl}/health` : undefined),
