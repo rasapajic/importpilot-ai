@@ -37,6 +37,9 @@ type IntakeCopy = {
   voiceError: string;
   voiceReview: string;
   voiceHeard: string;
+  productRequired: string;
+  quantityRequired: string;
+  destinationRequired: string;
 };
 
 const copy: Record<Locale, IntakeCopy> = {
@@ -65,6 +68,9 @@ const copy: Record<Locale, IntakeCopy> = {
     voiceError: "Govor nije mogao da se obradi. Pokušajte ponovo.",
     voiceReview: "JAKOV360 je popunio ono što je razumeo. Proverite proizvod, količinu i destinaciju pre pretrage.",
     voiceHeard: "Čuo sam",
+    productRequired: "Unesite proizvod koji tražite.",
+    quantityRequired: "Unesite ispravnu količinu veću od nule.",
+    destinationRequired: "Izaberite destinaciju.",
   },
   de: {
     productLabel: "Produkt",
@@ -91,6 +97,9 @@ const copy: Record<Locale, IntakeCopy> = {
     voiceError: "Die Sprache konnte nicht verarbeitet werden. Bitte versuchen Sie es erneut.",
     voiceReview: "JAKOV360 hat die erkannten Angaben eingetragen. Prüfen Sie Produkt, Menge und Zielland vor der Suche.",
     voiceHeard: "Erkannt",
+    productRequired: "Geben Sie das gesuchte Produkt ein.",
+    quantityRequired: "Geben Sie eine gültige Menge größer als null ein.",
+    destinationRequired: "Wählen Sie das Zielland aus.",
   },
   en: {
     productLabel: "Product",
@@ -117,6 +126,9 @@ const copy: Record<Locale, IntakeCopy> = {
     voiceError: "Speech could not be processed. Please try again.",
     voiceReview: "JAKOV360 filled the details it understood. Review the product, quantity, and destination before searching.",
     voiceHeard: "I heard",
+    productRequired: "Enter the product you are looking for.",
+    quantityRequired: "Enter a valid quantity greater than zero.",
+    destinationRequired: "Select a destination.",
   },
 };
 
@@ -175,6 +187,11 @@ export function DashboardPrimaryActions({
   const [voiceSeconds, setVoiceSeconds] = useState(0);
   const [voiceTranscript, setVoiceTranscript] = useState("");
   const [voiceReviewVisible, setVoiceReviewVisible] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<{
+    product?: string;
+    quantity?: string;
+    destination?: string;
+  }>({});
 
   const productInputRef = useRef<HTMLTextAreaElement | null>(null);
   const quantityInputRef = useRef<HTMLInputElement | null>(null);
@@ -391,12 +408,57 @@ export function DashboardPrimaryActions({
     }
   }
 
+
+  function clearFieldError(field: "product" | "quantity" | "destination") {
+    setFieldErrors((current) => {
+      if (!current[field]) return current;
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
+  }
+
+  function validateSearchForm(form: FormData) {
+    const nextErrors: {
+      product?: string;
+      quantity?: string;
+      destination?: string;
+    } = {};
+
+    const product = String(form.get("name") ?? "").trim();
+    const rawQuantity = String(form.get("quantity") ?? "").trim();
+    const quantity = Number(rawQuantity);
+    const destination = String(form.get("targetCountry") ?? "").trim();
+
+    if (product.length < 2) nextErrors.product = text.productRequired;
+    if (
+      !rawQuantity ||
+      !Number.isInteger(quantity) ||
+      quantity <= 0
+    ) {
+      nextErrors.quantity = text.quantityRequired;
+    }
+    if (!["AT", "DE", "RS"].includes(destination)) {
+      nextErrors.destination = text.destinationRequired;
+    }
+
+    setFieldErrors(nextErrors);
+
+    if (nextErrors.product) productInputRef.current?.focus();
+    else if (nextErrors.quantity) quantityInputRef.current?.focus();
+    else if (nextErrors.destination) countryInputRef.current?.focus();
+
+    return Object.keys(nextErrors).length === 0;
+  }
+
   async function createSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setPending(true);
     setError("");
 
     const form = new FormData(event.currentTarget);
+    if (!validateSearchForm(form)) return;
+
+    setPending(true);
     try {
       const response = await fetch("/api/projects", {
         method: "POST",
@@ -425,7 +487,12 @@ export function DashboardPrimaryActions({
   }
 
   return (
-    <form className={styles.card} aria-busy={pending || voiceProcessing} onSubmit={createSearch}>
+    <form
+      className={styles.card}
+      aria-busy={pending || voiceProcessing}
+      noValidate
+      onSubmit={createSearch}
+    >
       <div className={styles.mainField}>
         <div className={styles.mainFieldHeader}>
           <label className={styles.mainLabel} htmlFor="jakov360-product-search">
@@ -483,7 +550,15 @@ export function DashboardPrimaryActions({
           placeholder={text.productPlaceholder}
           ref={productInputRef}
           required
+          aria-invalid={Boolean(fieldErrors.product)}
+          aria-describedby={fieldErrors.product ? "jakov360-product-error" : undefined}
+          onInput={() => clearFieldError("product")}
         />
+        {fieldErrors.product && (
+          <p className={styles.fieldError} id="jakov360-product-error" role="alert">
+            {fieldErrors.product}
+          </p>
+        )}
 
         {voiceError && <p className={styles.voiceError} role="alert">{voiceError}</p>}
         {voiceTranscript && !voiceProcessing && (
@@ -507,16 +582,37 @@ export function DashboardPrimaryActions({
             required
             step="1"
             type="number"
+            aria-invalid={Boolean(fieldErrors.quantity)}
+            aria-describedby={fieldErrors.quantity ? "jakov360-quantity-error" : undefined}
+            onInput={() => clearFieldError("quantity")}
           />
+          {fieldErrors.quantity && (
+            <p className={styles.fieldError} id="jakov360-quantity-error" role="alert">
+              {fieldErrors.quantity}
+            </p>
+          )}
         </label>
         <label className={styles.fieldLabel}>
           {text.destination}
-          <select defaultValue="" name="targetCountry" ref={countryInputRef} required>
+          <select
+            defaultValue=""
+            name="targetCountry"
+            ref={countryInputRef}
+            required
+            aria-invalid={Boolean(fieldErrors.destination)}
+            aria-describedby={fieldErrors.destination ? "jakov360-destination-error" : undefined}
+            onChange={() => clearFieldError("destination")}
+          >
             <option disabled value="">{text.destinationPrompt}</option>
             <option value="AT">{text.austria}</option>
             <option value="DE">{text.germany}</option>
             <option value="RS">{text.serbia}</option>
           </select>
+          {fieldErrors.destination && (
+            <p className={styles.fieldError} id="jakov360-destination-error" role="alert">
+              {fieldErrors.destination}
+            </p>
+          )}
         </label>
       </div>
 
