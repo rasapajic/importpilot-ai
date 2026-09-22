@@ -160,8 +160,8 @@ const QUANTITY_UNIT = /^(?:kom|komada|komad|komade|komadi|pcs|pc|pieces|piece|un
 
 function quantityFromDigits(text: string): QuantityMatch | null {
   const patterns = [
-    /\b(?:koli[cč]ina|количина|quantity|menge)\s*(?:je|је|is|ist|:|-)?\s*([0-9][0-9\s.,]{0,12})\b/iu,
-    /\b([0-9][0-9\s.,]{0,12})\s*(?:kom(?:ada|ad|ade|adi)?|ком(?:ада|ад|аде|ади)?|pcs?|pieces?|units?|st(?:ü|u|ue)ck(?:e)?)\b/iu,
+    /(?<![\p{L}\p{N}])(?:koli[cč]ina|количина|quantity|menge)\s*(?:je|је|is|ist|:|-)?\s*([0-9][0-9\s.,]{0,12})(?![\p{L}\p{N}])/iu,
+    /(?<![\p{L}\p{N}])([0-9][0-9\s.,]{0,12})\s*(?:kom(?:ada|ad|ade|adi)?|ком(?:ада|ад|аде|ади)?|pcs?|pieces?|units?|st(?:ü|u|ue)ck(?:e)?)(?![\p{L}\p{N}])/iu,
   ];
 
   for (const pattern of patterns) {
@@ -210,15 +210,15 @@ const COUNTRY_PATTERNS: Array<{
 }> = [
   {
     value: "AT",
-    pattern: /\b(?:(?:za|за|u|у|destinacija|дестинација|zemlja|земља|für|fuer|nach|zielland|land|to|for|destination|country)\s*(?::|-)?\s*)?(?:austrij(?:a|u|i|e)|аустриј(?:а|у|и|е)|austria|österreich|oesterreich)\b/iu,
+    pattern: /(?<![\p{L}\p{N}])(?:(?:za|за|u|у|destinacija|дестинација|zemlja|земља|für|fuer|nach|zielland|land|to|for|destination|country)\s*(?::|-)?\s*)?(?:austrij(?:a|u|i|e)|аустриј(?:а|у|и|е)|austria|österreich|oesterreich)(?![\p{L}\p{N}])/iu,
   },
   {
     value: "DE",
-    pattern: /\b(?:(?:za|за|u|у|destinacija|дестинација|zemlja|земља|für|fuer|nach|zielland|land|to|for|destination|country)\s*(?::|-)?\s*)?(?:nema[cč]k(?:a|u|oj|e)|немачк(?:а|у|ој|е)|njema[cč]k(?:a|u|oj|e)|deutschland|germany)\b/iu,
+    pattern: /(?<![\p{L}\p{N}])(?:(?:za|за|u|у|destinacija|дестинација|zemlja|земља|für|fuer|nach|zielland|land|to|for|destination|country)\s*(?::|-)?\s*)?(?:nema[cč]k(?:a|u|oj|e)|немачк(?:а|у|ој|е)|njema[cč]k(?:a|u|oj|e)|deutschland|germany)(?![\p{L}\p{N}])/iu,
   },
   {
     value: "RS",
-    pattern: /\b(?:(?:za|за|u|у|destinacija|дестинација|zemlja|земља|für|fuer|nach|zielland|land|to|for|destination|country)\s*(?::|-)?\s*)?(?:srbij(?:a|u|i|e)|србиј(?:а|у|и|е)|serbia|serbien)\b/iu,
+    pattern: /(?<![\p{L}\p{N}])(?:(?:za|за|u|у|destinacija|дестинација|zemlja|земља|für|fuer|nach|zielland|land|to|for|destination|country)\s*(?::|-)?\s*)?(?:srbij(?:a|u|i|e)|србиј(?:а|у|и|е)|serbia|serbien)(?![\p{L}\p{N}])/iu,
   },
 ];
 
