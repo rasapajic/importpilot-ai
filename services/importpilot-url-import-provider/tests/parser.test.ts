@@ -24,27 +24,39 @@ describe("URL import provider parser", () => {
     expect(preview).toMatchObject({
       productTitle: "Factory 65W USB C GaN Charger",
       supplierName: "Shenzhen Reliable Power Co., Ltd.",
-      price: "4.80",
+      price: "6.50",
       currency: "USD",
-      minimumOrderQuantity: "100",
+      minimumOrderQuantity: "2",
       incoterm: "FOB",
       imageUrl: "https://sc04.alicdn.com/kf/charger-main.jpg",
       productUrl: "https://www.alibaba.com/product-detail/Factory-65W-USB-C-GaN-Charger_1600000000001.html",
-      details: null,
+      details: {
+        adapter: "alibaba-product-page-v1",
+        evidence: "PRODUCT_PAGE",
+        priceTiers: [
+          { price: "6.50", currency: "USD", minQuantity: 2, maxQuantity: 2_999 },
+          { price: "6.10", currency: "USD", minQuantity: 3_000, maxQuantity: 4_999 },
+          { price: "5.90", currency: "USD", minQuantity: 5_000, maxQuantity: 7_999 },
+          { price: "5.70", currency: "USD", minQuantity: 8_000, maxQuantity: null },
+        ],
+      },
     });
   });
 
   it("reports parser candidates before normalization", () => {
-    const snapshot = inspectPreviewExtraction(fixture("alibaba-product-detail.html"));
+    const snapshot = inspectPreviewExtraction(
+      fixture("alibaba-product-detail.html"),
+      "https://www.alibaba.com/product-detail/Factory-65W-USB-C-GaN-Charger_1600000000001.html",
+    );
 
     expect(snapshot.fieldCount).toBeGreaterThanOrEqual(6);
     expect(snapshot.candidates.slice(0, 3)).toEqual([
       { field: "productTitle", value: "Factory 65W USB C GaN Charger" },
       { field: "supplierName", value: "Shenzhen Reliable Power Co., Ltd." },
-      { field: "price", value: "4.80" },
+      { field: "price", value: "6.50" },
     ]);
     expect(snapshot.detailCounts).toEqual({
-      priceTiers: 0,
+      priceTiers: 4,
       attributes: 0,
       variants: 0,
       packagingFields: 0,

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   quantityPriceSnapshots,
+  supplierPriceTierSnapshots,
   supplierOfferForQuantity,
   supplierOfferVariantFacts,
 } from "../../components/search/supplier-choice-display";
@@ -47,6 +48,14 @@ describe("supplier choice display", () => {
       { quantity: 100, price: 1.2, currency: "USD", confirmedByTier: true },
       { quantity: 500, price: 0.95, currency: "USD", confirmedByTier: true },
       { quantity: 1_000, price: 0.82, currency: "USD", confirmedByTier: true },
+    ]);
+  });
+
+  it("returns every source-published quantity tier for display", () => {
+    expect(supplierPriceTierSnapshots(offer())).toEqual([
+      { minQuantity: 100, maxQuantity: 499, price: 1.2, currency: "USD" },
+      { minQuantity: 500, maxQuantity: 999, price: 0.95, currency: "USD" },
+      { minQuantity: 1_000, maxQuantity: null, price: 0.82, currency: "USD" },
     ]);
   });
 

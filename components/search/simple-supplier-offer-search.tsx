@@ -7,6 +7,7 @@ import { useI18n } from "@/components/i18n/i18n-provider";
 import { SearchResultImage } from "@/components/search/search-result-image";
 import {
   quantityPriceSnapshots,
+  supplierPriceTierSnapshots,
   supplierOfferForQuantity,
   supplierOfferVariantFacts,
 } from "@/components/search/supplier-choice-display";
@@ -569,6 +570,7 @@ export function SimpleSupplierOfferSearch({
             const decision = simpleDecision(analysis);
             const effectiveResult = supplierOfferForQuantity(result, quantity);
             const priceSnapshots = quantityPriceSnapshots(result, quantity);
+            const priceTierSnapshots = supplierPriceTierSnapshots(result);
             const variantFacts = supplierOfferVariantFacts(result);
             const liveEstimate = quantity && targetCountry
               ? estimateTajaPreliminaryLandedCost({
@@ -647,11 +649,17 @@ export function SimpleSupplierOfferSearch({
 
                   <p className="muted-text">
                     <strong>{text.quantityPrices}:</strong>{" "}
-                    {priceSnapshots.map((snapshot) => (
-                      `${formatQuantity(snapshot.quantity, locale)} ${text.pieces}: ${snapshot.price !== null && snapshot.currency
-                        ? `${formatSupplierPrice(snapshot.price, snapshot.currency, locale)} / ${text.pieces}`
-                        : text.unknown}`
-                    )).join(" · ")}
+                    {priceTierSnapshots.length > 0
+                      ? priceTierSnapshots.map((tier) => (
+                          `${formatQuantity(tier.minQuantity, locale)}${tier.maxQuantity === null
+                            ? "+"
+                            : `–${formatQuantity(tier.maxQuantity, locale)}`} ${text.pieces}: ${formatSupplierPrice(tier.price, tier.currency, locale)} / ${text.pieces}`
+                        )).join(" · ")
+                      : priceSnapshots.map((snapshot) => (
+                          `${formatQuantity(snapshot.quantity, locale)} ${text.pieces}: ${snapshot.price !== null && snapshot.currency
+                            ? `${formatSupplierPrice(snapshot.price, snapshot.currency, locale)} / ${text.pieces}`
+                            : text.unknown}`
+                        )).join(" · ")}
                   </p>
 
                   {reasons.length > 0 && (

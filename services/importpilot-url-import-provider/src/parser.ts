@@ -374,18 +374,19 @@ export function extractPriceTiers(html: string): ExtractedPriceTier[] {
   const currencyMarker = "(?:US\\s*\\$|US\\$|USD|EUR|GBP|CNY|RMB|\\$|€|£|¥)";
   const quantityToken = "(?:[0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)";
   const unitMarker = "(?:pieces?|pcs?|sets?|units?)";
-  const results: ExtractedPriceTier[] = [];
+  const forwardResults: ExtractedPriceTier[] = [];
+  const reverseResults: ExtractedPriceTier[] = [];
 
   const forward = new RegExp(
-    `(${currencyMarker})\\s*([0-9]+(?:[.,][0-9]+)?)\\s*(?:\\/\\s*(?:piece|pc|set|unit))?\\s*(${quantityToken})\\s*(?:(?:-|–|—)\\s*(${quantityToken})|\\+)\\s*${unitMarker}`,
+    `(${currencyMarker})\\s*([0-9]+(?:[.,][0-9]+)?)\\s*(?:\\/\\s*(?:piece|pc|set|unit))?\\s*(?:(?:>=|≥)\\s*(${quantityToken})|(${quantityToken})\\s*(?:(?:-|–|—)\\s*(${quantityToken})|\\+))\\s*${unitMarker}`,
     "gi",
   );
   for (const match of bodyText.matchAll(forward)) {
     const price = tierPrice(match[2]);
-    const minQuantity = quantityNumber(match[3]);
-    const maxQuantity = quantityNumber(match[4]);
+    const minQuantity = quantityNumber(match[3] ?? match[4]);
+    const maxQuantity = match[3] ? null : quantityNumber(match[5]);
     if (!price || !minQuantity) continue;
-    results.push({
+    forwardResults.push({
       price,
       currency: normalizeCurrency(match[1] ?? null),
       minQuantity,
@@ -394,22 +395,29 @@ export function extractPriceTiers(html: string): ExtractedPriceTier[] {
   }
 
   const reverse = new RegExp(
-    `(${quantityToken})\\s*(?:(?:-|–|—)\\s*(${quantityToken})|\\+)\\s*${unitMarker}\\s*(${currencyMarker})\\s*([0-9]+(?:[.,][0-9]+)?)`,
+    `(?:(?:>=|≥)\\s*(${quantityToken})|(${quantityToken})\\s*(?:(?:-|–|—)\\s*(${quantityToken})|\\+))\\s*${unitMarker}\\s*(${currencyMarker})\\s*([0-9]+(?:[.,][0-9]+)?)`,
     "gi",
   );
   for (const match of bodyText.matchAll(reverse)) {
-    const minQuantity = quantityNumber(match[1]);
-    const maxQuantity = quantityNumber(match[2]);
-    const price = tierPrice(match[4]);
+    const minQuantity = quantityNumber(match[1] ?? match[2]);
+    const maxQuantity = match[1] ? null : quantityNumber(match[3]);
+    const price = tierPrice(match[5]);
     if (!price || !minQuantity) continue;
-    results.push({
+    reverseResults.push({
       price,
-      currency: normalizeCurrency(match[3] ?? null),
+      currency: normalizeCurrency(match[4] ?? null),
       minQuantity,
       maxQuantity,
     });
   }
 
+  // Marketplace cards commonly render either `price → quantity` or
+  // `quantity → price`. Parsing both directions into one list can attach a
+  // tier's price to the following tier after HTML tags are flattened. The
+  // layout direction that yields the complete ladder is the trustworthy one.
+  const results = forwardResults.length >= reverseResults.length
+    ? forwardResults
+    : reverseResults;
   const unique = new Map<string, ExtractedPriceTier>();
   for (const tier of results) {
     const key = `${tier.currency ?? ""}:${tier.minQuantity}:${tier.maxQuantity ?? "open"}`;
@@ -612,6 +620,28 @@ export function extractMadeInChinaProductDetails(html: string): MarketplaceProdu
   });
 }
 
+export function extractAlibabaProductDetails(html: string): MarketplaceProductDetails {
+  const priceTiers = extractPriceTiers(html);
+  const attributes = extractProductAttributes(html);
+  const variants = extractProductVariants(html, attributes);
+  const packaging = extractProductPackaging(html, attributes);
+  return marketplaceProductDetailsSchema.parse({
+    adapter: "alibaba-product-page-v1",
+    evidence: "PRODUCT_PAGE",
+    priceTiers,
+    attributes,
+    variants,
+    packaging,
+  });
+}
+
+function extractMarketplaceProductDetails(html: string, productUrl: string) {
+  const provider = detectProvider(new URL(productUrl));
+  if (provider === "alibaba") return extractAlibabaProductDetails(html);
+  if (provider === "made-in-china") return extractMadeInChinaProductDetails(html);
+  return null;
+}
+
 function detailCounts(details: MarketplaceProductDetails | null) {
   return {
     priceTiers: details?.priceTiers.length ?? 0,
@@ -640,9 +670,7 @@ export function inspectPreviewExtraction(html: string, productUrl?: string): Pre
   let details: MarketplaceProductDetails | null = null;
   if (productUrl) {
     try {
-      if (detectProvider(new URL(productUrl)) === "made-in-china") {
-        details = extractMadeInChinaProductDetails(html);
-      }
+      details = extractMarketplaceProductDetails(html, productUrl);
     } catch {
       details = null;
     }
@@ -715,9 +743,7 @@ export function parseProductPreview(html: string, productUrl: string): ProductPr
   const minimumOrderQuantity = value("minimumOrderQuantity");
   const incoterm = value("incoterm");
   const imageUrl = value("imageUrl");
-  const details = detectProvider(new URL(productUrl)) === "made-in-china"
-    ? extractMadeInChinaProductDetails(html)
-    : null;
+  const details = extractMarketplaceProductDetails(html, productUrl);
 
   if (!productTitle && !supplierName && !price && !currency && !minimumOrderQuantity && !imageUrl) {
     throw new Error("PARSING_FAILED");

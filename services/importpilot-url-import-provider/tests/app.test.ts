@@ -119,7 +119,7 @@ describe("URL import provider API", () => {
       preview: {
         productTitle: "Factory 65W USB C GaN Charger",
         supplierName: "Shenzhen Reliable Power Co., Ltd.",
-        price: "4.80",
+        price: "6.50",
         currency: "USD",
       },
     });
@@ -269,7 +269,7 @@ describe("URL import provider API", () => {
       parserCandidates: [
         { field: "productTitle", value: "Factory 65W USB C GaN Charger" },
         { field: "supplierName", value: "Shenzhen Reliable Power Co., Ltd." },
-        { field: "price", value: "4.80" },
+        { field: "price", value: "6.50" },
       ],
     });
   });

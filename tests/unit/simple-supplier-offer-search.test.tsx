@@ -67,6 +67,8 @@ describe("ImportPilot 1.0 simple supplier results", () => {
   it("uses source quantity tiers and exposes more source-grounded choices", () => {
     expect(resultsSource).toContain("supplierOfferForQuantity(result, quantity)");
     expect(resultsSource).toContain("quantityPriceSnapshots(result, quantity)");
+    expect(resultsSource).toContain("supplierPriceTierSnapshots(result)");
+    expect(resultsSource).toContain("priceTierSnapshots.length > 0");
     expect(resultsSource).toContain("supplierOfferVariantFacts(result)");
     expect(resultsSource).toContain("Cene po količini");
     expect(resultsSource).toContain("Varijante");

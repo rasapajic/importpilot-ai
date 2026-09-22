@@ -11,6 +11,13 @@ export type QuantityPriceSnapshot = {
   confirmedByTier: boolean;
 };
 
+export type SupplierPriceTierSnapshot = {
+  minQuantity: number;
+  maxQuantity: number | null;
+  price: number;
+  currency: string;
+};
+
 function uniquePositiveQuantities(values: Array<number | null | undefined>) {
   return [...new Set(
     values.filter((value): value is number =>
@@ -61,6 +68,24 @@ export function quantityPriceSnapshots(
       confirmedByTier: false,
     };
   });
+}
+
+export function supplierPriceTierSnapshots(
+  result: SupplierOfferSearchResult,
+): SupplierPriceTierSnapshot[] {
+  return [...(result.marketplaceDetails?.priceTiers ?? [])]
+    .sort((left, right) => left.minQuantity - right.minQuantity)
+    .flatMap((tier) => {
+      const currency = tier.currency ?? result.currency;
+      return currency
+        ? [{
+            minQuantity: tier.minQuantity,
+            maxQuantity: tier.maxQuantity,
+            price: tier.price,
+            currency,
+          }]
+        : [];
+    });
 }
 
 function normalizedTitle(title: string) {

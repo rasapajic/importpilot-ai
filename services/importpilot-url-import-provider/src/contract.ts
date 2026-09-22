@@ -80,6 +80,7 @@ export const productPackagingSchema = z.object({
 
 const rawMarketplaceProductDetailsSchema = z.object({
   adapter: z.enum([
+    "alibaba-product-page-v1",
     "made-in-china-product-page-v1",
     "made-in-china-product-page-v2",
   ]),
@@ -362,7 +363,9 @@ export const marketplaceProductDetailsSchema =
     const attributes = normalizeAttributes(details.attributes);
     return {
       ...details,
-      adapter: "made-in-china-product-page-v2" as const,
+      adapter: details.adapter === "made-in-china-product-page-v1"
+        ? "made-in-china-product-page-v2" as const
+        : details.adapter,
       attributes,
       variants: normalizeVariants(details.variants, attributes),
       packaging: normalizePackaging(details.packaging),
