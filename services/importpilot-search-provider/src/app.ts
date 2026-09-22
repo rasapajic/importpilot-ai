@@ -16,6 +16,10 @@ import {
   type SupplierSearchSource,
 } from "./provider.js";
 import { createRateLimiter } from "./rate-limit.js";
+import {
+  voiceIntakeRequestSchema,
+  type VoiceIntakeResult,
+} from "./openai-voice-intake.js";
 
 const DEFAULT_IDEMPOTENCY_TTL_MS = 2 * 60 * 1_000;
 const MIN_IDEMPOTENCY_TTL_MS = 5_000;
@@ -31,6 +35,8 @@ type AppOptions = {
   idempotencyTtlMs?: number;
   logger?: DevelopmentLogger;
   now?: () => number;
+  voiceIntake?: (input: unknown) => Promise<VoiceIntakeResult>;
+  maxVoiceRequestBytes?: number;
 };
 
 type SearchExecution = {
@@ -130,6 +136,8 @@ export function createSearchProviderApp({
   idempotencyTtlMs,
   logger = createDevelopmentLogger(),
   now = Date.now,
+  voiceIntake,
+  maxVoiceRequestBytes = 8_000_000,
 }: AppOptions) {
   if (!token) throw new Error("SEARCH_PROVIDER_TOKEN is required.");
   const rateLimiter = createRateLimiter(rateLimitMax, rateLimitWindowMs);
@@ -200,6 +208,36 @@ export function createSearchProviderApp({
           status: "error",
           source: source.name,
           implemented: source.implemented,
+        });
+      }
+    }
+
+
+    if (request.method === "POST" && request.url === "/voice-intake") {
+      if (!voiceIntake) {
+        return sendJson(response, 503, { error: "Voice intake is not configured." });
+      }
+      try {
+        const parsed = voiceIntakeRequestSchema.safeParse(
+          await readJson(request, maxVoiceRequestBytes),
+        );
+        if (!parsed.success) {
+          return sendJson(response, 400, { error: "Invalid voice intake request." });
+        }
+
+        const result = await withTimeout(
+          Math.max(timeoutMs, 30_000),
+          () => voiceIntake(parsed.data),
+        );
+        return sendJson(response, 200, result);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Voice intake failed.";
+        const status = message === "REQUEST_TOO_LARGE" ? 413 : 502;
+        logger("voice_intake_failed", { reason: message });
+        return sendJson(response, status, {
+          error: status === 413
+            ? "Voice recording is too large."
+            : "Voice input could not be understood.",
         });
       }
     }
