@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
+  extractProductImageUrl,
   extractMadeInChinaProductDetails,
   extractPriceTiers,
   inspectPreviewExtraction,
@@ -41,6 +42,29 @@ describe("URL import provider parser", () => {
         ],
       },
     });
+  });
+
+  it("extracts German Alibaba EUR tiers and the real product image", () => {
+    const html = fixture("alibaba-product-detail-de.html");
+    const productUrl = "https://www.alibaba.com/product-detail/Factory-Wholesale-65W-2C-2A-GaN_1601390306760.html";
+    const preview = parseProductPreview(html, productUrl);
+
+    expect(preview).toMatchObject({
+      supplierName: "Shenzhen Vinop Technology Co., Ltd.",
+      price: "6.16",
+      currency: "EUR",
+      minimumOrderQuantity: "2",
+      imageUrl: "https://sc04.alicdn.com/kf/Hvinop-65w-yellow-charger.jpg",
+      details: {
+        priceTiers: [
+          { price: "6.16", currency: "EUR", minQuantity: 2, maxQuantity: 99 },
+          { price: "6.08", currency: "EUR", minQuantity: 100, maxQuantity: 999 },
+          { price: "5.99", currency: "EUR", minQuantity: 1_000, maxQuantity: 4_999 },
+          { price: "5.90", currency: "EUR", minQuantity: 5_000, maxQuantity: null },
+        ],
+      },
+    });
+    expect(extractProductImageUrl(html)).not.toContain("company-logo");
   });
 
   it("reports parser candidates before normalization", () => {

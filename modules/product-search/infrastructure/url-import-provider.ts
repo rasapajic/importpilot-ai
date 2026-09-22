@@ -167,8 +167,46 @@ function embeddedJsonNumber(html: string, keys: string[]) {
 
 function normalizeImageUrl(value: string | null) {
   if (!value) return null;
-  if (value.startsWith("//")) return `https:${value}`;
-  return value;
+  const unescaped = value
+    .replace(/\\u002f/gi, "/")
+    .replace(/\\u0026/gi, "&")
+    .replace(/\\\//g, "/")
+    .trim();
+  if (unescaped.startsWith("//")) return `https:${unescaped}`;
+  return unescaped;
+}
+
+function likelyProductImageUrl(value: string | null) {
+  const normalized = normalizeImageUrl(value);
+  if (!normalized || /(?:^|[\/_\-.])(?:logo|company[-_]?logo|favicon|icon|sprite|avatar|flag|star|badge|qr(?:code)?)(?:[\/_\-.]|$)/i.test(normalized)) {
+    return null;
+  }
+  try {
+    const url = new URL(normalized);
+    return url.protocol === "https:" || url.protocol === "http:" ? normalized : null;
+  } catch {
+    return null;
+  }
+}
+
+function fallbackProductImage(html: string) {
+  const candidates: string[] = [];
+  for (const match of html.matchAll(
+    /<img\b[^>]*(?:src|data-src|data-original|data-lazy-src)=["']([^"']+)["'][^>]*>/gi,
+  )) {
+    if (match[1]) candidates.push(match[1]);
+  }
+  for (const match of html.matchAll(
+    /["']((?:(?:https?:)?(?:\\\/|\/){2})[^"'<>\s]+?\.(?:jpe?g|png|webp)(?:\?[^"'<>\s]*)?)["']/gi,
+  )) {
+    if (match[1]) candidates.push(match[1]);
+  }
+  return candidates
+    .map((candidate) => likelyProductImageUrl(candidate))
+    .find((candidate) => candidate && (
+      /(?:alicdn\.com|made-in-china\.com|micstatic\.com)/i.test(candidate) ||
+      /(?:\/kf\/|product|main|original)/i.test(candidate)
+    )) ?? null;
 }
 
 function normalizeCurrency(value: string | null) {
@@ -356,12 +394,12 @@ export function extractSupplierOfferFromHtml(html: string, productUrl: string): 
   const titleTag = decodeHtml(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]);
   const title = text(product.name) ?? fallbackTitle ?? meta(html, "og:title") ?? titleTag;
   const supplierName = text(seller?.name) ?? text(brand?.name) ?? fallbackSupplier ?? meta(html, "author");
-  const imageUrl = normalizeImageUrl(
+  const imageUrl = likelyProductImageUrl(
     imageText(product.image)
     ?? meta(html, "og:image")
     ?? meta(html, "twitter:image")
     ?? embeddedJsonString(html, ["imageUrl", "mainImage", "mainImageUrl", "imagePath", "imgUrl", "productImage"]),
-  );
+  ) ?? fallbackProductImage(html);
   const moq = embeddedMoq ?? moqMatch?.[1] ?? null;
 
   if (!title && !supplierName && !fallbackPrice && !fallbackCurrency && !moq && !imageUrl) {

@@ -121,8 +121,13 @@ function normalizeCurrency(value: string | null) {
 
 function normalizeUrl(value: string | null) {
   if (!value) return null;
-  if (value.startsWith("//")) return `https:${value}`;
-  return value;
+  const unescaped = value
+    .replace(/\\u002f/gi, "/")
+    .replace(/\\u0026/gi, "&")
+    .replace(/\\\//g, "/")
+    .trim();
+  if (unescaped.startsWith("//")) return `https:${unescaped}`;
+  return unescaped;
 }
 
 function isGenericTitle(value: string | null) {
@@ -320,15 +325,72 @@ export function pageTitleFromHtml(html: string) {
   return regexText(html, [/<title[^>]*>([\s\S]*?)<\/title>/i]);
 }
 
-function firstLargeProductImage(html: string) {
-  const imageMatches = [...html.matchAll(/<img\b[^>]*(?:src|data-src|data-original|data-lazy-src)=["']([^"']+)["'][^>]*>/gi)];
-  const image = imageMatches
-    .map((match) => normalizeUrl(decodeHtml(match[1]) ?? null))
-    .find((value) => value && (
-      /image\.made-in-china\.com|micstatic\.com|alicdn\.com|sc\d+\.alicdn\.com/i.test(value) ||
-      /product|main|large|big|original|photo|image/i.test(value)
-    ));
-  return image ?? null;
+const NON_PRODUCT_IMAGE_PATTERN =
+  /(?:^|[\/_\-.])(?:logo|company[-_]?logo|favicon|icon|sprite|avatar|flag|star|badge|qr(?:code)?)(?:[\/_\-.]|$)/i;
+
+function productImageCandidate(value: string | null, priority: number) {
+  const normalized = normalizeUrl(decodeHtml(value) ?? null);
+  if (!normalized || NON_PRODUCT_IMAGE_PATTERN.test(normalized)) return null;
+  try {
+    const url = new URL(normalized);
+    if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+    const productSignal =
+      /(?:alicdn\.com|made-in-china\.com|micstatic\.com)/i.test(url.hostname) ||
+      /(?:\/kf\/|product|main|large|big|original|photo|image)/i.test(url.pathname);
+    if (!productSignal) return null;
+    return {
+      url: normalized,
+      score: priority +
+        (/(?:\/kf\/|product|main|original)/i.test(url.pathname) ? 20 : 0) +
+        (/(?:\.jpe?g|\.png|\.webp)(?:$|\?)/i.test(normalized) ? 10 : 0),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Alibaba commonly places the main product photo in JSON arrays or lazy-load
+ * attributes instead of a normal img src. Collect all source-grounded image
+ * candidates and explicitly reject marketplace/company logos and UI icons.
+ */
+export function extractProductImageUrl(html: string) {
+  const candidates: Array<{ url: string; score: number }> = [];
+  const add = (value: string | null | undefined, priority: number) => {
+    const candidate = productImageCandidate(value ?? null, priority);
+    if (candidate) candidates.push(candidate);
+  };
+
+  add(meta(html, "og:image"), 120);
+  add(meta(html, "twitter:image"), 115);
+  add(embeddedJsonString(html, [
+    "mainImageUrl",
+    "mainImage",
+    "originalImage",
+    "productImage",
+    "imageUrl",
+    "imagePath",
+    "imgUrl",
+  ]), 105);
+
+  for (const match of html.matchAll(
+    /<img\b[^>]*(?:src|data-src|data-original|data-lazy-src)=["']([^"']+)["'][^>]*>/gi,
+  )) {
+    add(match[1], 85);
+  }
+  for (const match of html.matchAll(/\bsrcset=["']([^"']+)["']/gi)) {
+    for (const entry of (match[1] ?? "").split(",")) {
+      add(entry.trim().split(/\s+/)[0], 80);
+    }
+  }
+  for (const match of html.matchAll(
+    /["']((?:(?:https?:)?(?:\\\/|\/){2})[^"'<>\s]+?\.(?:jpe?g|png|webp)(?:\?[^"'<>\s]*)?)["']/gi,
+  )) {
+    add(match[1], 70);
+  }
+
+  return candidates
+    .sort((left, right) => right.score - left.score)[0]?.url ?? null;
 }
 
 function extractIncoterm(bodyText: string) {
@@ -372,10 +434,10 @@ export function extractPriceTiers(html: string): ExtractedPriceTier[] {
     html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>|<[^>]+>/gi, " "),
   ) ?? "";
   const currencyMarker = "(?:US\\s*\\$|US\\$|USD|EUR|GBP|CNY|RMB|\\$|€|£|¥)";
-  const quantityToken = "(?:[0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)";
-  const unitMarker = "(?:pieces?|pcs?|sets?|units?)";
-  const forwardResults: ExtractedPriceTier[] = [];
-  const reverseResults: ExtractedPriceTier[] = [];
+  const quantityToken = "(?:[0-9]{1,3}(?:[.,\\s\\u00a0][0-9]{3})+|[0-9]+)";
+  const unitMarker = "(?:pieces?|pcs?|sets?|units?|st(?:ü|u)ck|stk\\.?)";
+  const priceFirstResults: ExtractedPriceTier[] = [];
+  const quantityFirstResults: ExtractedPriceTier[] = [];
 
   const forward = new RegExp(
     `(${currencyMarker})\\s*([0-9]+(?:[.,][0-9]+)?)\\s*(?:\\/\\s*(?:piece|pc|set|unit))?\\s*(?:(?:>=|≥)\\s*(${quantityToken})|(${quantityToken})\\s*(?:(?:-|–|—)\\s*(${quantityToken})|\\+))\\s*${unitMarker}`,
@@ -386,9 +448,26 @@ export function extractPriceTiers(html: string): ExtractedPriceTier[] {
     const minQuantity = quantityNumber(match[3] ?? match[4]);
     const maxQuantity = match[3] ? null : quantityNumber(match[5]);
     if (!price || !minQuantity) continue;
-    forwardResults.push({
+    priceFirstResults.push({
       price,
       currency: normalizeCurrency(match[1] ?? null),
+      minQuantity,
+      maxQuantity,
+    });
+  }
+
+  const forwardLocalized = new RegExp(
+    `([0-9]+(?:[.,][0-9]+)?)\\s*(${currencyMarker})\\s*(?:\\/\\s*(?:piece|pc|set|unit|st(?:ü|u)ck|stk\\.?))?\\s*(?:(?:>=|≥)\\s*(${quantityToken})|(${quantityToken})\\s*(?:(?:-|–|—)\\s*(${quantityToken})|\\+))\\s*${unitMarker}`,
+    "gi",
+  );
+  for (const match of bodyText.matchAll(forwardLocalized)) {
+    const price = tierPrice(match[1]);
+    const minQuantity = quantityNumber(match[3] ?? match[4]);
+    const maxQuantity = match[3] ? null : quantityNumber(match[5]);
+    if (!price || !minQuantity) continue;
+    priceFirstResults.push({
+      price,
+      currency: normalizeCurrency(match[2] ?? null),
       minQuantity,
       maxQuantity,
     });
@@ -403,9 +482,26 @@ export function extractPriceTiers(html: string): ExtractedPriceTier[] {
     const maxQuantity = match[1] ? null : quantityNumber(match[3]);
     const price = tierPrice(match[5]);
     if (!price || !minQuantity) continue;
-    reverseResults.push({
+    quantityFirstResults.push({
       price,
       currency: normalizeCurrency(match[4] ?? null),
+      minQuantity,
+      maxQuantity,
+    });
+  }
+
+  const reverseLocalized = new RegExp(
+    `(?:(?:>=|≥)\\s*(${quantityToken})|(${quantityToken})\\s*(?:(?:-|–|—)\\s*(${quantityToken})|\\+))\\s*${unitMarker}\\s*([0-9]+(?:[.,][0-9]+)?)\\s*(${currencyMarker})`,
+    "gi",
+  );
+  for (const match of bodyText.matchAll(reverseLocalized)) {
+    const minQuantity = quantityNumber(match[1] ?? match[2]);
+    const maxQuantity = match[1] ? null : quantityNumber(match[3]);
+    const price = tierPrice(match[4]);
+    if (!price || !minQuantity) continue;
+    quantityFirstResults.push({
+      price,
+      currency: normalizeCurrency(match[5] ?? null),
       minQuantity,
       maxQuantity,
     });
@@ -415,9 +511,9 @@ export function extractPriceTiers(html: string): ExtractedPriceTier[] {
   // `quantity → price`. Parsing both directions into one list can attach a
   // tier's price to the following tier after HTML tags are flattened. The
   // layout direction that yields the complete ladder is the trustworthy one.
-  const results = forwardResults.length >= reverseResults.length
-    ? forwardResults
-    : reverseResults;
+  const results = priceFirstResults.length >= quantityFirstResults.length
+    ? priceFirstResults
+    : quantityFirstResults;
   const unique = new Map<string, ExtractedPriceTier>();
   for (const tier of results) {
     const key = `${tier.currency ?? ""}:${tier.minQuantity}:${tier.maxQuantity ?? "open"}`;
@@ -700,12 +796,7 @@ export function inspectPreviewExtraction(html: string, productUrl?: string): Pre
       bodyText.match(/(\d+)\s*(?:piece|pieces|pcs|set|sets|unit|units)\s*\(?(?:MOQ|Min\.\s*Order|Minimum\s+Order)\)?/i)?.[1] ??
       null;
   const incoterm = extractIncoterm(bodyText);
-  const imageUrl = normalizeUrl(
-    meta(html, "og:image") ??
-    meta(html, "twitter:image") ??
-    embeddedJsonString(html, ["imageUrl", "mainImage", "mainImageUrl", "imagePath", "imgUrl", "productImage", "originalImage"]) ??
-    firstLargeProductImage(html),
-  );
+  const imageUrl = extractProductImageUrl(html);
   const values = {
     productTitle,
     supplierName,

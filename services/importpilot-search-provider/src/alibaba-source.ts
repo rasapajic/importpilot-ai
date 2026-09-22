@@ -63,6 +63,14 @@ function absoluteUrl(value: unknown) {
   }
 }
 
+function productImageUrl(value: unknown) {
+  const url = absoluteUrl(value);
+  if (!url) return null;
+  return /(?:^|[\/_\-.])(?:logo|company[-_]?logo|favicon|icon|sprite|avatar|flag|star|badge|qr(?:code)?)(?:[\/_\-.]|$)/i.test(url)
+    ? null
+    : url;
+}
+
 function incoterm(value: unknown) {
   const candidate = text(value)?.toUpperCase();
   return candidate?.match(/\b(EXW|FCA|FAS|FOB|CFR|CIF|CPT|CIP|DAP|DPU|DDP)\b/)?.[1] ?? null;
@@ -117,7 +125,7 @@ function normalizeRecord(record: Record<string, unknown>): SupplierSearchResult 
       : null,
     incoterm: incoterm(first(record, ["incoterm", "tradeTerms", "deliveryTerms"])),
     productUrl,
-    imageUrl: absoluteUrl(first(record, ["imageUrl", "image", "imagePath", "mainImage"])),
+    imageUrl: productImageUrl(first(record, ["imageUrl", "image", "imagePath", "mainImage"])),
     source: "Alibaba",
   };
 }

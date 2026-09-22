@@ -29,7 +29,7 @@ describe("ImportPilot 1.0 simple supplier results", () => {
     expect(resultsSource).toContain("Ovo nije ukupan broj kandidata nove pretrage.");
     expect(resultsSource).toContain('origin === "cache"');
     expect(resultsSource).toContain('whySelected: "Zašto je izdvojena"');
-    expect(resultsSource).toContain("selectionReasons(result, analysis, quantity, text)");
+    expect(resultsSource).toContain("selectionReasons(effectiveResult, analysis, quantity, text)");
     expect(resultsSource).toContain('className="supplier-selection-summary"');
     expect(resultsSource).toContain('className="selection-reasons"');
     expect(resultCss).toContain(".supplier-selection-summary");
@@ -103,6 +103,14 @@ describe("ImportPilot 1.0 simple supplier results", () => {
     expect(resultsSource).toContain("Varijante");
     expect(resultsSource).toContain(".slice(0, 10)");
     expect(resultsSource).toContain("selectOffer(effectiveResult)");
+  });
+
+  it("retries exact-page data without blocking the initial result list", () => {
+    expect(resultsSource).toContain("recoveryAttemptedUrls");
+    expect(resultsSource).toContain("/supplier-search/url-preview");
+    expect(resultsSource).toContain("mergeRecoveredSupplierPreview");
+    expect(resultsSource).toContain("!isLikelyProductImageUrl(result.imageUrl)");
+    expect(resultsSource).toContain("!result.marketplaceDetails?.priceTiers.length");
   });
 
   it("maps deep analysis to the simple 1.0 decision vocabulary", () => {

@@ -61,12 +61,13 @@ describe("supplier commercial price signal", () => {
     expect(service).toContain("urlImportProvider: getSupplierOfferUrlImportProvider()");
   });
 
-  it("labels missing supplier price as an RFQ instead of an unusable result", () => {
+  it("does not falsely claim that a failed price extraction means price on request", () => {
     const simpleSearch = readFileSync(
       join(process.cwd(), "components/search/simple-supplier-offer-search.tsx"),
       "utf8",
     );
-    expect(simpleSearch).toContain('priceOnRequest: "Cena na upit"');
+    expect(simpleSearch).toContain('priceOnRequest: "Cena nije preuzeta"');
+    expect(simpleSearch).toContain("Cena nije uspešno preuzeta; proverite izvornu ponudu.");
     expect(simpleSearch).toContain("text.priceOnRequest");
     expect(simpleSearch).toContain('landedPending: "čeka potvrđenu cenu dobavljača"');
   });

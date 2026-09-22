@@ -197,6 +197,30 @@ describe("supplier offer URL import provider", () => {
     });
   });
 
+  it("rejects an Alibaba logo and recovers the lazy-loaded product photo", async () => {
+    const provider = createSupplierOfferUrlImportProvider({
+      resolveHost: publicResolver,
+      fetcher: async () => htmlResponse(`
+        <html>
+          <head>
+            <meta property="og:title" content="65W yellow charger">
+            <meta property="og:image" content="https://img.alicdn.com/company-logo.png">
+          </head>
+          <body>
+            <img src="https://img.alicdn.com/company-logo.png">
+            <img data-src="//sc04.alicdn.com/kf/Hvinop-65w-yellow-charger.jpg">
+          </body>
+        </html>
+      `),
+    });
+
+    await expect(provider.previewSupplierOfferUrl(
+      "https://www.alibaba.com/product-detail/yellow-charger_1601390306760.html",
+    )).resolves.toMatchObject({
+      imageUrl: "https://sc04.alicdn.com/kf/Hvinop-65w-yellow-charger.jpg",
+    });
+  });
+
   it("extracts best-effort fields from a Made-in-China product URL", async () => {
     const provider = createSupplierOfferUrlImportProvider({
       resolveHost: publicResolver,

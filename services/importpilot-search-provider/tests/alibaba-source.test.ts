@@ -71,6 +71,17 @@ describe("Alibaba supplier search source", () => {
     });
   });
 
+  it("never presents a marketplace or company logo as the product image", () => {
+    const html = `<script type="application/json">${JSON.stringify({
+      title: "65W charger",
+      supplierName: "Shenzhen Charger Co., Ltd.",
+      productUrl: "https://www.alibaba.com/product-detail/charger-logo-test.html",
+      imageUrl: "https://img.alicdn.com/company-logo.png",
+    })}</script>`;
+
+    expect(parseAlibabaSearchHtml(html)[0]?.imageUrl).toBeNull();
+  });
+
   it("returns empty results with a reason when parsing produces no offers", async () => {
     const source = createAlibabaSupplierSearchSource({
       fetcher: async () => new Response("<html><body>No structured products</body></html>"),

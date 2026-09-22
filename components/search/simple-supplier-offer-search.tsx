@@ -4,7 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { useI18n } from "@/components/i18n/i18n-provider";
-import { SearchResultImage } from "@/components/search/search-result-image";
+import {
+  isLikelyProductImageUrl,
+  SearchResultImage,
+} from "@/components/search/search-result-image";
 import {
   quantityPriceSnapshots,
   supplierPriceTierSnapshots,
@@ -13,7 +16,11 @@ import {
 } from "@/components/search/supplier-choice-display";
 import { convertToEur, type FxSnapshot } from "@/modules/fx/euro-display";
 import type { Locale } from "@/modules/i18n/translations";
-import type { SupplierOfferSearchResult, SupplierOfferSearchSummary } from "@/modules/product-search/domain/search";
+import type {
+  SupplierOfferSearchResult,
+  SupplierOfferSearchSummary,
+  SupplierOfferUrlPreview,
+} from "@/modules/product-search/domain/search";
 import { estimateTajaPreliminaryLandedCost } from "@/modules/product-search/domain/taja-preliminary-cost-estimate";
 import type { TajaCandidateAnalysisWithProductForm } from "@/modules/product-search/domain/taja-product-form-policy";
 
@@ -132,10 +139,10 @@ const copy: Record<Locale, Copy> = {
     reasonProductLikely: "Ponuda je relevantna za traženi proizvod, ali deo specifikacije još treba potvrditi.",
     reasonMoqFits: "MOQ odgovara traženoj količini.",
     reasonPriceKnown: "Cena dobavljača je dostupna za poređenje.",
-    reasonPriceOnRequest: "Cena nije javna; ponuda ostaje relevantna kao RFQ kandidat.",
+    reasonPriceOnRequest: "Cena nije uspešno preuzeta; proverite izvornu ponudu.",
     reasonDataConfidence: "Dostupni podaci imaju dobru pouzdanost.",
     unknown: "nije poznato",
-    priceOnRequest: "Cena na upit",
+    priceOnRequest: "Cena nije preuzeta",
     variants: "Varijante",
     type: "Tip",
     quantityPrices: "Cene po količini",
@@ -189,10 +196,10 @@ const copy: Record<Locale, Copy> = {
     reasonProductLikely: "Das Angebot ist relevant, ein Teil der Spezifikation muss jedoch noch bestätigt werden.",
     reasonMoqFits: "Das MOQ passt zur gewünschten Menge.",
     reasonPriceKnown: "Der Lieferantenpreis ist für den Vergleich verfügbar.",
-    reasonPriceOnRequest: "Kein öffentlicher Preis; das Angebot bleibt als RFQ-Kandidat relevant.",
+    reasonPriceOnRequest: "Der Preis wurde nicht erfolgreich abgerufen; prüfen Sie das Quellangebot.",
     reasonDataConfidence: "Die verfügbaren Daten haben eine gute Zuverlässigkeit.",
     unknown: "unbekannt",
-    priceOnRequest: "Preis auf Anfrage",
+    priceOnRequest: "Preis nicht abgerufen",
     variants: "Varianten",
     type: "Typ",
     quantityPrices: "Mengenpreise",
@@ -246,10 +253,10 @@ const copy: Record<Locale, Copy> = {
     reasonProductLikely: "The offer is relevant, but part of the specification still needs confirmation.",
     reasonMoqFits: "The MOQ fits the requested quantity.",
     reasonPriceKnown: "A supplier price is available for comparison.",
-    reasonPriceOnRequest: "No public price; the offer remains relevant as an RFQ candidate.",
+    reasonPriceOnRequest: "The price was not retrieved successfully; check the source offer.",
     reasonDataConfidence: "The available data has good confidence.",
     unknown: "unknown",
-    priceOnRequest: "Price on request",
+    priceOnRequest: "Price not retrieved",
     variants: "Variants",
     type: "Type",
     quantityPrices: "Quantity prices",
@@ -390,6 +397,40 @@ function supplierRiskGapLabels(
   return gaps.map((gap) => labels[gap]).join(", ");
 }
 
+function isRecoverableMarketplaceProductUrl(productUrl: string) {
+  try {
+    const host = new URL(productUrl).hostname.toLowerCase();
+    return host === "alibaba.com" || host.endsWith(".alibaba.com") ||
+      host === "made-in-china.com" || host.endsWith(".made-in-china.com");
+  } catch {
+    return false;
+  }
+}
+
+export function mergeRecoveredSupplierPreview(
+  result: SupplierOfferSearchResult,
+  preview: SupplierOfferUrlPreview,
+) {
+  const previewHasPrice = preview.price !== null && preview.currency !== null;
+  const resultHasPrice = result.price !== null && result.currency !== null;
+  const recoveredImage = isLikelyProductImageUrl(preview.imageUrl)
+    ? preview.imageUrl
+    : null;
+  const currentImage = isLikelyProductImageUrl(result.imageUrl)
+    ? result.imageUrl
+    : null;
+
+  return {
+    ...result,
+    price: resultHasPrice || !previewHasPrice ? result.price : preview.price,
+    currency: resultHasPrice || !previewHasPrice ? result.currency : preview.currency,
+    minimumOrderQuantity: result.minimumOrderQuantity ?? preview.minimumOrderQuantity,
+    incoterm: result.incoterm ?? preview.incoterm,
+    imageUrl: recoveredImage ?? currentImage,
+    marketplaceDetails: preview.details ?? result.marketplaceDetails ?? null,
+  } satisfies SupplierOfferSearchResult;
+}
+
 function selectionReasons(
   result: SupplierOfferSearchResult,
   analysis: TajaCandidateAnalysisWithProductForm | undefined,
@@ -464,12 +505,14 @@ export function SimpleSupplierOfferSearch({
   const [advancing, setAdvancing] = useState(false);
   const [fxSnapshot, setFxSnapshot] = useState<FxSnapshot | null>(null);
   const automaticSearchStarted = useRef(false);
+  const recoveryAttemptedUrls = useRef(new Set<string>());
 
   const runSearch = useCallback(async () => {
     if (!quantity || !targetCountry) return;
     setLoading(true);
     setError("");
     setLimitReached(false);
+    recoveryAttemptedUrls.current.clear();
     try {
       const response = await fetch(`/api/projects/${projectId}/supplier-search`, {
         method: "POST",
@@ -536,6 +579,54 @@ export function SimpleSupplierOfferSearch({
       .catch(() => undefined);
     return () => controller.abort();
   }, [quantity, results]);
+
+  useEffect(() => {
+    if (!results?.length) return;
+    const candidates = results
+      .filter((result) =>
+        isRecoverableMarketplaceProductUrl(result.productUrl) &&
+        !recoveryAttemptedUrls.current.has(result.productUrl) &&
+        (
+          !isLikelyProductImageUrl(result.imageUrl) ||
+          result.price === null ||
+          !result.marketplaceDetails?.priceTiers.length
+        )
+      )
+      .slice(0, 10);
+    if (candidates.length === 0) return;
+    candidates.forEach((result) => recoveryAttemptedUrls.current.add(result.productUrl));
+
+    const controller = new AbortController();
+    void Promise.all(candidates.map(async (result) => {
+      try {
+        const response = await fetch(`/api/projects/${projectId}/supplier-search/url-preview`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ productUrl: result.productUrl }),
+          signal: controller.signal,
+        });
+        const payload = await response.json().catch(() => null) as {
+          preview?: SupplierOfferUrlPreview;
+        } | null;
+        return response.ok && payload?.preview
+          ? { productUrl: result.productUrl, preview: payload.preview }
+          : null;
+      } catch {
+        return null;
+      }
+    })).then((recovered) => {
+      if (controller.signal.aborted || recovered.every((item) => item === null)) return;
+      const previewByUrl = new Map(
+        recovered.flatMap((item) => item ? [[item.productUrl, item.preview] as const] : []),
+      );
+      setResults((current) => current?.map((result) => {
+        const preview = previewByUrl.get(result.productUrl);
+        return preview ? mergeRecoveredSupplierPreview(result, preview) : result;
+      }) ?? current);
+    });
+
+    return () => controller.abort();
+  }, [projectId, results]);
 
   async function selectOffer(result: SupplierOfferSearchResult) {
     if (selectedUrls.includes(result.productUrl)) return;
@@ -672,7 +763,7 @@ export function SimpleSupplierOfferSearch({
             const deliveryEstimate = liveEstimate ?? analysis?.preliminaryCostEstimate ?? null;
             const selecting = selectingUrl === result.productUrl;
             const selected = selectedUrls.includes(result.productUrl);
-            const reasons = selectionReasons(result, analysis, quantity, text);
+            const reasons = selectionReasons(effectiveResult, analysis, quantity, text);
             return (
               <article className="search-result-card" key={`${result.source}-${result.productUrl}`}>
                 <SearchResultImage src={result.imageUrl} title={result.title} />
