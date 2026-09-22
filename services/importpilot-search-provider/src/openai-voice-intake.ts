@@ -108,7 +108,7 @@ export function createOpenAIVoiceIntake({
     transcriptionForm.set("language", language(input.locale));
     transcriptionForm.set(
       "file",
-      new Blob([audioBytes], { type: input.mimeType }),
+      new Blob([new Uint8Array(audioBytes)], { type: input.mimeType }),
       `jakov360-voice.${extensionForMime(input.mimeType)}`,
     );
 
