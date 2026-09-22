@@ -14,7 +14,7 @@ describe("OpenAI voice intake", () => {
         }), {
           status: 200,
           headers: { "content-type": "application/json" },
-        };
+        });
       }
 
       return new Response(JSON.stringify({
