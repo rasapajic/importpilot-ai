@@ -275,7 +275,12 @@ export function parseVoiceSearchIntake(text: string, locale: Locale): VoiceSearc
   const quantity = findQuantity(trimmed, locale);
   const country = findCountry(trimmed);
   const product = cleanProduct(
-    removeSpans(trimmed, [quantity, country].filter((value): value is Span => Boolean(value))),
+    removeSpans(
+      trimmed,
+      [quantity, country].filter(
+        (value): value is QuantityMatch | CountryMatch => value !== null,
+      ),
+    ),
     locale,
   );
 
