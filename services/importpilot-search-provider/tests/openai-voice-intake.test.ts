@@ -27,7 +27,7 @@ describe("OpenAI voice intake", () => {
         status: 200,
         headers: { "content-type": "application/json" },
       });
-    });
+    };
 
     const parse = createOpenAIVoiceIntake({
       apiKey: "sk-test-voice",
