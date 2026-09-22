@@ -89,7 +89,7 @@ describe("ImportPilot 1.0 core search intake", () => {
     expect(intakeSource).toContain("quotaUsage");
     expect(intakeSource).toContain("Mesečni limit je potrošen");
     expect(intakeSource).toContain('href="/billing"');
-    expect(intakeSource).toContain("disabled={pending}");
+    expect(intakeSource).toContain("disabled={pending || voiceRecording || voiceProcessing}");
     expect(dashboardSource).toContain("getMonthlySupplierSearchQuotaStatus");
     expect(dashboardSource).toContain("<DashboardPrimaryActions quota={{");
   });
