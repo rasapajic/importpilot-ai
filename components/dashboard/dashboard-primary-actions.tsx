@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useI18n } from "@/components/i18n/i18n-provider";
 import type { Locale } from "@/modules/i18n/translations";
 import { getProjectCreationDestination } from "@/modules/projects/application/project-creation-destination";
+import { parseVoiceSearchIntake } from "@/modules/product-search/domain/voice-search-intake";
 
 import styles from "./dashboard-primary-actions.module.css";
 
@@ -30,6 +31,7 @@ type IntakeCopy = {
   voiceListening: string;
   voiceUnavailable: string;
   voiceError: string;
+  voiceReview: string;
 };
 
 const copy: Record<Locale, IntakeCopy> = {
@@ -53,6 +55,7 @@ const copy: Record<Locale, IntakeCopy> = {
     voiceListening: "Slušam...",
     voiceUnavailable: "Govorni unos nije podržan u ovom pregledaču.",
     voiceError: "Govor nije mogao da se prepozna. Pokušajte ponovo.",
+    voiceReview: "JAKOV360 je popunio ono što je razumeo. Proverite proizvod, količinu i destinaciju pre pretrage.",
   },
   de: {
     productLabel: "Produkt",
@@ -74,6 +77,7 @@ const copy: Record<Locale, IntakeCopy> = {
     voiceListening: "Ich höre zu...",
     voiceUnavailable: "Spracheingabe wird in diesem Browser nicht unterstützt.",
     voiceError: "Die Sprache konnte nicht erkannt werden. Bitte versuchen Sie es erneut.",
+    voiceReview: "JAKOV360 hat die erkannten Angaben eingetragen. Prüfen Sie Produkt, Menge und Zielland vor der Suche.",
   },
   en: {
     productLabel: "Product",
@@ -95,6 +99,7 @@ const copy: Record<Locale, IntakeCopy> = {
     voiceListening: "Listening...",
     voiceUnavailable: "Voice input is not supported in this browser.",
     voiceError: "Speech could not be recognized. Please try again.",
+    voiceReview: "JAKOV360 filled the details it understood. Review the product, quantity, and destination before searching.",
   },
 };
 
@@ -164,9 +169,11 @@ export function DashboardPrimaryActions({
   const [voiceError, setVoiceError] = useState("");
   const [voiceListening, setVoiceListening] = useState(false);
   const [voiceSupported, setVoiceSupported] = useState(false);
+  const [voiceReviewVisible, setVoiceReviewVisible] = useState(false);
   const productInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const quantityInputRef = useRef<HTMLInputElement | null>(null);
+  const countryInputRef = useRef<HTMLSelectElement | null>(null);
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
-  const voiceBaseValueRef = useRef("");
 
   useEffect(() => {
     setVoiceSupported(Boolean(speechRecognitionConstructor()));
@@ -199,17 +206,35 @@ export function DashboardPrimaryActions({
     recognition.continuous = false;
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
-    voiceBaseValueRef.current = field.value.trim();
 
     recognition.onresult = (event) => {
       let transcript = "";
       for (let index = 0; index < event.results.length; index += 1) {
-        transcript += event.results[index]?.[0]?.transcript ?? "";
+        transcript += `${event.results[index]?.[0]?.transcript ?? ""} `;
       }
       const spoken = transcript.trim();
-      const base = voiceBaseValueRef.current;
-      field.value = [base, spoken].filter(Boolean).join(base && spoken ? " " : "");
-      field.dispatchEvent(new Event("input", { bubbles: true }));
+      if (!spoken) return;
+
+      const parsed = parseVoiceSearchIntake(spoken, locale);
+      let understood = false;
+
+      if (parsed.product && productInputRef.current) {
+        productInputRef.current.value = parsed.product;
+        productInputRef.current.dispatchEvent(new Event("input", { bubbles: true }));
+        understood = true;
+      }
+      if (parsed.quantity && quantityInputRef.current) {
+        quantityInputRef.current.value = String(parsed.quantity);
+        quantityInputRef.current.dispatchEvent(new Event("input", { bubbles: true }));
+        understood = true;
+      }
+      if (parsed.targetCountry && countryInputRef.current) {
+        countryInputRef.current.value = parsed.targetCountry;
+        countryInputRef.current.dispatchEvent(new Event("change", { bubbles: true }));
+        understood = true;
+      }
+
+      setVoiceReviewVisible(understood);
     };
 
     recognition.onerror = () => {
@@ -300,16 +325,27 @@ export function DashboardPrimaryActions({
           required
         />
         {voiceError && <p className={styles.voiceError} role="alert">{voiceError}</p>}
+        {voiceReviewVisible && !voiceListening && (
+          <p className={styles.voiceReview} role="status">{text.voiceReview}</p>
+        )}
       </div>
 
       <div className={styles.businessGrid}>
         <label className={styles.fieldLabel}>
           {text.quantity}
-          <input min="1" name="quantity" placeholder="100" required step="1" type="number" />
+          <input
+            min="1"
+            name="quantity"
+            placeholder="100"
+            ref={quantityInputRef}
+            required
+            step="1"
+            type="number"
+          />
         </label>
         <label className={styles.fieldLabel}>
           {text.destination}
-          <select defaultValue="" name="targetCountry" required>
+          <select defaultValue="" name="targetCountry" ref={countryInputRef} required>
             <option disabled value="">{text.destinationPrompt}</option>
             <option value="AT">{text.austria}</option>
             <option value="DE">{text.germany}</option>
