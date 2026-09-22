@@ -203,15 +203,15 @@ const COUNTRY_PATTERNS: Array<{
 }> = [
   {
     value: "AT",
-    pattern: /\b(?:(?:za|u|destinacija|zemlja|für|fuer|nach|zielland|land|to|for|destination|country)\s*(?::|-)?\s*)?(?:austrij(?:a|u|i)|austria|österreich|oesterreich)\b/iu,
+    pattern: /\b(?:(?:za|u|destinacija|zemlja|für|fuer|nach|zielland|land|to|for|destination|country)\s*(?::|-)?\s*)?(?:austrij(?:a|u|i|e)|austria|österreich|oesterreich)\b/iu,
   },
   {
     value: "DE",
-    pattern: /\b(?:(?:za|u|destinacija|zemlja|für|fuer|nach|zielland|land|to|for|destination|country)\s*(?::|-)?\s*)?(?:nema[cč]k(?:a|u|oj)|njema[cč]k(?:a|u|oj)|deutschland|germany)\b/iu,
+    pattern: /\b(?:(?:za|u|destinacija|zemlja|für|fuer|nach|zielland|land|to|for|destination|country)\s*(?::|-)?\s*)?(?:nema[cč]k(?:a|u|oj|e)|njema[cč]k(?:a|u|oj|e)|deutschland|germany)\b/iu,
   },
   {
     value: "RS",
-    pattern: /\b(?:(?:za|u|destinacija|zemlja|für|fuer|nach|zielland|land|to|for|destination|country)\s*(?::|-)?\s*)?(?:srbij(?:a|u|i)|serbia|serbien)\b/iu,
+    pattern: /\b(?:(?:za|u|destinacija|zemlja|für|fuer|nach|zielland|land|to|for|destination|country)\s*(?::|-)?\s*)?(?:srbij(?:a|u|i|e)|serbia|serbien)\b/iu,
   },
 ];
 
@@ -258,7 +258,7 @@ function cleanProduct(text: string, locale: Locale) {
   };
 
   for (const pattern of prefixes[locale]) result = result.replace(pattern, "");
-  return result.replace(/^[-:,\s]+|[-:,\s]+$/g, "").replace(/\s+/g, " ").trim();
+  return result.replace(/^[-:,.!?;\s]+|[-:,.!?;\s]+$/g, "").replace(/\s+/g, " ").trim();
 }
 
 export function parseVoiceSearchIntake(text: string, locale: Locale): VoiceSearchIntake {
