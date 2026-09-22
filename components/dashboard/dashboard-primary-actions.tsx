@@ -7,9 +7,10 @@ import { useRouter } from "next/navigation";
 import { useI18n } from "@/components/i18n/i18n-provider";
 import type { Locale } from "@/modules/i18n/translations";
 import { getProjectCreationDestination } from "@/modules/projects/application/project-creation-destination";
-import { parseVoiceSearchIntake } from "@/modules/product-search/domain/voice-search-intake";
 
 import styles from "./dashboard-primary-actions.module.css";
+
+const MAX_VOICE_SECONDS = 30;
 
 type IntakeCopy = {
   productLabel: string;
@@ -28,13 +29,14 @@ type IntakeCopy = {
   managePlan: string;
   voiceStart: string;
   voiceStop: string;
-  voiceListening: string;
-  voiceHeard: string;
-  voiceWaiting: string;
+  voiceRecording: string;
+  voiceReceiving: string;
+  voiceProcessing: string;
   voiceUnavailable: string;
+  voicePermission: string;
   voiceError: string;
-  voiceNoSpeech: string;
   voiceReview: string;
+  voiceHeard: string;
 };
 
 const copy: Record<Locale, IntakeCopy> = {
@@ -54,14 +56,15 @@ const copy: Record<Locale, IntakeCopy> = {
     quotaExhausted: "Mesečni limit je potrošen. Sačuvane pretrage ostaju dostupne.",
     managePlan: "Plan i naplata",
     voiceStart: "Govorni unos",
-    voiceStop: "Zaustavi i popuni",
-    voiceListening: "Slušam...",
-    voiceHeard: "Čujem",
-    voiceWaiting: "Počnite da govorite. Tekst će se pojaviti ovde.",
-    voiceUnavailable: "Govorni unos nije podržan u ovom pregledaču.",
-    voiceError: "Govor nije mogao da se prepozna. Proverite dozvolu za mikrofon i pokušajte ponovo.",
-    voiceNoSpeech: "Nisam dobio prepoznat govor. Pokušajte ponovo i govorite dok je prikazano „Slušam...“.",
+    voiceStop: "ZAUSTAVI",
+    voiceRecording: "Snimam...",
+    voiceReceiving: "Mikrofon prima vaš glas",
+    voiceProcessing: "JAKOV360 razume govor...",
+    voiceUnavailable: "Snimanje glasa nije podržano u ovom pregledaču.",
+    voicePermission: "Mikrofon nije dostupan. Dozvolite pristup mikrofonu i pokušajte ponovo.",
+    voiceError: "Govor nije mogao da se obradi. Pokušajte ponovo.",
     voiceReview: "JAKOV360 je popunio ono što je razumeo. Proverite proizvod, količinu i destinaciju pre pretrage.",
+    voiceHeard: "Čuo sam",
   },
   de: {
     productLabel: "Produkt",
@@ -79,14 +82,15 @@ const copy: Record<Locale, IntakeCopy> = {
     quotaExhausted: "Das monatliche Limit ist erreicht. Gespeicherte Suchen bleiben verfügbar.",
     managePlan: "Tarif und Abrechnung",
     voiceStart: "Spracheingabe",
-    voiceStop: "Stoppen und übernehmen",
-    voiceListening: "Ich höre zu...",
-    voiceHeard: "Erkannt",
-    voiceWaiting: "Sprechen Sie jetzt. Der erkannte Text erscheint hier.",
-    voiceUnavailable: "Spracheingabe wird in diesem Browser nicht unterstützt.",
-    voiceError: "Die Sprache konnte nicht erkannt werden. Prüfen Sie die Mikrofonberechtigung und versuchen Sie es erneut.",
-    voiceNoSpeech: "Es wurde keine Sprache erkannt. Versuchen Sie es erneut und sprechen Sie, solange „Ich höre zu...“ angezeigt wird.",
+    voiceStop: "STOPP",
+    voiceRecording: "Aufnahme läuft...",
+    voiceReceiving: "Das Mikrofon empfängt Ihre Stimme",
+    voiceProcessing: "JAKOV360 versteht die Sprache...",
+    voiceUnavailable: "Sprachaufnahme wird in diesem Browser nicht unterstützt.",
+    voicePermission: "Mikrofon nicht verfügbar. Erlauben Sie den Mikrofonzugriff und versuchen Sie es erneut.",
+    voiceError: "Die Sprache konnte nicht verarbeitet werden. Bitte versuchen Sie es erneut.",
     voiceReview: "JAKOV360 hat die erkannten Angaben eingetragen. Prüfen Sie Produkt, Menge und Zielland vor der Suche.",
+    voiceHeard: "Erkannt",
   },
   en: {
     productLabel: "Product",
@@ -104,62 +108,17 @@ const copy: Record<Locale, IntakeCopy> = {
     quotaExhausted: "The monthly limit is reached. Saved searches remain available.",
     managePlan: "Plan and billing",
     voiceStart: "Voice input",
-    voiceStop: "Stop and fill",
-    voiceListening: "Listening...",
-    voiceHeard: "Hearing",
-    voiceWaiting: "Start speaking. Recognized text will appear here.",
-    voiceUnavailable: "Voice input is not supported in this browser.",
-    voiceError: "Speech could not be recognized. Check microphone permission and try again.",
-    voiceNoSpeech: "No speech was recognized. Try again and speak while “Listening...” is shown.",
+    voiceStop: "STOP",
+    voiceRecording: "Recording...",
+    voiceReceiving: "The microphone is receiving your voice",
+    voiceProcessing: "JAKOV360 is understanding your speech...",
+    voiceUnavailable: "Voice recording is not supported in this browser.",
+    voicePermission: "Microphone unavailable. Allow microphone access and try again.",
+    voiceError: "Speech could not be processed. Please try again.",
     voiceReview: "JAKOV360 filled the details it understood. Review the product, quantity, and destination before searching.",
+    voiceHeard: "I heard",
   },
 };
-
-type BrowserSpeechRecognitionResult = {
-  readonly isFinal: boolean;
-  readonly 0?: { readonly transcript?: string };
-};
-
-type BrowserSpeechRecognitionEvent = Event & {
-  readonly results: {
-    readonly length: number;
-    readonly [index: number]: BrowserSpeechRecognitionResult;
-  };
-};
-
-type BrowserSpeechRecognitionErrorEvent = Event & {
-  readonly error?: string;
-};
-
-type BrowserSpeechRecognition = {
-  lang: string;
-  continuous: boolean;
-  interimResults: boolean;
-  maxAlternatives: number;
-  start(): void;
-  stop(): void;
-  abort(): void;
-  onresult: ((event: BrowserSpeechRecognitionEvent) => void) | null;
-  onerror: ((event: BrowserSpeechRecognitionErrorEvent) => void) | null;
-  onend: (() => void) | null;
-};
-
-type BrowserSpeechRecognitionConstructor = new () => BrowserSpeechRecognition;
-
-function speechRecognitionConstructor() {
-  if (typeof window === "undefined") return null;
-  const browserWindow = window as typeof window & {
-    SpeechRecognition?: BrowserSpeechRecognitionConstructor;
-    webkitSpeechRecognition?: BrowserSpeechRecognitionConstructor;
-  };
-  return browserWindow.SpeechRecognition ?? browserWindow.webkitSpeechRecognition ?? null;
-}
-
-function speechLocale(locale: Locale) {
-  if (locale === "sr") return "sr-RS";
-  if (locale === "de") return "de-DE";
-  return "en-US";
-}
 
 type SearchQuotaView = {
   plan: "FREE" | "PLUS" | "PRO";
@@ -167,6 +126,37 @@ type SearchQuotaView = {
   limit: number;
   remaining: number;
 };
+
+type VoiceIntakeResponse = {
+  transcript?: string;
+  product?: string | null;
+  quantity?: number | null;
+  targetCountry?: "AT" | "DE" | "RS" | null;
+  error?: string;
+};
+
+function preferredAudioMimeType() {
+  if (typeof MediaRecorder === "undefined") return "";
+  for (const mime of [
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/mp4",
+    "audio/ogg;codecs=opus",
+  ]) {
+    if (MediaRecorder.isTypeSupported(mime)) return mime;
+  }
+  return "";
+}
+
+function voiceFilename(mimeType: string) {
+  if (mimeType.includes("mp4")) return "jakov360-voice.m4a";
+  if (mimeType.includes("ogg")) return "jakov360-voice.ogg";
+  return "jakov360-voice.webm";
+}
+
+function voiceTime(seconds: number) {
+  return `0:${String(seconds).padStart(2, "0")}`;
+}
 
 export function DashboardPrimaryActions({
   quota,
@@ -176,205 +166,229 @@ export function DashboardPrimaryActions({
   const { locale } = useI18n();
   const text = copy[locale];
   const router = useRouter();
+
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const [voiceError, setVoiceError] = useState("");
-  const [voiceListening, setVoiceListening] = useState(false);
+  const [voiceRecording, setVoiceRecording] = useState(false);
+  const [voiceProcessing, setVoiceProcessing] = useState(false);
+  const [voiceSeconds, setVoiceSeconds] = useState(0);
   const [voiceTranscript, setVoiceTranscript] = useState("");
   const [voiceReviewVisible, setVoiceReviewVisible] = useState(false);
+
   const productInputRef = useRef<HTMLTextAreaElement | null>(null);
   const quantityInputRef = useRef<HTMLInputElement | null>(null);
   const countryInputRef = useRef<HTMLSelectElement | null>(null);
-  const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
-  const voiceShouldListenRef = useRef(false);
-  const voiceCommittedTranscriptRef = useRef("");
-  const voiceSessionTranscriptRef = useRef("");
-  const voiceRestartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const voiceGenerationRef = useRef(0);
-  const voiceSkipFinalizeRef = useRef(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const recordingSecondsRef = useRef(0);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserFrameRef = useRef<number | null>(null);
+  const voiceMeterRef = useRef<HTMLDivElement | null>(null);
+
+  function stopMediaTracks() {
+    for (const track of mediaStreamRef.current?.getTracks() ?? []) track.stop();
+    mediaStreamRef.current = null;
+  }
+
+  function stopVoiceMeter() {
+    if (analyserFrameRef.current !== null) {
+      cancelAnimationFrame(analyserFrameRef.current);
+      analyserFrameRef.current = null;
+    }
+    const context = audioContextRef.current;
+    audioContextRef.current = null;
+    if (context && context.state !== "closed") void context.close();
+    voiceMeterRef.current?.style.setProperty("--voice-level", "0.04");
+  }
+
+  function clearVoiceTimer() {
+    if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+    recordingTimerRef.current = null;
+  }
+
+  function cleanupVoiceResources() {
+    clearVoiceTimer();
+    stopVoiceMeter();
+    stopMediaTracks();
+    mediaRecorderRef.current = null;
+  }
 
   useEffect(() => {
     return () => {
-      voiceShouldListenRef.current = false;
-      voiceGenerationRef.current += 1;
-      if (voiceRestartTimerRef.current) clearTimeout(voiceRestartTimerRef.current);
-      recognitionRef.current?.abort();
-      recognitionRef.current = null;
+      const recorder = mediaRecorderRef.current;
+      if (recorder?.state === "recording") {
+        recorder.ondataavailable = null;
+        recorder.onstop = null;
+        recorder.onerror = null;
+        recorder.stop();
+      }
+      cleanupVoiceResources();
     };
   }, []);
 
+  function startVoiceMeter(stream: MediaStream) {
+    if (typeof AudioContext === "undefined") return;
 
-  function normalizedTranscript(...parts: string[]) {
-    return parts
-      .map((part) => part.trim())
-      .filter(Boolean)
-      .join(" ")
-      .replace(/\s+/g, " ")
-      .trim();
+    const context = new AudioContext();
+    const analyser = context.createAnalyser();
+    analyser.fftSize = 256;
+    analyser.smoothingTimeConstant = 0.75;
+    const source = context.createMediaStreamSource(stream);
+    source.connect(analyser);
+    const samples = new Uint8Array(analyser.fftSize);
+    audioContextRef.current = context;
+
+    const draw = () => {
+      analyser.getByteTimeDomainData(samples);
+      let energy = 0;
+      for (const sample of samples) {
+        const normalized = (sample - 128) / 128;
+        energy += normalized * normalized;
+      }
+      const rms = Math.sqrt(energy / samples.length);
+      const level = Math.max(0.04, Math.min(1, rms * 7));
+      voiceMeterRef.current?.style.setProperty("--voice-level", level.toFixed(3));
+      analyserFrameRef.current = requestAnimationFrame(draw);
+    };
+    draw();
   }
 
-  function applyVoiceTranscript(transcript: string) {
-    const spoken = transcript.trim();
-    if (!spoken) {
-      setVoiceError(text.voiceNoSpeech);
-      setVoiceReviewVisible(false);
-      return;
-    }
-
-    const parsed = parseVoiceSearchIntake(spoken, locale);
+  function applyVoiceResult(payload: VoiceIntakeResponse) {
     let understood = false;
 
-    if (parsed.product && productInputRef.current) {
-      productInputRef.current.value = parsed.product;
+    if (payload.product && productInputRef.current) {
+      productInputRef.current.value = payload.product;
       productInputRef.current.dispatchEvent(new Event("input", { bubbles: true }));
       understood = true;
     }
-    if (parsed.quantity && quantityInputRef.current) {
-      quantityInputRef.current.value = String(parsed.quantity);
+    if (payload.quantity && quantityInputRef.current) {
+      quantityInputRef.current.value = String(payload.quantity);
       quantityInputRef.current.dispatchEvent(new Event("input", { bubbles: true }));
       understood = true;
     }
-    if (parsed.targetCountry && countryInputRef.current) {
-      countryInputRef.current.value = parsed.targetCountry;
+    if (payload.targetCountry && countryInputRef.current) {
+      countryInputRef.current.value = payload.targetCountry;
       countryInputRef.current.dispatchEvent(new Event("change", { bubbles: true }));
       understood = true;
     }
 
     setVoiceReviewVisible(understood);
-    if (!understood) setVoiceError(text.voiceError);
     productInputRef.current?.focus();
   }
 
-  function currentVoiceTranscript() {
-    return normalizedTranscript(
-      voiceCommittedTranscriptRef.current,
-      voiceSessionTranscriptRef.current,
-    );
-  }
+  async function submitVoiceRecording(blob: Blob) {
+    setVoiceProcessing(true);
+    setVoiceError("");
 
-  function finishVoiceInput() {
-    const transcript = currentVoiceTranscript();
-    setVoiceListening(false);
-    setVoiceTranscript(transcript);
-    recognitionRef.current = null;
-    applyVoiceTranscript(transcript);
-  }
+    const formData = new FormData();
+    formData.set("audio", blob, voiceFilename(blob.type));
+    formData.set("locale", locale);
 
-  function beginVoiceRecognitionSession(
-    Recognition: BrowserSpeechRecognitionConstructor,
-    generation: number,
-  ) {
-    if (!voiceShouldListenRef.current || generation !== voiceGenerationRef.current) return;
-
-    const recognition = new Recognition();
-    recognition.lang = speechLocale(locale);
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.maxAlternatives = 1;
-    voiceSessionTranscriptRef.current = "";
-
-    recognition.onresult = (event) => {
-      if (generation !== voiceGenerationRef.current) return;
-      let sessionTranscript = "";
-      for (let index = 0; index < event.results.length; index += 1) {
-        sessionTranscript += `${event.results[index]?.[0]?.transcript ?? ""} `;
-      }
-      voiceSessionTranscriptRef.current = sessionTranscript.trim();
-      setVoiceTranscript(currentVoiceTranscript());
-    };
-
-    recognition.onerror = (event) => {
-      if (generation !== voiceGenerationRef.current) return;
-      const recoverable = event.error === "no-speech" || event.error === "aborted";
-      if (recoverable && voiceShouldListenRef.current) return;
-
-      voiceShouldListenRef.current = false;
-      setVoiceListening(false);
-      recognitionRef.current = null;
-      if (event.error !== "aborted") {
-        voiceSkipFinalizeRef.current = true;
-        setVoiceError(text.voiceError);
-      }
-    };
-
-    recognition.onend = () => {
-      if (generation !== voiceGenerationRef.current) return;
-      recognitionRef.current = null;
-
-      if (!voiceShouldListenRef.current) {
-        if (voiceSkipFinalizeRef.current) {
-          voiceSkipFinalizeRef.current = false;
-          return;
-        }
-        finishVoiceInput();
-        return;
-      }
-
-      voiceCommittedTranscriptRef.current = currentVoiceTranscript();
-      voiceSessionTranscriptRef.current = "";
-      setVoiceTranscript(voiceCommittedTranscriptRef.current);
-
-      voiceRestartTimerRef.current = setTimeout(() => {
-        voiceRestartTimerRef.current = null;
-        beginVoiceRecognitionSession(Recognition, generation);
-      }, 150);
-    };
-
-    recognitionRef.current = recognition;
     try {
-      recognition.start();
-    } catch {
-      voiceShouldListenRef.current = false;
-      setVoiceListening(false);
-      recognitionRef.current = null;
-      setVoiceError(text.voiceError);
+      const response = await fetch("/api/voice-intake", {
+        method: "POST",
+        body: formData,
+      });
+      const payload = await response.json().catch(() => null) as VoiceIntakeResponse | null;
+
+      if (!response.ok || !payload?.transcript) {
+        throw new Error(payload?.error ?? text.voiceError);
+      }
+
+      setVoiceTranscript(payload.transcript);
+      applyVoiceResult(payload);
+    } catch (caught) {
+      setVoiceError(caught instanceof Error && caught.message ? caught.message : text.voiceError);
+      setVoiceReviewVisible(false);
+    } finally {
+      setVoiceProcessing(false);
     }
   }
 
   function stopVoiceInput() {
-    if (!voiceListening) return;
-    voiceShouldListenRef.current = false;
-    voiceSkipFinalizeRef.current = false;
-    if (voiceRestartTimerRef.current) {
-      clearTimeout(voiceRestartTimerRef.current);
-      voiceRestartTimerRef.current = null;
-    }
-
-    const recognition = recognitionRef.current;
-    if (!recognition) {
-      finishVoiceInput();
-      return;
-    }
-
-    try {
-      recognition.stop();
-    } catch {
-      finishVoiceInput();
-    }
+    const recorder = mediaRecorderRef.current;
+    if (!recorder || recorder.state !== "recording") return;
+    recorder.stop();
   }
 
-  function startVoiceInput() {
+  async function startVoiceInput() {
     setVoiceError("");
+    setVoiceTranscript("");
     setVoiceReviewVisible(false);
-    const Recognition = speechRecognitionConstructor();
-    if (!Recognition) {
+
+    if (
+      typeof MediaRecorder === "undefined" ||
+      !navigator.mediaDevices?.getUserMedia
+    ) {
       setVoiceError(text.voiceUnavailable);
       return;
     }
 
-    voiceShouldListenRef.current = false;
-    voiceGenerationRef.current += 1;
-    const generation = voiceGenerationRef.current;
-    voiceSkipFinalizeRef.current = false;
-    recognitionRef.current?.abort();
-    recognitionRef.current = null;
-    if (voiceRestartTimerRef.current) clearTimeout(voiceRestartTimerRef.current);
-    voiceCommittedTranscriptRef.current = "";
-    voiceSessionTranscriptRef.current = "";
-    setVoiceTranscript("");
-    voiceShouldListenRef.current = true;
-    setVoiceListening(true);
-    beginVoiceRecognitionSession(Recognition, generation);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+      mediaStreamRef.current = stream;
+
+      const mimeType = preferredAudioMimeType();
+      const recorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
+
+      audioChunksRef.current = [];
+      mediaRecorderRef.current = recorder;
+      recordingSecondsRef.current = 0;
+      setVoiceSeconds(0);
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) audioChunksRef.current.push(event.data);
+      };
+
+      recorder.onerror = () => {
+        setVoiceRecording(false);
+        setVoiceError(text.voiceError);
+        cleanupVoiceResources();
+      };
+
+      recorder.onstop = () => {
+        const chunks = audioChunksRef.current;
+        const type = recorder.mimeType || mimeType || "audio/webm";
+        const blob = new Blob(chunks, { type });
+        audioChunksRef.current = [];
+        setVoiceRecording(false);
+        cleanupVoiceResources();
+
+        if (blob.size < 200) {
+          setVoiceError(text.voiceError);
+          return;
+        }
+        void submitVoiceRecording(blob);
+      };
+
+      recorder.start(250);
+      setVoiceRecording(true);
+      startVoiceMeter(stream);
+
+      recordingTimerRef.current = setInterval(() => {
+        recordingSecondsRef.current += 1;
+        const seconds = recordingSecondsRef.current;
+        setVoiceSeconds(seconds);
+        if (seconds >= MAX_VOICE_SECONDS && recorder.state === "recording") {
+          recorder.stop();
+        }
+      }, 1_000);
+    } catch {
+      cleanupVoiceResources();
+      setVoiceRecording(false);
+      setVoiceError(text.voicePermission);
+    }
   }
 
   async function createSearch(event: FormEvent<HTMLFormElement>) {
@@ -411,38 +425,55 @@ export function DashboardPrimaryActions({
   }
 
   return (
-    <form className={styles.card} aria-busy={pending} onSubmit={createSearch}>
+    <form className={styles.card} aria-busy={pending || voiceProcessing} onSubmit={createSearch}>
       <div className={styles.mainField}>
         <div className={styles.mainFieldHeader}>
           <label className={styles.mainLabel} htmlFor="jakov360-product-search">
             {text.productLabel}
           </label>
-          <button
-            aria-label={voiceListening ? text.voiceStop : text.voiceStart}
-            aria-pressed={voiceListening}
-            className={styles.voiceButton}
-            disabled={pending}
-            onClick={voiceListening ? stopVoiceInput : startVoiceInput}
-            type="button"
-          >
-            <span aria-hidden="true">{voiceListening ? "■" : "🎙"}</span>
-            {voiceListening ? text.voiceListening : text.voiceStart}
-          </button>
+
+          {!voiceRecording && (
+            <button
+              className={styles.voiceButton}
+              disabled={pending || voiceProcessing}
+              onClick={() => void startVoiceInput()}
+              type="button"
+            >
+              <span aria-hidden="true">🎙</span>
+              {voiceProcessing ? text.voiceProcessing : text.voiceStart}
+            </button>
+          )}
         </div>
-        {voiceListening && (
-          <div className={styles.voiceLive} role="status" aria-live="polite">
-            <div className={styles.voiceLiveHeader}>
-              <span className={styles.voicePulse} aria-hidden="true">
-                <i /><i /><i />
-              </span>
-              <strong>{text.voiceListening}</strong>
+
+        {voiceRecording && (
+          <div className={styles.voiceRecorder} role="status">
+            <div className={styles.voiceRecorderTop}>
+              <div>
+                <strong>{text.voiceRecording}</strong>
+                <span>{voiceTime(voiceSeconds)} / 0:{MAX_VOICE_SECONDS}</span>
+              </div>
+              <button
+                className={styles.voiceStopButton}
+                onClick={stopVoiceInput}
+                type="button"
+              >
+                <span aria-hidden="true">■</span> {text.voiceStop}
+              </button>
             </div>
-            <p>
-              <span>{text.voiceHeard}: </span>
-              {voiceTranscript || text.voiceWaiting}
-            </p>
+            <div className={styles.voiceMeter} ref={voiceMeterRef} aria-hidden="true">
+              <span />
+            </div>
+            <p>{text.voiceReceiving}</p>
           </div>
         )}
+
+        {voiceProcessing && (
+          <div className={styles.voiceProcessing} role="status" aria-live="polite">
+            <span className={styles.voicePulse} aria-hidden="true"><i /><i /><i /></span>
+            <strong>{text.voiceProcessing}</strong>
+          </div>
+        )}
+
         <textarea
           className={styles.description}
           id="jakov360-product-search"
@@ -453,13 +484,14 @@ export function DashboardPrimaryActions({
           ref={productInputRef}
           required
         />
+
         {voiceError && <p className={styles.voiceError} role="alert">{voiceError}</p>}
-        {voiceTranscript && !voiceListening && (
+        {voiceTranscript && !voiceProcessing && (
           <p className={styles.voiceTranscriptFinal}>
             <strong>{text.voiceHeard}:</strong> {voiceTranscript}
           </p>
         )}
-        {voiceReviewVisible && !voiceListening && (
+        {voiceReviewVisible && !voiceProcessing && (
           <p className={styles.voiceReview} role="status">{text.voiceReview}</p>
         )}
       </div>
@@ -502,7 +534,7 @@ export function DashboardPrimaryActions({
         <span />
         <button
           className={styles.primaryAction}
-          disabled={pending}
+          disabled={pending || voiceRecording || voiceProcessing}
           type="submit"
         >
           {pending ? text.creating : text.create}

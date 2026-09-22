@@ -69,6 +69,22 @@ async function startWithLogger(
   return `http://127.0.0.1:${address.port}`;
 }
 
+
+async function startWithVoice(
+  voiceIntake: (input: unknown) => Promise<{
+    transcript: string;
+    product: string | null;
+    quantity: number | null;
+    targetCountry: "AT" | "DE" | "RS" | null;
+  }>,
+) {
+  const server = createServer(createSearchProviderApp({ token, voiceIntake }));
+  servers.push(server);
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address() as AddressInfo;
+  return `http://127.0.0.1:${address.port}`;
+}
+
 async function request(baseUrl: string, path: string, init: RequestInit = {}) {
   return fetch(`${baseUrl}${path}`, {
     ...init,
@@ -88,6 +104,34 @@ afterEach(async () => {
 });
 
 describe("ImportPilot Search Provider service", () => {
+
+  it("returns structured voice intake from the authenticated provider endpoint", async () => {
+    const voiceIntake = vi.fn(async () => ({
+      transcript: "Tražim 100 komada punjača za Austriju.",
+      product: "punjač",
+      quantity: 100,
+      targetCountry: "AT" as const,
+    }));
+    const baseUrl = await startWithVoice(voiceIntake);
+    const response = await request(baseUrl, "/voice-intake", {
+      method: "POST",
+      body: JSON.stringify({
+        audioBase64: Buffer.alloc(600, 1).toString("base64"),
+        mimeType: "audio/webm",
+        locale: "sr",
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      transcript: "Tražim 100 komada punjača za Austriju.",
+      product: "punjač",
+      quantity: 100,
+      targetCountry: "AT",
+    });
+    expect(voiceIntake).toHaveBeenCalledOnce();
+  });
+
   it("requires bearer authentication", async () => {
     const baseUrl = await start();
     const response = await fetch(`${baseUrl}/search`, { method: "POST" });

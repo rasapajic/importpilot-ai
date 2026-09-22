@@ -35,18 +35,17 @@ describe("ImportPilot 1.0 core search intake", () => {
     expect(intakeSource).not.toContain('type="url"');
   });
 
-  it("supports one voice request that fills product, quantity and destination before submit", () => {
-    expect(intakeSource).toContain("speechRecognitionConstructor");
-    expect(intakeSource).toContain("parseVoiceSearchIntake");
+  it("records real audio, shows an explicit stop control and fills structured fields through the voice API", () => {
+    expect(intakeSource).toContain("MediaRecorder");
+    expect(intakeSource).toContain("navigator.mediaDevices.getUserMedia");
+    expect(intakeSource).toContain('fetch("/api/voice-intake"');
     expect(intakeSource).toContain("quantityInputRef");
     expect(intakeSource).toContain("countryInputRef");
     expect(intakeSource).toContain("voiceReview");
-    expect(intakeSource).toContain('recognition.lang = speechLocale(locale)');
-    expect(intakeSource).toContain("recognition.continuous = true");
-    expect(intakeSource).toContain("voiceTranscript");
-    expect(intakeSource).toContain("Zaustavi i popuni");
-    expect(intakeSource).toContain("beginVoiceRecognitionSession");
-    expect(intakeSource).toContain("finishVoiceInput");
+    expect(intakeSource).toContain('voiceStop: "ZAUSTAVI"');
+    expect(intakeSource).toContain("voiceMeterRef");
+    expect(intakeSource).toContain("recorder.stop()");
+    expect(intakeSource).not.toContain("speechRecognitionConstructor");
     expect(intakeSource).not.toContain("router.push(" + '"/api');
   });
 
@@ -90,7 +89,7 @@ describe("ImportPilot 1.0 core search intake", () => {
     expect(intakeSource).toContain("quotaUsage");
     expect(intakeSource).toContain("Mesečni limit je potrošen");
     expect(intakeSource).toContain('href="/billing"');
-    expect(intakeSource).toContain("disabled={pending}");
+    expect(intakeSource).toContain("disabled={pending || voiceRecording || voiceProcessing}");
     expect(dashboardSource).toContain("getMonthlySupplierSearchQuotaStatus");
     expect(dashboardSource).toContain("<DashboardPrimaryActions quota={{");
   });
