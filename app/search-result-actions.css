@@ -51,7 +51,8 @@
   overflow-wrap: anywhere;
 }
 
-.supplier-order-total {
+.supplier-order-total,
+.supplier-risk-detail {
   color: #496158;
   font-size: 0.82rem;
   font-weight: 700;

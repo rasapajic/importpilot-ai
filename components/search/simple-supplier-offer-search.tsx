@@ -43,6 +43,10 @@ type Copy = {
   landedPending: string;
   delivery: string;
   supplierRisk: string;
+  supplierRiskMissing: (items: string) => string;
+  supplierIdentity: string;
+  supplierPlatformVerification: string;
+  supplierBusinessHistory: string;
   moq: string;
   incoterm: string;
   details: string;
@@ -96,7 +100,11 @@ const copy: Record<Locale, Copy> = {
     landedEstimate: "procena",
     landedPending: "čeka potvrđenu cenu dobavljača",
     delivery: "Rok isporuke",
-    supplierRisk: "Dobavljač",
+    supplierRisk: "Rizik dobavljača",
+    supplierRiskMissing: (items) => `Nedostaju podaci: ${items}.`,
+    supplierIdentity: "identitet firme",
+    supplierPlatformVerification: "verifikacija na platformi",
+    supplierBusinessHistory: "istorija poslovanja",
     moq: "Minimalna količina (MOQ)",
     incoterm: "Uslov isporuke (Incoterm)",
     details: "Detalji analize",
@@ -131,7 +139,7 @@ const copy: Record<Locale, Copy> = {
     quantityPrices: "Cene po količini",
     pieces: "kom",
     limitReachedAction: "Pogledaj Plus/Pro ili Full Import Analysis 1,99 €",
-    risk: { LOW: "nizak rizik", MEDIUM: "srednji rizik", HIGH: "visok rizik", UNKNOWN: "nije provereno" },
+    risk: { LOW: "nizak rizik", MEDIUM: "srednji rizik", HIGH: "visok rizik", UNKNOWN: "nije moguće proceniti" },
     decision: { BUY: "KUPI", NEGOTIATE: "PREGOVARAJ", WATCH: "PRATI", SKIP: "PRESKOČI" },
   },
   de: {
@@ -148,7 +156,11 @@ const copy: Record<Locale, Copy> = {
     landedEstimate: "Schätzung",
     landedPending: "wartet auf bestätigten Lieferantenpreis",
     delivery: "Lieferzeit",
-    supplierRisk: "Lieferant",
+    supplierRisk: "Lieferantenrisiko",
+    supplierRiskMissing: (items) => `Fehlende Daten: ${items}.`,
+    supplierIdentity: "Unternehmensidentität",
+    supplierPlatformVerification: "Plattform-Verifizierung",
+    supplierBusinessHistory: "Geschäftshistorie",
     moq: "MOQ",
     incoterm: "Incoterm",
     details: "Analysedetails",
@@ -183,7 +195,7 @@ const copy: Record<Locale, Copy> = {
     quantityPrices: "Mengenpreise",
     pieces: "Stk.",
     limitReachedAction: "Plus/Pro oder Full Import Analysis für 1,99 € ansehen",
-    risk: { LOW: "niedriges Risiko", MEDIUM: "mittleres Risiko", HIGH: "hohes Risiko", UNKNOWN: "nicht geprüft" },
+    risk: { LOW: "niedriges Risiko", MEDIUM: "mittleres Risiko", HIGH: "hohes Risiko", UNKNOWN: "nicht bewertbar" },
     decision: { BUY: "BUY", NEGOTIATE: "NEGOTIATE", WATCH: "WATCH", SKIP: "SKIP" },
   },
   en: {
@@ -200,7 +212,11 @@ const copy: Record<Locale, Copy> = {
     landedEstimate: "estimate",
     landedPending: "waiting for confirmed supplier price",
     delivery: "Delivery",
-    supplierRisk: "Supplier",
+    supplierRisk: "Supplier risk",
+    supplierRiskMissing: (items) => `Missing data: ${items}.`,
+    supplierIdentity: "company identity",
+    supplierPlatformVerification: "platform verification",
+    supplierBusinessHistory: "business history",
     moq: "MOQ",
     incoterm: "Incoterm",
     details: "Analysis details",
@@ -235,7 +251,7 @@ const copy: Record<Locale, Copy> = {
     quantityPrices: "Quantity prices",
     pieces: "pcs",
     limitReachedAction: "View Plus/Pro or Full Import Analysis for €1.99",
-    risk: { LOW: "low risk", MEDIUM: "medium risk", HIGH: "high risk", UNKNOWN: "not checked" },
+    risk: { LOW: "low risk", MEDIUM: "medium risk", HIGH: "high risk", UNKNOWN: "cannot be assessed" },
     decision: { BUY: "BUY", NEGOTIATE: "NEGOTIATE", WATCH: "WATCH", SKIP: "SKIP" },
   },
 };
@@ -311,6 +327,37 @@ export function formatDeliveryTimeDays(value: string | number, locale: Locale) {
   if (locale === "sr") return `${display} ${display === "1" ? "dan" : "dana"}`;
   if (locale === "de") return `${display} ${display === "1" ? "Tag" : "Tage"}`;
   return `${display} ${display === "1" ? "day" : "days"}`;
+}
+
+export type SupplierRiskGap = "IDENTITY" | "PLATFORM_VERIFICATION" | "BUSINESS_HISTORY";
+
+export function supplierRiskGapKeys(
+  supplierName: string,
+  missingData: readonly string[] | null | undefined,
+): SupplierRiskGap[] {
+  const gaps: SupplierRiskGap[] = [];
+  if (/\b(?:unspecified|unknown|not specified|unidentified)\b|\bseller on alibaba\b/i.test(supplierName)) {
+    gaps.push("IDENTITY");
+  }
+  if (!missingData || missingData.includes("SUPPLIER_VERIFICATION")) {
+    gaps.push("PLATFORM_VERIFICATION");
+  }
+  if (!missingData || missingData.includes("SUPPLIER_RISK_DATA")) {
+    gaps.push("BUSINESS_HISTORY");
+  }
+  return gaps;
+}
+
+function supplierRiskGapLabels(
+  gaps: SupplierRiskGap[],
+  text: Copy,
+) {
+  const labels: Record<SupplierRiskGap, string> = {
+    IDENTITY: text.supplierIdentity,
+    PLATFORM_VERIFICATION: text.supplierPlatformVerification,
+    BUSINESS_HISTORY: text.supplierBusinessHistory,
+  };
+  return gaps.map((gap) => labels[gap]).join(", ");
 }
 
 function selectionReasons(
@@ -579,6 +626,10 @@ export function SimpleSupplierOfferSearch({
             const priceSnapshots = quantityPriceSnapshots(result, quantity);
             const priceTierSnapshots = supplierPriceTierSnapshots(result);
             const variantFacts = supplierOfferVariantFacts(result);
+            const supplierRiskGaps = supplierRiskGapKeys(
+              result.supplierName,
+              analysis?.missingData,
+            );
             const liveEstimate = quantity && targetCountry
               ? estimateTajaPreliminaryLandedCost({
                   result: effectiveResult,
@@ -641,6 +692,11 @@ export function SimpleSupplierOfferSearch({
                     <span>
                       {text.supplierRisk}
                       <strong>{analysis ? text.risk[analysis.supplierRiskLevel] : text.risk.UNKNOWN}</strong>
+                      {(!analysis || analysis.supplierRiskLevel === "UNKNOWN") && supplierRiskGaps.length > 0 && (
+                        <small className="supplier-risk-detail">
+                          {text.supplierRiskMissing(supplierRiskGapLabels(supplierRiskGaps, text))}
+                        </small>
+                      )}
                     </span>
                   </div>
 
