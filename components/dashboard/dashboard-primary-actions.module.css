@@ -257,3 +257,76 @@
   color: #a32121;
   font-weight: 700;
 }
+
+
+.voiceLive {
+  background: #f3faf6;
+  border: 1px solid #9dcdb8;
+  border-radius: 0.8rem;
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.85rem 1rem;
+}
+
+.voiceLiveHeader {
+  align-items: center;
+  display: flex;
+  gap: 0.6rem;
+}
+
+.voiceLiveHeader strong {
+  color: #0b5f41;
+}
+
+.voiceLive p,
+.voiceTranscriptFinal {
+  line-height: 1.5;
+  margin: 0;
+}
+
+.voiceLive p {
+  color: #173b2d;
+  min-height: 1.5em;
+}
+
+.voiceLive p span {
+  color: #60766c;
+}
+
+.voicePulse {
+  align-items: end;
+  display: inline-flex;
+  gap: 0.16rem;
+  height: 1.1rem;
+}
+
+.voicePulse i {
+  animation: jakov360-voice-pulse 0.85s ease-in-out infinite alternate;
+  background: #137752;
+  border-radius: 999px;
+  display: block;
+  height: 0.45rem;
+  width: 0.18rem;
+}
+
+.voicePulse i:nth-child(2) {
+  animation-delay: 0.15s;
+  height: 0.85rem;
+}
+
+.voicePulse i:nth-child(3) {
+  animation-delay: 0.3s;
+  height: 0.6rem;
+}
+
+.voiceTranscriptFinal {
+  background: #f8fbf9;
+  border-left: 3px solid #8fb9a6;
+  color: #496158;
+  padding: 0.65rem 0.8rem;
+}
+
+@keyframes jakov360-voice-pulse {
+  from { transform: scaleY(0.55); }
+  to { transform: scaleY(1.2); }
+}
