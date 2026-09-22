@@ -29,8 +29,11 @@ type IntakeCopy = {
   voiceStart: string;
   voiceStop: string;
   voiceListening: string;
+  voiceHeard: string;
+  voiceWaiting: string;
   voiceUnavailable: string;
   voiceError: string;
+  voiceNoSpeech: string;
   voiceReview: string;
 };
 
@@ -51,10 +54,13 @@ const copy: Record<Locale, IntakeCopy> = {
     quotaExhausted: "Mesečni limit je potrošen. Sačuvane pretrage ostaju dostupne.",
     managePlan: "Plan i naplata",
     voiceStart: "Govorni unos",
-    voiceStop: "Zaustavi",
+    voiceStop: "Zaustavi i popuni",
     voiceListening: "Slušam...",
+    voiceHeard: "Čujem",
+    voiceWaiting: "Počnite da govorite. Tekst će se pojaviti ovde.",
     voiceUnavailable: "Govorni unos nije podržan u ovom pregledaču.",
-    voiceError: "Govor nije mogao da se prepozna. Pokušajte ponovo.",
+    voiceError: "Govor nije mogao da se prepozna. Proverite dozvolu za mikrofon i pokušajte ponovo.",
+    voiceNoSpeech: "Nisam dobio prepoznat govor. Pokušajte ponovo i govorite dok je prikazano „Slušam...“.",
     voiceReview: "JAKOV360 je popunio ono što je razumeo. Proverite proizvod, količinu i destinaciju pre pretrage.",
   },
   de: {
@@ -73,10 +79,13 @@ const copy: Record<Locale, IntakeCopy> = {
     quotaExhausted: "Das monatliche Limit ist erreicht. Gespeicherte Suchen bleiben verfügbar.",
     managePlan: "Tarif und Abrechnung",
     voiceStart: "Spracheingabe",
-    voiceStop: "Stoppen",
+    voiceStop: "Stoppen und übernehmen",
     voiceListening: "Ich höre zu...",
+    voiceHeard: "Erkannt",
+    voiceWaiting: "Sprechen Sie jetzt. Der erkannte Text erscheint hier.",
     voiceUnavailable: "Spracheingabe wird in diesem Browser nicht unterstützt.",
-    voiceError: "Die Sprache konnte nicht erkannt werden. Bitte versuchen Sie es erneut.",
+    voiceError: "Die Sprache konnte nicht erkannt werden. Prüfen Sie die Mikrofonberechtigung und versuchen Sie es erneut.",
+    voiceNoSpeech: "Es wurde keine Sprache erkannt. Versuchen Sie es erneut und sprechen Sie, solange „Ich höre zu...“ angezeigt wird.",
     voiceReview: "JAKOV360 hat die erkannten Angaben eingetragen. Prüfen Sie Produkt, Menge und Zielland vor der Suche.",
   },
   en: {
@@ -95,10 +104,13 @@ const copy: Record<Locale, IntakeCopy> = {
     quotaExhausted: "The monthly limit is reached. Saved searches remain available.",
     managePlan: "Plan and billing",
     voiceStart: "Voice input",
-    voiceStop: "Stop",
+    voiceStop: "Stop and fill",
     voiceListening: "Listening...",
+    voiceHeard: "Hearing",
+    voiceWaiting: "Start speaking. Recognized text will appear here.",
     voiceUnavailable: "Voice input is not supported in this browser.",
-    voiceError: "Speech could not be recognized. Please try again.",
+    voiceError: "Speech could not be recognized. Check microphone permission and try again.",
+    voiceNoSpeech: "No speech was recognized. Try again and speak while “Listening...” is shown.",
     voiceReview: "JAKOV360 filled the details it understood. Review the product, quantity, and destination before searching.",
   },
 };
@@ -168,93 +180,179 @@ export function DashboardPrimaryActions({
   const [error, setError] = useState("");
   const [voiceError, setVoiceError] = useState("");
   const [voiceListening, setVoiceListening] = useState(false);
+  const [voiceTranscript, setVoiceTranscript] = useState("");
   const [voiceReviewVisible, setVoiceReviewVisible] = useState(false);
   const productInputRef = useRef<HTMLTextAreaElement | null>(null);
   const quantityInputRef = useRef<HTMLInputElement | null>(null);
   const countryInputRef = useRef<HTMLSelectElement | null>(null);
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
+  const voiceShouldListenRef = useRef(false);
+  const voiceCommittedTranscriptRef = useRef("");
+  const voiceSessionTranscriptRef = useRef("");
+  const voiceRestartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     return () => {
+      voiceShouldListenRef.current = false;
+      if (voiceRestartTimerRef.current) clearTimeout(voiceRestartTimerRef.current);
       recognitionRef.current?.abort();
       recognitionRef.current = null;
     };
   }, []);
 
 
+  function normalizedTranscript(...parts: string[]) {
+    return parts
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function applyVoiceTranscript(transcript: string) {
+    const spoken = transcript.trim();
+    if (!spoken) {
+      setVoiceError(text.voiceNoSpeech);
+      setVoiceReviewVisible(false);
+      return;
+    }
+
+    const parsed = parseVoiceSearchIntake(spoken, locale);
+    let understood = false;
+
+    if (parsed.product && productInputRef.current) {
+      productInputRef.current.value = parsed.product;
+      productInputRef.current.dispatchEvent(new Event("input", { bubbles: true }));
+      understood = true;
+    }
+    if (parsed.quantity && quantityInputRef.current) {
+      quantityInputRef.current.value = String(parsed.quantity);
+      quantityInputRef.current.dispatchEvent(new Event("input", { bubbles: true }));
+      understood = true;
+    }
+    if (parsed.targetCountry && countryInputRef.current) {
+      countryInputRef.current.value = parsed.targetCountry;
+      countryInputRef.current.dispatchEvent(new Event("change", { bubbles: true }));
+      understood = true;
+    }
+
+    setVoiceReviewVisible(understood);
+    if (!understood) setVoiceError(text.voiceError);
+    productInputRef.current?.focus();
+  }
+
+  function currentVoiceTranscript() {
+    return normalizedTranscript(
+      voiceCommittedTranscriptRef.current,
+      voiceSessionTranscriptRef.current,
+    );
+  }
+
+  function finishVoiceInput() {
+    const transcript = currentVoiceTranscript();
+    setVoiceListening(false);
+    setVoiceTranscript(transcript);
+    recognitionRef.current = null;
+    applyVoiceTranscript(transcript);
+  }
+
+  function beginVoiceRecognitionSession(Recognition: BrowserSpeechRecognitionConstructor) {
+    if (!voiceShouldListenRef.current) return;
+
+    const recognition = new Recognition();
+    recognition.lang = speechLocale(locale);
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+    voiceSessionTranscriptRef.current = "";
+
+    recognition.onresult = (event) => {
+      let sessionTranscript = "";
+      for (let index = 0; index < event.results.length; index += 1) {
+        sessionTranscript += `${event.results[index]?.[0]?.transcript ?? ""} `;
+      }
+      voiceSessionTranscriptRef.current = sessionTranscript.trim();
+      setVoiceTranscript(currentVoiceTranscript());
+    };
+
+    recognition.onerror = (event) => {
+      const recoverable = event.error === "no-speech" || event.error === "aborted";
+      if (recoverable && voiceShouldListenRef.current) return;
+
+      voiceShouldListenRef.current = false;
+      setVoiceListening(false);
+      recognitionRef.current = null;
+      if (event.error !== "aborted") setVoiceError(text.voiceError);
+    };
+
+    recognition.onend = () => {
+      recognitionRef.current = null;
+
+      if (!voiceShouldListenRef.current) {
+        finishVoiceInput();
+        return;
+      }
+
+      voiceCommittedTranscriptRef.current = currentVoiceTranscript();
+      voiceSessionTranscriptRef.current = "";
+      setVoiceTranscript(voiceCommittedTranscriptRef.current);
+
+      voiceRestartTimerRef.current = setTimeout(() => {
+        voiceRestartTimerRef.current = null;
+        beginVoiceRecognitionSession(Recognition);
+      }, 150);
+    };
+
+    recognitionRef.current = recognition;
+    try {
+      recognition.start();
+    } catch {
+      voiceShouldListenRef.current = false;
+      setVoiceListening(false);
+      recognitionRef.current = null;
+      setVoiceError(text.voiceError);
+    }
+  }
+
   function stopVoiceInput() {
-    recognitionRef.current?.stop();
+    if (!voiceListening) return;
+    voiceShouldListenRef.current = false;
+    if (voiceRestartTimerRef.current) {
+      clearTimeout(voiceRestartTimerRef.current);
+      voiceRestartTimerRef.current = null;
+    }
+
+    const recognition = recognitionRef.current;
+    if (!recognition) {
+      finishVoiceInput();
+      return;
+    }
+
+    try {
+      recognition.stop();
+    } catch {
+      finishVoiceInput();
+    }
   }
 
   function startVoiceInput() {
     setVoiceError("");
+    setVoiceReviewVisible(false);
     const Recognition = speechRecognitionConstructor();
     if (!Recognition) {
       setVoiceError(text.voiceUnavailable);
       return;
     }
 
-    const field = productInputRef.current;
-    if (!field) return;
-
     recognitionRef.current?.abort();
-    const recognition = new Recognition();
-    recognition.lang = speechLocale(locale);
-    recognition.continuous = false;
-    recognition.interimResults = true;
-    recognition.maxAlternatives = 1;
-
-    recognition.onresult = (event) => {
-      let transcript = "";
-      for (let index = 0; index < event.results.length; index += 1) {
-        transcript += `${event.results[index]?.[0]?.transcript ?? ""} `;
-      }
-      const spoken = transcript.trim();
-      if (!spoken) return;
-
-      const parsed = parseVoiceSearchIntake(spoken, locale);
-      let understood = false;
-
-      if (parsed.product && productInputRef.current) {
-        productInputRef.current.value = parsed.product;
-        productInputRef.current.dispatchEvent(new Event("input", { bubbles: true }));
-        understood = true;
-      }
-      if (parsed.quantity && quantityInputRef.current) {
-        quantityInputRef.current.value = String(parsed.quantity);
-        quantityInputRef.current.dispatchEvent(new Event("input", { bubbles: true }));
-        understood = true;
-      }
-      if (parsed.targetCountry && countryInputRef.current) {
-        countryInputRef.current.value = parsed.targetCountry;
-        countryInputRef.current.dispatchEvent(new Event("change", { bubbles: true }));
-        understood = true;
-      }
-
-      setVoiceReviewVisible(understood);
-    };
-
-    recognition.onerror = () => {
-      setVoiceError(text.voiceError);
-      setVoiceListening(false);
-      recognitionRef.current = null;
-    };
-
-    recognition.onend = () => {
-      setVoiceListening(false);
-      recognitionRef.current = null;
-      field.focus();
-    };
-
-    recognitionRef.current = recognition;
+    if (voiceRestartTimerRef.current) clearTimeout(voiceRestartTimerRef.current);
+    voiceCommittedTranscriptRef.current = "";
+    voiceSessionTranscriptRef.current = "";
+    setVoiceTranscript("");
+    voiceShouldListenRef.current = true;
     setVoiceListening(true);
-    try {
-      recognition.start();
-    } catch {
-      setVoiceListening(false);
-      recognitionRef.current = null;
-      setVoiceError(text.voiceError);
-    }
+    beginVoiceRecognitionSession(Recognition);
   }
 
   async function createSearch(event: FormEvent<HTMLFormElement>) {
@@ -309,6 +407,20 @@ export function DashboardPrimaryActions({
             {voiceListening ? text.voiceListening : text.voiceStart}
           </button>
         </div>
+        {voiceListening && (
+          <div className={styles.voiceLive} role="status" aria-live="polite">
+            <div className={styles.voiceLiveHeader}>
+              <span className={styles.voicePulse} aria-hidden="true">
+                <i /><i /><i />
+              </span>
+              <strong>{text.voiceListening}</strong>
+            </div>
+            <p>
+              <span>{text.voiceHeard}: </span>
+              {voiceTranscript || text.voiceWaiting}
+            </p>
+          </div>
+        )}
         <textarea
           className={styles.description}
           id="jakov360-product-search"
@@ -320,6 +432,11 @@ export function DashboardPrimaryActions({
           required
         />
         {voiceError && <p className={styles.voiceError} role="alert">{voiceError}</p>}
+        {voiceTranscript && !voiceListening && (
+          <p className={styles.voiceTranscriptFinal}>
+            <strong>{text.voiceHeard}:</strong> {voiceTranscript}
+          </p>
+        )}
         {voiceReviewVisible && !voiceListening && (
           <p className={styles.voiceReview} role="status">{text.voiceReview}</p>
         )}
