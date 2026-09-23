@@ -92,3 +92,30 @@ describe("food packaging search plan", () => {
     expect(providerInput.targetCountry).toBe("RS");
   });
 });
+
+
+describe("reading glasses search plan", () => {
+  it("translates a Serbian diopter range into marketplace-ready English and Chinese queries", () => {
+    const readingGlassesRequest: ProjectSupplierSearchRequest = {
+      query: "naočare od +1 do +3,5 dioptrija",
+      quantity: 1000,
+      targetCountry: "RS",
+      strictPriceLimit: false,
+      avoidComplexCompliance: false,
+      privateLabel: false,
+    };
+
+    const plan = createLunaSearchPlan(readingGlassesRequest);
+
+    expect(plan.category).toBe("reading-glasses");
+    expect(plan.providerQueries).toContain(
+      "reading glasses +1.0 to +3.5 diopter wholesale manufacturer supplier",
+    );
+    expect(plan.providerQueries).toContain(
+      "presbyopia reading glasses assorted strengths wholesale manufacturer supplier",
+    );
+    expect(plan.chinese1688Queries).toContain("老花镜 1.0 3.5度 厂家 批发");
+    expect(plan.chinese1688Query).not.toBeNull();
+    expect(plan.warnings).not.toContain("CHINESE_QUERY_UNCONFIRMED");
+  });
+});

@@ -85,6 +85,20 @@ const LUNA_SEARCH_CATALOG: LunaCatalogEntry[] = [
     englishQuery: "patio misting cooling system",
     chineseQuery: "喷雾降温系统",
   },
+  {
+    category: "reading-glasses",
+    keywords: [
+      "naocare za citanje",
+      "naočare za čitanje",
+      "наочаре за читање",
+      "dioptrija",
+      "диоптрија",
+      "reading glasses",
+      "presbyopia",
+    ],
+    englishQuery: "reading glasses assorted diopter strengths",
+    chineseQuery: "老花镜 多度数",
+  },
 ];
 
 function normalizeSearchText(value: string) {
@@ -132,6 +146,47 @@ function requestedMlVolumes(query: string) {
     .map((match) => Number(match[1]))
     .filter((value) => Number.isFinite(value) && value > 0);
   return [...new Set(values)].sort((left, right) => left - right);
+}
+
+function requestedDiopters(query: string) {
+  const values = [...query.matchAll(/[+]?\\d+(?:[.,]\\d+)?/g)]
+    .map((match) => Number(match[0].replace(",", ".")))
+    .filter((value) => Number.isFinite(value) && value >= 0.25 && value <= 10);
+  return [...new Set(values)].sort((left, right) => left - right);
+}
+
+function formatDiopter(value: number) {
+  return `+${value.toFixed(1)}`;
+}
+
+function requirementDrivenReadingGlassesQueries(
+  originalQuery: string,
+  fallbackEnglishQuery: string,
+  fallbackChineseQuery: string,
+) {
+  const diopters = requestedDiopters(originalQuery);
+  const minimum = diopters[0] ?? null;
+  const maximum = diopters.at(-1) ?? null;
+  const englishRange = minimum !== null && maximum !== null
+    ? `${formatDiopter(minimum)} to ${formatDiopter(maximum)} diopter`
+    : "assorted diopter";
+  const chineseRange = minimum !== null && maximum !== null
+    ? `${minimum.toFixed(1)} ${maximum.toFixed(1)}度`
+    : "多度数";
+
+  return {
+    english: uniqueQueries([
+      `reading glasses ${englishRange}`,
+      `assorted diopter reading glasses ${englishRange}`,
+      "presbyopia reading glasses assorted strengths",
+      fallbackEnglishQuery,
+    ]),
+    chinese: uniqueQueries([
+      `老花镜 ${chineseRange}`,
+      "老花眼镜 多度数",
+      fallbackChineseQuery,
+    ]),
+  };
 }
 
 function requirementDrivenFoodPackagingQueries(
@@ -259,7 +314,9 @@ export function createLunaSearchPlan(input: ProjectSupplierSearchRequest): LunaS
     ? requirementDrivenMistingQueries(input.query, englishQuery, chineseBaseQuery)
     : catalogEntry?.category === "food-packaging" && chineseBaseQuery
       ? requirementDrivenFoodPackagingQueries(input.query, englishQuery, chineseBaseQuery)
-      : null;
+      : catalogEntry?.category === "reading-glasses" && chineseBaseQuery
+        ? requirementDrivenReadingGlassesQueries(input.query, englishQuery, chineseBaseQuery)
+        : null;
   const baseEnglishQueries = requirementQueries?.english ?? [englishQuery];
   const providerQueries = uniqueQueries([
     ...baseEnglishQueries.map((query) => withEnglishCommercialTerms(query, input.privateLabel)),
