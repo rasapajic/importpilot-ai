@@ -181,7 +181,11 @@ function comparableUrl(value: string) {
     const url = new URL(value);
     if (url.protocol !== "https:") return null;
     const path = url.pathname.replace(/\/+$/, "") || "/";
-    return `${url.hostname.toLowerCase()}${path}`;
+    // Search citations often use the explicit `www` host while the model
+    // returns the canonical form (or vice versa). They identify the same page;
+    // treating them as different can discard every otherwise verified result.
+    const hostname = url.hostname.toLowerCase().replace(/^www\./, "");
+    return `${hostname}${path}`;
   } catch {
     return null;
   }

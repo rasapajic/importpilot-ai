@@ -169,6 +169,36 @@ describe("OpenAI web supplier search source", () => {
     expect(requestBody).toMatchObject({ reasoning: { effort: "low" } });
   });
 
+  it("accepts a canonical product URL when its citation differs only by www", async () => {
+    const citedUrl = "https://www.alibaba.com/product-detail/Solar-Garden-Lamp_1600123456789.html";
+    const canonicalUrl = "https://alibaba.com/product-detail/Solar-Garden-Lamp_1600123456789.html";
+    const source = createOpenAIWebSearchSource({
+      apiKey: "sk-test",
+      fetcher: async () => new Response(JSON.stringify({
+        id: "resp_www_canonical",
+        status: "completed",
+        output: [{
+          type: "web_search_call",
+          action: { type: "search", sources: [{ type: "url", url: citedUrl }] },
+        }, {
+          type: "message",
+          content: [{
+            type: "output_text",
+            text: JSON.stringify({ results: [result(canonicalUrl)] }),
+            annotations: [{ type: "url_citation", url: citedUrl }],
+          }],
+        }],
+      }), { status: 200, headers: { "content-type": "application/json" } }),
+    });
+
+    const outcome = await source.search(input, new AbortController().signal);
+    expect(Array.isArray(outcome)).toBe(false);
+    if (Array.isArray(outcome)) throw new Error("Expected structured outcome.");
+    expect(outcome.results).toEqual([
+      expect.objectContaining({ productUrl: canonicalUrl }),
+    ]);
+  });
+
   it("is disabled without an API key so direct providers can take over", async () => {
     const source = createOpenAIWebSearchSource();
     expect(source.implemented).toBe(false);
