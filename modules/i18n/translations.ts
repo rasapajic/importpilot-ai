@@ -1,3 +1,5 @@
+import { toSerbianLatin } from "./serbian-latin";
+
 export const supportedLocales = ["en", "de", "sr"] as const;
 export type Locale = (typeof supportedLocales)[number];
 
@@ -648,13 +650,17 @@ const demoProjectNames: Record<string, Translation> = {
 export function translateText(text: string, locale: Locale | string): string {
   const resolved = resolveLocale(locale);
   const demoProjectName = demoProjectNames[text]?.[resolved];
-  if (demoProjectName) return demoProjectName;
+  if (demoProjectName) return resolved === "sr" ? toSerbianLatin(demoProjectName) : demoProjectName;
   const withoutInternalStatuses = Object.keys(statusLabels).reduce(
     (result, status) =>
       result.replaceAll(status, statusLabels[status as keyof typeof statusLabels][resolved]),
     text,
   );
-  return withoutInternalStatuses.replace(aliasPattern, (source) => aliasMap.get(source)?.[resolved] ?? source);
+  const translated = withoutInternalStatuses.replace(
+    aliasPattern,
+    (source) => aliasMap.get(source)?.[resolved] ?? source,
+  );
+  return resolved === "sr" ? toSerbianLatin(translated) : translated;
 }
 
 export function translateBusinessText(text: string, locale: Locale | string): string {

@@ -522,7 +522,7 @@ export function SupplierOfferSearch({
 
     return (
       <article className="search-result-card" key={`${result.source}-${result.productUrl}`}>
-        <SearchResultImage src={result.imageUrl} title={result.title} />
+        <SearchResultImage src={result.imageUrl} title={t(result.title)} />
         <div>
           <p className="eyebrow">{result.source}</p>
           {(recommendationRank !== undefined || analysis?.status === "FINAL") && (
@@ -545,8 +545,8 @@ export function SupplierOfferSearch({
               {analysisText.incompleteData}
             </span>
           )}
-          <h3>{result.title}</h3>
-          <p><strong>{result.supplierName}</strong>{result.supplierCountry ? ` · ${result.supplierCountry}` : ""}</p>
+          <h3>{t(result.title)}</h3>
+          <p><strong>{t(result.supplierName)}</strong>{result.supplierCountry ? ` · ${t(result.supplierCountry)}` : ""}</p>
           <p>
             {result.price !== null ? `${result.price} ${result.currency}` : t("Cena nije navedena")}
             {" · "}
