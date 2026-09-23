@@ -88,6 +88,20 @@ describe("TAJA 1688 partial logistics handoff", () => {
     }
   });
 
+  it("does not reject an offer when link verification is inconclusive", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      throw new TypeError("fetch failed");
+    }));
+    try {
+      await expect(verifyOpenable1688OfferUrl(
+        "https://detail.1688.com/offer/123456.html",
+        new AbortController().signal,
+      )).resolves.toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("removes commercially populated candidates when the source offer is not openable", async () => {
     const fetcher = vi.fn(async () => new Response(JSON.stringify(discoveryResponse(
       [incompleteResult()],
@@ -111,7 +125,31 @@ describe("TAJA 1688 partial logistics handoff", () => {
 
     expect(offerUrlVerifier).toHaveBeenCalledWith(offerUrl, expect.any(AbortSignal));
     expect(outcome.results).toEqual([]);
-    expect(outcome.reason).toContain("discarded unverified or unavailable");
+    expect(outcome.reason).toContain("discarded unavailable or redirected");
+  });
+
+  it("keeps commercially populated candidates when openability cannot be verified", async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify(discoveryResponse(
+      [incompleteResult()],
+      [offerUrl],
+    )), { status: 200, headers: { "content-type": "application/json" } }));
+    const source = createOpenAI1688SearchSource({
+      apiKey: "sk-test",
+      fetcher: fetcher as typeof fetch,
+      offerUrlVerifier: async () => null,
+      enricher: { implemented: false, async enrich() { throw new Error("not expected"); } },
+    });
+
+    const outcome = await source.search({
+      productQuery: "foldable organizer",
+      quantity: 100,
+      targetCountry: "AT",
+      language: "en",
+    }, new AbortController().signal);
+    if (Array.isArray(outcome)) throw new Error("Expected structured outcome.");
+
+    expect(outcome.results).toHaveLength(1);
+    expect(outcome.results[0]?.productUrl).toBe(offerUrl);
   });
 
   it("accepts only genuine HTTPS 1688 offer-detail URLs", () => {
@@ -278,7 +316,7 @@ describe("TAJA 1688 partial logistics handoff", () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(directUrl).toBe("https://detail.1688.com/offer/669806086431.html");
     expect(outcome.results).toEqual([]);
-    expect(outcome.reason).toContain("discarded unverified");
+    expect(outcome.reason).toContain("discarded unavailable or redirected");
     expect(outcome.aiUsage).toHaveLength(1);
   });
 
