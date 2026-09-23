@@ -69,7 +69,7 @@ type SearchPresentationInput = {
   sourceResults: SupplierOfferSearchResult[];
   resultOrigin: SearchResultOrigin;
   fetchedAt: string;
-  urlImportProvider?: SupplierOfferUrlImportProvider;
+  urlImportProvider?: SupplierOfferUrlImportProvider | null;
 };
 
 function developmentLog(event: string, details: Record<string, unknown>) {
@@ -330,7 +330,7 @@ export async function searchProjectSupplierOffers(
   organizationId: string,
   searchInput: unknown,
   provider?: SupplierOfferSearchProvider,
-  urlImportProvider?: SupplierOfferUrlImportProvider,
+  urlImportProvider?: SupplierOfferUrlImportProvider | null,
 ) {
   const project = await findSearchProject(projectId, organizationId);
   const activeProvider = provider ?? getSupplierOfferSearchProvider({
@@ -352,9 +352,11 @@ export async function searchProjectSupplierOffers(
     sourceResults: outcome.results,
     resultOrigin: outcome.resultOrigin,
     fetchedAt: new Date().toISOString(),
-    urlImportProvider: urlImportProvider ?? getDetailedSupplierOfferUrlImportProvider({
-      requestedQuantity: effectiveRequest.quantity,
-    }),
+    urlImportProvider: urlImportProvider === undefined
+      ? getDetailedSupplierOfferUrlImportProvider({
+          requestedQuantity: effectiveRequest.quantity,
+        })
+      : urlImportProvider,
   });
 
   if (outcome.resultOrigin === "live" && presentation.results.length > 0) {
