@@ -9,6 +9,7 @@ import {
   is1688ProductUrl,
   mirror1688OfferId,
   prepare1688ResultsForEnrichment,
+  verifyOpenable1688OfferUrl,
 } from "../src/openai-1688-search-source.js";
 import type { SupplierSearchResult } from "../src/contract.js";
 
@@ -71,6 +72,48 @@ function discoveryResponse(
 }
 
 describe("TAJA 1688 partial logistics handoff", () => {
+  it("rejects an offer that redirects to the 1688 homepage", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: true,
+      url: "https://www.1688.com/",
+      text: async () => "<html>1688 home</html>",
+    } as Response)));
+    try {
+      await expect(verifyOpenable1688OfferUrl(
+        "https://detail.1688.com/offer/123456.html",
+        new AbortController().signal,
+      )).resolves.toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("removes commercially populated candidates when the source offer is not openable", async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify(discoveryResponse(
+      [incompleteResult()],
+      [offerUrl],
+    )), { status: 200, headers: { "content-type": "application/json" } }));
+    const offerUrlVerifier = vi.fn(async () => false);
+    const source = createOpenAI1688SearchSource({
+      apiKey: "sk-test",
+      fetcher: fetcher as typeof fetch,
+      offerUrlVerifier,
+      enricher: { implemented: false, async enrich() { throw new Error("not expected"); } },
+    });
+
+    const outcome = await source.search({
+      productQuery: "foldable organizer",
+      quantity: 100,
+      targetCountry: "AT",
+      language: "en",
+    }, new AbortController().signal);
+    if (Array.isArray(outcome)) throw new Error("Expected structured outcome.");
+
+    expect(offerUrlVerifier).toHaveBeenCalledWith(offerUrl, expect.any(AbortSignal));
+    expect(outcome.results).toEqual([]);
+    expect(outcome.reason).toContain("discarded unverified or unavailable");
+  });
+
   it("accepts only genuine HTTPS 1688 offer-detail URLs", () => {
     expect(is1688ProductUrl("https://detail.1688.com/offer/123456.html")).toBe(true);
     expect(is1688ProductUrl("https://m.1688.com/offer/123456.htm?spm=tracking")).toBe(true);
@@ -117,6 +160,7 @@ describe("TAJA 1688 partial logistics handoff", () => {
     const source = createOpenAI1688SearchSource({
       apiKey: "sk-test",
       fetcher: fetcher as typeof fetch,
+      offerUrlVerifier: async () => true,
       logger: (event, details) => events.push({ event, details }),
       enricher: { implemented: false, async enrich() { throw new Error("not expected"); } },
     });
@@ -169,6 +213,7 @@ describe("TAJA 1688 partial logistics handoff", () => {
     const source = createOpenAI1688SearchSource({
       apiKey: "sk-test",
       fetcher: fetcher as typeof fetch,
+      offerUrlVerifier: async () => true,
       enricher: {
         implemented: false,
         async enrich() {
@@ -217,6 +262,7 @@ describe("TAJA 1688 partial logistics handoff", () => {
     const source = createOpenAI1688SearchSource({
       apiKey: "sk-test",
       fetcher: fetcher as typeof fetch,
+      offerUrlVerifier: async () => true,
       enricher: { implemented: false, async enrich() { throw new Error("not expected"); } },
     });
 
@@ -270,6 +316,7 @@ describe("TAJA 1688 partial logistics handoff", () => {
     const source = createOpenAI1688SearchSource({
       apiKey: "sk-test",
       fetcher: fetcher as typeof fetch,
+      offerUrlVerifier: async () => true,
       enricher: { implemented: true, enrich },
     });
 

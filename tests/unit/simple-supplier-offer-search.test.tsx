@@ -101,8 +101,19 @@ describe("ImportPilot 1.0 simple supplier results", () => {
     expect(resultsSource).toContain("supplierOfferVariantFacts(result)");
     expect(resultsSource).toContain("Cene po količini");
     expect(resultsSource).toContain("Varijante");
-    expect(resultsSource).toContain(".slice(0, 10)");
     expect(resultsSource).toContain("selectOffer(effectiveResult)");
+  });
+
+  it("shows every available candidate and marks only the top-ranked offer as best", () => {
+    const rankingStart = resultsSource.indexOf("const analysisByUrl");
+    const renderStart = resultsSource.indexOf("return (", rankingStart);
+    const rankingSource = resultsSource.slice(rankingStart, renderStart);
+    expect(rankingSource).not.toContain('matchStatus !== "MISMATCH"');
+    expect(rankingSource).not.toContain(".slice(0, 10)");
+    expect(resultsSource).toContain('bestChoice: "Najbolji izbor"');
+    expect(resultsSource).toContain('index === 0 && <span className="best-choice-badge">');
+    expect(resultCss).toContain(".search-result-card-best");
+    expect(resultCss).toContain(".best-choice-badge");
   });
 
   it("retries exact-page data without blocking the initial result list", () => {

@@ -248,6 +248,7 @@ describe("TAJA Deep Search phase 1", () => {
     const source = createOpenAI1688SearchSource({
       apiKey: "sk-test",
       fetcher: fetcher as typeof fetch,
+      offerUrlVerifier: async () => true,
     });
 
     const outcome = await source.search(input, new AbortController().signal);
@@ -306,6 +307,7 @@ describe("TAJA Deep Search phase 1", () => {
     const source = createOpenAI1688SearchSource({
       apiKey: "sk-test",
       fetcher: fetcher as typeof fetch,
+      offerUrlVerifier: async () => true,
       enricher: { implemented: true, enrich },
     });
 
