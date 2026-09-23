@@ -102,6 +102,7 @@ describe("requirement-driven supplier query variants", () => {
     const source = createOpenAI1688SearchSource({
       apiKey: "sk-test",
       fetcher: fetcher as typeof fetch,
+      offerUrlVerifier: async () => true,
     });
 
     await source.search({
