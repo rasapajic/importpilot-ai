@@ -58,7 +58,7 @@ describe("supplier commercial price signal", () => {
     );
     expect(service).not.toContain("candidateResults = candidateResults.filter((result) =>");
     expect(service).not.toContain("hasUsableSupplierOfferPrice(result");
-    expect(service).toContain("urlImportProvider: getSupplierOfferUrlImportProvider()");
+    expect(service).toContain("urlImportProvider: getDetailedSupplierOfferUrlImportProvider({");
   });
 
   it("does not falsely claim that a failed price extraction means price on request", () => {

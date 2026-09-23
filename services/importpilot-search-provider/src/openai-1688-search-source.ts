@@ -156,6 +156,29 @@ function restorePartialLogistics(
   }));
 }
 
+function confirmedSupplierName(value: string) {
+  return !/^(?:supplier\s+(?:not\s+confirmed|unknown)|unknown|unspecified)$/i.test(
+    value.trim(),
+  );
+}
+
+/**
+ * A 1688 URL by itself is not a usable supplier offer. Indexed mirrors can
+ * point to removed/login-only offers which redirect to the 1688 home page.
+ * Do not show those placeholders unless exact-page enrichment (or a native
+ * cited result) supplied both an identifiable seller and commercial evidence.
+ */
+export function hasUsable1688CommercialEvidence(result: SupplierSearchResult) {
+  const hasPrice = result.price !== null && result.currency !== null;
+  const hasOfferEvidence = hasPrice ||
+    result.minimumOrderQuantity !== null ||
+    result.imageUrl !== null ||
+    hasUsableLogistics(result);
+  return is1688ProductUrl(result.productUrl) &&
+    confirmedSupplierName(result.supplierName) &&
+    hasOfferEvidence;
+}
+
 function uniqueQueries(queries: string[]) {
   return [...new Set(
     queries.map((query) => query.replace(/\s+/g, " ").trim()).filter(Boolean),
@@ -275,9 +298,13 @@ export function createOpenAI1688SearchSource(
         }
       }
 
+      results = results.filter(hasUsable1688CommercialEvidence);
       const aiUsage = [...discoveryUsage, ...enrichmentUsage];
       return {
         results,
+        ...(results.length === 0
+          ? { reason: "TAJA 1688 discarded unverified or unavailable product placeholders." }
+          : {}),
         ...(aiUsage.length > 0 ? { aiUsage } : {}),
       };
     },

@@ -197,7 +197,7 @@ describe("TAJA 1688 partial logistics handoff", () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
-  it("converts an allowlisted mirror identity and discards unverified supplier/commercial data", async () => {
+  it("discards an indexed mirror when exact enrichment cannot verify the seller and offer", async () => {
     const mirrorUrl = "https://www.1688wholesale.com/zh-CHS/1688/china_alibaba_item/669806086431.html";
     const directUrl = "https://detail.1688.com/offer/669806086431.html";
     const fetcher = vi.fn(async () => new Response(JSON.stringify(discoveryResponse([
@@ -230,20 +230,9 @@ describe("TAJA 1688 partial logistics handoff", () => {
     if (Array.isArray(outcome)) throw new Error("Expected structured outcome.");
 
     expect(fetcher).toHaveBeenCalledTimes(1);
-    expect(outcome.results).toEqual([
-      expect.objectContaining({
-        title: "景观喷雾设备雾森系统高压喷雾主机",
-        supplierName: "Supplier not confirmed",
-        productUrl: directUrl,
-        source: "TAJA 1688 · indexed mirror",
-        supplierCountry: null,
-        price: null,
-        currency: null,
-        minimumOrderQuantity: null,
-        incoterm: null,
-        imageUrl: null,
-      }),
-    ]);
+    expect(directUrl).toBe("https://detail.1688.com/offer/669806086431.html");
+    expect(outcome.results).toEqual([]);
+    expect(outcome.reason).toContain("discarded unverified");
     expect(outcome.aiUsage).toHaveLength(1);
   });
 

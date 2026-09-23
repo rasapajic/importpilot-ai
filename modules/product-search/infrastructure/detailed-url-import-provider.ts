@@ -20,7 +20,7 @@ import {
   UrlImportUnsupportedUrlError,
 } from "./url-import-provider";
 
-const DEFAULT_TIMEOUT_MS = 8_000;
+const DEFAULT_TIMEOUT_MS = 20_000;
 const COMPANY_SUFFIX_SOURCE =
   "(?:Co\\.,?\\s*Ltd\\.?|Company\\s+Limited|Limited|Ltd\\.?|Factory|Manufacturer)";
 const PLATFORM_COMPANY_PATTERN =

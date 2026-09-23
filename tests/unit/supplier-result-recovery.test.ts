@@ -69,4 +69,19 @@ describe("supplier result exact-page recovery", () => {
       currency: "EUR",
     });
   });
+
+  it("replaces a corrupted cached price with authoritative exact-page pricing", () => {
+    const stale = {
+      ...result(),
+      price: 545,
+      currency: "USD",
+      minimumOrderQuantity: 100,
+    };
+
+    expect(mergeRecoveredSupplierPreview(stale, preview())).toMatchObject({
+      price: 6.16,
+      currency: "EUR",
+      minimumOrderQuantity: 2,
+    });
+  });
 });

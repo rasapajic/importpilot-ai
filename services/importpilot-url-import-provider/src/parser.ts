@@ -713,7 +713,47 @@ export function extractMadeInChinaProductDetails(html: string): MarketplaceProdu
     attributes,
     variants,
     packaging,
+    supplierProfile: null,
   });
+}
+
+export function extractAlibabaSupplierProfile(html: string) {
+  const bodyText = plainText(
+    html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, " "),
+  );
+  const ratingMatch = bodyText.match(/\b([0-5](?:[.,]\d+)?)\s*\/\s*5\s*(?:\((\d[\d.,\s]*)\))?/i);
+  const responseMatch = bodyText.match(
+    /(?:response\s*time|reaktionszeit)[^\d≤<]{0,30}(?:≤|<\s*=)?\s*(\d+(?:[.,]\d+)?)\s*(?:h|hours?|std\.?)/i,
+  ) ?? bodyText.match(
+    /(?:≤|<\s*=)\s*(\d+(?:[.,]\d+)?)\s*(?:h|hours?|std\.?)\s*(?:response\s*time|reaktionszeit)/i,
+  );
+  const deliveryMatch = bodyText.match(
+    /(?:on[-\s]*time\s+delivery(?:\s+rate)?|p(?:ü|u)nktliche\s+lieferquote)[^\d≥>]{0,30}(?:≥|>\s*=)?\s*(\d+(?:[.,]\d+)?)\s*%/i,
+  ) ?? bodyText.match(
+    /(?:≥|>\s*=)?\s*(\d+(?:[.,]\d+)?)\s*%\s*(?:on[-\s]*time\s+delivery(?:\s+rate)?|p(?:ü|u)nktliche\s+lieferquote)/i,
+  );
+  const yearsMatch = bodyText.match(
+    /\b(?:CN|supplier|manufacturer|company)\b[^\d]{0,30}(\d{1,3})\s*(?:yrs?|years?|j\.)(?:\b|\s|$)/i,
+  ) ?? bodyText.match(
+    /\b(\d{1,3})\s*(?:yrs?|years?)\s*(?:on\s+(?:the\s+)?platform|on\s+alibaba|experience)\b/i,
+  );
+  const verified = /\bverified\s+(?:supplier|manufacturer)\b|\bsupplier\s+verified\b|\bverified\b(?=.{0,120}\b(?:supplier|manufacturer|company)\b)|\b(?:supplier|manufacturer|company)\b.{0,120}\bverified\b/i.test(bodyText)
+    ? true
+    : null;
+  const rating = positiveNumber(ratingMatch?.[1] ?? null);
+  const reviewCount = quantityNumber(ratingMatch?.[2]);
+  const responseTimeHours = positiveNumber(responseMatch?.[1] ?? null);
+  const onTimeDeliveryPercent = positiveNumber(deliveryMatch?.[1] ?? null);
+  const yearsOnPlatform = quantityNumber(yearsMatch?.[1]);
+  const values = {
+    verified,
+    rating,
+    reviewCount,
+    responseTimeHours,
+    onTimeDeliveryPercent,
+    yearsOnPlatform,
+  };
+  return Object.values(values).some((value) => value !== null) ? values : null;
 }
 
 export function extractAlibabaProductDetails(html: string): MarketplaceProductDetails {
@@ -728,6 +768,7 @@ export function extractAlibabaProductDetails(html: string): MarketplaceProductDe
     attributes,
     variants,
     packaging,
+    supplierProfile: extractAlibabaSupplierProfile(html),
   });
 }
 

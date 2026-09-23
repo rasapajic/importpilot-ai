@@ -21,6 +21,7 @@ import type {
   SupplierOfferSearchSummary,
   SupplierOfferUrlPreview,
 } from "@/modules/product-search/domain/search";
+import type { SupplierOfferMarketplaceSupplierProfile } from "@/modules/product-search/domain/marketplace-product-details";
 import { estimateTajaPreliminaryLandedCost } from "@/modules/product-search/domain/taja-preliminary-cost-estimate";
 import type { TajaCandidateAnalysisWithProductForm } from "@/modules/product-search/domain/taja-product-form-policy";
 
@@ -55,6 +56,7 @@ type Copy = {
   supplierIdentity: string;
   supplierPlatformVerification: string;
   supplierBusinessHistory: string;
+  supplierPlatformSignalsAvailable: string;
   moq: string;
   incoterm: string;
   details: string;
@@ -114,6 +116,7 @@ const copy: Record<Locale, Copy> = {
     supplierIdentity: "identitet firme",
     supplierPlatformVerification: "verifikacija na platformi",
     supplierBusinessHistory: "istorija poslovanja",
+    supplierPlatformSignalsAvailable: "dostupni su pokazatelji sa platforme",
     moq: "Minimalna količina (MOQ)",
     incoterm: "Uslov isporuke (Incoterm)",
     details: "Detalji analize",
@@ -171,6 +174,7 @@ const copy: Record<Locale, Copy> = {
     supplierIdentity: "Unternehmensidentität",
     supplierPlatformVerification: "Plattform-Verifizierung",
     supplierBusinessHistory: "Geschäftshistorie",
+    supplierPlatformSignalsAvailable: "Plattformdaten sind verfügbar",
     moq: "MOQ",
     incoterm: "Incoterm",
     details: "Analysedetails",
@@ -228,6 +232,7 @@ const copy: Record<Locale, Copy> = {
     supplierIdentity: "company identity",
     supplierPlatformVerification: "platform verification",
     supplierBusinessHistory: "business history",
+    supplierPlatformSignalsAvailable: "platform indicators are available",
     moq: "MOQ",
     incoterm: "Incoterm",
     details: "Analysis details",
@@ -371,18 +376,50 @@ export type SupplierRiskGap = "IDENTITY" | "PLATFORM_VERIFICATION" | "BUSINESS_H
 export function supplierRiskGapKeys(
   supplierName: string,
   missingData: readonly string[] | null | undefined,
+  profile?: SupplierOfferMarketplaceSupplierProfile | null,
 ): SupplierRiskGap[] {
   const gaps: SupplierRiskGap[] = [];
   if (/\b(?:unspecified|unknown|not specified|unidentified)\b|\bseller on alibaba\b/i.test(supplierName)) {
     gaps.push("IDENTITY");
   }
-  if (!missingData || missingData.includes("SUPPLIER_VERIFICATION")) {
+  if (profile?.verified !== true && (!missingData || missingData.includes("SUPPLIER_VERIFICATION"))) {
     gaps.push("PLATFORM_VERIFICATION");
   }
-  if (!missingData || missingData.includes("SUPPLIER_RISK_DATA")) {
+  const hasBusinessHistory = profile?.rating !== null && profile?.rating !== undefined ||
+    profile?.onTimeDeliveryPercent !== null && profile?.onTimeDeliveryPercent !== undefined ||
+    profile?.yearsOnPlatform !== null && profile?.yearsOnPlatform !== undefined;
+  if (!hasBusinessHistory && (!missingData || missingData.includes("SUPPLIER_RISK_DATA"))) {
     gaps.push("BUSINESS_HISTORY");
   }
   return gaps;
+}
+
+function supplierPlatformProfileSummary(
+  profile: SupplierOfferMarketplaceSupplierProfile | null | undefined,
+  locale: Locale,
+) {
+  if (!profile) return "";
+  const parts: string[] = [];
+  if (profile.verified === true) {
+    parts.push(locale === "sr" ? "verifikovan na platformi" : locale === "de" ? "auf der Plattform verifiziert" : "platform verified");
+  }
+  if (typeof profile.rating === "number") {
+    const rating = profile.rating.toLocaleString(numberLocale(locale), { maximumFractionDigits: 1 });
+    parts.push(locale === "sr" ? `ocena ${rating}/5` : locale === "de" ? `Bewertung ${rating}/5` : `rating ${rating}/5`);
+  }
+  if (typeof profile.reviewCount === "number") {
+    parts.push(locale === "sr" ? `${formatQuantity(profile.reviewCount, locale)} ocena` : locale === "de" ? `${formatQuantity(profile.reviewCount, locale)} Bewertungen` : `${formatQuantity(profile.reviewCount, locale)} reviews`);
+  }
+  if (typeof profile.responseTimeHours === "number") {
+    parts.push(locale === "sr" ? `odgovor ≤ ${profile.responseTimeHours} h` : locale === "de" ? `Antwort ≤ ${profile.responseTimeHours} Std.` : `response ≤ ${profile.responseTimeHours} h`);
+  }
+  if (typeof profile.onTimeDeliveryPercent === "number") {
+    parts.push(locale === "sr" ? `isporuka na vreme ≥ ${profile.onTimeDeliveryPercent}%` : locale === "de" ? `pünktliche Lieferung ≥ ${profile.onTimeDeliveryPercent}%` : `on-time delivery ≥ ${profile.onTimeDeliveryPercent}%`);
+  }
+  if (typeof profile.yearsOnPlatform === "number") {
+    parts.push(locale === "sr" ? `${profile.yearsOnPlatform} god. na platformi` : locale === "de" ? `${profile.yearsOnPlatform} J. auf der Plattform` : `${profile.yearsOnPlatform} years on platform`);
+  }
+  return parts.join(" · ");
 }
 
 function supplierRiskGapLabels(
@@ -422,10 +459,17 @@ export function mergeRecoveredSupplierPreview(
 
   return {
     ...result,
-    price: resultHasPrice || !previewHasPrice ? result.price : preview.price,
-    currency: resultHasPrice || !previewHasPrice ? result.currency : preview.currency,
-    minimumOrderQuantity: result.minimumOrderQuantity ?? preview.minimumOrderQuantity,
-    incoterm: result.incoterm ?? preview.incoterm,
+    // A complete exact product page is stronger evidence than a search card or
+    // an old cache entry. It must be allowed to correct values such as a
+    // localized `5,45` price that an older parser misread as `545`.
+    price: previewHasPrice && !preview.isPartial ? preview.price : resultHasPrice ? result.price : preview.price,
+    currency: previewHasPrice && !preview.isPartial ? preview.currency : resultHasPrice ? result.currency : preview.currency,
+    minimumOrderQuantity: preview.minimumOrderQuantity !== null && !preview.isPartial
+      ? preview.minimumOrderQuantity
+      : result.minimumOrderQuantity ?? preview.minimumOrderQuantity,
+    incoterm: preview.incoterm !== null && !preview.isPartial
+      ? preview.incoterm
+      : result.incoterm ?? preview.incoterm,
     imageUrl: recoveredImage ?? currentImage,
     marketplaceDetails: preview.details ?? result.marketplaceDetails ?? null,
   } satisfies SupplierOfferSearchResult;
@@ -598,22 +642,26 @@ export function SimpleSupplierOfferSearch({
 
     const controller = new AbortController();
     void Promise.all(candidates.map(async (result) => {
-      try {
-        const response = await fetch(`/api/projects/${projectId}/supplier-search/url-preview`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ productUrl: result.productUrl }),
-          signal: controller.signal,
-        });
-        const payload = await response.json().catch(() => null) as {
-          preview?: SupplierOfferUrlPreview;
-        } | null;
-        return response.ok && payload?.preview
-          ? { productUrl: result.productUrl, preview: payload.preview }
-          : null;
-      } catch {
-        return null;
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          const response = await fetch(`/api/projects/${projectId}/supplier-search/url-preview`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ productUrl: result.productUrl }),
+            signal: controller.signal,
+          });
+          const payload = await response.json().catch(() => null) as {
+            preview?: SupplierOfferUrlPreview;
+          } | null;
+          if (response.ok && payload?.preview) {
+            return { productUrl: result.productUrl, preview: payload.preview };
+          }
+          if (![502, 504].includes(response.status)) return null;
+        } catch {
+          if (controller.signal.aborted) return null;
+        }
       }
+      return null;
     })).then((recovered) => {
       if (controller.signal.aborted || recovered.every((item) => item === null)) return;
       const previewByUrl = new Map(
@@ -750,6 +798,11 @@ export function SimpleSupplierOfferSearch({
             const supplierRiskGaps = supplierRiskGapKeys(
               result.supplierName,
               analysis?.missingData,
+              result.marketplaceDetails?.supplierProfile,
+            );
+            const supplierPlatformSummary = supplierPlatformProfileSummary(
+              result.marketplaceDetails?.supplierProfile,
+              locale,
             );
             const liveEstimate = quantity && targetCountry
               ? estimateTajaPreliminaryLandedCost({
@@ -825,7 +878,14 @@ export function SimpleSupplierOfferSearch({
                     </span>
                     <span>
                       {text.supplierRisk}
-                      <strong>{analysis ? text.risk[analysis.supplierRiskLevel] : text.risk.UNKNOWN}</strong>
+                      <strong>{analysis && analysis.supplierRiskLevel !== "UNKNOWN"
+                        ? text.risk[analysis.supplierRiskLevel]
+                        : supplierPlatformSummary
+                          ? text.supplierPlatformSignalsAvailable
+                          : text.risk.UNKNOWN}</strong>
+                      {supplierPlatformSummary && (
+                        <small className="supplier-risk-detail">{supplierPlatformSummary}</small>
+                      )}
                       {(!analysis || analysis.supplierRiskLevel === "UNKNOWN") && supplierRiskGaps.length > 0 && (
                         <small className="supplier-risk-detail">
                           {text.supplierRiskMissing(supplierRiskGapLabels(supplierRiskGaps, text))}
