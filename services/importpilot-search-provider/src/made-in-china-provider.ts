@@ -9,6 +9,7 @@ import {
 } from "./development-log.js";
 import type { SupplierSearchSource } from "./provider.js";
 import { createSupplierSearchQueryVariants } from "./query-variants.js";
+import { parseLocalizedNumber } from "./localized-number.js";
 
 const SEARCH_URL = "https://www.made-in-china.com/products-search/hot-china-products";
 const MULTI_SEARCH_URL = "https://www.made-in-china.com/multi-search";
@@ -30,13 +31,6 @@ type Options = {
 
 function text(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
-}
-
-function number(value: unknown) {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value !== "string") return null;
-  const parsed = Number(value.replaceAll(",", "").match(/\d+(?:\.\d+)?/)?.[0]);
-  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function currency(value: unknown, price: unknown) {
@@ -140,9 +134,12 @@ function normalize(record: Record<string, unknown>): SupplierSearchResult | null
   if (!title || !supplierName || !productUrl || !productUrl.includes("made-in-china.com")) return null;
 
   const rawPrice = first(record, ["price", "priceText", "unitPrice"]);
-  const parsedPrice = number(rawPrice);
+  const parsedPrice = parseLocalizedNumber(rawPrice, "price");
   const parsedCurrency = currency(first(record, ["currency", "currencyCode"]), rawPrice);
-  const rawMoq = number(first(record, ["minimumOrderQuantity", "moq", "minOrder"]));
+  const rawMoq = parseLocalizedNumber(
+    first(record, ["minimumOrderQuantity", "moq", "minOrder"]),
+    "quantity",
+  );
   const rawCountry = text(first(record, ["supplierCountry", "countryCode"]))?.toUpperCase();
   const rawIncoterm = text(first(record, ["incoterm", "tradeTerms"]))?.toUpperCase();
 

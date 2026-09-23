@@ -7,6 +7,7 @@ services:
     buildCommand: npm install && npm run build
     startCommand: npm start
     healthCheckPath: /health
+    autoDeployTrigger: checksPass
     envVars:
       - key: NODE_ENV
         value: production
@@ -15,6 +16,6 @@ services:
       - key: URL_IMPORT_DEBUG_HTML
         value: "false"
       - key: URL_IMPORT_TIMEOUT_MS
-        value: "8000"
+        value: "12000"
       - key: URL_IMPORT_MAX_RESPONSE_BYTES
         value: "1000000"

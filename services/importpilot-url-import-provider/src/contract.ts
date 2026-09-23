@@ -78,6 +78,15 @@ export const productPackagingSchema = z.object({
   validationNote: optionalText(300),
 }).strict();
 
+export const marketplaceSupplierProfileSchema = z.object({
+  verified: z.boolean().nullable(),
+  rating: z.number().min(0).max(5).finite().nullable(),
+  reviewCount: z.number().int().nonnegative().max(10_000_000).nullable(),
+  responseTimeHours: z.number().nonnegative().max(24 * 365).finite().nullable(),
+  onTimeDeliveryPercent: z.number().min(0).max(100).finite().nullable(),
+  yearsOnPlatform: z.number().int().nonnegative().max(200).nullable(),
+}).strict();
+
 const rawMarketplaceProductDetailsSchema = z.object({
   adapter: z.enum([
     "alibaba-product-page-v1",
@@ -89,6 +98,7 @@ const rawMarketplaceProductDetailsSchema = z.object({
   attributes: z.array(productAttributeSchema).max(80),
   variants: z.array(productVariantGroupSchema).max(20),
   packaging: productPackagingSchema.nullable(),
+  supplierProfile: marketplaceSupplierProfileSchema.nullable().optional(),
 }).strict();
 
 type RawProductAttribute = z.infer<typeof productAttributeSchema>;

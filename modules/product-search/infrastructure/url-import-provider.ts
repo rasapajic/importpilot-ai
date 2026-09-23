@@ -9,7 +9,7 @@ import {
   type SupplierOfferUrlPreview,
 } from "../domain/search";
 
-export const URL_IMPORT_TIMEOUT_MS = 8_000;
+export const URL_IMPORT_TIMEOUT_MS = 20_000;
 export const URL_IMPORT_MAX_RESPONSE_BYTES = 1_000_000;
 
 let localEnvCache: Record<string, string> | null = null;
@@ -718,6 +718,7 @@ function normalizeExternalPreview(candidate: unknown) {
     productUrl,
     imageUrl: record.imageUrl ?? null,
     source,
+    details: record.details ?? null,
     titleFromSlug: record.titleFromSlug ?? false,
   };
   const requiredPreviewValues = [

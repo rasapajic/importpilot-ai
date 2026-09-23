@@ -182,6 +182,13 @@ export function createSearchProviderApp({
   }
 
   return async function handler(request: IncomingMessage, response: ServerResponse) {
+    if (request.method === "GET" && request.url === "/version") {
+      return sendJson(response, 200, {
+        service: "importpilot-search-provider",
+        revision: process.env.RENDER_GIT_COMMIT?.slice(0, 12) ?? null,
+      });
+    }
+
     if (!authorized(request.headers.authorization, token)) {
       return sendJson(response, 401, { error: "Unauthorized." });
     }

@@ -16,6 +16,7 @@ export async function GET() {
       service: "tradepilot-ai",
       status: "ok",
       database: "ok",
+      revision: process.env.RENDER_GIT_COMMIT?.slice(0, 12) ?? null,
       ...(providerStatus ? { supplierSearchProvider: providerStatus } : {}),
     });
   } catch {

@@ -86,7 +86,7 @@ export async function previewProductUrl(productUrl: string, options: FetchOption
   }
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? 8_000);
+  const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? 12_000);
   let lastSnapshot: PreviewExtractionSnapshot | null = null;
   let upstreamStatus: number | undefined;
   let finalUrl: string | undefined;

@@ -71,6 +71,15 @@ export const supplierOfferPackagingSchema = z.object({
   validationNote: optionalText(300),
 }).strict();
 
+export const supplierOfferMarketplaceSupplierProfileSchema = z.object({
+  verified: z.boolean().nullable(),
+  rating: z.number().min(0).max(5).finite().nullable(),
+  reviewCount: z.number().int().nonnegative().max(10_000_000).nullable(),
+  responseTimeHours: z.number().nonnegative().max(24 * 365).finite().nullable(),
+  onTimeDeliveryPercent: z.number().min(0).max(100).finite().nullable(),
+  yearsOnPlatform: z.number().int().nonnegative().max(200).nullable(),
+}).strict();
+
 const rawSupplierOfferMarketplaceDetailsSchema = z.object({
   adapter: z.string().trim().min(1).max(100),
   evidence: z.enum(["PRODUCT_PAGE", "SEARCH_SNIPPET"]),
@@ -78,6 +87,7 @@ const rawSupplierOfferMarketplaceDetailsSchema = z.object({
   attributes: z.array(supplierOfferProductAttributeSchema).max(80),
   variants: z.array(supplierOfferProductVariantGroupSchema).max(20),
   packaging: supplierOfferPackagingSchema.nullable(),
+  supplierProfile: supplierOfferMarketplaceSupplierProfileSchema.nullable().optional(),
 }).strict();
 
 type RawProductAttribute = z.infer<typeof supplierOfferProductAttributeSchema>;
@@ -365,6 +375,9 @@ export type SupplierOfferProductAttributeCategory = z.infer<
 export type SupplierOfferProductAttribute = z.infer<typeof supplierOfferProductAttributeSchema>;
 export type SupplierOfferProductVariantGroup = z.infer<typeof supplierOfferProductVariantGroupSchema>;
 export type SupplierOfferPackaging = z.infer<typeof supplierOfferPackagingSchema>;
+export type SupplierOfferMarketplaceSupplierProfile = z.infer<
+  typeof supplierOfferMarketplaceSupplierProfileSchema
+>;
 export type SupplierOfferMarketplaceDetails = z.infer<typeof supplierOfferMarketplaceDetailsSchema>;
 
 export function selectSupplierOfferPriceTier(

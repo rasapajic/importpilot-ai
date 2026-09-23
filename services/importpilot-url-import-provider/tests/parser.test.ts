@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   extractProductImageUrl,
+  extractAlibabaSupplierProfile,
   extractMadeInChinaProductDetails,
   extractPriceTiers,
   inspectPreviewExtraction,
@@ -65,6 +66,28 @@ describe("URL import provider parser", () => {
       },
     });
     expect(extractProductImageUrl(html)).not.toContain("company-logo");
+  });
+
+  it("extracts supplier verification and performance evidence from Alibaba", () => {
+    const html = `
+      <section class="supplier-card">
+        <strong>Shenzhen JY Industrial Co., Ltd.</strong>
+        <span>Verified Supplier</span>
+        <span>CN · 4 J.</span>
+        <span>4,9/5 (17)</span>
+        <span>≤3h Reaktionszeit</span>
+        <span>≥100% Pünktliche Lieferquote</span>
+      </section>
+    `;
+
+    expect(extractAlibabaSupplierProfile(html)).toEqual({
+      verified: true,
+      rating: 4.9,
+      reviewCount: 17,
+      responseTimeHours: 3,
+      onTimeDeliveryPercent: 100,
+      yearsOnPlatform: 4,
+    });
   });
 
   it("reports parser candidates before normalization", () => {

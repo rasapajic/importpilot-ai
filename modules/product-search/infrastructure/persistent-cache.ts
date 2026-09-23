@@ -9,6 +9,10 @@ import {
 } from "../domain/search";
 
 export const SUPPLIER_SEARCH_PERSISTENT_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1_000;
+// Results written by older parsers may contain decimal-comma corruption and
+// incomplete marketplace details. Do not restore those entries after this
+// result-integrity release; a new live result will immediately replace them.
+export const SUPPLIER_SEARCH_CACHE_RESULT_EPOCH = new Date("2026-09-23T00:40:00.000Z");
 
 export function normalizeSupplierSearchQuery(query: string) {
   return query
@@ -72,6 +76,12 @@ export async function findLastSuccessfulSupplierSearch(rawInput: SupplierOfferSe
     },
   });
   if (!entry) return null;
+  if (
+    entry.expiresAt.getTime() <= Date.now() ||
+    entry.createdAt.getTime() < SUPPLIER_SEARCH_CACHE_RESULT_EPOCH.getTime()
+  ) {
+    return null;
+  }
 
   const parsed = supplierOfferSearchResultsSchema.safeParse(entry.resultsJson);
   if (!parsed.success || parsed.data.length === 0) return null;

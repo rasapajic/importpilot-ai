@@ -76,6 +76,13 @@ export function createUrlImportProviderApp(options: AppOptions = {}) {
   return async function handler(request: IncomingMessage, response: ServerResponse) {
     const url = new URL(request.url ?? "/", "http://localhost");
 
+    if (request.method === "GET" && url.pathname === "/version") {
+      return sendJson(response, 200, {
+        service: "importpilot-url-import-provider",
+        revision: process.env.RENDER_GIT_COMMIT?.slice(0, 12) ?? null,
+      });
+    }
+
     if (request.method === "GET" && url.pathname === "/health") {
       if (url.searchParams.get("verbose") === "1") {
         const diagnostics = await getProviderDiagnostics({

@@ -82,6 +82,22 @@ describe("Alibaba supplier search source", () => {
     expect(parseAlibabaSearchHtml(html)[0]?.imageUrl).toBeNull();
   });
 
+  it("preserves localized decimal prices instead of multiplying them by 100", () => {
+    const html = `<script type="application/json">${JSON.stringify({
+      title: "65W charger",
+      supplierName: "Shenzhen Charger Co., Ltd.",
+      productUrl: "https://www.alibaba.com/product-detail/localized-price-test.html",
+      price: "5,45 US$",
+      minimumOrderQuantity: "1.000 Stück",
+    })}</script>`;
+
+    expect(parseAlibabaSearchHtml(html)[0]).toMatchObject({
+      price: 5.45,
+      currency: "USD",
+      minimumOrderQuantity: 1_000,
+    });
+  });
+
   it("returns empty results with a reason when parsing produces no offers", async () => {
     const source = createAlibabaSupplierSearchSource({
       fetcher: async () => new Response("<html><body>No structured products</body></html>"),

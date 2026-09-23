@@ -41,7 +41,7 @@ import {
   storeSuccessfulSupplierSearch,
 } from "../infrastructure/persistent-cache";
 import { getSupplierOfferSearchProvider } from "../infrastructure/provider";
-import { getSupplierOfferUrlImportProvider } from "../infrastructure/url-import-provider";
+import { getDetailedSupplierOfferUrlImportProvider } from "../infrastructure/detailed-url-import-provider";
 import { recordProjectActivity } from "../../timeline/application/timeline-service";
 import { extractSupplierLogisticsData } from "../../transport/domain/transport-estimator";
 import { autoEnrichTajaCandidates } from "./taja-auto-enrichment";
@@ -330,7 +330,7 @@ export async function searchProjectSupplierOffers(
   organizationId: string,
   searchInput: unknown,
   provider?: SupplierOfferSearchProvider,
-  urlImportProvider: SupplierOfferUrlImportProvider = getSupplierOfferUrlImportProvider(),
+  urlImportProvider?: SupplierOfferUrlImportProvider,
 ) {
   const project = await findSearchProject(projectId, organizationId);
   const activeProvider = provider ?? getSupplierOfferSearchProvider({
@@ -352,7 +352,9 @@ export async function searchProjectSupplierOffers(
     sourceResults: outcome.results,
     resultOrigin: outcome.resultOrigin,
     fetchedAt: new Date().toISOString(),
-    urlImportProvider,
+    urlImportProvider: urlImportProvider ?? getDetailedSupplierOfferUrlImportProvider({
+      requestedQuantity: effectiveRequest.quantity,
+    }),
   });
 
   if (outcome.resultOrigin === "live" && presentation.results.length > 0) {
@@ -400,7 +402,9 @@ export async function loadCachedProjectSupplierOffers(
     // Re-check cached marketplace finalists against supported exact pages.
     // This does not run a paid supplier search, but it gives stale cached
     // results another bounded chance to recover missing price/image fields.
-    urlImportProvider: getSupplierOfferUrlImportProvider(),
+    urlImportProvider: getDetailedSupplierOfferUrlImportProvider({
+      requestedQuantity: effectiveRequest.quantity,
+    }),
   });
 
   return {
@@ -472,7 +476,7 @@ export async function previewProjectSupplierOfferUrl(
   projectId: string,
   organizationId: string,
   productUrl: string,
-  provider: SupplierOfferUrlImportProvider = getSupplierOfferUrlImportProvider(),
+  provider: SupplierOfferUrlImportProvider = getDetailedSupplierOfferUrlImportProvider(),
 ) {
   const project = await prisma.importProject.findFirst({
     where: { id: projectId, organizationId },
