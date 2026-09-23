@@ -21,7 +21,7 @@ type OpenAI1688SearchOptions = OpenAIWebSearchOptions & {
   enrichmentMaxResults?: number;
   enrichmentTimeoutMs?: number;
   enricher?: Supplier1688Enricher;
-  offerUrlVerifier?: (productUrl: string, signal: AbortSignal) => Promise<boolean>;
+  offerUrlVerifier?: (productUrl: string, signal: AbortSignal) => Promise<boolean | null>;
 };
 
 const OFFER_VERIFICATION_TIMEOUT_MS = 5_000;
@@ -106,11 +106,15 @@ export async function verifyOpenable1688OfferUrl(
         "user-agent": "Mozilla/5.0 (compatible; JAKOV360/1.0; supplier-link-verification)",
       },
     });
-    if (!response.ok || !is1688ProductUrl(response.url)) return false;
+    if (response.status === 404 || response.status === 410) return false;
+    if (!response.ok) return null;
+    if (!is1688ProductUrl(response.url)) return false;
     const html = (await response.text()).slice(0, 300_000);
     return !/(?:window\.location|location\.replace|http-equiv=["']refresh)[\s\S]{0,300}https?:\/\/(?:www\.)?1688\.com(?:[\/"'])/i.test(html);
   } catch {
-    return false;
+    // A timeout, anti-bot response or network failure does not prove that the
+    // supplier offer is invalid. Preserve the candidate as unverified.
+    return null;
   } finally {
     clearTimeout(timer);
     signal.removeEventListener("abort", abort);
@@ -346,13 +350,13 @@ export function createOpenAI1688SearchSource(
         })),
       );
       results = verifiedOpenable
-        .filter((candidate) => candidate.openable)
+        .filter((candidate) => candidate.openable !== false)
         .map((candidate) => candidate.result);
       const aiUsage = [...discoveryUsage, ...enrichmentUsage];
       return {
         results,
         ...(results.length === 0
-          ? { reason: "TAJA 1688 discarded unverified or unavailable product placeholders." }
+          ? { reason: "TAJA 1688 discarded unavailable or redirected product placeholders." }
           : {}),
         ...(aiUsage.length > 0 ? { aiUsage } : {}),
       };
