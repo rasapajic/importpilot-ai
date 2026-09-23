@@ -289,6 +289,29 @@ describe("URL import provider parser", () => {
     )).toThrow("UNAVAILABLE");
   });
 
+  it("detects Alibaba offers that cannot be shipped to the buyer region", () => {
+    const germanHtml = `
+      <html>
+        <head><title>Product Not Available</title></head>
+        <body>
+          <main>Es tut uns leid, dieses Produkt kann nicht in Ihre Region versendet werden.</main>
+        </body>
+      </html>
+    `;
+    const englishHtml = `
+      <html>
+        <body>This product cannot be shipped to your region.</body>
+      </html>
+    `;
+
+    expect(isUnavailableProductHtml(germanHtml)).toBe(true);
+    expect(isUnavailableProductHtml(englishHtml)).toBe(true);
+    expect(() => parseProductPreview(
+      germanHtml,
+      "https://www.alibaba.com/product-detail/Factory-Custom-Charger_1601394520383.html",
+    )).toThrow("UNAVAILABLE");
+  });
+
   it("detects blocked pages clearly", () => {
     expect(() => parseProductPreview(
       fixture("blocked-page.html"),
