@@ -35,10 +35,13 @@ export function isUnavailableProductHtml(html: string) {
     .replace(/\s+/g, " ")
     .trim();
 
-  return /\b(?:this\s+product\s+is\s+(?:no\s+longer|not)\s+available|product\s+is\s+no\s+longer\s+available|product\s+has\s+been\s+removed|listing\s+is\s+no\s+longer\s+available)\b/i.test(visibleText) ||
+  return /\b(?:this\s+product\s+is\s+(?:no\s+longer|not)\s+available|product\s+is\s+no\s+longer\s+available|product\s+has\s+been\s+removed|listing\s+is\s+no\s+longer\s+available|product\s+not\s+available)\b/i.test(visibleText) ||
+    /\b(?:this\s+product|the\s+product|product)\s+(?:cannot|can't|can\s+not)\s+be\s+(?:shipped|delivered)\s+to\s+(?:your|the)\s+(?:region|country|destination)\b/i.test(visibleText) ||
     /\b(?:dieses\s+produkt|produkt)\s+ist\s+nicht\s+mehr\s+verf(?:ü|u)gbar\b/i.test(visibleText) ||
+    /\b(?:dieses\s+produkt|das\s+produkt|produkt)\s+kann\s+nicht\s+(?:in|an)\s+(?:ihre|die)\s+(?:region|adresse)\s+versendet\s+werden\b/i.test(visibleText) ||
     /\b(?:producto|art[ií]culo)\s+ya\s+no\s+est[aá]\s+disponible\b/i.test(visibleText) ||
-    /(?:商品已下架|商品不存在|该商品已下架)/.test(visibleText);
+    /\b(?:este\s+producto|el\s+producto|producto)\s+no\s+se\s+puede\s+enviar\s+a\s+(?:su|tu)\s+(?:regi[oó]n|pa[ií]s|destino)\b/i.test(visibleText) ||
+    /(?:商品已下架|商品不存在|该商品已下架|该商品无法配送至您的地区)/.test(visibleText);
 }
 
 function decodeHtml(value: string | null | undefined) {
