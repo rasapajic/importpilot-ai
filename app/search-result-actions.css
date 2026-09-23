@@ -198,6 +198,23 @@
   padding: 1rem;
 }
 
+.search-result-card-best {
+  border-color: #16825d;
+  box-shadow: 0 0 0 2px rgb(22 130 93 / 10%);
+}
+
+.best-choice-badge {
+  background: #16825d;
+  border-radius: 999px;
+  color: #fff;
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 800;
+  margin: 0 0.5rem 0.55rem 0;
+  padding: 0.3rem 0.65rem;
+  text-transform: uppercase;
+}
+
 .supplier-selection-summary strong {
   display: block;
   font-size: 1rem;
