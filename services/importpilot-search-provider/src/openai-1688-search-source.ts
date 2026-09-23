@@ -21,7 +21,10 @@ type OpenAI1688SearchOptions = OpenAIWebSearchOptions & {
   enrichmentMaxResults?: number;
   enrichmentTimeoutMs?: number;
   enricher?: Supplier1688Enricher;
+  offerUrlVerifier?: (productUrl: string, signal: AbortSignal) => Promise<boolean>;
 };
+
+const OFFER_VERIFICATION_TIMEOUT_MS = 5_000;
 
 const MIRROR_HOSTS = new Set([
   "1688wholesale.com",
@@ -76,6 +79,42 @@ export function is1688MirrorProductUrl(productUrl: string) {
 
 export function is1688DiscoveryUrl(productUrl: string) {
   return is1688ProductUrl(productUrl) || is1688MirrorProductUrl(productUrl);
+}
+
+/**
+ * Confirms that a native 1688 offer still resolves to that exact offer page.
+ * Removed or region-blocked offers commonly redirect foreign visitors to the
+ * marketplace homepage while retaining plausible product data in search
+ * indexes. Such URLs must never be presented as openable supplier offers.
+ */
+export async function verifyOpenable1688OfferUrl(
+  productUrl: string,
+  signal: AbortSignal,
+) {
+  if (!is1688ProductUrl(productUrl)) return false;
+  const timeout = new AbortController();
+  const timer = setTimeout(() => timeout.abort(), OFFER_VERIFICATION_TIMEOUT_MS);
+  const abort = () => timeout.abort();
+  signal.addEventListener("abort", abort, { once: true });
+  try {
+    const response = await fetch(productUrl, {
+      method: "GET",
+      redirect: "follow",
+      signal: timeout.signal,
+      headers: {
+        accept: "text/html,application/xhtml+xml",
+        "user-agent": "Mozilla/5.0 (compatible; JAKOV360/1.0; supplier-link-verification)",
+      },
+    });
+    if (!response.ok || !is1688ProductUrl(response.url)) return false;
+    const html = (await response.text()).slice(0, 300_000);
+    return !/(?:window\.location|location\.replace|http-equiv=["']refresh)[\s\S]{0,300}https?:\/\/(?:www\.)?1688\.com(?:[\/"'])/i.test(html);
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+    signal.removeEventListener("abort", abort);
+  }
 }
 
 export function canonical1688UrlFromMirror(productUrl: string) {
@@ -233,6 +272,7 @@ export function createOpenAI1688SearchSource(
     enrichmentMaxResults,
     enrichmentTimeoutMs,
     enricher: injectedEnricher,
+    offerUrlVerifier = verifyOpenable1688OfferUrl,
     ...sharedOptions
   } = options;
   const discoverySource = createOpenAIWebSearchSource({
@@ -298,7 +338,16 @@ export function createOpenAI1688SearchSource(
         }
       }
 
-      results = results.filter(hasUsable1688CommercialEvidence);
+      const commerciallyUsable = results.filter(hasUsable1688CommercialEvidence);
+      const verifiedOpenable = await Promise.all(
+        commerciallyUsable.map(async (result) => ({
+          result,
+          openable: await offerUrlVerifier(result.productUrl, signal),
+        })),
+      );
+      results = verifiedOpenable
+        .filter((candidate) => candidate.openable)
+        .map((candidate) => candidate.result);
       const aiUsage = [...discoveryUsage, ...enrichmentUsage];
       return {
         results,
