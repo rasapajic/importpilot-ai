@@ -8,14 +8,6 @@ import {
 } from "@/modules/product-search/application/product-search-service";
 import { projectSupplierSearchRequestSchema } from "@/modules/product-search/domain/search";
 import {
-  createDetailedSupplierOfferUrlImportProvider,
-} from "@/modules/product-search/infrastructure/detailed-url-import-provider";
-import {
-  createFinalistUrlEnrichmentProvider,
-  TAJA_FINALIST_EXACT_PAGE_LIMIT,
-  TAJA_FINALIST_EXACT_PAGE_TIMEOUT_MS,
-} from "@/modules/product-search/infrastructure/finalist-url-enrichment-provider";
-import {
   SupplierSearchProviderError,
   SupplierSearchProviderUnavailableError,
 } from "@/modules/product-search/infrastructure/http-provider";
@@ -108,22 +100,13 @@ export async function POST(
       projectId,
     });
 
-    const exactPageProvider = createFinalistUrlEnrichmentProvider(
-      createDetailedSupplierOfferUrlImportProvider({
-        requestedQuantity: parsed.data.quantity,
-        timeoutMs: TAJA_FINALIST_EXACT_PAGE_TIMEOUT_MS,
-      }),
-      TAJA_FINALIST_EXACT_PAGE_LIMIT,
-    );
-
     developmentLog("supplier_search_request_started", {
       project_id: projectId,
       quota_plan: quotaReservation.plan,
       quota_used: quotaReservation.used,
       quota_limit: quotaReservation.limit,
       quota_source: quotaReservation.source,
-      exact_page_finalist_limit: TAJA_FINALIST_EXACT_PAGE_LIMIT,
-      exact_page_timeout_ms: TAJA_FINALIST_EXACT_PAGE_TIMEOUT_MS,
+      exact_page_enrichment: "deferred_until_offer_selection",
       request_timeout_ms: SUPPLIER_SEARCH_REQUEST_TIMEOUT_MS,
     });
 
@@ -133,14 +116,14 @@ export async function POST(
         auth.membership.organizationId,
         parsed.data,
         undefined,
-        exactPageProvider,
+        null,
       ),
     );
     developmentLog("supplier_search_request_completed", {
       project_id: projectId,
       duration_ms: Date.now() - startedAt,
       result_count: outcome.results.length,
-      exact_page_finalist_limit: TAJA_FINALIST_EXACT_PAGE_LIMIT,
+      exact_page_enrichment: "deferred_until_offer_selection",
     });
     return NextResponse.json({
       ...outcome,
