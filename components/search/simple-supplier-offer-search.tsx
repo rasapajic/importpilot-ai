@@ -76,6 +76,7 @@ type Copy = {
   selectionOverview: (reviewed: number, shown: number) => string;
   cachedSelectionOverview: (shown: number) => string;
   liveSelectionOverview: (found: number, relevant: number, shown: number) => string;
+  bestChoice: string;
   selectionCriteria: string;
   whySelected: string;
   reasonProductMatch: string;
@@ -133,10 +134,11 @@ const copy: Record<Locale, Copy> = {
     continuing: "Otvaranje sledećeg koraka...",
     cached: "Prikazani su poslednji sačuvani rezultati.",
     liveRefresh: "Ponovi živu pretragu",
-    selectionOverview: (reviewed, shown) => `JAKOV360 je pregledao ${reviewed} kandidata i izdvojio ${shown} za prikaz.`,
+    selectionOverview: (reviewed, shown) => `JAKOV360 je pregledao ${reviewed} kandidata i prikazuje svih ${shown} dostupnih ponuda.`,
     cachedSelectionOverview: (shown) => `Prikazano je ${shown} sačuvanih ponuda iz prethodne pretrage. Ovo nije ukupan broj kandidata nove pretrage.`,
-    liveSelectionOverview: (found, relevant, shown) => `Pronađeno ${found} kandidata → ${relevant} prošlo osnovnu proveru → prikazano najboljih ${shown}.`,
-    selectionCriteria: "Izdvajanje se zasniva na podudaranju proizvoda, količini i MOQ-u, ceni/uslovima i kvalitetu dostupnih podataka.",
+    liveSelectionOverview: (found, relevant, shown) => `Pronađeno ${found} kandidata → prikazano svih ${shown} dostupnih ponuda → ${relevant} trenutno prolazi osnovnu proveru.`,
+    bestChoice: "Najbolji izbor",
+    selectionCriteria: "Sve dostupne ponude su prikazane redom. Najbolji izbor se određuje prema podudaranju proizvoda, količini i MOQ-u, ceni/uslovima i kvalitetu dostupnih podataka.",
     whySelected: "Zašto je izdvojena",
     reasonProductMatch: "Proizvod odgovara traženom tipu ili specifikaciji.",
     reasonProductLikely: "Ponuda je relevantna za traženi proizvod, ali deo specifikacije još treba potvrditi.",
@@ -191,10 +193,11 @@ const copy: Record<Locale, Copy> = {
     continuing: "Nächster Schritt wird geöffnet...",
     cached: "Die letzten gespeicherten Ergebnisse werden angezeigt.",
     liveRefresh: "Live-Suche wiederholen",
-    selectionOverview: (reviewed, shown) => `JAKOV360 hat ${reviewed} Kandidaten geprüft und ${shown} zur Anzeige ausgewählt.`,
+    selectionOverview: (reviewed, shown) => `JAKOV360 hat ${reviewed} Kandidaten geprüft und zeigt alle ${shown} verfügbaren Angebote.`,
     cachedSelectionOverview: (shown) => `${shown} gespeicherte Angebote aus der vorherigen Suche werden angezeigt. Dies ist nicht die Gesamtzahl der Kandidaten einer neuen Suche.`,
-    liveSelectionOverview: (found, relevant, shown) => `${found} Kandidaten gefunden → ${relevant} haben die Grundprüfung bestanden → die besten ${shown} werden angezeigt.`,
-    selectionCriteria: "Die Auswahl berücksichtigt Produktübereinstimmung, Menge und MOQ, Preis/Konditionen sowie die Qualität der verfügbaren Daten.",
+    liveSelectionOverview: (found, relevant, shown) => `${found} Kandidaten gefunden → alle ${shown} verfügbaren Angebote werden angezeigt → ${relevant} bestehen derzeit die Grundprüfung.`,
+    bestChoice: "Beste Wahl",
+    selectionCriteria: "Alle verfügbaren Angebote werden in Rangfolge angezeigt. Die beste Wahl basiert auf Produktübereinstimmung, Menge und MOQ, Preis/Konditionen sowie Datenqualität.",
     whySelected: "Warum ausgewählt",
     reasonProductMatch: "Das Produkt entspricht dem gesuchten Typ oder der Spezifikation.",
     reasonProductLikely: "Das Angebot ist relevant, ein Teil der Spezifikation muss jedoch noch bestätigt werden.",
@@ -249,10 +252,11 @@ const copy: Record<Locale, Copy> = {
     continuing: "Opening the next step...",
     cached: "Showing the latest saved results.",
     liveRefresh: "Run live search again",
-    selectionOverview: (reviewed, shown) => `JAKOV360 reviewed ${reviewed} candidates and selected ${shown} to display.`,
+    selectionOverview: (reviewed, shown) => `JAKOV360 reviewed ${reviewed} candidates and displays all ${shown} available offers.`,
     cachedSelectionOverview: (shown) => `Showing ${shown} saved offers from the previous search. This is not the total candidate count for a new search.`,
-    liveSelectionOverview: (found, relevant, shown) => `${found} candidates found → ${relevant} passed the basic check → the best ${shown} are displayed.`,
-    selectionCriteria: "Selection considers product fit, requested quantity and MOQ, price/terms, and the quality of available data.",
+    liveSelectionOverview: (found, relevant, shown) => `${found} candidates found → all ${shown} available offers are displayed → ${relevant} currently pass the basic check.`,
+    bestChoice: "Best choice",
+    selectionCriteria: "All available offers are shown in ranked order. The best choice is based on product fit, quantity and MOQ, price/terms, and data quality.",
     whySelected: "Why it was selected",
     reasonProductMatch: "The product matches the requested type or specification.",
     reasonProductLikely: "The offer is relevant, but part of the specification still needs confirmation.",
@@ -528,7 +532,7 @@ export function SimpleSupplierOfferSearch({
   autoStart?: boolean;
   initialOutcome?: SimpleSupplierSearchInitialOutcome | null;
 }) {
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const text = copy[locale];
   const router = useRouter();
   const [results, setResults] = useState<SupplierOfferSearchResult[] | null>(initialOutcome?.results ?? null);
@@ -718,15 +722,9 @@ export function SimpleSupplierOfferSearch({
   }
 
   const analysisByUrl = new Map(analyses.map((analysis) => [analysis.productUrl, analysis]));
-  const ranked = (results ?? [])
+  const visible = (results ?? [])
     .map((result, index) => ({ result, index, analysis: analysisByUrl.get(result.productUrl) }))
-    .filter((entry) => entry.analysis?.productForm.matchStatus !== "MISMATCH")
     .sort((left, right) => (left.analysis?.rank ?? left.index + 100) - (right.analysis?.rank ?? right.index + 100));
-  const visible = (ranked.length > 0 ? ranked : (results ?? []).map((result, index) => ({
-    result,
-    index,
-    analysis: analysisByUrl.get(result.productUrl),
-  }))).slice(0, 10);
 
   return (
     <section className="dashboard-card supplier-search">
@@ -818,8 +816,8 @@ export function SimpleSupplierOfferSearch({
             const selected = selectedUrls.includes(result.productUrl);
             const reasons = selectionReasons(effectiveResult, analysis, quantity, text);
             return (
-              <article className="search-result-card" key={`${result.source}-${result.productUrl}`}>
-                <SearchResultImage src={result.imageUrl} title={result.title} />
+              <article className={`search-result-card${index === 0 ? " search-result-card-best" : ""}`} key={`${result.source}-${result.productUrl}`}>
+                <SearchResultImage src={result.imageUrl} title={t(result.title)} />
                 <div>
                   <p className="eyebrow">
                     <a
@@ -827,13 +825,14 @@ export function SimpleSupplierOfferSearch({
                       href={result.productUrl}
                       rel="noreferrer"
                       target="_blank"
-                      aria-label={`${text.source}: ${result.supplierName}`}
+                      aria-label={`${text.source}: ${t(result.supplierName)}`}
                     >
-                      #{index + 1} · {result.supplierName}
+                      #{index + 1} · {t(result.supplierName)}
                     </a>
                   </p>
+                  {index === 0 && <span className="best-choice-badge">{text.bestChoice}</span>}
                   <span className={`provider-status ${decisionClass(decision)}`}>{text.decision[decision]}</span>
-                  <h3>{result.title}</h3>
+                  <h3>{t(result.title)}</h3>
                   <div className="offer-highlights">
                     <span>
                       {text.supplierPrice}
