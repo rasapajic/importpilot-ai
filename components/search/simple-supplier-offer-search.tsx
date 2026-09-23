@@ -532,7 +532,7 @@ export function SimpleSupplierOfferSearch({
   autoStart?: boolean;
   initialOutcome?: SimpleSupplierSearchInitialOutcome | null;
 }) {
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const text = copy[locale];
   const router = useRouter();
   const [results, setResults] = useState<SupplierOfferSearchResult[] | null>(initialOutcome?.results ?? null);
@@ -817,7 +817,7 @@ export function SimpleSupplierOfferSearch({
             const reasons = selectionReasons(effectiveResult, analysis, quantity, text);
             return (
               <article className={`search-result-card${index === 0 ? " search-result-card-best" : ""}`} key={`${result.source}-${result.productUrl}`}>
-                <SearchResultImage src={result.imageUrl} title={result.title} />
+                <SearchResultImage src={result.imageUrl} title={t(result.title)} />
                 <div>
                   <p className="eyebrow">
                     <a
@@ -825,14 +825,14 @@ export function SimpleSupplierOfferSearch({
                       href={result.productUrl}
                       rel="noreferrer"
                       target="_blank"
-                      aria-label={`${text.source}: ${result.supplierName}`}
+                      aria-label={`${text.source}: ${t(result.supplierName)}`}
                     >
-                      #{index + 1} · {result.supplierName}
+                      #{index + 1} · {t(result.supplierName)}
                     </a>
                   </p>
                   {index === 0 && <span className="best-choice-badge">{text.bestChoice}</span>}
                   <span className={`provider-status ${decisionClass(decision)}`}>{text.decision[decision]}</span>
-                  <h3>{result.title}</h3>
+                  <h3>{t(result.title)}</h3>
                   <div className="offer-highlights">
                     <span>
                       {text.supplierPrice}
