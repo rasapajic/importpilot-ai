@@ -53,14 +53,12 @@ describe("ImportPilot 1.0 simple supplier results", () => {
     expect(resultsSource).toContain("formatDeliveryTimeDays(deliveryEstimate.deliveryTimeDays, locale)");
   });
 
-  it("explains exactly which supplier-risk evidence is missing", () => {
-    expect(resultsSource).toContain('UNKNOWN: "nije moguće proceniti"');
-    expect(resultsSource).toContain('supplierIdentity: "identitet firme"');
-    expect(resultsSource).toContain('supplierPlatformVerification: "verifikacija na platformi"');
-    expect(resultsSource).toContain('supplierBusinessHistory: "istorija poslovanja"');
-    expect(resultsSource).toContain("supplierRiskGapKeys(");
-    expect(resultsSource).toContain('className="supplier-risk-detail"');
-    expect(resultCss).toContain(".supplier-risk-detail");
+  it("does not repeat an unknown supplier-risk card on every offer", () => {
+    expect(resultsSource).toContain('supplierRiskDeferred: "Detaljna provera rizika');
+    expect(resultsSource).toContain("hasDeferredSupplierRisk");
+    expect(resultsSource).toContain('className="supplier-risk-notice"');
+    expect(resultsSource).toContain('analysis.supplierRiskLevel !== "UNKNOWN" || supplierPlatformSummary');
+    expect(resultCss).toContain(".supplier-risk-notice");
   });
 
   it("shows supplier price per piece and a separate total for the requested quantity", () => {
