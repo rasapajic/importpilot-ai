@@ -14,6 +14,7 @@
     "db:migrate:dev": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
+    "db:seed:jakov360": "node --env-file=.env --import tsx prisma/seed-jakov360-acceptance.ts",
     "diagnose:supplier-search": "node scripts/diagnose-supplier-search.mjs",
     "diagnose:url-import": "tsx scripts/diagnose-url-import.ts",
     "test:url-provider-live": "tsx scripts/test-url-provider-live.ts",

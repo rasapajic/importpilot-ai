@@ -102,6 +102,57 @@ Seed kreira demo organizaciju, owner korisnika, sesiju i tri projekta:
 Seed koristi stvarni calculator, scoring i decision engine. Komanda namerno
 prekida izvršavanje ako projekti ne dobiju očekivane statuse.
 
+## JAKOV360 lokalni acceptance pregled
+
+Ovaj dodatni seed je odvojen od standardnog demo seed-a. Radi samo uz
+eksplicitnu potvrdu, dozvoljava isključivo `NODE_ENV=development` ili `test`,
+odbija udaljeni PostgreSQL host i odbija naziv baze koji izgleda produkcijski.
+Komanda učitava lokalni `.env` i koristi postojeći lokalni demo nalog, pa prvo
+jednom pokrenite standardni seed.
+
+U PowerShell-u, nakon što su lokalni PostgreSQL i migracije spremni:
+
+```powershell
+npm run db:seed
+$env:JAKOV360_ACCEPTANCE_SEED="1"
+npm run db:seed:jakov360
+Remove-Item Env:JAKOV360_ACCEPTANCE_SEED
+npm run dev
+```
+
+Seed je idempotentan: ponavljanje osvežava isti projekat i iste cache ključeve,
+bez dupliranja podataka. Kreira projekat:
+
+```text
+JAKOV360 Acceptance pregled
+```
+
+Direktan URL projekta je:
+
+```text
+http://localhost:3000/projects/36000000-0000-4000-8000-000000000001
+```
+
+Prijavite se standardnim demo nalogom, otvorite projekat i u koraku `Ponude
+dobavljača` kliknite `Pretraži ponude`. Podrazumevani naziv, količina `1000` i
+zemlja `RS` vraćaju lokalni cache sa sledećim vizuelnim primerima:
+
+- naočare sa četiri quantity tier-a; `500–1.199` je označen kao `Vaša količina`;
+- `Domaće ponude`, `Direktan uvoz` i `Vrsta ponude nije potvrđena`;
+- Dudi Co. cena `1.099 RSD` sa PDV-om i neto cena `916 RSD`, bez potvrđene
+  dostupnosti, B2B cene i oznake `Najbolji izbor`;
+- validna lokalna slika i primer bez slike koji aktivira fallback;
+- RFQ dugme sa izborom `Uzorak` / `Puna narudžbina`, engleskom porukom i copy
+  dugmetom.
+
+U `Da li se isplati?` otvorite `Prikaži detalje`, zatim detalje prve ponude.
+Kalkulacija naočara prikazuje detaljan breakdown i `Čeka potvrđene podatke`, jer
+transport i carinska stopa nisu potvrđeni. TARIS URL i predloženi HS broj su
+sačuvani kao provenance, ali stopa nije označena kao zvanično potvrđena.
+
+Za izolovani Dudi scenario isključite `Koristi vrednosti iz projekta`, unesite
+upit `Dudi Co. punjač`, količinu `100` i zemlju `RS`, pa pokrenite pretragu.
+
 ## Pokretanje aplikacije
 
 ```powershell
