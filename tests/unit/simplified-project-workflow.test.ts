@@ -35,7 +35,11 @@ describe("simplified project workflow", () => {
 
   it("keeps profitability active until a final recommendation exists", () => {
     expect(pageSource).toContain("const hasFinalRecommendation = isFinalDecisionStatus(decision?.status)");
-    expect(pageSource).toContain('hasFinalRecommendation\n      ? "COMPLETED"\n      : "ACTIVE"');
+    expect(pageSource).toContain("const decisionAreaStatus");
+    expect(pageSource).toContain("!offerCount");
+    expect(pageSource).toContain("hasFinalRecommendation");
+    expect(pageSource).toContain('? "COMPLETED"');
+    expect(pageSource).toContain(': "ACTIVE"');
     expect(pageSource).toContain('summary={hasFinalRecommendation ? getDecisionStepSummary(decision?.status, locale) : t("Nakon preporuke")}');
   });
 

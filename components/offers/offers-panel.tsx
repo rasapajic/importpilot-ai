@@ -10,6 +10,7 @@ import { CostCalculatorForm } from "@/components/costs/cost-calculator-form";
 import { AssessmentPanel } from "@/components/intelligence/assessment-panel";
 import { useI18n } from "@/components/i18n/i18n-provider";
 import { ResponsiveOfferDetails } from "@/components/offers/responsive-offer-details";
+import { RfqRequestPanel } from "@/components/search/rfq-request-panel";
 import { getStatusLabel } from "@/modules/i18n/translations";
 import { recommendationBadgeStatus } from "@/modules/intelligence/application/recommendation-display";
 import { getEuroDisplay } from "@/modules/fx/euro-display";
@@ -18,11 +19,23 @@ import {
   assessSupplierRiskV2,
   type SupplierRiskLevel,
 } from "@/modules/intelligence/domain/supplier-risk-v2";
+import { classifyOffer } from "@/modules/product-search/domain/offer-classification";
 
 type OfferWithDetails = SupplierOffer & {
   costCalculations: CostCalculation[];
   assessments: OfferAssessment[];
 };
+
+function isSupplierProductUrl(value: string | null): value is string {
+  if (!value) return false;
+
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && url.pathname.replace(/\/+$/, "").length > 0;
+  } catch {
+    return false;
+  }
+}
 
 export function OffersPanel({
   projectId,
@@ -127,6 +140,12 @@ export function OffersPanel({
     return "Rizik nepoznat";
   }
 
+  function metadata(offer: OfferWithDetails) {
+    return offer.sourceMetadata && typeof offer.sourceMetadata === "object" && !Array.isArray(offer.sourceMetadata)
+      ? offer.sourceMetadata as Record<string, unknown>
+      : {};
+  }
+
   return (
     <section className="dashboard-card">
       <header className="section-header">
@@ -170,6 +189,22 @@ export function OffersPanel({
             clearCommercialTermsScore: offer.termsClarityScore,
             clearTransportScore: offer.shippingClarityScore,
           });
+          const data = metadata(offer);
+          const classification = classifyOffer({
+            source: typeof data.providerSource === "string" ? data.providerSource : undefined,
+            targetCountry,
+            supplierCountry: offer.supplierCountry,
+            sellerCountry: typeof data.sellerCountry === "string" ? data.sellerCountry : undefined,
+            originCountry: typeof data.originCountry === "string" ? data.originCountry : undefined,
+            importerName: typeof data.importerName === "string" ? data.importerName : undefined,
+            currency: offer.currency,
+            offerType: data.offerType === "DOMESTIC" || data.offerType === "DIRECT_IMPORT" || data.offerType === "UNKNOWN" ? data.offerType : undefined,
+            availabilityConfirmed: typeof data.availabilityConfirmed === "boolean" ? data.availabilityConfirmed : undefined,
+            b2bPriceConfirmed: typeof data.b2bPriceConfirmed === "boolean" ? data.b2bPriceConfirmed : undefined,
+            priceIncludesVat: typeof data.priceIncludesVat === "boolean" ? data.priceIncludesVat : undefined,
+          });
+          const productUrl = typeof data.productUrl === "string" ? data.productUrl : null;
+          const title = typeof data.title === "string" ? data.title : projectName;
 
           return (
             <article className="offer-card" key={offer.id}>
@@ -178,6 +213,7 @@ export function OffersPanel({
                 <span className="offer-source-label">{getStatusLabel(offer.extractionStatus, locale)}</span>
               </header>
               <div className="offer-badges" aria-label={t("Supplier signals")}>
+                <span className={`offer-kind-badge offer-kind-${classification.kind.toLowerCase()}`}>{t(classification.label)}</span>
                 <span className={`moq-badge moq-badge-${moq.status.toLowerCase()}`}>{t(moq.label)}</span>
                 <span className={`risk-badge risk-badge-${supplierRisk.riskLevel.toLowerCase()}`}>{t(riskLabel(supplierRisk.riskLevel))}</span>
               </div>
@@ -211,6 +247,19 @@ export function OffersPanel({
                     : t("Minimalna količina (MOQ) nije navedena")} · {offer.incoterm ?? t("Incoterm nije naveden")}
                 </p>
                 {moq.status === "BLOCKING" && <p className="form-error">{t(moq.message)}</p>}
+                <p className="muted-text">{t(classification.reason)}</p>
+                {classification.needsSupplierConfirmation && <p className="warning-text">{t("Potrebna potvrda dobavljača")}</p>}
+                {isSupplierProductUrl(productUrl) && (
+                  <a href={productUrl} rel="noreferrer" target="_blank">{t("Otvori ponudu dobavljača")}</a>
+                )}
+                <RfqRequestPanel
+                  incoterm={offer.incoterm}
+                  productTitle={title}
+                  productUrl={productUrl}
+                  quantity={projectQuantity}
+                  supplierName={offer.supplierName}
+                  targetCountry={targetCountry}
+                />
                 {showAddControls && (
                   <div className="actions">
                     <button className="secondary-button" onClick={() => setEditing(editing === offer.id ? null : offer.id)} type="button">{t("Izmeni")}</button>

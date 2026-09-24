@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { normalizeTargetCountryCode } from "../../i18n/country-names";
+import type { OfferKind } from "./offer-classification";
 
 const optionalText = (max: number) =>
   z.preprocess(
@@ -46,6 +47,31 @@ export const supplierOfferSearchResultSchema = z
       "Image URL must be valid.",
     ),
     source: z.string().trim().min(1).max(100),
+    offerType: z.enum(["DOMESTIC", "DIRECT_IMPORT", "UNKNOWN"]).optional(),
+    sellerCountry: z.preprocess(
+      (value) => (value === "" || value === undefined || value === null ? null : String(value).toUpperCase()),
+      z.string().regex(/^[A-Z]{2}$/).nullable(),
+    ).optional(),
+    originCountry: z.preprocess(
+      (value) => (value === "" || value === undefined || value === null ? null : String(value).toUpperCase()),
+      z.string().regex(/^[A-Z]{2}$/).nullable(),
+    ).optional(),
+    importerName: optionalText(200).optional(),
+    brandName: optionalText(120).optional(),
+    priceIncludesVat: z.boolean().optional(),
+    netPrice: optionalNumber(z.number().nonnegative().finite()).optional(),
+    availabilityConfirmed: z.boolean().optional(),
+    b2bPriceConfirmed: z.boolean().optional(),
+    quantityTiers: z.array(z.object({
+      minQuantity: z.number().int().positive(),
+      maxQuantity: z.number().int().positive().nullable(),
+      price: optionalNumber(z.number().nonnegative().finite()),
+      currency: z.preprocess(
+        (value) => (value === "" || value === undefined || value === null ? null : String(value).toUpperCase()),
+        z.string().regex(/^[A-Z]{3}$/).nullable(),
+      ),
+      confirmed: z.boolean().default(false),
+    }).strict()).max(20).optional(),
   })
   .strict()
   .superRefine((result, context) => {
@@ -105,7 +131,9 @@ export const supplierOfferUrlPreviewSchema = z
   .strict();
 
 export type SupplierOfferSearchInput = z.infer<typeof supplierOfferSearchInputSchema>;
-export type SupplierOfferSearchResult = z.infer<typeof supplierOfferSearchResultSchema>;
+export type SupplierOfferSearchResult = z.infer<typeof supplierOfferSearchResultSchema> & {
+  offerType?: OfferKind;
+};
 export type SupplierOfferUrlPreview = z.infer<typeof supplierOfferUrlPreviewSchema>;
 
 export interface SupplierOfferSearchProvider {

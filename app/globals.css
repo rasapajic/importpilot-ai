@@ -2255,3 +2255,164 @@ details > .workflow-step-summary {
     break-inside: avoid;
   }
 }
+
+.search-result-group {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.search-result-group > h3 {
+  margin: 0.5rem 0 0;
+}
+
+.search-result-image-fallback {
+  align-items: center;
+  background: #eef5f1;
+  border: 1px dashed #b8c9c0;
+  border-radius: 0.9rem;
+  color: #4f665b;
+  display: flex;
+  font-size: 0.85rem;
+  justify-content: center;
+  min-height: 120px;
+  padding: 1rem;
+  text-align: center;
+}
+
+.offer-kind-badge,
+.best-choice-badge,
+.candidate-badge {
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 0.75rem;
+  font-weight: 800;
+  margin: 0 0.35rem 0.35rem 0;
+  padding: 0.28rem 0.55rem;
+}
+
+.offer-kind-domestic {
+  background: #e9f5ff;
+  color: #19527a;
+}
+
+.offer-kind-direct_import {
+  background: #ecf8ef;
+  color: #12613f;
+}
+
+.offer-kind-unknown {
+  background: #fff4d8;
+  color: #7a530f;
+}
+
+.best-choice-badge {
+  background: #dff4e8;
+  color: #0f5d3b;
+}
+
+.candidate-badge {
+  background: #fff7e8;
+  color: #815600;
+}
+
+.quantity-tier-list {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0.75rem 0;
+}
+
+.quantity-tier {
+  align-items: center;
+  background: #f8fbf9;
+  border: 1px solid #dce7e1;
+  border-radius: 0.75rem;
+  display: grid;
+  gap: 0.25rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 0.65rem 0.75rem;
+}
+
+.quantity-tier-active {
+  background: #edf8f1;
+  border-color: #8fbea5;
+}
+
+.rfq-panel {
+  display: grid;
+  gap: 0.6rem;
+  margin-top: 0.75rem;
+}
+
+.rfq-box {
+  background: #fbfaf4;
+  border: 1px solid #ead9a8;
+  border-radius: 1rem;
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.9rem;
+}
+
+.rfq-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.rfq-box textarea {
+  min-height: 260px;
+  resize: vertical;
+}
+
+.calculation-warning {
+  background: #fff6df;
+  border: 1px solid #e3c878;
+  border-radius: 0.9rem;
+  padding: 0.75rem 0.9rem;
+}
+
+.landed-cost-breakdown {
+  background: #f8fbf9;
+  border: 1px solid #dce7e1;
+  border-radius: 1rem;
+  padding: 0.75rem 0.9rem;
+}
+
+.landed-cost-breakdown dl {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0.75rem 0 0;
+}
+
+.landed-cost-breakdown dl div {
+  align-items: start;
+  border-bottom: 1px solid #e6eee9;
+  display: grid;
+  gap: 0.4rem;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  padding-bottom: 0.45rem;
+}
+
+.landed-cost-breakdown dt {
+  color: #4f665b;
+  font-weight: 700;
+}
+
+.landed-cost-breakdown dd {
+  margin: 0;
+  text-align: right;
+}
+
+@media (max-width: 640px) {
+  .quantity-tier {
+    align-items: start;
+    grid-template-columns: 1fr;
+  }
+
+  .landed-cost-breakdown dl div {
+    grid-template-columns: 1fr;
+  }
+
+  .landed-cost-breakdown dd {
+    text-align: left;
+  }
+}

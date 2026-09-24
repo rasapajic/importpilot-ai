@@ -10,6 +10,7 @@ import {
   formatDisplayedPercent,
   getDisplayedProfitSummary,
 } from "@/modules/cost-engine/application/calculation-summary";
+import { buildLandedCostBreakdown } from "@/modules/cost-engine/application/landed-cost-breakdown";
 import { getAutomaticVatRate, resolveVatRate } from "@/modules/cost-engine/domain/vat-rates";
 import { getStatusLabel } from "@/modules/i18n/translations";
 import { getEuroDisplay } from "@/modules/fx/euro-display";
@@ -58,6 +59,40 @@ export function CostCalculatorForm({
     landedCostTotal: getEuroDisplay(latestCalculation.landedCostTotal, currency),
     expectedProfit: getEuroDisplay(profit.totalProfit, currency),
   } : null;
+  const sourceData = sourceMetadata && typeof sourceMetadata === "object" && !Array.isArray(sourceMetadata)
+    ? sourceMetadata as Record<string, unknown>
+    : {};
+  const breakdown = latestCalculation ? buildLandedCostBreakdown({
+    unitPrice: latestCalculation.unitPrice,
+    quantity: latestCalculation.quantity,
+    currency,
+    shippingCost: latestCalculation.shippingCost,
+    customsDutyRate: latestCalculation.customsDutyRate,
+    customsDutyAmount: latestCalculation.customsDutyAmount,
+    vatRate: latestCalculation.vatRate,
+    vatAmount: latestCalculation.vatAmount,
+    storageCost: latestCalculation.storageCost,
+    inspectionCost: latestCalculation.inspectionCost,
+    otherCosts: latestCalculation.otherCosts,
+    landedCostTotal: latestCalculation.landedCostTotal,
+    landedCostPerUnit: latestCalculation.landedCostPerUnit,
+    calculationStatus: latestCalculation.calculationStatus,
+    shippingEstimated: sourceData.transportEstimated === true,
+    customsProvenance: sourceData.customsProvenance && typeof sourceData.customsProvenance === "object"
+      ? sourceData.customsProvenance as never
+      : {
+          sourceName: null,
+          officialUrl: null,
+          checkedAt: null,
+          validFrom: null,
+          tariffCode: typeof sourceData.hsCode === "string" ? sourceData.hsCode : null,
+          originCountry: typeof sourceData.originCountry === "string" ? sourceData.originCountry : null,
+          shippingCountry: typeof sourceData.sellerCountry === "string" ? sourceData.sellerCountry : null,
+          rateType: "unknown",
+          confirmedByOfficialSource: false,
+          classificationSuggested: typeof sourceData.hsCode === "string",
+        },
+  }) : null;
 
   useEffect(() => {
     if (!editInitially) return;
@@ -147,14 +182,48 @@ export function CostCalculatorForm({
       )}
       {latestCalculation && (
         <div className="cost-results">
-          <strong>{t("Poslednja kalkulacija")} · {getStatusLabel(latestCalculation.calculationStatus, locale)}</strong>
+          <strong>{t("Ukupno sa cenom uvoza")} · {breakdown?.isConfirmed ? getStatusLabel(latestCalculation.calculationStatus, locale) : t("Čeka potvrđene podatke")}</strong>
+          {breakdown && breakdown.pendingReasons.length > 0 && (
+            <div className="calculation-warning">
+              <strong>{t("Potrebna potvrda")}</strong>
+              <ul>
+                {breakdown.pendingReasons.map((reason) => <li key={reason}>{t(reason)}</li>)}
+              </ul>
+            </div>
+          )}
           <span>{t("Supplier price")}: {euroDisplays?.supplierPrice.original}{euroDisplays?.supplierPrice.converted ? ` (≈ ${euroDisplays.supplierPrice.eur})` : ""}</span>
-          <span>{t("Ukupna nabavna cena")}: {euroDisplays?.landedCostTotal.original}{euroDisplays?.landedCostTotal.converted ? ` (≈ ${euroDisplays.landedCostTotal.eur})` : ""}</span>
-          <span>{t("Ukupna nabavna cena po jedinici")}: {euroDisplays?.landedCostPerUnit.original}{euroDisplays?.landedCostPerUnit.converted ? ` (≈ ${euroDisplays.landedCostPerUnit.eur})` : ""}</span>
+          <span>{t("Ukupna vrednost")}: {breakdown?.isConfirmed ? `${euroDisplays?.landedCostTotal.original}${euroDisplays?.landedCostTotal.converted ? ` (≈ ${euroDisplays.landedCostTotal.eur})` : ""}` : t("Čeka potvrđene podatke")}</span>
+          <span>{t("Ukupno po komadu")}: {breakdown?.isConfirmed ? `${euroDisplays?.landedCostPerUnit.original}${euroDisplays?.landedCostPerUnit.converted ? ` (≈ ${euroDisplays.landedCostPerUnit.eur})` : ""}` : t("Čeka potvrđene podatke")}</span>
           <span>{t("Bruto marža")}: {formatDisplayedPercent(latestCalculation.grossMarginPercent)}%</span>
           <span>{t("Zarada po komadu")} ({currency}): {profit?.profitPerUnit}</span>
           <span>{t("Ukupna očekivana zarada")}: {euroDisplays?.expectedProfit.original}{euroDisplays?.expectedProfit.converted ? ` (≈ ${euroDisplays.expectedProfit.eur})` : ""}</span>
           <span>{t("Cena pokrića troškova")}: {latestCalculation.breakEvenPrice.toString()} {currency}</span>
+          {breakdown && (
+            <details className="landed-cost-breakdown" open>
+              <summary>{t("Detaljan obračun")}</summary>
+              <dl>
+                <div><dt>{t("Cena robe")}</dt><dd>{breakdown.goodsCost.toFixed(2)} {currency}</dd></div>
+                <div><dt>{t("Međunarodni transport")}</dt><dd>{breakdown.internationalShipping.toFixed(2)} {currency}{sourceData.transportEstimated === true ? ` · ${t("Procenjeni trošak")}` : ""}</dd></div>
+                <div><dt>{t("Osiguranje")}</dt><dd>{breakdown.insurance === null ? t("Nije navedeno") : `${breakdown.insurance.toFixed(2)} ${currency}`}</dd></div>
+                <div><dt>{t("Carinska vrednost")}</dt><dd>{breakdown.customsValue.toFixed(2)} {currency}</dd></div>
+                <div><dt>{t("Tarifni/HS broj")}</dt><dd>{breakdown.customsProvenance.tariffCode ?? t("Nije potvrđeno")}</dd></div>
+                <div><dt>{t("Poreklo robe")}</dt><dd>{breakdown.customsProvenance.originCountry ?? t("Nije potvrđeno")}</dd></div>
+                <div><dt>{t("Zemlja slanja")}</dt><dd>{breakdown.customsProvenance.shippingCountry ?? t("Nije potvrđeno")}</dd></div>
+                <div><dt>{t("Carinska stopa")}</dt><dd>{breakdown.customsDutyRate.toFixed(4)}% · {breakdown.customsProvenance.confirmedByOfficialSource ? t("Potvrđeno zvaničnim izvorom") : t("Nije potvrđeno")}</dd></div>
+                <div><dt>{t("Iznos carine")}</dt><dd>{breakdown.customsDutyAmount.toFixed(2)} {currency}</dd></div>
+                <div><dt>{t("Osnovica za PDV")}</dt><dd>{breakdown.vatBase.toFixed(2)} {currency}</dd></div>
+                <div><dt>{t("PDV")}</dt><dd>{breakdown.vatRate.toFixed(4)}% · {breakdown.vatAmount.toFixed(2)} {currency}</dd></div>
+                <div><dt>{t("Špedicija")}</dt><dd>{breakdown.freightForwarding.toFixed(2)} {currency}</dd></div>
+                <div><dt>{t("Skladištenje")}</dt><dd>{breakdown.storageCost.toFixed(2)} {currency}</dd></div>
+                <div><dt>{t("Ostali troškovi")}</dt><dd>{breakdown.otherCosts.toFixed(2)} {currency}</dd></div>
+                <div><dt>{t("Ukupna vrednost")}</dt><dd>{breakdown.displayedTotal.toFixed(2)} {currency}</dd></div>
+                <div><dt>{t("Ukupno po komadu")}</dt><dd>{breakdown.totalPerUnit.toFixed(2)} {currency}</dd></div>
+              </dl>
+              {breakdown.assumptions.length > 0 && (
+                <p className="muted-text">{breakdown.assumptions.map((assumption) => t(assumption)).join(" ")}</p>
+              )}
+            </details>
+          )}
           <FxSourceNote />
           {!editing && (
             <button

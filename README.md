@@ -34,6 +34,7 @@ Ovaj repozitorijum trenutno sadrži produkcionu osnovu Faze 1.
 - **Multi-tenant autorizacija:** svaka važeća sesija mora imati aktivno članstvo u organizaciji.
 - **Audit i rate limit:** auth događaji se beleže, a pokušaji prijave i registracije ograničavaju kroz PostgreSQL.
 - **EUR prikaz za Evropu:** originalne valute i obračuni ostaju nepromenjeni, dok UI koristi označeni referentni FX snapshot za EUR prikaz i poređenje. Ako kurs nije dostupan, prikazuje se samo originalna valuta.
+- **Provera carine:** landed-cost formula ostaje deterministička, a carinska stopa se jasno označava kao predložena, ručna ili potvrđena iz zvaničnog izvora. Detalji su u [docs/customs-provenance.md](docs/customs-provenance.md).
 
 ## Preduslovi
 
