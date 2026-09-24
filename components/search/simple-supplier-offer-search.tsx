@@ -52,6 +52,8 @@ type Copy = {
   landedPending: string;
   delivery: string;
   supplierRisk: string;
+  supplierProfile: string;
+  supplierRiskDeferred: string;
   supplierRiskMissing: (items: string) => string;
   supplierIdentity: string;
   supplierPlatformVerification: string;
@@ -113,6 +115,8 @@ const copy: Record<Locale, Copy> = {
     landedPending: "čeka potvrđenu cenu dobavljača",
     delivery: "Rok isporuke",
     supplierRisk: "Rizik dobavljača",
+    supplierProfile: "Podaci o dobavljaču",
+    supplierRiskDeferred: "Detaljna provera rizika radi se tek za ponude koje dodate za poređenje. Kada platforma ne objavljuje verifikaciju i istoriju poslovanja, JAKOV360 neće ponavljati istu neproverenu procenu na svakoj ponudi.",
     supplierRiskMissing: (items) => `Nedostaju podaci: ${items}.`,
     supplierIdentity: "identitet firme",
     supplierPlatformVerification: "verifikacija na platformi",
@@ -172,6 +176,8 @@ const copy: Record<Locale, Copy> = {
     landedPending: "wartet auf bestätigten Lieferantenpreis",
     delivery: "Lieferzeit",
     supplierRisk: "Lieferantenrisiko",
+    supplierProfile: "Lieferantendaten",
+    supplierRiskDeferred: "Die detaillierte Risikoprüfung erfolgt für Angebote, die Sie zum Vergleich hinzufügen. Wenn die Plattform keine Verifizierung und Geschäftshistorie veröffentlicht, wiederholt JAKOV360 nicht bei jedem Angebot dieselbe unbestätigte Bewertung.",
     supplierRiskMissing: (items) => `Fehlende Daten: ${items}.`,
     supplierIdentity: "Unternehmensidentität",
     supplierPlatformVerification: "Plattform-Verifizierung",
@@ -231,6 +237,8 @@ const copy: Record<Locale, Copy> = {
     landedPending: "waiting for confirmed supplier price",
     delivery: "Delivery",
     supplierRisk: "Supplier risk",
+    supplierProfile: "Supplier data",
+    supplierRiskDeferred: "A detailed risk check is performed for offers you add for comparison. When the marketplace does not publish verification and business history, JAKOV360 will not repeat the same unverified assessment on every offer.",
     supplierRiskMissing: (items) => `Missing data: ${items}.`,
     supplierIdentity: "company identity",
     supplierPlatformVerification: "platform verification",
@@ -424,18 +432,6 @@ function supplierPlatformProfileSummary(
     parts.push(locale === "sr" ? `${profile.yearsOnPlatform} god. na platformi` : locale === "de" ? `${profile.yearsOnPlatform} J. auf der Plattform` : `${profile.yearsOnPlatform} years on platform`);
   }
   return parts.join(" · ");
-}
-
-function supplierRiskGapLabels(
-  gaps: SupplierRiskGap[],
-  text: Copy,
-) {
-  const labels: Record<SupplierRiskGap, string> = {
-    IDENTITY: text.supplierIdentity,
-    PLATFORM_VERIFICATION: text.supplierPlatformVerification,
-    BUSINESS_HISTORY: text.supplierBusinessHistory,
-  };
-  return gaps.map((gap) => labels[gap]).join(", ");
 }
 
 function isRecoverableMarketplaceProductUrl(productUrl: string) {
@@ -725,6 +721,10 @@ export function SimpleSupplierOfferSearch({
   const visible = (results ?? [])
     .map((result, index) => ({ result, index, analysis: analysisByUrl.get(result.productUrl) }))
     .sort((left, right) => (left.analysis?.rank ?? left.index + 100) - (right.analysis?.rank ?? right.index + 100));
+  const hasDeferredSupplierRisk = visible.some(({ result, analysis }) =>
+    (!analysis || analysis.supplierRiskLevel === "UNKNOWN") &&
+    !supplierPlatformProfileSummary(result.marketplaceDetails?.supplierProfile, locale)
+  );
 
   return (
     <section className="dashboard-card supplier-search">
@@ -785,6 +785,9 @@ export function SimpleSupplierOfferSearch({
                   : text.selectionOverview(Math.max(reviewedCount, visible.length), visible.length)}
             </strong>
             <p>{text.selectionCriteria}</p>
+            {hasDeferredSupplierRisk && (
+              <p className="supplier-risk-notice">{text.supplierRiskDeferred}</p>
+            )}
           </section>
           <div className="search-result-list">
           {visible.map(({ result, analysis }, index) => {
@@ -793,11 +796,6 @@ export function SimpleSupplierOfferSearch({
             const priceSnapshots = quantityPriceSnapshots(result, quantity);
             const priceTierSnapshots = supplierPriceTierSnapshots(result);
             const variantFacts = supplierOfferVariantFacts(result);
-            const supplierRiskGaps = supplierRiskGapKeys(
-              result.supplierName,
-              analysis?.missingData,
-              result.marketplaceDetails?.supplierProfile,
-            );
             const supplierPlatformSummary = supplierPlatformProfileSummary(
               result.marketplaceDetails?.supplierProfile,
               locale,
@@ -875,22 +873,19 @@ export function SimpleSupplierOfferSearch({
                         ? formatDeliveryTimeDays(deliveryEstimate.deliveryTimeDays, locale)
                         : text.unknown}</strong>
                     </span>
-                    <span>
-                      {text.supplierRisk}
-                      <strong>{analysis && analysis.supplierRiskLevel !== "UNKNOWN"
-                        ? text.risk[analysis.supplierRiskLevel]
-                        : supplierPlatformSummary
-                          ? text.supplierPlatformSignalsAvailable
-                          : text.risk.UNKNOWN}</strong>
-                      {supplierPlatformSummary && (
-                        <small className="supplier-risk-detail">{supplierPlatformSummary}</small>
-                      )}
-                      {(!analysis || analysis.supplierRiskLevel === "UNKNOWN") && supplierRiskGaps.length > 0 && (
-                        <small className="supplier-risk-detail">
-                          {text.supplierRiskMissing(supplierRiskGapLabels(supplierRiskGaps, text))}
-                        </small>
-                      )}
-                    </span>
+                    {(analysis && analysis.supplierRiskLevel !== "UNKNOWN" || supplierPlatformSummary) && (
+                      <span>
+                        {analysis && analysis.supplierRiskLevel !== "UNKNOWN"
+                          ? text.supplierRisk
+                          : text.supplierProfile}
+                        <strong>{analysis && analysis.supplierRiskLevel !== "UNKNOWN"
+                          ? text.risk[analysis.supplierRiskLevel]
+                          : text.supplierPlatformSignalsAvailable}</strong>
+                        {supplierPlatformSummary && (
+                          <small className="supplier-risk-detail">{supplierPlatformSummary}</small>
+                        )}
+                      </span>
+                    )}
                   </div>
 
                   {(variantFacts.groups.length > 0 || variantFacts.types.length > 0) && (
