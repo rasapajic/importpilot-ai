@@ -60,6 +60,12 @@
   line-height: 1.35;
 }
 
+.supplier-risk-notice {
+  border-top: 1px solid #cbded4;
+  margin-top: 0.65rem;
+  padding-top: 0.65rem;
+}
+
 .search-result-image-placeholder {
   align-items: center;
   background: #f3f6f4;
