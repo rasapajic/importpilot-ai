@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 
 import { useI18n } from "@/components/i18n/i18n-provider";
 import { generateRfqMessage, type RfqOrderType } from "@/modules/product-search/domain/rfq";
+import { getCountryDisplayName } from "@/modules/i18n/country-names";
 
 export function RfqRequestPanel({
   productTitle,
@@ -20,23 +21,32 @@ export function RfqRequestPanel({
   productUrl?: string | null;
   incoterm?: string | null;
 }) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const [open, setOpen] = useState(false);
   const [orderType, setOrderType] = useState<RfqOrderType>("FULL_ORDER");
-  const [deliveryPlace, setDeliveryPlace] = useState("");
+  const [deliveryCity, setDeliveryCity] = useState("");
+  const [postalCode, setPostalCode] = useState("");
   const [copied, setCopied] = useState(false);
+  const [validationError, setValidationError] = useState("");
   const message = useMemo(() => generateRfqMessage({
     productTitle,
     supplierName,
     quantity,
     deliveryCountry: targetCountry,
-    deliveryPlace,
+    deliveryCity,
+    postalCode,
     orderType,
     incoterm,
     productUrl,
-  }), [deliveryPlace, incoterm, orderType, productTitle, productUrl, quantity, supplierName, targetCountry]);
+  }), [deliveryCity, incoterm, orderType, postalCode, productTitle, productUrl, quantity, supplierName, targetCountry]);
 
   async function copy() {
+    if (!deliveryCity.trim() || !postalCode.trim()) {
+      setCopied(false);
+      setValidationError(t("Unesite grad i poštanski broj pre kopiranja poruke."));
+      return;
+    }
+    setValidationError("");
     await navigator.clipboard.writeText(message);
     setCopied(true);
   }
@@ -50,16 +60,18 @@ export function RfqRequestPanel({
         <div className="rfq-box">
           <div className="rfq-grid">
             <label>{t("Količina")}<input readOnly value={quantity} /></label>
-            <label>{t("Zemlja isporuke")}<input readOnly value={targetCountry} /></label>
-            <label>{t("Mesto isporuke")}<input onChange={(event) => setDeliveryPlace(event.target.value)} value={deliveryPlace} /></label>
+            <label>{t("Zemlja isporuke")}<input readOnly value={getCountryDisplayName(targetCountry, locale)} /></label>
+            <label>{t("Grad")}<input required onChange={(event) => { setDeliveryCity(event.target.value); setCopied(false); setValidationError(""); }} value={deliveryCity} /></label>
+            <label>{t("Poštanski broj")}<input required onChange={(event) => { setPostalCode(event.target.value); setCopied(false); setValidationError(""); }} value={postalCode} /></label>
             <label>{t("Tip zahteva")}
-              <select onChange={(event) => setOrderType(event.target.value as RfqOrderType)} value={orderType}>
+              <select onChange={(event) => { setOrderType(event.target.value as RfqOrderType); setCopied(false); }} value={orderType}>
                 <option value="SAMPLE">{t("Uzorak")}</option>
                 <option value="FULL_ORDER">{t("Puna narudžbina")}</option>
               </select>
             </label>
           </div>
-          <textarea aria-label={t("RFQ poruka")} readOnly rows={14} value={message} />
+          <textarea aria-label={t("RFQ poruka")} data-no-translate="true" readOnly rows={14} value={message} />
+          {validationError && <p className="form-error" role="alert">{validationError}</p>}
           <button className="secondary-button" onClick={() => void copy()} type="button">
             {copied ? t("Poruka je kopirana") : t("Kopiraj RFQ poruku")}
           </button>

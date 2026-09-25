@@ -56,19 +56,20 @@ describe("JAKOV360 acceptance seed plan", () => {
 
   it("contains all visual acceptance examples without treating Dudi retail price as confirmed B2B", () => {
     const plan = buildJakov360AcceptanceSeedPlan();
-    const mainResults = plan.searchCaches[0].results;
-    expect(supplierOfferSearchResultsSchema.parse(mainResults)).toHaveLength(4);
+    const allResults = plan.searchCaches.flatMap((cache) => cache.results);
+    expect(plan.projects).toHaveLength(2);
+    expect(supplierOfferSearchResultsSchema.parse(allResults)).toHaveLength(4);
 
-    const glasses = mainResults.find((result) => result.title.includes("naočare"));
-    const dudi = mainResults.find((result) => result.supplierName === "Dudi Co.");
-    const unknown = mainResults.find((result) => result.offerType === "UNKNOWN");
+    const glasses = allResults.find((result) => result.title.includes("naočare"));
+    const dudi = allResults.find((result) => result.supplierName === "Dudi Co.");
+    const unknown = allResults.find((result) => result.offerType === "UNKNOWN");
     expect(glasses?.quantityTiers).toHaveLength(4);
     expect(findMatchingQuantityTier(glasses?.quantityTiers, 1000)).toMatchObject({
       minQuantity: 500,
       maxQuantity: 1199,
     });
     expect(glasses?.imageUrl).toContain("jakov360-acceptance-glasses.svg");
-    expect(unknown?.imageUrl).toBeNull();
+    expect(unknown?.imageUrl).toContain("missing-image.svg");
 
     expect(dudi).toMatchObject({
       price: 1099,
@@ -97,6 +98,8 @@ describe("JAKOV360 acceptance seed plan", () => {
       hasConfirmedAvailability: false,
     })).toBe(false);
     expect(plan.glassesOfferId).not.toBe(plan.offers.find((offer) => offer.supplierName === "Dudi Co.")?.id);
+    expect(plan.projects[0].offers.some((offer) => offer.supplierName === "Dudi Co.")).toBe(false);
+    expect(plan.projects[1].offers.some((offer) => offer.supplierName === "Dudi Co.")).toBe(true);
   });
 
   it("keeps customs and transport explicitly unconfirmed and includes both RFQ modes", () => {
@@ -104,7 +107,10 @@ describe("JAKOV360 acceptance seed plan", () => {
     const glasses = plan.offers.find((offer) => offer.id === plan.glassesOfferId);
     const provenance = glasses?.sourceMetadata.customsProvenance as Record<string, unknown>;
 
-    expect(Number(plan.glassesCalculation.shippingCost)).toBe(0);
+    expect(plan.glassesCalculation.shippingCost).toBeNull();
+    expect(plan.glassesCalculation.customsDutyRate).toBeNull();
+    expect(plan.glassesCalculation.landedCostTotal).toBeNull();
+    expect(plan.glassesCalculation.costEvidence.shipping.status).toBe("UNKNOWN");
     expect(provenance.officialUrl).toContain("carina.rs");
     expect(provenance.confirmedByOfficialSource).toBe(false);
     expect(provenance.rateType).toBe("unknown");

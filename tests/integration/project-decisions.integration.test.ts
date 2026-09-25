@@ -1,4 +1,8 @@
-import { OrganizationRole } from "@prisma/client";
+import {
+  CalculationStatus,
+  OrganizationRole,
+  RecommendationStatus,
+} from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
@@ -25,6 +29,53 @@ describeWithDatabase("project decision history and tenant isolation", () => {
     const other = await prisma.organization.create({ data: { name: "Other Decision Org" } });
     const project = await prisma.importProject.create({
       data: { organizationId: organization.id, createdById: user.id, name: "Decision Project", targetCountry: "DE", quantity: 100, targetMargin: 20 },
+    });
+    const offer = await prisma.supplierOffer.create({
+      data: {
+        organizationId: organization.id,
+        projectId: project.id,
+        supplierName: "Decision Supplier",
+        moq: 100,
+        unitPrice: 10,
+        currency: "EUR",
+        incoterm: "FOB",
+        sampleAvailable: true,
+        shippingClarityScore: 80,
+      },
+    });
+    const calculation = await prisma.costCalculation.create({
+      data: {
+        organizationId: organization.id,
+        projectId: project.id,
+        offerId: offer.id,
+        targetCountry: "DE",
+        quantity: 100,
+        unitPrice: 10,
+        currency: "EUR",
+        incoterm: "FOB",
+        landedCostTotal: 1300,
+        landedCostPerUnit: 13,
+        targetSellingPrice: 20,
+        grossMarginPercent: 35,
+        breakEvenPrice: 13,
+        calculationStatus: CalculationStatus.CALCULATED,
+      },
+    });
+    await prisma.offerAssessment.create({
+      data: {
+        organizationId: organization.id,
+        projectId: project.id,
+        offerId: offer.id,
+        costCalculationId: calculation.id,
+        supplierRiskScore: 30,
+        offerQualityScore: 75,
+        overallScore: 70,
+        confidenceScore: 80,
+        recommendationStatus: RecommendationStatus.OK_WITH_RISK,
+        explanation: "Complete deterministic decision fixture.",
+        scoreBreakdown: { supplierRiskV2: { riskLevel: "LOW" } },
+        assessmentVersion: "integration-test-v1",
+      },
     });
     userId = user.id;
     organizationId = organization.id;

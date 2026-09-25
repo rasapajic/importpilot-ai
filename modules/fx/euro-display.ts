@@ -3,6 +3,7 @@ export type FxSnapshot = {
   ratesToEur: Readonly<Record<string, number>>;
   source: string;
   timestamp: string;
+  isTest?: boolean;
 };
 
 export const DEFAULT_EUR_FX_SNAPSHOT: FxSnapshot = {
@@ -15,7 +16,23 @@ export const DEFAULT_EUR_FX_SNAPSHOT: FxSnapshot = {
   },
   source: "ImportPilot MVP reference rates",
   timestamp: "2026-06-14T00:00:00.000Z",
+  isTest: true,
 };
+
+export function getFxSnapshotStatus(
+  snapshot: FxSnapshot = DEFAULT_EUR_FX_SNAPSHOT,
+  now: Date = new Date(),
+  maxAgeHours = 24,
+) {
+  const timestamp = new Date(snapshot.timestamp);
+  const ageMs = now.getTime() - timestamp.getTime();
+  const stale = !Number.isFinite(timestamp.getTime()) || ageMs > maxAgeHours * 60 * 60 * 1000;
+  return {
+    isTest: snapshot.isTest === true,
+    stale,
+    reliable: snapshot.isTest !== true && !stale && ageMs >= 0,
+  };
+}
 
 export function convertToEur(
   value: number | string | { toString(): string },

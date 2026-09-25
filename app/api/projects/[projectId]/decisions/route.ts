@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest } from "@/modules/auth/infrastructure/request-auth";
 import {
   DecisionProjectNotFoundError,
+  DecisionNoAnalyzedOffersError,
   generateProjectDecision,
 } from "@/modules/decisions/application/project-decision-service";
 
@@ -24,6 +25,12 @@ export async function POST(
   } catch (error) {
     if (error instanceof DecisionProjectNotFoundError) {
       return NextResponse.json({ error: "Projekat nije pronađen." }, { status: 404 });
+    }
+    if (error instanceof DecisionNoAnalyzedOffersError) {
+      return NextResponse.json(
+        { error: "Analizirajte najmanje jednu kompletnu ponudu pre generisanja preporuke." },
+        { status: 422 },
+      );
     }
     throw error;
   }

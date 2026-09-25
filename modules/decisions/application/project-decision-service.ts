@@ -14,8 +14,11 @@ import {
 import { getMoqStatus } from "@/modules/offers/domain/moq-status";
 import type { SupplierRiskLevel } from "@/modules/intelligence/domain/supplier-risk-v2";
 import { recordProjectActivity } from "@/modules/timeline/application/timeline-service";
+import { getOfferReadiness } from "@/modules/offers/domain/offer-readiness";
+import { DEFAULT_EUR_FX_SNAPSHOT, getFxSnapshotStatus } from "@/modules/fx/euro-display";
 
 export class DecisionProjectNotFoundError extends Error {}
+export class DecisionNoAnalyzedOffersError extends Error {}
 
 function jsonValue(value: unknown) {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
@@ -43,7 +46,25 @@ export async function generateProjectDecision(projectId: string, organizationId:
   });
   if (!project) throw new DecisionProjectNotFoundError();
 
-  const offers: ProjectDecisionOffer[] = project.offers.map((offer) => {
+  const analyzedOffers = project.offers.filter((offer) => {
+    const readiness = getOfferReadiness({
+      supplierName: offer.supplierName,
+      unitPrice: offer.unitPrice,
+      currency: offer.currency,
+      moq: offer.moq,
+      sourceMetadata: offer.sourceMetadata,
+    });
+    const cost = offer.costCalculations[0];
+    return readiness.ready &&
+      offer.assessments[0] !== undefined &&
+      cost?.calculationStatus === CalculationStatus.CALCULATED &&
+      cost.landedCostTotal !== null &&
+      cost.landedCostPerUnit !== null &&
+      cost.grossMarginPercent !== null;
+  });
+  if (analyzedOffers.length === 0) throw new DecisionNoAnalyzedOffersError();
+
+  const offers: ProjectDecisionOffer[] = analyzedOffers.map((offer) => {
     const cost = offer.costCalculations[0] ?? null;
     const assessment = offer.assessments[0] ?? null;
     return {
@@ -56,9 +77,10 @@ export async function generateProjectDecision(projectId: string, organizationId:
       moqStatus: getMoqStatus({ projectQuantity: project.quantity, moq: offer.moq }),
       sampleAvailable: offer.sampleAvailable,
       shippingClarityScore: offer.shippingClarityScore,
-      landedCostTotal: cost?.landedCostTotal.toNumber() ?? null,
-      landedCostPerUnit: cost?.landedCostPerUnit.toNumber() ?? null,
-      grossMarginPercent: cost?.grossMarginPercent.toNumber() ?? null,
+      landedCostTotal: cost?.landedCostTotal?.toNumber() ?? null,
+      landedCostPerUnit: cost?.landedCostPerUnit?.toNumber() ?? null,
+      grossMarginPercent: cost?.grossMarginPercent?.toNumber() ?? null,
+      fxReliableForDecision: offer.currency === "EUR" || getFxSnapshotStatus(DEFAULT_EUR_FX_SNAPSHOT).reliable,
       calculationNeedsReview:
         cost === null || cost.calculationStatus === CalculationStatus.NEEDS_REVIEW,
       assessment: assessment

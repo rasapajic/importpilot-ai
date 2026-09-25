@@ -1,3 +1,5 @@
+import { isUsableSupplierName } from "../../offers/domain/offer-readiness";
+
 export type OfferKind = "DOMESTIC" | "DIRECT_IMPORT" | "UNKNOWN";
 
 export type QuantityTier = {
@@ -113,4 +115,56 @@ export function canShowBestChoice(input: {
     !input.classification.needsSupplierConfirmation &&
     input.classification.kind !== "UNKNOWN"
   );
+}
+
+export type BestChoiceCandidate = {
+  id: string | number;
+  classification: OfferClassification;
+  supplierName: string | null;
+  price: number | null;
+  currency: string | null;
+  minimumOrderQuantity: number | null;
+  incoterm: string | null;
+  availabilityConfirmed?: boolean | null;
+  quantityTiers?: QuantityTier[] | null;
+};
+
+function comparablePrice(candidate: BestChoiceCandidate, quantity: number) {
+  const tier = findMatchingQuantityTier(candidate.quantityTiers, quantity);
+  if (tier?.confirmed && tier.price !== null && tier.currency === candidate.currency) return tier.price;
+  return candidate.price;
+}
+
+export function selectBestChoiceId(
+  candidates: BestChoiceCandidate[],
+  quantity: number,
+): string | number | null {
+  const comparable = candidates.filter((candidate) =>
+    candidate.classification.kind !== "UNKNOWN" &&
+    candidate.classification.needsSupplierConfirmation === false &&
+    candidate.classification.canUseAsConfirmedB2BPrice &&
+    candidate.availabilityConfirmed === true &&
+    isUsableSupplierName(candidate.supplierName) &&
+    comparablePrice(candidate, quantity) !== null &&
+    Boolean(candidate.currency) &&
+    Number.isInteger(candidate.minimumOrderQuantity) &&
+    (candidate.minimumOrderQuantity ?? 0) > 0 &&
+    Boolean(candidate.incoterm),
+  );
+
+  const cohorts = new Map<string, BestChoiceCandidate[]>();
+  for (const candidate of comparable) {
+    const key = `${candidate.classification.kind}:${candidate.currency}:${candidate.incoterm}`;
+    cohorts.set(key, [...(cohorts.get(key) ?? []), candidate]);
+  }
+  const eligibleCohorts = [...cohorts.values()].filter((cohort) => cohort.length >= 2);
+  if (eligibleCohorts.length === 0) return null;
+  eligibleCohorts.sort((a, b) => b.length - a.length);
+  if (eligibleCohorts[1]?.length === eligibleCohorts[0].length) return null;
+
+  const ranked = eligibleCohorts[0]
+    .map((candidate) => ({ candidate, price: comparablePrice(candidate, quantity)! }))
+    .sort((a, b) => a.price - b.price);
+  if (ranked.length < 2 || ranked[0].price === ranked[1].price) return null;
+  return ranked[0].candidate.id;
 }

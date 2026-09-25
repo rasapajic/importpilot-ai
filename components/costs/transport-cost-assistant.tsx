@@ -58,7 +58,15 @@ export function TransportCostAssistant({
     weightOption: weightOption || null,
     supplierLogistics,
   }), [productName, quantity, sizeOption, supplierLogistics, weightOption]);
-  const routes = useMemo(() => estimateTransportRoutes(logisticsEstimate), [logisticsEstimate]);
+  const routes = useMemo(
+    () => logisticsEstimate ? estimateTransportRoutes(logisticsEstimate) : [],
+    [logisticsEstimate],
+  );
+  const transportStatus = !logisticsEstimate
+    ? "Transport nije poznat"
+    : logisticsEstimate.source === "SUPPLIER"
+      ? "Transport potvrđen"
+      : "Transport procenjen";
 
   return (
     <section className="transport-assistant">
@@ -67,12 +75,12 @@ export function TransportCostAssistant({
           <h4>{t("Procena troška transporta")}</h4>
           <p>{t("Odgovorite jednostavno. ImportPilot će proceniti težinu, zapreminu i okvirni transport.")}</p>
         </div>
-        <span className={`transport-confidence transport-confidence-${logisticsEstimate.confidence.toLowerCase()}`}>
-          {t(logisticsEstimate.confidence)}
+        <span className={`transport-confidence transport-confidence-${logisticsEstimate?.confidence.toLowerCase() ?? "low"}`}>
+          {t(transportStatus)}
         </span>
       </header>
 
-      {!supplierLogistics && (
+      {logisticsEstimate?.source !== "SUPPLIER" && (
         <div className="transport-simple-questions">
           <label>
             {t("How large is the product?")}
@@ -95,11 +103,15 @@ export function TransportCostAssistant({
         </div>
       )}
 
-      <div className="transport-estimate-summary">
-        <span>{t("Estimated category")}: <strong>{t(logisticsEstimate.category)}</strong></span>
-        <span>{t("Estimated weight")}: <strong>{logisticsEstimate.estimatedWeightKg} kg</strong></span>
-        <span>{t("Estimated volume")}: <strong>{logisticsEstimate.estimatedVolumeCbm} CBM</strong></span>
-      </div>
+      {logisticsEstimate ? (
+        <div className="transport-estimate-summary">
+          <span>{t("Estimated category")}: <strong>{t(logisticsEstimate.category)}</strong></span>
+          <span>{t("Estimated weight")}: <strong>{logisticsEstimate.estimatedWeightKg} kg</strong></span>
+          <span>{t("Estimated volume")}: <strong>{logisticsEstimate.estimatedVolumeCbm} CBM</strong></span>
+        </div>
+      ) : (
+        <p className="warning-text">{t("Procena nije moguća bez podataka o proizvodu. Izaberite veličinu i težinu jednog komada.")}</p>
+      )}
 
       <div className="transport-route-grid">
         {routes.map((route) => (
@@ -123,12 +135,12 @@ export function TransportCostAssistant({
         <p className="warning-text">{t("Transport estimates are shown in EUR. Check the calculation currency before saving.")}</p>
       )}
 
-      <details>
+      {logisticsEstimate && <details>
         <summary>{t("Prikaži detalje")}</summary>
         <ul>
           {logisticsEstimate.reasons.map((reason) => <li key={reason}>{t(reason)}</li>)}
         </ul>
-      </details>
+      </details>}
     </section>
   );
 }

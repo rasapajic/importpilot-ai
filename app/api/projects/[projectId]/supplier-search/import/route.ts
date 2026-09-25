@@ -4,6 +4,7 @@ import { authenticateRequest } from "@/modules/auth/infrastructure/request-auth"
 import {
   importSearchResult,
   ProductSearchProjectNotFoundError,
+  ProductSearchResultNotReadyError,
 } from "@/modules/product-search/application/product-search-service";
 import { supplierOfferSearchResultSchema } from "@/modules/product-search/domain/search";
 
@@ -32,6 +33,9 @@ export async function POST(
   } catch (error) {
     if (error instanceof ProductSearchProjectNotFoundError) {
       return NextResponse.json({ error: "Projekat nije pronađen." }, { status: 404 });
+    }
+    if (error instanceof ProductSearchResultNotReadyError) {
+      return NextResponse.json({ error: error.message }, { status: 422 });
     }
     throw error;
   }

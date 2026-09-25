@@ -7,9 +7,11 @@ import {
   type AssessmentOfferInput,
 } from "@/modules/intelligence/domain/scoring";
 import { recordProjectActivity } from "@/modules/timeline/application/timeline-service";
+import { getOfferReadiness, readinessExplanation } from "@/modules/offers/domain/offer-readiness";
 
 export class AssessmentOfferNotFoundError extends Error {}
 export class AssessmentProjectNotFoundError extends Error {}
+export class AssessmentOfferNotReadyError extends Error {}
 
 export async function assessSupplierOffer(offerId: string, organizationId: string) {
   const offer = await prisma.supplierOffer.findFirst({
@@ -20,6 +22,16 @@ export async function assessSupplierOffer(offerId: string, organizationId: strin
     },
   });
   if (!offer) throw new AssessmentOfferNotFoundError();
+  const readiness = getOfferReadiness({
+    supplierName: offer.supplierName,
+    unitPrice: offer.unitPrice,
+    currency: offer.currency,
+    moq: offer.moq,
+    sourceMetadata: offer.sourceMetadata,
+  });
+  if (!readiness.ready) {
+    throw new AssessmentOfferNotReadyError(readinessExplanation(readiness));
+  }
 
   const comparableOffers = offer.currency
     ? await prisma.supplierOffer.findMany({
@@ -53,8 +65,8 @@ export async function assessSupplierOffer(offerId: string, organizationId: strin
     shippingClarityScore: offer.shippingClarityScore,
     projectQuantity: offer.project.quantity,
     projectTargetMargin: offer.project.targetMargin.toNumber(),
-    landedCostPerUnit: latestCost?.landedCostPerUnit.toNumber() ?? null,
-    grossMarginPercent: latestCost?.grossMarginPercent.toNumber() ?? null,
+    landedCostPerUnit: latestCost?.landedCostPerUnit?.toNumber() ?? null,
+    grossMarginPercent: latestCost?.grossMarginPercent?.toNumber() ?? null,
   };
   const result = assessOffer(
     input,
@@ -120,16 +132,29 @@ export async function compareProjectOffers(projectId: string, organizationId: st
     offers.map((offer) => {
       const cost = offer.costCalculations[0] ?? null;
       const assessment = offer.assessments[0] ?? null;
+      const readiness = getOfferReadiness({
+        supplierName: offer.supplierName,
+        unitPrice: offer.unitPrice,
+        currency: offer.currency,
+        moq: offer.moq,
+        sourceMetadata: offer.sourceMetadata,
+      });
+      const exclusionReasons = [
+        ...(!readiness.ready ? [readinessExplanation(readiness)] : []),
+        ...(cost?.calculationStatus !== "CALCULATED" ? ["Obračun čeka potvrđene podatke."] : []),
+      ];
       return {
         offerId: offer.id,
         supplierName: offer.supplierName,
         currency: offer.currency,
-        landedCostTotal: cost?.landedCostTotal.toNumber() ?? null,
-        grossMarginPercent: cost?.grossMarginPercent.toNumber() ?? null,
+        landedCostTotal: cost?.landedCostTotal?.toNumber() ?? null,
+        grossMarginPercent: cost?.grossMarginPercent?.toNumber() ?? null,
         deliveryTimeDays: offer.deliveryTimeDays,
         supplierRiskScore: assessment?.supplierRiskScore ?? null,
         overallScore: assessment?.overallScore ?? null,
         recommendationStatus: assessment?.recommendationStatus ?? null,
+        complete: readiness.ready && cost?.calculationStatus === "CALCULATED" && cost.landedCostTotal !== null && cost.grossMarginPercent !== null,
+        exclusionReasons,
       };
     }),
   );

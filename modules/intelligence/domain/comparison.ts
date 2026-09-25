@@ -2,6 +2,7 @@ import type { RecommendationStatusValue } from "./recommendation";
 import {
   convertToEur,
   DEFAULT_EUR_FX_SNAPSHOT,
+  getFxSnapshotStatus,
   type FxSnapshot,
 } from "../../fx/euro-display";
 
@@ -15,6 +16,8 @@ export type ComparableOffer = {
   supplierRiskScore: number | null;
   overallScore: number | null;
   recommendationStatus: RecommendationStatusValue | null;
+  complete?: boolean;
+  exclusionReasons?: string[];
   landedCostTotalEur?: number | null;
 };
 
@@ -25,6 +28,12 @@ export type ComparisonGroup = {
   lowestRisk: ComparableOffer | null;
   fastestDelivery: ComparableOffer | null;
   bestForResale: ComparableOffer | null;
+};
+
+export type OfferComparison = {
+  groups: ComparisonGroup[];
+  excluded: Array<{ offerId: string; supplierName: string; reasons: string[] }>;
+  fxReliable: boolean;
 };
 
 function minBy(items: ComparableOffer[], value: (item: ComparableOffer) => number | null) {
@@ -66,26 +75,64 @@ function maxByWithRiskTieBreak(
     })[0] ?? null;
 }
 
+function buildGroup(currency: string, offers: ComparableOffer[]): ComparisonGroup {
+  const enoughForWinner = offers.length >= 2;
+  return {
+    currency,
+    offers,
+    bestTotalCost: enoughForWinner ? minByWithRiskTieBreak(offers, (offer) => currency === "EUR" ? offer.landedCostTotalEur ?? null : offer.landedCostTotal) : null,
+    lowestRisk: enoughForWinner ? minBy(offers, (offer) => offer.supplierRiskScore) : null,
+    fastestDelivery: enoughForWinner ? minBy(offers, (offer) => offer.deliveryTimeDays) : null,
+    bestForResale: enoughForWinner ? maxByWithRiskTieBreak(offers, (offer) => offer.grossMarginPercent) : null,
+  };
+}
+
 export function compareOffers(
   offers: ComparableOffer[],
   fx: FxSnapshot = DEFAULT_EUR_FX_SNAPSHOT,
-): ComparisonGroup[] {
-  const comparable = offers.flatMap((offer) => {
-    if (!offer.currency || offer.recommendationStatus === null) return [];
-    const landedCostTotalEur = offer.landedCostTotal === null
-      ? null
-      : convertToEur(offer.landedCostTotal, offer.currency, fx);
-    if (offer.landedCostTotal !== null && landedCostTotalEur === null) return [];
-    return [{ ...offer, landedCostTotalEur }];
+  now: Date = new Date(),
+): OfferComparison {
+  const excluded: OfferComparison["excluded"] = [];
+  const eligible = offers.flatMap((offer) => {
+    const reasons = [...(offer.exclusionReasons ?? [])];
+    if (offer.complete === false) reasons.push("Ponuda nema kompletan potvrđen obračun.");
+    if (offer.recommendationStatus === null) reasons.push("Ponuda nije analizirana.");
+    if (!offer.currency) reasons.push("Valuta nije potvrđena.");
+    if (offer.landedCostTotal === null) reasons.push("Ukupna nabavna cena nije potvrđena.");
+    if (offer.grossMarginPercent === null) reasons.push("Ostvarena marža nije izračunata.");
+    if (reasons.length > 0) {
+      excluded.push({ offerId: offer.offerId, supplierName: offer.supplierName, reasons: [...new Set(reasons)] });
+      return [];
+    }
+    return [offer];
   });
-  if (comparable.length === 0) return [];
+  const fxStatus = getFxSnapshotStatus(fx, now);
+  if (eligible.length === 0) return { groups: [], excluded, fxReliable: fxStatus.reliable };
 
-  return [{
-    currency: "EUR",
-    offers: comparable,
-    bestTotalCost: minByWithRiskTieBreak(comparable, (offer) => offer.landedCostTotalEur ?? null),
-    lowestRisk: minBy(comparable, (offer) => offer.supplierRiskScore),
-    fastestDelivery: minBy(comparable, (offer) => offer.deliveryTimeDays),
-    bestForResale: maxByWithRiskTieBreak(comparable, (offer) => offer.grossMarginPercent),
-  }];
+  if (fxStatus.reliable) {
+    const converted = eligible.flatMap((offer) => {
+      const landedCostTotalEur = convertToEur(offer.landedCostTotal!, offer.currency, fx);
+      if (landedCostTotalEur === null) {
+        excluded.push({ offerId: offer.offerId, supplierName: offer.supplierName, reasons: ["FX kurs za valutu nije dostupan."] });
+        return [];
+      }
+      return [{ ...offer, landedCostTotalEur }];
+    });
+    return {
+      groups: converted.length > 0 ? [buildGroup("EUR", converted)] : [],
+      excluded,
+      fxReliable: true,
+    };
+  }
+
+  const groups = new Map<string, ComparableOffer[]>();
+  for (const offer of eligible) {
+    const currency = offer.currency!;
+    groups.set(currency, [...(groups.get(currency) ?? []), offer]);
+  }
+  return {
+    groups: [...groups.entries()].map(([currency, groupOffers]) => buildGroup(currency, groupOffers)),
+    excluded,
+    fxReliable: false,
+  };
 }

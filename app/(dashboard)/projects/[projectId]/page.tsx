@@ -35,6 +35,8 @@ import {
   type ProjectWorkflowStepStatus,
 } from "@/modules/projects/domain/project-workflow";
 import { listProjectActivities } from "@/modules/timeline/application/timeline-service";
+import { getOfferReadiness } from "@/modules/offers/domain/offer-readiness";
+import { serializePrismaDecimals } from "@/modules/shared/serialize-prisma-decimals";
 
 export default async function ProjectPage({
   params,
@@ -80,17 +82,45 @@ export default async function ProjectPage({
   const offerCount = project.offers.length;
   const calculatedOffers = project.offers.filter((offer) => offer.costCalculations.length > 0);
   const calculatedOfferCount = calculatedOffers.length;
+  const analysisReadyOffers = project.offers.filter((offer) => getOfferReadiness({
+    supplierName: offer.supplierName,
+    unitPrice: offer.unitPrice,
+    currency: offer.currency,
+    moq: offer.moq,
+    sourceMetadata: offer.sourceMetadata,
+  }).ready);
   const assessedCalculatedOfferCount = calculatedOffers.filter(
-    (offer) => offer.assessments.length > 0,
+    (offer) => offer.assessments.length > 0 && analysisReadyOffers.some((ready) => ready.id === offer.id),
   ).length;
-  const assessedOfferCount = project.offers.filter((offer) => offer.assessments.length > 0).length;
-  const pendingAssessmentOfferIds = project.offers
+  const analyzedOffers = analysisReadyOffers.filter((offer) => offer.assessments.length > 0);
+  const decisionReadyOffers = analyzedOffers.filter((offer) => {
+    const cost = offer.costCalculations[0];
+    return cost?.calculationStatus === "CALCULATED" &&
+      cost.landedCostTotal !== null &&
+      cost.landedCostPerUnit !== null &&
+      cost.grossMarginPercent !== null;
+  });
+  const assessedOfferCount = analyzedOffers.length;
+  const pendingAssessmentOfferIds = analysisReadyOffers
     .filter((offer) => offer.assessments.length === 0)
     .map((offer) => offer.id);
+  const analyzedOfferSummaries = decisionReadyOffers.map((offer) => {
+    const metadata = offer.sourceMetadata && typeof offer.sourceMetadata === "object" && !Array.isArray(offer.sourceMetadata)
+      ? offer.sourceMetadata as Record<string, unknown>
+      : {};
+    return {
+      offerId: offer.id,
+      productName: typeof metadata.title === "string" ? metadata.title : project.name,
+      supplierName: offer.supplierName,
+      quantity: project.quantity,
+      unitPrice: offer.unitPrice?.toString() ?? null,
+      currency: offer.currency,
+    };
+  });
   const selectedDecisionOffer = decision?.selectedOfferId
     ? project.offers.find((offer) => offer.id === decision.selectedOfferId)
     : null;
-  const selectedDecisionCalculation = selectedDecisionOffer?.costCalculations[0]
+  const selectedDecisionCalculation = selectedDecisionOffer?.costCalculations[0]?.targetSellingPrice && selectedDecisionOffer.costCalculations[0].landedCostPerUnit
     ? {
         targetSellingPrice: selectedDecisionOffer.costCalculations[0].targetSellingPrice.toString(),
         landedCostPerUnit: selectedDecisionOffer.costCalculations[0].landedCostPerUnit.toString(),
@@ -152,6 +182,7 @@ export default async function ProjectPage({
     decisionStatus: decision?.status ?? null,
   });
   const targetCountryName = getCountryDisplayName(project.targetCountry, locale);
+  const clientOffers = serializePrismaDecimals(project.offers);
   const lockedText = t("Završite prethodni korak da biste nastavili.");
   const statusLabel = (status: ProjectWorkflowStepStatus, activeLabel: string) =>
     status === "COMPLETED"
@@ -223,9 +254,10 @@ export default async function ProjectPage({
             projectName={project.name}
             targetCountry={project.targetCountry}
             projectQuantity={project.quantity}
-            offers={project.offers}
+            offers={clientOffers}
             showCosts={false}
             showAssessments={false}
+            showAnalysisActions
           />
         </ProjectWorkflowStep>
 
@@ -241,6 +273,8 @@ export default async function ProjectPage({
           helperText={t("Pogledajte realnu nabavnu cenu, rizik dobavljača i očekivanu zaradu.")}
         >
           <ProjectDecisionPanel
+            analyzedOffers={analyzedOfferSummaries}
+            assessedOfferCount={assessedOfferCount}
             projectId={project.id}
             decision={decision}
             selectedCalculation={selectedDecisionCalculation}
@@ -259,7 +293,7 @@ export default async function ProjectPage({
                   projectName={project.name}
                   targetCountry={project.targetCountry}
                   projectQuantity={project.quantity}
-                  offers={project.offers}
+                  offers={clientOffers}
                   showAddControls={false}
                   showAssessments={false}
                   selectedCalculationOfferId={selectedCalculationOfferId}
@@ -272,7 +306,7 @@ export default async function ProjectPage({
                   projectName={project.name}
                   targetCountry={project.targetCountry}
                   projectQuantity={project.quantity}
-                  offers={project.offers}
+                  offers={clientOffers}
                   showAddControls={false}
                   showCosts={false}
                   showRecalculationLinks
@@ -283,7 +317,7 @@ export default async function ProjectPage({
                   bulkAssessmentOfferIds={pendingAssessmentOfferIds}
                 />
               </section>
-              <ComparisonView groups={comparison} />
+              <ComparisonView comparison={comparison} />
             </div>
           </details>
         </ProjectWorkflowStep>

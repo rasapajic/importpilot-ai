@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest } from "@/modules/auth/infrastructure/request-auth";
 import {
   AssessmentOfferNotFoundError,
+  AssessmentOfferNotReadyError,
   assessSupplierOffer,
 } from "@/modules/intelligence/application/assessment-service";
 
@@ -21,6 +22,9 @@ export async function POST(
   } catch (error) {
     if (error instanceof AssessmentOfferNotFoundError) {
       return NextResponse.json({ error: "Ponuda nije pronađena." }, { status: 404 });
+    }
+    if (error instanceof AssessmentOfferNotReadyError) {
+      return NextResponse.json({ error: error.message }, { status: 422 });
     }
     throw error;
   }

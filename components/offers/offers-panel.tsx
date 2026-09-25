@@ -20,6 +20,8 @@ import {
   type SupplierRiskLevel,
 } from "@/modules/intelligence/domain/supplier-risk-v2";
 import { classifyOffer } from "@/modules/product-search/domain/offer-classification";
+import { getOfferReadiness, readinessExplanation } from "@/modules/offers/domain/offer-readiness";
+import { formatDisplayedPercent } from "@/modules/cost-engine/application/calculation-summary";
 
 type OfferWithDetails = SupplierOffer & {
   costCalculations: CostCalculation[];
@@ -47,6 +49,7 @@ export function OffersPanel({
   showCosts = true,
   showAssessments = true,
   showRecalculationLinks = false,
+  showAnalysisActions = false,
   selectedCalculationOfferId,
   assessmentProgress,
   bulkAssessmentOfferIds = [],
@@ -59,6 +62,7 @@ export function OffersPanel({
   showCosts?: boolean;
   showAssessments?: boolean;
   showRecalculationLinks?: boolean;
+  showAnalysisActions?: boolean;
   selectedCalculationOfferId?: string;
   assessmentProgress?: { assessed: number; total: number };
   bulkAssessmentOfferIds?: string[];
@@ -70,6 +74,7 @@ export function OffersPanel({
   const [editing, setEditing] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [bulkAssessing, setBulkAssessing] = useState(false);
+  const [assessingOfferId, setAssessingOfferId] = useState<string | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -140,6 +145,24 @@ export function OffersPanel({
     return "Rizik nepoznat";
   }
 
+  async function analyzeOffer(offerId: string) {
+    setAssessingOfferId(offerId);
+    setError("");
+    try {
+      const response = await fetch(`/api/offers/${offerId}/assessments`, { method: "POST" });
+      const result = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(result.error ?? t("Ocena ponude nije završena. Pokušajte ponovo."));
+      router.refresh();
+      requestAnimationFrame(() =>
+        document.getElementById("workflow-step-decision")?.scrollIntoView({ behavior: "smooth", block: "start" }),
+      );
+    } catch (caught) {
+      setError(caught instanceof Error ? t(caught.message) : t("Ocena ponude nije završena. Pokušajte ponovo."));
+    } finally {
+      setAssessingOfferId(null);
+    }
+  }
+
   function metadata(offer: OfferWithDetails) {
     return offer.sourceMetadata && typeof offer.sourceMetadata === "object" && !Array.isArray(offer.sourceMetadata)
       ? offer.sourceMetadata as Record<string, unknown>
@@ -205,6 +228,18 @@ export function OffersPanel({
           });
           const productUrl = typeof data.productUrl === "string" ? data.productUrl : null;
           const title = typeof data.title === "string" ? data.title : projectName;
+          const readiness = getOfferReadiness({
+            supplierName: offer.supplierName,
+            unitPrice: offer.unitPrice,
+            currency: offer.currency,
+            moq: offer.moq,
+            sourceMetadata: offer.sourceMetadata,
+          });
+
+          const latestCalculation = offer.costCalculations[0];
+          const marginDisplay = latestCalculation?.grossMarginPercent && latestCalculation.targetSellingPrice
+            ? `${formatDisplayedPercent(latestCalculation.grossMarginPercent)}% · ${t("Prodajna cena")}: ${latestCalculation.targetSellingPrice.toString()} ${latestCalculation.currency} · ${t("Unos korisnika")}`
+            : t("Nije izračunata");
 
           return (
             <article className="offer-card" key={offer.id}>
@@ -229,7 +264,7 @@ export function OffersPanel({
                 </span>
                 <span>
                   {t("Očekivana marža")}
-                  <strong>{offer.costCalculations[0] ? `${offer.costCalculations[0].grossMarginPercent.toString()}%` : t("Nije izračunata")}</strong>
+                  <strong>{marginDisplay}</strong>
                 </span>
                 <span>
                   {offer.assessments[0] ? t("Preporuka") : t("Status")}
@@ -240,11 +275,29 @@ export function OffersPanel({
                   </strong>
                 </span>
               </div>
+              {showAnalysisActions && (
+                <div className="offer-analysis-action">
+                  <button
+                    className="primary-button"
+                    disabled={!readiness.ready || assessingOfferId === offer.id}
+                    onClick={() => void analyzeOffer(offer.id)}
+                    type="button"
+                  >
+                    {assessingOfferId === offer.id
+                      ? t("Analiza je u toku...")
+                      : offer.assessments.length > 0
+                        ? t("Ponovo analiziraj ponudu")
+                        : t("Analiziraj ponudu")}
+                  </button>
+                  {!readiness.ready && <p className="warning-text">{t(readinessExplanation(readiness))}</p>}
+                </div>
+              )}
               <ResponsiveOfferDetails summary={t("Prikaži detalje")}>
                 <p>
                   {offer.moq
                     ? `${t("Minimalna količina (MOQ)")}: ${offer.moq} ${t("kom")}`
-                    : t("Minimalna količina (MOQ) nije navedena")} · {offer.incoterm ?? t("Incoterm nije naveden")}
+                    : t("Minimalna količina (MOQ) nije navedena")}
+                  {classification.kind === "DOMESTIC" ? "" : ` · ${offer.incoterm ?? t("Incoterm nije naveden")}`}
                 </p>
                 {moq.status === "BLOCKING" && <p className="form-error">{t(moq.message)}</p>}
                 <p className="muted-text">{t(classification.reason)}</p>
@@ -278,12 +331,23 @@ export function OffersPanel({
                   </Link>
                 )}
                 {showCosts && (
-                  offer.unitPrice && offer.currency && offer.incoterm ? (
+                  classification.kind === "DOMESTIC" ? (
+                    <div className="domestic-cost-summary">
+                      <strong>{t("Domaća ponuda")}</strong>
+                      <p>{t("Kalkulator direktnog uvoza se ne primenjuje na domaću ponudu.")}</p>
+                      <dl>
+                        <div><dt>{t("Potreban novac po komadu")}</dt><dd>{offer.unitPrice ? `${offer.unitPrice.toString()} ${offer.currency ?? ""}` : t("Nepoznato")}</dd></div>
+                        <div><dt>{t("Neto nabavna cena po komadu")}</dt><dd>{typeof data.netPrice === "number" ? `${data.netPrice} ${offer.currency ?? ""}` : t("Nisam siguran")}</dd></div>
+                        <div><dt>{t("PDV tretman")}</dt><dd>{data.priceIncludesVat === true ? t("Potencijalno odbitni pretporez — proverite sa knjigovođom") : t("Nisam siguran")}</dd></div>
+                      </dl>
+                      <p className="warning-text">{t("Ukupna B2B cena se ne računa dok količinska cena i dostupnost nisu potvrđene.")}</p>
+                    </div>
+                  ) : offer.unitPrice && offer.currency && offer.incoterm ? (
                     <CostCalculatorForm
                       offerId={offer.id}
                       currency={offer.currency}
                       targetCountry={targetCountry}
-                      productName={projectName}
+                      productName={title}
                       quantity={projectQuantity}
                       sourceMetadata={offer.sourceMetadata}
                       latestCalculation={offer.costCalculations[0]}

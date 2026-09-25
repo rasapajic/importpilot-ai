@@ -5,8 +5,10 @@ export type LandedCostInput = {
   currency: string;
   incoterm: string;
   shippingCost: string;
+  insuranceCost?: string;
   customsDutyRate: string;
   vatRate: string;
+  freightForwardingCost?: string;
   storageCost: string;
   inspectionCost: string;
   otherCosts: string;
@@ -65,9 +67,15 @@ export function calculateLandedCost(input: LandedCostInput): LandedCostResult {
 
   const unitPriceScale4 = parseDecimal(input.unitPrice, 4, "Cena po jedinici");
   const shipping = parseDecimal(input.shippingCost, 2, "Transport");
+  const insurance = parseDecimal(input.insuranceCost ?? "0", 2, "Osiguranje");
   const storage = parseDecimal(input.storageCost, 2, "Skladištenje");
   const inspection = parseDecimal(input.inspectionCost, 2, "Inspekcija");
   const other = parseDecimal(input.otherCosts, 2, "Ostali troškovi");
+  const freightForwarding = parseDecimal(
+    input.freightForwardingCost ?? "0",
+    2,
+    "Špedicija",
+  );
   const sellingPrice = parseDecimal(input.targetSellingPrice, 2, "Ciljna prodajna cena");
   const customsRate = parseDecimal(input.customsDutyRate, 4, "Carinska stopa");
   const vatRate = parseDecimal(input.vatRate, 4, "PDV stopa");
@@ -77,13 +85,13 @@ export function calculateLandedCost(input: LandedCostInput): LandedCostResult {
   if (vatRate > 100n * 10_000n) throw new Error("PDV stopa ne sme biti veća od 100%.");
 
   const goodsCost = divideHalfUp(unitPriceScale4 * BigInt(input.quantity), 100n);
-  const customsBase = goodsCost + shipping;
+  const customsBase = goodsCost + shipping + insurance;
   const rateDenominator = 100n * 10_000n;
   const customsDutyAmount = divideHalfUp(customsBase * customsRate, rateDenominator);
-  const vatBase = customsBase + customsDutyAmount + inspection + other;
+  const vatBase = customsBase + customsDutyAmount + freightForwarding + inspection + other;
   const vatAmount = divideHalfUp(vatBase * vatRate, rateDenominator);
   const landedCostTotal =
-    goodsCost + shipping + customsDutyAmount + vatAmount + storage + inspection + other;
+    goodsCost + shipping + insurance + customsDutyAmount + vatAmount + freightForwarding + storage + inspection + other;
   const landedCostPerUnit = divideHalfUp(landedCostTotal, BigInt(input.quantity));
   const grossMarginScaled4 = divideHalfUp(
     (sellingPrice - landedCostPerUnit) * 100n * 10_000n,
@@ -108,6 +116,8 @@ export function calculateLandedCost(input: LandedCostInput): LandedCostResult {
 
   return {
     ...input,
+    insuranceCost: formatDecimal(insurance, 2),
+    freightForwardingCost: formatDecimal(freightForwarding, 2),
     customsDutyAmount: formatDecimal(customsDutyAmount, 2),
     vatAmount: formatDecimal(vatAmount, 2),
     landedCostTotal: formatDecimal(landedCostTotal, 2),

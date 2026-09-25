@@ -43,7 +43,7 @@ export const supplierOfferSearchResultSchema = z
     ),
     productUrl: z.url().max(2_000),
     imageUrl: optionalText(2_000).refine(
-      (value) => value === null || z.url().safeParse(value).success,
+      (value) => value === null || value.startsWith("/") || z.url().safeParse(value).success,
       "Image URL must be valid.",
     ),
     source: z.string().trim().min(1).max(100),
@@ -121,7 +121,7 @@ export const supplierOfferUrlPreviewSchema = z
     ),
     productUrl: supplierOfferUrlImportRequestSchema.shape.productUrl,
     imageUrl: optionalText(2_000).refine(
-      (value) => value === null || z.url().safeParse(value).success,
+      (value) => value === null || value.startsWith("/") || z.url().safeParse(value).success,
       "Image URL must be valid.",
     ),
     source: z.string().trim().min(1).max(100),

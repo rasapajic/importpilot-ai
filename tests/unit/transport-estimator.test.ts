@@ -14,6 +14,8 @@ describe("smart transport cost estimation", () => {
       sizeOption: "POCKET",
       weightOption: "UNDER_100G",
     });
+    expect(estimate).not.toBeNull();
+    if (!estimate) throw new Error("Expected a transport estimate.");
 
     expect(estimate.category).toBe("Phone charger");
     expect(estimate.estimatedWeightKg).toBe(8);
@@ -28,6 +30,8 @@ describe("smart transport cost estimation", () => {
       sizeOption: "BOOK",
       weightOption: "KG_0_5_2",
     });
+    expect(estimate).not.toBeNull();
+    if (!estimate) throw new Error("Expected a transport estimate.");
 
     expect(estimate.category).toBe("PTZ camera");
     expect(estimate.estimatedWeightKg).toBe(60);
@@ -47,6 +51,8 @@ describe("smart transport cost estimation", () => {
         piecesPerCarton: 20,
       },
     });
+    expect(estimate).not.toBeNull();
+    if (!estimate) throw new Error("Expected a transport estimate.");
 
     expect(estimate.source).toBe("SUPPLIER");
     expect(estimate.estimatedWeightKg).toBe(60);
@@ -54,23 +60,24 @@ describe("smart transport cost estimation", () => {
     expect(estimate.confidence).toBe("HIGH");
   });
 
-  it("falls back when supplier weight is not available", () => {
+  it("does not invent logistics when supplier and product data are unknown", () => {
     const estimate = estimateProductLogistics({
       productName: "custom accessory",
       quantity: 10,
     });
 
-    expect(estimate.source).toBe("FALLBACK");
-    expect(estimate.confidence).toBe("LOW");
+    expect(estimate).toBeNull();
   });
 
   it("returns Air, Rail and Sea estimates", () => {
-    const routes = estimateTransportRoutes(estimateProductLogistics({
+    const estimate = estimateProductLogistics({
       productName: "LED light",
       quantity: 200,
       sizeOption: "SHOEBOX",
       weightOption: "G_100_500",
-    }));
+    });
+    expect(estimate).not.toBeNull();
+    const routes = estimateTransportRoutes(estimate!);
 
     expect(routes.map((route) => route.mode)).toEqual(["AIR", "RAIL", "SEA"]);
     expect(routes.every((route) => route.estimatedCostEur > 0)).toBe(true);
@@ -78,10 +85,12 @@ describe("smart transport cost estimation", () => {
   });
 
   it("marks unsuitable modes with lower confidence", () => {
-    const routes = estimateTransportRoutes(estimateProductLogistics({
+    const estimate = estimateProductLogistics({
       productName: "solar panel",
       quantity: 100,
-    }));
+    });
+    expect(estimate).not.toBeNull();
+    const routes = estimateTransportRoutes(estimate!);
 
     expect(routes.find((route) => route.mode === "AIR")?.confidence).toBe("LOW");
   });
@@ -102,6 +111,22 @@ describe("smart transport cost estimation", () => {
       cartonWidthCm: 40,
       cartonHeightCm: 30,
       piecesPerCarton: 25,
+    });
+  });
+
+  it("keeps charger and LED estimates isolated by product", () => {
+    const charger = estimateProductLogistics({ productName: "USB-C phone charger", quantity: 100 });
+    const light = estimateProductLogistics({ productName: "LED light", quantity: 100 });
+
+    expect(charger).toMatchObject({
+      category: "Phone charger",
+      estimatedWeightKg: 8,
+      estimatedVolumeCbm: 0.035,
+    });
+    expect(light).toMatchObject({
+      category: "LED light",
+      estimatedWeightKg: 35,
+      estimatedVolumeCbm: 0.25,
     });
   });
 });

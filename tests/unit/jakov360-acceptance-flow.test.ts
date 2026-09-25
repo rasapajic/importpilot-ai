@@ -6,6 +6,7 @@ import {
   canShowBestChoice,
   classifyOffer,
   findMatchingQuantityTier,
+  selectBestChoiceId,
   type QuantityTier,
 } from "../../modules/product-search/domain/offer-classification";
 import { generateRfqMessage } from "../../modules/product-search/domain/rfq";
@@ -82,11 +83,25 @@ describe("JAKOV360 acceptance import flow fixes", () => {
         officialUrl: "https://taxation-customs.ec.europa.eu/customs-4/calculation-customs-duties/customs-tariff/eu-customs-tariff-taric_en",
         checkedAt: "2026-06-15",
         validFrom: "2026",
-        tariffCode: "8504",
+        tariffCode: "85044095",
         originCountry: "CN",
         shippingCountry: "CN",
         rateType: "preferential",
         confirmedByOfficialSource: true,
+      },
+      insuranceCost: "0",
+      freightForwardingCost: "0",
+      costEvidence: {
+        goods: { status: "CONFIRMED", value: "10" },
+        shipping: { status: "CONFIRMED", value: "20" },
+        insurance: { status: "NOT_APPLICABLE", value: null },
+        customsDutyRate: { status: "CONFIRMED", value: "0" },
+        vatRate: { status: "CONFIRMED", value: "19" },
+        freightForwarding: { status: "NOT_APPLICABLE", value: null },
+        storage: { status: "NOT_APPLICABLE", value: null },
+        inspection: { status: "NOT_APPLICABLE", value: null },
+        other: { status: "NOT_APPLICABLE", value: null },
+        vatTreatment: "COST",
       },
     });
     expect(confirmed.isConfirmed).toBe(true);
@@ -152,18 +167,58 @@ describe("JAKOV360 acceptance import flow fixes", () => {
       deliveryCountry: "RS",
       orderType: "SAMPLE",
       productUrl,
+      deliveryCity: "Beograd",
+      postalCode: "11000",
     });
     expect(sample).toContain("request a sample");
-    expect(sample).toContain("carton dimensions, gross weight and net weight");
+    expect(sample).toContain("sample shipping cost");
+    expect(sample).not.toContain("carton dimensions, gross weight and net weight");
+    expect(sample).not.toContain("100 units");
 
     const fullOrder = generateRfqMessage({
       productTitle: "USB-C charger",
-      supplierName: "Supplier Ltd.",
+      supplierName: "Nepotvrđen prodavac",
       quantity: 100,
       deliveryCountry: "RS",
       orderType: "FULL_ORDER",
+      deliveryCity: "Beograd",
+      postalCode: "11000",
     });
+    expect(fullOrder).toContain("Hello Sales Team,");
     expect(fullOrder).toContain("final quotation for 100 units");
+    expect(fullOrder).toContain("final unit price and total price");
+    expect(fullOrder).toContain("carton dimensions, gross weight and net weight");
+    expect(fullOrder).toContain("11000 Beograd RS");
+  });
+
+  it("selects at most one best choice from a genuinely comparable cohort", () => {
+    const direct = classifyOffer({
+      offerType: "DIRECT_IMPORT",
+      availabilityConfirmed: true,
+      b2bPriceConfirmed: true,
+    });
+    const winner = selectBestChoiceId([
+      { id: "first", classification: direct, supplierName: "First", price: 1.2, currency: "USD", minimumOrderQuantity: 100, incoterm: "FOB", availabilityConfirmed: true },
+      { id: "second", classification: direct, supplierName: "Second", price: 1.1, currency: "USD", minimumOrderQuantity: 100, incoterm: "FOB", availabilityConfirmed: true },
+      { id: "third", classification: direct, supplierName: "Third", price: 1.3, currency: "USD", minimumOrderQuantity: 100, incoterm: "FOB", availabilityConfirmed: true },
+    ], 1000);
+
+    expect(winner).toBe("second");
+  });
+
+  it("does not rank incomplete, unconfirmed or non-normalized offer groups", () => {
+    const direct = classifyOffer({ offerType: "DIRECT_IMPORT", availabilityConfirmed: true, b2bPriceConfirmed: true });
+    const domestic = classifyOffer({ offerType: "DOMESTIC", availabilityConfirmed: true, b2bPriceConfirmed: true });
+    const unconfirmedDomestic = classifyOffer({ offerType: "DOMESTIC", availabilityConfirmed: false, b2bPriceConfirmed: false });
+
+    expect(selectBestChoiceId([
+      { id: "import", classification: direct, supplierName: "Importer", price: 10, currency: "EUR", minimumOrderQuantity: 100, incoterm: "DDP", availabilityConfirmed: true },
+      { id: "domestic", classification: domestic, supplierName: "Local", price: 12, currency: "EUR", minimumOrderQuantity: 100, incoterm: "DDP", availabilityConfirmed: true },
+    ], 100)).toBeNull();
+    expect(selectBestChoiceId([
+      { id: "retail", classification: unconfirmedDomestic, supplierName: "Dudi Co.", price: 1099, currency: "RSD", minimumOrderQuantity: 100, incoterm: "DDP", availabilityConfirmed: false },
+      { id: "missing-moq", classification: direct, supplierName: "Incomplete", price: 5, currency: "USD", minimumOrderQuantity: null, incoterm: "FOB", availabilityConfirmed: true },
+    ], 100)).toBeNull();
   });
 
   it("keeps new Serbian localization strings available", () => {

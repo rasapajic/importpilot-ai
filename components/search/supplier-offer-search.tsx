@@ -10,11 +10,12 @@ import { UrlImportReview } from "@/components/search/url-import-review";
 import { hasSupplierSearchResultCards } from "@/components/search/search-result-display";
 import type { SupplierOfferSearchResult } from "@/modules/product-search/domain/search";
 import {
-  canShowBestChoice,
   classifyOffer,
   findMatchingQuantityTier,
+  selectBestChoiceId,
   type OfferClassification,
 } from "@/modules/product-search/domain/offer-classification";
+import { getOfferReadiness, readinessExplanation } from "@/modules/offers/domain/offer-readiness";
 
 type ProviderStatus = "connected" | "not_configured" | "error";
 type ResultOrigin = "live" | "cache";
@@ -275,16 +276,35 @@ export function SupplierOfferSearch({
             [t("Domaće ponude"), groupedResults().domestic],
             [t("Direktan uvoz"), groupedResults().direct],
             [t("Vrsta ponude nije potvrđena"), groupedResults().unknown],
-          ] as const).map(([groupTitle, groupItems]) => groupItems.length > 0 && (
-            <section className="search-result-group" key={groupTitle}>
+          ] as const).map(([groupTitle, groupItems]) => {
+            if (groupItems.length === 0) return null;
+            const bestChoiceId = selectBestChoiceId(groupItems.map(({ result, index, classification }) => ({
+              id: index,
+              classification,
+              supplierName: result.supplierName,
+              price: result.price,
+              currency: result.currency,
+              minimumOrderQuantity: result.minimumOrderQuantity,
+              incoterm: result.incoterm,
+              availabilityConfirmed: result.availabilityConfirmed,
+              quantityTiers: result.quantityTiers,
+            })), Number(searchQuantity));
+            return <section className="search-result-group" key={groupTitle}>
               <h3>{groupTitle}</h3>
               {groupItems.map(({ result, index, classification }) => {
                 const matchingTier = findMatchingQuantityTier(result.quantityTiers, Number(searchQuantity));
-                const bestChoice = canShowBestChoice({
-                  classification,
-                  hasComparablePrice: result.price !== null && result.currency !== null,
-                  hasConfirmedAvailability: result.availabilityConfirmed === true,
+                const readiness = getOfferReadiness({
+                  supplierName: result.supplierName,
+                  unitPrice: result.price,
+                  currency: result.currency,
+                  moq: result.minimumOrderQuantity,
+                  sourceMetadata: {
+                    offerType: classification.kind,
+                    availabilityConfirmed: result.availabilityConfirmed ?? null,
+                    b2bPriceConfirmed: result.b2bPriceConfirmed ?? null,
+                  },
                 });
+                const bestChoice = bestChoiceId === index;
                 return (
                   <article className="search-result-card" key={`${result.source}-${result.productUrl}`}>
                     {result.imageUrl ? (
@@ -316,9 +336,8 @@ export function SupplierOfferSearch({
                       <span className={`offer-kind-badge offer-kind-${classification.kind.toLowerCase()}`}>
                         {t(classification.label)}
                       </span>
-                      <span className={bestChoice ? "best-choice-badge" : "candidate-badge"}>
-                        {bestChoice ? t("Najbolji izbor") : t("Vodeći kandidat — potrebna potvrda")}
-                      </span>
+                      {bestChoice && <span className="best-choice-badge">{t("Najbolji izbor")}</span>}
+                      {!readiness.ready && <span className="candidate-badge">{t("Potrebna potvrda dobavljača")}</span>}
                       <h3>{result.title}</h3>
                       <p><strong>{result.supplierName}</strong>{result.supplierCountry ? ` · ${result.supplierCountry}` : ""}</p>
                       <p>
@@ -351,9 +370,9 @@ export function SupplierOfferSearch({
                             );
                           })}
                         </div>
-                      ) : (
+                      ) : result.b2bPriceConfirmed !== true ? (
                         <p className="muted-text">{t("Količinska cena nije potvrđena.")}</p>
-                      )}
+                      ) : null}
                       {result.productUrl && result.productUrl !== "https://www.alibaba.com" && (
                         <a href={result.productUrl} rel="noreferrer" target="_blank">{t("Otvori ponudu dobavljača")}</a>
                       )}
@@ -368,7 +387,7 @@ export function SupplierOfferSearch({
                     </div>
                     <button
                       className="secondary-button"
-                      disabled={importing === index || imported.includes(index)}
+                      disabled={!readiness.ready || importing === index || imported.includes(index)}
                       onClick={() => addResult(result, index)}
                       type="button"
                     >
@@ -376,13 +395,14 @@ export function SupplierOfferSearch({
                         ? t("Dodato u projekat")
                         : importing === index
                           ? t("Dodavanje...")
-                          : t("Dodaj u kupovinu")}
+                          : t("Dodaj ponudu")}
                     </button>
+                    {!readiness.ready && <p className="warning-text">{t(readinessExplanation(readiness))}</p>}
                   </article>
                 );
               })}
             </section>
-          ))}
+          })}
         </div>
       )}
       </>}

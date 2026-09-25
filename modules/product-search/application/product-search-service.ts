@@ -11,8 +11,11 @@ import { getSupplierOfferSearchProvider } from "../infrastructure/provider";
 import { getSupplierOfferUrlImportProvider } from "../infrastructure/url-import-provider";
 import { recordProjectActivity } from "../../timeline/application/timeline-service";
 import { searchSupplierOffersWithPersistentFallback } from "./search-fallback";
+import { getOfferReadiness, readinessExplanation } from "../../offers/domain/offer-readiness";
+import { classifyOffer } from "../domain/offer-classification";
 
 export class ProductSearchProjectNotFoundError extends Error {}
+export class ProductSearchResultNotReadyError extends Error {}
 
 export async function searchProjectSupplierOffers(
   projectId: string,
@@ -38,10 +41,33 @@ export async function importSearchResult(
   const result = supplierOfferSearchResultsSchema.element.parse(input);
   const project = await prisma.importProject.findFirst({
     where: { id: projectId, organizationId },
-    select: { id: true },
+    select: { id: true, targetCountry: true },
   });
   if (!project) throw new ProductSearchProjectNotFoundError();
-
+  const classification = classifyOffer({
+    source: result.source,
+    targetCountry: project.targetCountry,
+    supplierCountry: result.supplierCountry,
+    sellerCountry: result.sellerCountry,
+    importerName: result.importerName,
+    offerType: result.offerType,
+    availabilityConfirmed: result.availabilityConfirmed,
+    b2bPriceConfirmed: result.b2bPriceConfirmed,
+  });
+  const readiness = getOfferReadiness({
+    supplierName: result.supplierName,
+    unitPrice: result.price,
+    currency: result.currency,
+    moq: result.minimumOrderQuantity,
+    sourceMetadata: {
+      offerType: classification.kind,
+      availabilityConfirmed: result.availabilityConfirmed ?? null,
+      b2bPriceConfirmed: result.b2bPriceConfirmed ?? null,
+    },
+  });
+  if (!readiness.ready) {
+    throw new ProductSearchResultNotReadyError(readinessExplanation(readiness));
+  }
   return prisma.$transaction(async (transaction) => {
     const offer = await transaction.supplierOffer.create({
       data: {
@@ -60,7 +86,7 @@ export async function importSearchResult(
           productUrl: result.productUrl,
           imageUrl: result.imageUrl,
           providerSource: result.source,
-          offerType: result.offerType ?? "UNKNOWN",
+          offerType: classification.kind,
           sellerCountry: result.sellerCountry ?? null,
           originCountry: result.originCountry ?? null,
           importerName: result.importerName ?? null,

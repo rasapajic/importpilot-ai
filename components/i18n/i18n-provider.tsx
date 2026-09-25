@@ -23,7 +23,12 @@ function translateElement(root: ParentNode, locale: Locale) {
   let node = walker.nextNode();
   while (node) {
     const parent = node.parentElement;
-    if (parent && !["SCRIPT", "STYLE", "PRE"].includes(parent.tagName) && node.textContent) {
+    if (
+      parent &&
+      !["SCRIPT", "STYLE", "PRE"].includes(parent.tagName) &&
+      !parent.closest('[data-no-translate="true"]') &&
+      node.textContent
+    ) {
       const translated = translateText(node.textContent, locale);
       if (translated !== node.textContent) node.textContent = translated;
     }

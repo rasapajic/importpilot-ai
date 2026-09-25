@@ -13,6 +13,15 @@ import { RecommendationStatuses } from "../../modules/intelligence/domain/recomm
 import { getMoqStatus } from "../../modules/offers/domain/moq-status";
 import { assessSupplierRiskV2 } from "../../modules/intelligence/domain/supplier-risk-v2";
 
+const freshFx = {
+  baseCurrency: "EUR" as const,
+  ratesToEur: { EUR: 1, USD: 0.9 },
+  source: "Test ECB snapshot",
+  timestamp: "2026-09-25T08:00:00.000Z",
+  isTest: false,
+};
+const freshFxNow = new Date("2026-09-25T09:00:00.000Z");
+
 const strongOffer: AssessmentOfferInput = {
   offerId: "offer-1",
   supplierName: "Strong Supplier",
@@ -187,10 +196,11 @@ describe("supplier offer intelligence", () => {
   });
 
   it("converts mixed currencies into one EUR comparison group", () => {
-    const groups = compareOffers([
+    const comparison = compareOffers([
       { offerId: "usd", supplierName: "USD Supplier", currency: "USD", landedCostTotal: 100, grossMarginPercent: 20, deliveryTimeDays: 20, supplierRiskScore: 10, overallScore: 80, recommendationStatus: RecommendationStatuses.RECOMMENDED },
       { offerId: "eur", supplierName: "EUR Supplier", currency: "EUR", landedCostTotal: 90, grossMarginPercent: 25, deliveryTimeDays: 10, supplierRiskScore: 5, overallScore: 90, recommendationStatus: RecommendationStatuses.RECOMMENDED },
-    ]);
+    ], freshFx, freshFxNow);
+    const { groups } = comparison;
     expect(groups).toHaveLength(1);
     expect(groups[0].currency).toBe("EUR");
     expect(groups[0].offers.map((offer) => offer.offerId)).toEqual(["usd", "eur"]);
@@ -201,7 +211,7 @@ describe("supplier offer intelligence", () => {
     const [group] = compareOffers([
       { offerId: "cheap", supplierName: "Cheap", currency: "USD", landedCostTotal: 90, grossMarginPercent: 20, deliveryTimeDays: 30, supplierRiskScore: 30, overallScore: 70, recommendationStatus: RecommendationStatuses.OK_WITH_RISK },
       { offerId: "safe", supplierName: "Safe", currency: "USD", landedCostTotal: 100, grossMarginPercent: 25, deliveryTimeDays: 20, supplierRiskScore: 5, overallScore: 90, recommendationStatus: RecommendationStatuses.RECOMMENDED },
-    ]);
+    ]).groups;
     expect(group.bestTotalCost?.offerId).toBe("cheap");
     expect(group.lowestRisk?.offerId).toBe("safe");
     expect(group.fastestDelivery?.offerId).toBe("safe");
@@ -212,28 +222,32 @@ describe("supplier offer intelligence", () => {
     const [group] = compareOffers([
       { offerId: "slightly-cheaper", supplierName: "Cheaper", currency: "USD", landedCostTotal: 100, grossMarginPercent: 30, deliveryTimeDays: 30, supplierRiskScore: 60, overallScore: 70, recommendationStatus: RecommendationStatuses.OK_WITH_RISK },
       { offerId: "safer", supplierName: "Safer", currency: "USD", landedCostTotal: 102, grossMarginPercent: 29, deliveryTimeDays: 20, supplierRiskScore: 10, overallScore: 90, recommendationStatus: RecommendationStatuses.RECOMMENDED },
-    ]);
+    ]).groups;
 
     expect(group.bestTotalCost?.offerId).toBe("safer");
     expect(group.bestForResale?.offerId).toBe("safer");
   });
 
   it("ignores offers that are still awaiting analysis", () => {
-    const [group] = compareOffers([
+    const comparison = compareOffers([
       { offerId: "assessed", supplierName: "Assessed", currency: "USD", landedCostTotal: 100, grossMarginPercent: 25, deliveryTimeDays: 20, supplierRiskScore: 10, overallScore: 80, recommendationStatus: RecommendationStatuses.RECOMMENDED },
       { offerId: "pending", supplierName: "Pending", currency: "USD", landedCostTotal: 1, grossMarginPercent: 99, deliveryTimeDays: 1, supplierRiskScore: null, overallScore: null, recommendationStatus: null },
     ]);
+    const [group] = comparison.groups;
 
     expect(group.offers.map((offer) => offer.offerId)).toEqual(["assessed"]);
-    expect(group.bestTotalCost?.offerId).toBe("assessed");
-    expect(group.fastestDelivery?.offerId).toBe("assessed");
+    expect(group.bestTotalCost).toBeNull();
+    expect(group.fastestDelivery).toBeNull();
+    expect(comparison.excluded[0].reasons).toContain("Ponuda nije analizirana.");
   });
 
   it("excludes an offer from EUR ranking when its FX rate is unavailable", () => {
-    const [group] = compareOffers([
+    const comparison = compareOffers([
       { offerId: "eur", supplierName: "EUR", currency: "EUR", landedCostTotal: 100, grossMarginPercent: 20, deliveryTimeDays: 20, supplierRiskScore: 10, overallScore: 80, recommendationStatus: RecommendationStatuses.RECOMMENDED },
       { offerId: "jpy", supplierName: "JPY", currency: "JPY", landedCostTotal: 1, grossMarginPercent: 90, deliveryTimeDays: 1, supplierRiskScore: 1, overallScore: 99, recommendationStatus: RecommendationStatuses.RECOMMENDED },
-    ]);
+    ], freshFx, freshFxNow);
+    const [group] = comparison.groups;
     expect(group.offers.map((offer) => offer.offerId)).toEqual(["eur"]);
+    expect(comparison.excluded[0].offerId).toBe("jpy");
   });
 });

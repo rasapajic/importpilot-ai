@@ -1,5 +1,6 @@
 import { CalculationStatus, OrganizationRole } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { CostEvidenceStatuses, VatTreatments } from "../../modules/cost-engine/domain/cost-evidence";
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 const describeWithDatabase = testDatabaseUrl ? describe : describe.skip;
@@ -41,9 +42,21 @@ describeWithDatabase("cost calculation tenant isolation", () => {
         organizationId: organization.id,
         projectId: project.id,
         supplierName: "Cost Supplier",
+        moq: 100,
         unitPrice: 10,
         currency: "EUR",
         incoterm: "FOB",
+        sourceMetadata: {
+          customsProvenance: {
+            sourceName: "TARIC",
+            officialUrl: "https://taxation-customs.ec.europa.eu/taric",
+            checkedAt: "2026-09-25",
+            tariffCode: "85044095",
+            originCountry: "CN",
+            shippingCountry: "CN",
+            confirmedByOfficialSource: true,
+          },
+        },
       },
     });
     userId = user.id;
@@ -61,37 +74,19 @@ describeWithDatabase("cost calculation tenant isolation", () => {
   });
 
   it("persists a calculated scenario for the active tenant", async () => {
-    const calculation = await service.createCostCalculation(offerId, organizationId, {
-      shippingCost: "100.00",
-      customsDutyRate: "5",
-      vatRate: "20",
-      storageCost: "30.00",
-      inspectionCost: "20.00",
-      otherCosts: "10.00",
-      targetSellingPrice: "20.00",
-      calculationStatus: CalculationStatus.CALCULATED,
-    });
-    expect(calculation.landedCostTotal.toString()).toBe("1452");
+    const calculation = await service.createCostCalculation(offerId, organizationId, completeRequest());
+    expect(calculation.landedCostTotal?.toString()).toBe("1452");
   });
 
   it("does not expose an offer across tenants", async () => {
     await expect(
-      service.createCostCalculation(offerId, otherOrganizationId, {
-        shippingCost: "0",
-        customsDutyRate: "0",
-        vatRate: "0",
-        storageCost: "0",
-        inspectionCost: "0",
-        otherCosts: "0",
-        targetSellingPrice: "20",
-        calculationStatus: CalculationStatus.CALCULATED,
-      }),
+      service.createCostCalculation(offerId, otherOrganizationId, completeRequest()),
     ).rejects.toBeInstanceOf(service.CostOfferNotFoundError);
   });
 
   it("keeps calculation history and assessment uses the latest calculation", async () => {
     const previousCount = await prisma.costCalculation.count({ where: { offerId } });
-    const latest = await service.createCostCalculation(offerId, organizationId, {
+    const latest = await service.createCostCalculation(offerId, organizationId, completeRequest({
       shippingCost: "250",
       customsDutyRate: "7",
       vatRate: "19",
@@ -99,8 +94,7 @@ describeWithDatabase("cost calculation tenant isolation", () => {
       inspectionCost: "25",
       otherCosts: "15",
       targetSellingPrice: "24",
-      calculationStatus: CalculationStatus.CALCULATED,
-    });
+    }));
     expect(await prisma.costCalculation.count({ where: { offerId } })).toBe(previousCount + 1);
 
     const intelligence = await import("@/modules/intelligence/application/assessment-service");
@@ -108,3 +102,27 @@ describeWithDatabase("cost calculation tenant isolation", () => {
     expect(assessment.costCalculationId).toBe(latest.id);
   });
 });
+  function completeRequest(overrides: Record<string, string> = {}) {
+    return {
+      shippingCost: "100.00",
+      shippingStatus: CostEvidenceStatuses.CONFIRMED,
+      insuranceCost: null,
+      insuranceStatus: CostEvidenceStatuses.NOT_APPLICABLE,
+      customsDutyRate: "5",
+      customsDutyStatus: CostEvidenceStatuses.CONFIRMED,
+      vatRate: "20",
+      vatStatus: CostEvidenceStatuses.CONFIRMED,
+      freightForwardingCost: null,
+      freightForwardingStatus: CostEvidenceStatuses.NOT_APPLICABLE,
+      storageCost: "30.00",
+      storageStatus: CostEvidenceStatuses.CONFIRMED,
+      inspectionCost: "20.00",
+      inspectionStatus: CostEvidenceStatuses.CONFIRMED,
+      otherCosts: "10.00",
+      otherStatus: CostEvidenceStatuses.CONFIRMED,
+      targetSellingPrice: "20.00",
+      vatTreatment: VatTreatments.COST,
+      calculationStatus: CalculationStatus.CALCULATED,
+      ...overrides,
+    };
+  }

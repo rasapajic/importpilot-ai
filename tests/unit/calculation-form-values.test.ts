@@ -19,12 +19,23 @@ describe("calculation edit values", () => {
 
     expect(getCalculationFormValues(calculation as never)).toEqual({
       shippingCost: "120.5",
+      shippingStatus: "UNKNOWN",
+      insuranceCost: "",
+      insuranceStatus: "UNKNOWN",
       customsDutyRate: "8.25",
+      customsDutyStatus: "UNKNOWN",
       vatRate: "20",
+      vatStatus: "ESTIMATED",
+      freightForwardingCost: "",
+      freightForwardingStatus: "UNKNOWN",
       storageCost: "30",
+      storageStatus: "UNKNOWN",
       inspectionCost: "15",
+      inspectionStatus: "UNKNOWN",
       otherCosts: "5",
+      otherStatus: "UNKNOWN",
       targetSellingPrice: "25",
+      vatTreatment: "UNSURE",
       needsReview: true,
     });
   });

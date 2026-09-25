@@ -126,7 +126,7 @@ describe("project decision", () => {
     expect(result.summarySnapshot.incomparableCurrencies).toEqual(["NO_CURRENCY", "USD"]);
   });
 
-  it("builds an explainable action checklist from the selected offer", () => {
+  it("excludes an incomplete calculation instead of selecting it", () => {
     const best = offer({
       offerId: "best",
       supplierName: "Best",
@@ -141,14 +141,28 @@ describe("project decision", () => {
       offer({ offerId: "two", supplierName: "Two" }),
       offer({ offerId: "three", supplierName: "Three" }),
     ]);
-    expect(result.actionChecklist.map((item) => item.key)).toEqual(
-      expect.arrayContaining([
-        "REQUEST_SAMPLE",
-        "CONFIRM_INCOTERM",
-        "CONFIRM_SHIPPING",
-        "NEGOTIATE_MOQ",
-        "VERIFY_CUSTOMS",
-      ]),
-    );
+    expect(result.selectedOfferId).not.toBe("best");
+    expect(result.summarySnapshot.offerCount).toBe(2);
+  });
+
+  it("does not return READY_TO_BUY with an unreliable FX snapshot", () => {
+    const result = createProjectDecision([
+      offer({ offerId: "best", supplierName: "Best", currency: "USD", fxReliableForDecision: false, assessment: { overallScore: 95, supplierRiskScore: 5, supplierRiskLevel: "LOW", confidenceScore: 95, recommendationStatus: "RECOMMENDED" } }),
+      offer({ offerId: "two", supplierName: "Two", currency: "USD", fxReliableForDecision: false }),
+      offer({ offerId: "three", supplierName: "Three", currency: "USD", fxReliableForDecision: false }),
+    ]);
+    expect(result.status).toBe(ProjectDecisionStatuses.NEGOTIATE_FIRST);
+    expect(result.actionChecklist.map((item) => item.key)).toContain("VERIFY_FX");
+  });
+
+  it("builds rankings and counts only from analyzed offers", () => {
+    const result = createProjectDecision([
+      offer({ offerId: "analyzed", supplierName: "Analyzed" }),
+      offer({ offerId: "waiting", supplierName: "Waiting", assessment: null, landedCostTotal: 1 }),
+    ]);
+
+    expect(result.summarySnapshot.offerCount).toBe(1);
+    expect(result.summarySnapshot.assessedOfferCount).toBe(1);
+    expect(result.selectedOfferId).toBe("analyzed");
   });
 });

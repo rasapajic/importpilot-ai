@@ -27,7 +27,7 @@ describeWithDatabase("offer assessment history and tenant isolation", () => {
       data: { organizationId: organization.id, createdById: user.id, name: "Assessment Project", targetCountry: "DE", quantity: 100, targetMargin: 20 },
     });
     const offer = await prisma.supplierOffer.create({
-      data: { organizationId: organization.id, projectId: project.id, supplierName: "Assessment Supplier", unitPrice: 10, currency: "EUR", incoterm: "FOB", supplierVerified: true },
+      data: { organizationId: organization.id, projectId: project.id, supplierName: "Assessment Supplier", moq: 100, unitPrice: 10, currency: "EUR", incoterm: "FOB", supplierVerified: true },
     });
     userId = user.id;
     organizationId = organization.id;
@@ -58,7 +58,8 @@ describeWithDatabase("offer assessment history and tenant isolation", () => {
       (await prisma.supplierOffer.findUniqueOrThrow({ where: { id: offerId } })).projectId,
       organizationId,
     );
-    expect(comparison.flatMap((group) => group.offers).every((offer) => offer.offerId === offerId)).toBe(true);
+    expect(comparison.groups.flatMap((group) => group.offers).every((offer) => offer.offerId === offerId)).toBe(true);
+    expect(comparison.excluded.every((offer) => offer.offerId === offerId)).toBe(true);
   });
 });
 

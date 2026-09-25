@@ -26,7 +26,7 @@ export type ProductLogisticsEstimate = {
   estimatedVolumeCbm: number;
   confidence: TransportConfidence;
   reasons: string[];
-  source: "SUPPLIER" | "USER_ASSISTED" | "PRODUCT_LOOKUP" | "FALLBACK";
+  source: "SUPPLIER" | "USER_ASSISTED" | "PRODUCT_LOOKUP";
 };
 
 export type TransportRouteEstimate = {
@@ -125,7 +125,7 @@ function supplierEstimate(quantity: number, supplier?: SupplierLogisticsData | n
   };
 }
 
-export function estimateProductLogistics(input: ProductEstimateInput): ProductLogisticsEstimate {
+export function estimateProductLogistics(input: ProductEstimateInput): ProductLogisticsEstimate | null {
   const supplier = supplierEstimate(input.quantity, input.supplierLogistics);
   if (supplier) {
     return {
@@ -140,23 +140,25 @@ export function estimateProductLogistics(input: ProductEstimateInput): ProductLo
   const profile = findProductProfile(input.productName);
   const size = input.sizeOption ? sizeProfiles[input.sizeOption] : null;
   const weight = input.weightOption ? weightProfiles[input.weightOption] : null;
-  const unitWeightKg = weight?.unitWeightKg ?? profile?.unitWeightKg ?? 0.6;
-  const unitVolumeCbm = size?.unitVolumeCbm ?? profile?.unitVolumeCbm ?? 0.004;
+  if (!profile && (!size || !weight)) return null;
+
+  const unitWeightKg = weight?.unitWeightKg ?? profile!.unitWeightKg;
+  const unitVolumeCbm = size?.unitVolumeCbm ?? profile!.unitVolumeCbm;
   const reasons = [
-    profile ? `Matched product category: ${profile.category}.` : "No exact product category match.",
+    profile ? `Matched product category: ${profile.category}.` : "Estimate uses the selected size and weight.",
     size?.reason,
     weight?.reason,
   ].filter((reason): reason is string => Boolean(reason));
   const confidence: TransportConfidence =
-    size && weight ? "HIGH" : profile && (size || weight) ? "MEDIUM" : profile ? "MEDIUM" : "LOW";
+    size && weight ? "HIGH" : "MEDIUM";
 
   return {
-    category: profile?.category ?? "General product",
+    category: profile?.category ?? "User-provided size and weight",
     estimatedWeightKg: round(unitWeightKg * input.quantity, 2),
     estimatedVolumeCbm: round(unitVolumeCbm * input.quantity, 3),
     confidence,
     reasons,
-    source: size || weight ? "USER_ASSISTED" : profile ? "PRODUCT_LOOKUP" : "FALLBACK",
+    source: size || weight ? "USER_ASSISTED" : "PRODUCT_LOOKUP",
   };
 }
 

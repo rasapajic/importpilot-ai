@@ -32,6 +32,7 @@ export type ProjectDecisionOffer = {
   landedCostPerUnit: number | null;
   grossMarginPercent: number | null;
   calculationNeedsReview: boolean;
+  fxReliableForDecision?: boolean;
   assessment: {
     overallScore: number;
     supplierRiskScore: number;
@@ -48,6 +49,7 @@ export type ActionItem = {
     | "CONFIRM_SHIPPING"
     | "NEGOTIATE_MOQ"
     | "VERIFY_CUSTOMS"
+    | "VERIFY_FX"
     | "COMPARE_MORE_OFFERS";
   label: string;
   reason: string;
@@ -155,6 +157,13 @@ function buildChecklist(
       reason: "Carinska pretpostavka ili landed cost zahtevaju proveru.",
     });
   }
+  if (best?.fxReliableForDecision === false) {
+    checklist.push({
+      key: "VERIFY_FX",
+      label: "Osveži kurs",
+      reason: "Testni ili zastareo kurs ne može biti osnova pouzdane konačne preporuke.",
+    });
+  }
   if (comparableOfferCount < 3) {
     const missing = 3 - comparableOfferCount;
     checklist.push({
@@ -167,7 +176,14 @@ function buildChecklist(
 }
 
 export function createProjectDecision(offers: ProjectDecisionOffer[]): ProjectDecisionResult {
-  const primary = primaryCurrencyGroup(offers);
+  const analyzedOffers = offers.filter((offer) =>
+    offer.assessment !== null &&
+    !offer.calculationNeedsReview &&
+    offer.landedCostTotal !== null &&
+    offer.landedCostPerUnit !== null &&
+    offer.grossMarginPercent !== null,
+  );
+  const primary = primaryCurrencyGroup(analyzedOffers);
   const primaryCurrency = primary?.[0] ?? null;
   const comparableOffers = primary?.[1] ?? [];
   const bestOverallOffer = rankBestOverall(comparableOffers);
@@ -176,19 +192,19 @@ export function createProjectDecision(offers: ProjectDecisionOffer[]): ProjectDe
     (offer) => offer.assessment?.supplierRiskScore ?? null,
   );
   const bestMarginOffer = maxBy(comparableOffers, (offer) => offer.grossMarginPercent);
-  const assessedOfferCount = offers.filter((offer) => offer.assessment !== null).length;
+  const assessedOfferCount = analyzedOffers.length;
   const incomparableCurrencies = [
     ...new Set(
-      offers
+      analyzedOffers
         .filter((offer) => !primaryCurrency || offer.currency !== primaryCurrency)
         .map((offer) => offer.currency ?? "NO_CURRENCY"),
     ),
   ].sort();
-  const incomparableOfferCount = offers.length - comparableOffers.length;
+  const incomparableOfferCount = analyzedOffers.length - comparableOffers.length;
   const checklist = buildChecklist(bestOverallOffer, comparableOffers.length);
 
   let status: ProjectDecisionStatusValue;
-  if (offers.length < 3 || assessedOfferCount < 2 || comparableOffers.length < 2) {
+  if (analyzedOffers.length < 3 || assessedOfferCount < 2 || comparableOffers.length < 2) {
     status = ProjectDecisionStatuses.NEED_MORE_OFFERS;
   } else if (
     !bestOverallOffer ||
@@ -205,6 +221,7 @@ export function createProjectDecision(offers: ProjectDecisionOffer[]): ProjectDe
     bestOverallOffer.shippingClarityScore >= 70 &&
     Boolean(bestOverallOffer.incoterm) &&
     bestOverallOffer.sampleAvailable === true &&
+    bestOverallOffer.fxReliableForDecision !== false &&
     !bestOverallOffer.calculationNeedsReview
   ) {
     status = ProjectDecisionStatuses.READY_TO_BUY;
@@ -214,8 +231,8 @@ export function createProjectDecision(offers: ProjectDecisionOffer[]): ProjectDe
 
   const comparisonSentence =
     incomparableOfferCount > 0
-      ? `Imate ${offers.length} ponuda, ali ${comparableOffers.length} su direktno uporedive u valuti ${primaryCurrency ?? "bez potvrđene valute"}.`
-      : `Imate ${offers.length} ponuda i sve su uporedive u valuti ${primaryCurrency ?? "bez potvrđene valute"}.`;
+      ? `Analizirano je ${analyzedOffers.length} ponuda, ali ${comparableOffers.length} su direktno uporedive u valuti ${primaryCurrency ?? "bez potvrđene valute"}.`
+      : `Analizirano je ${analyzedOffers.length} ponuda i sve su uporedive u valuti ${primaryCurrency ?? "bez potvrđene valute"}.`;
   const bestSentence = bestOverallOffer
     ? `Najbolja ukupna ponuda je ${bestOverallOffer.supplierName} sa ocenom ${bestOverallOffer.assessment?.overallScore ?? 0}/100.`
     : "Još nema dovoljno ocenjenih ponuda za izbor najbolje ponude.";
@@ -230,7 +247,7 @@ export function createProjectDecision(offers: ProjectDecisionOffer[]): ProjectDe
     decisionReason: `${comparisonSentence} ${bestSentence} ${nextSentence}`,
     actionChecklist: checklist,
     summarySnapshot: {
-      offerCount: offers.length,
+      offerCount: analyzedOffers.length,
       assessedOfferCount,
       primaryCurrency,
       comparableOfferCount: comparableOffers.length,

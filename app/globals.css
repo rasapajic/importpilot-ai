@@ -766,7 +766,8 @@ button:disabled {
   font-weight: 700;
 }
 
-.cost-form input {
+.cost-form input,
+.cost-form select {
   border: 1px solid #b8c9c0;
   border-radius: 0.5rem;
   font: inherit;
@@ -2256,6 +2257,40 @@ details > .workflow-step-summary {
   }
 }
 
+.cost-results > .secondary-button {
+  justify-self: start;
+  margin-top: 0.5rem;
+  padding: 0.7rem 1rem;
+  text-decoration: none;
+}
+
+.domestic-cost-summary {
+  background: #f8fbf9;
+  border: 1px solid #dce7e1;
+  border-radius: 0.9rem;
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.9rem;
+}
+
+.domestic-cost-summary dl {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0;
+}
+
+.domestic-cost-summary dl div {
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.domestic-cost-summary dd {
+  font-weight: 700;
+  margin: 0;
+  text-align: right;
+}
+
 .search-result-group {
   display: grid;
   gap: 0.8rem;
@@ -2313,6 +2348,39 @@ details > .workflow-step-summary {
 .candidate-badge {
   background: #fff7e8;
   color: #815600;
+}
+
+.offer-analysis-action {
+  align-items: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.offer-analysis-action p {
+  margin: 0;
+}
+
+.analyzed-offer-list {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  margin: 1rem 0;
+}
+
+.analyzed-offer-summary {
+  background: #f8fbf9;
+  border: 1px solid #dce7e1;
+  border-radius: 0.75rem;
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.85rem;
+}
+
+.analyzed-offer-summary span {
+  color: #536b61;
+  font-size: 0.9rem;
 }
 
 .quantity-tier-list {

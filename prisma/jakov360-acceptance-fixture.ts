@@ -1,9 +1,11 @@
-import { calculateLandedCost } from "../modules/cost-engine/domain/calculator";
 import type { SupplierOfferSearchResult } from "../modules/product-search/domain/search";
 import { generateRfqMessage } from "../modules/product-search/domain/rfq";
+import { CostEvidenceStatuses, VatTreatments } from "../modules/cost-engine/domain/cost-evidence";
 
 export const JAKOV360_ACCEPTANCE_PROJECT_ID = "36000000-0000-4000-8000-000000000001";
-export const JAKOV360_ACCEPTANCE_PROJECT_NAME = "JAKOV360 Acceptance pregled";
+export const JAKOV360_CHARGERS_PROJECT_ID = "36000000-0000-4000-8000-000000000002";
+export const JAKOV360_ACCEPTANCE_PROJECT_NAME = "JAKOV360 Acceptance pregled — Zaštitne naočare";
+export const JAKOV360_CHARGERS_PROJECT_NAME = "JAKOV360 Acceptance pregled — USB-C punjači";
 export const JAKOV360_DEMO_EMAIL = "owner@tradepilot.local";
 export const JAKOV360_DEMO_ORGANIZATION_ID = "00000000-0000-4000-8000-000000000001";
 
@@ -85,7 +87,7 @@ export function buildJakov360AcceptanceSeedPlan() {
     minimumOrderQuantity: 500,
     incoterm: "FOB",
     productUrl: "https://supplier.example/jakov360/safety-glasses",
-    imageUrl: "http://localhost:3000/jakov360-acceptance-glasses.svg",
+    imageUrl: "/jakov360-acceptance-glasses.svg",
     source: "Made-in-China acceptance fixture",
     offerType: "DIRECT_IMPORT",
     sellerCountry: "CN",
@@ -125,7 +127,7 @@ export function buildJakov360AcceptanceSeedPlan() {
     minimumOrderQuantity: 100,
     incoterm: "FOB",
     productUrl: "https://supplier.example/jakov360/usb-c-pd-charger",
-    imageUrl: "http://localhost:3000/jakov360-acceptance-glasses.svg",
+    imageUrl: "/jakov360-acceptance-glasses.svg",
     source: "Alibaba acceptance fixture",
     offerType: "DIRECT_IMPORT",
     sellerCountry: "CN",
@@ -143,7 +145,7 @@ export function buildJakov360AcceptanceSeedPlan() {
     minimumOrderQuantity: null,
     incoterm: null,
     productUrl: "https://supplier.example/jakov360/unconfirmed-charger",
-    imageUrl: null,
+    imageUrl: "/jakov360-acceptance-missing-image.svg",
     source: "Acceptance fixture",
     offerType: "UNKNOWN",
     availabilityConfirmed: false,
@@ -153,7 +155,7 @@ export function buildJakov360AcceptanceSeedPlan() {
   const customsProvenance = {
     sourceName: "Uprava carina Republike Srbije — TARIS",
     officialUrl: "https://www.carina.rs/sr/privreda/tarifski-poslovi/taris.html",
-    checkedAt: null,
+    checkedAt: "2026-06-14",
     validFrom: null,
     tariffCode: "9004",
     originCountry: "CN",
@@ -169,6 +171,8 @@ export function buildJakov360AcceptanceSeedPlan() {
       supplierName: glasses.supplierName,
       quantity: 1000,
       deliveryCountry: "RS",
+      deliveryCity: "Beograd",
+      postalCode: "11000",
       orderType: "SAMPLE",
       incoterm: glasses.incoterm,
       productUrl: glasses.productUrl,
@@ -178,38 +182,39 @@ export function buildJakov360AcceptanceSeedPlan() {
       supplierName: glasses.supplierName,
       quantity: 1000,
       deliveryCountry: "RS",
+      deliveryCity: "Beograd",
+      postalCode: "11000",
       orderType: "FULL_ORDER",
       incoterm: glasses.incoterm,
       productUrl: glasses.productUrl,
     }),
   };
 
-  const offers: AcceptanceOfferFixture[] = [
-    {
-      id: "36000000-0000-4000-8000-000000000010",
-      supplierName: glasses.supplierName,
-      supplierCountry: glasses.supplierCountry,
-      moq: glasses.minimumOrderQuantity,
-      unitPrice: glasses.price?.toString() ?? null,
-      currency: glasses.currency,
-      incoterm: glasses.incoterm,
-      sourceMetadata: {
-        title: glasses.title,
-        productUrl: glasses.productUrl,
-        imageUrl: glasses.imageUrl,
-        providerSource: glasses.source,
-        offerType: glasses.offerType,
-        sellerCountry: glasses.sellerCountry,
-        originCountry: glasses.originCountry,
-        availabilityConfirmed: glasses.availabilityConfirmed,
-        b2bPriceConfirmed: glasses.b2bPriceConfirmed,
-        quantityTiers,
-        requestedQuantity: 1000,
-        transportEstimated: true,
-        customsProvenance,
-        acceptanceRfqExamples: rfqExamples,
-      },
+  const glassesOffer: AcceptanceOfferFixture = {
+    id: "36000000-0000-4000-8000-000000000010",
+    supplierName: glasses.supplierName,
+    supplierCountry: glasses.supplierCountry,
+    moq: glasses.minimumOrderQuantity,
+    unitPrice: glasses.price?.toString() ?? null,
+    currency: glasses.currency,
+    incoterm: glasses.incoterm,
+    sourceMetadata: {
+      title: glasses.title,
+      productUrl: glasses.productUrl,
+      imageUrl: glasses.imageUrl,
+      providerSource: glasses.source,
+      offerType: glasses.offerType,
+      sellerCountry: glasses.sellerCountry,
+      originCountry: glasses.originCountry,
+      availabilityConfirmed: glasses.availabilityConfirmed,
+      b2bPriceConfirmed: glasses.b2bPriceConfirmed,
+      quantityTiers,
+      requestedQuantity: 1000,
+      customsProvenance,
+      acceptanceRfqExamples: rfqExamples,
     },
+  };
+  const chargerOffers: AcceptanceOfferFixture[] = [
     {
       id: "36000000-0000-4000-8000-000000000020",
       supplierName: dudi.supplierName,
@@ -217,7 +222,7 @@ export function buildJakov360AcceptanceSeedPlan() {
       moq: dudi.minimumOrderQuantity,
       unitPrice: dudi.price?.toString() ?? null,
       currency: dudi.currency,
-      incoterm: dudi.incoterm,
+      incoterm: null,
       sourceMetadata: {
         title: dudi.title,
         productUrl: dudi.productUrl,
@@ -227,10 +232,10 @@ export function buildJakov360AcceptanceSeedPlan() {
         sellerCountry: dudi.sellerCountry,
         originCountry: dudi.originCountry,
         importerName: dudi.importerName,
-        priceIncludesVat: dudi.priceIncludesVat,
-        netPrice: dudi.netPrice,
-        availabilityConfirmed: dudi.availabilityConfirmed,
-        b2bPriceConfirmed: dudi.b2bPriceConfirmed,
+        priceIncludesVat: true,
+        netPrice: 916,
+        availabilityConfirmed: false,
+        b2bPriceConfirmed: false,
         requestedQuantity: 100,
         retailPriceOnly: true,
       },
@@ -251,76 +256,92 @@ export function buildJakov360AcceptanceSeedPlan() {
         offerType: directImport.offerType,
         sellerCountry: directImport.sellerCountry,
         originCountry: directImport.originCountry,
-        availabilityConfirmed: directImport.availabilityConfirmed,
-        b2bPriceConfirmed: directImport.b2bPriceConfirmed,
+        availabilityConfirmed: true,
+        b2bPriceConfirmed: true,
       },
     },
     {
       id: "36000000-0000-4000-8000-000000000040",
       supplierName: unknown.supplierName,
-      supplierCountry: unknown.supplierCountry,
-      moq: unknown.minimumOrderQuantity,
+      supplierCountry: null,
+      moq: null,
       unitPrice: null,
       currency: null,
       incoterm: null,
       sourceMetadata: {
         title: unknown.title,
         productUrl: unknown.productUrl,
-        imageUrl: null,
+        imageUrl: unknown.imageUrl,
         providerSource: unknown.source,
-        offerType: unknown.offerType,
-        availabilityConfirmed: unknown.availabilityConfirmed,
-        b2bPriceConfirmed: unknown.b2bPriceConfirmed,
+        offerType: "UNKNOWN",
+        availabilityConfirmed: false,
+        b2bPriceConfirmed: false,
       },
     },
   ];
 
-  const glassesCalculation = calculateLandedCost({
+  const glassesCalculation = {
+    id: "36000000-0000-4000-8000-000000000200",
     targetCountry: "RS",
     quantity: 1000,
     unitPrice: "0.964",
     currency: "EUR",
     incoterm: "FOB",
-    shippingCost: "0",
-    customsDutyRate: "0",
+    shippingCost: null,
+    insuranceCost: null,
+    customsDutyRate: null,
+    customsDutyAmount: null,
     vatRate: "20",
-    storageCost: "0",
-    inspectionCost: "0",
-    otherCosts: "0",
-    targetSellingPrice: "4",
-  });
+    vatAmount: null,
+    freightForwardingCost: null,
+    storageCost: null,
+    inspectionCost: null,
+    otherCosts: null,
+    knownCostTotal: "964.00",
+    landedCostTotal: null,
+    landedCostPerUnit: null,
+    targetSellingPrice: "4.00",
+    grossMarginPercent: null,
+    breakEvenPrice: null,
+    requiredCashTotal: null,
+    netAcquisitionCost: null,
+    vatTreatment: VatTreatments.UNSURE,
+    costEvidence: {
+      goods: { status: CostEvidenceStatuses.CONFIRMED, value: "0.964" },
+      shipping: { status: CostEvidenceStatuses.UNKNOWN, value: null },
+      insurance: { status: CostEvidenceStatuses.UNKNOWN, value: null },
+      customsDutyRate: { status: CostEvidenceStatuses.UNKNOWN, value: null },
+      vatRate: { status: CostEvidenceStatuses.ESTIMATED, value: "20" },
+      freightForwarding: { status: CostEvidenceStatuses.UNKNOWN, value: null },
+      storage: { status: CostEvidenceStatuses.NOT_APPLICABLE, value: null },
+      inspection: { status: CostEvidenceStatuses.NOT_APPLICABLE, value: null },
+      other: { status: CostEvidenceStatuses.UNKNOWN, value: null },
+      vatTreatment: VatTreatments.UNSURE,
+    },
+  };
 
   const searchCaches: AcceptanceSearchCacheFixture[] = [
-    {
-      id: "36000000-0000-4000-8000-000000000100",
-      query: JAKOV360_ACCEPTANCE_PROJECT_NAME,
-      quantity: 1000,
-      targetCountry: "RS",
-      results: [glasses, dudi, directImport, unknown],
-    },
-    {
-      id: "36000000-0000-4000-8000-000000000110",
-      query: "Dudi Co. punjač",
-      quantity: 100,
-      targetCountry: "RS",
-      results: [dudi],
-    },
+    { id: "36000000-0000-4000-8000-000000000100", query: JAKOV360_ACCEPTANCE_PROJECT_NAME, quantity: 1000, targetCountry: "RS", results: [glasses] },
+    { id: "36000000-0000-4000-8000-000000000110", query: JAKOV360_CHARGERS_PROJECT_NAME, quantity: 100, targetCountry: "RS", results: [dudi, directImport, unknown] },
   ];
 
   return {
-    project: {
-      id: JAKOV360_ACCEPTANCE_PROJECT_ID,
-      name: JAKOV360_ACCEPTANCE_PROJECT_NAME,
-      targetCountry: "RS",
-      quantity: 1000,
-      targetMargin: 30,
-    },
-    offers,
-    glassesOfferId: offers[0].id,
-    glassesCalculation: {
-      id: "36000000-0000-4000-8000-000000000200",
-      ...glassesCalculation,
-    },
+    projects: [
+      {
+        project: { id: JAKOV360_ACCEPTANCE_PROJECT_ID, name: JAKOV360_ACCEPTANCE_PROJECT_NAME, targetCountry: "RS", quantity: 1000, targetMargin: 30 },
+        offers: [glassesOffer],
+        calculations: [{ ...glassesCalculation, offerId: glassesOffer.id }],
+      },
+      {
+        project: { id: JAKOV360_CHARGERS_PROJECT_ID, name: JAKOV360_CHARGERS_PROJECT_NAME, targetCountry: "RS", quantity: 100, targetMargin: 25 },
+        offers: chargerOffers,
+        calculations: [],
+      },
+    ],
+    project: { id: JAKOV360_ACCEPTANCE_PROJECT_ID, name: JAKOV360_ACCEPTANCE_PROJECT_NAME, targetCountry: "RS", quantity: 1000, targetMargin: 30 },
+    offers: [glassesOffer, ...chargerOffers],
+    glassesOfferId: glassesOffer.id,
+    glassesCalculation,
     searchCaches,
     rfqExamples,
   };

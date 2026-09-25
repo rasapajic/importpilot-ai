@@ -120,38 +120,36 @@ Remove-Item Env:JAKOV360_ACCEPTANCE_SEED
 npm run dev
 ```
 
-Seed je idempotentan: ponavljanje osvežava isti projekat i iste cache ključeve,
-bez dupliranja podataka. Kreira projekat:
+Seed je idempotentan: ponavljanje briše i ponovo kreira samo dva lokalna
+acceptance projekta (uključujući istorije nastale browser proverom) i osvežava
+iste cache ključeve, bez dupliranja podataka. Kreira projekte:
 
 ```text
-JAKOV360 Acceptance pregled
+JAKOV360 Acceptance pregled — Zaštitne naočare
+JAKOV360 Acceptance pregled — USB-C punjači
 ```
 
-Direktan URL projekta je:
+Direktni URL-ovi su:
 
 ```text
 http://localhost:3000/projects/36000000-0000-4000-8000-000000000001
+http://localhost:3000/projects/36000000-0000-4000-8000-000000000002
 ```
 
-Prijavite se standardnim demo nalogom, otvorite projekat i u koraku `Ponude
-dobavljača` kliknite `Pretraži ponude`. Podrazumevani naziv, količina `1000` i
-zemlja `RS` vraćaju lokalni cache sa sledećim vizuelnim primerima:
+Prijavite se standardnim demo nalogom. Projekat naočara koristi količinu `1000`
+i sadrži četiri quantity tier-a; `500–1.199` je označen kao `Vaša količina`.
+Njegov nepotpun obračun prikazuje `Poznati troškovi do sada` i `Čeka potvrđene
+podatke`: transport, osiguranje, špedicija, carina i ostali obavezni troškovi
+ostaju nepoznati, a četvorocifreni HS naslov nije potvrđena tarifna stopa.
 
-- naočare sa četiri quantity tier-a; `500–1.199` je označen kao `Vaša količina`;
+Projekat USB-C punjača koristi količinu `100` i sadrži sledeće vizuelne primere:
+
 - `Domaće ponude`, `Direktan uvoz` i `Vrsta ponude nije potvrđena`;
 - Dudi Co. cena `1.099 RSD` sa PDV-om i neto cena `916 RSD`, bez potvrđene
   dostupnosti, B2B cene i oznake `Najbolji izbor`;
-- validna lokalna slika i primer bez slike koji aktivira fallback;
+- validna lokalna slika i namerno pokvaren URL slike koji aktivira fallback;
 - RFQ dugme sa izborom `Uzorak` / `Puna narudžbina`, engleskom porukom i copy
   dugmetom.
-
-U `Da li se isplati?` otvorite `Prikaži detalje`, zatim detalje prve ponude.
-Kalkulacija naočara prikazuje detaljan breakdown i `Čeka potvrđene podatke`, jer
-transport i carinska stopa nisu potvrđeni. TARIS URL i predloženi HS broj su
-sačuvani kao provenance, ali stopa nije označena kao zvanično potvrđena.
-
-Za izolovani Dudi scenario isključite `Koristi vrednosti iz projekta`, unesite
-upit `Dudi Co. punjač`, količinu `100` i zemlju `RS`, pa pokrenite pretragu.
 
 ## Pokretanje aplikacije
 
