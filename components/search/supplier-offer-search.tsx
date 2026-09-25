@@ -27,6 +27,7 @@ export function SupplierOfferSearch({
   targetCountry,
   openUrlImport = false,
   canDeleteSearch = false,
+  existingOffers = [],
 }: {
   projectId: string;
   productName: string;
@@ -34,6 +35,7 @@ export function SupplierOfferSearch({
   targetCountry: string | null;
   openUrlImport?: boolean;
   canDeleteSearch?: boolean;
+  existingOffers?: Array<{ productUrl: string | null; supplierName: string }>;
 }) {
   const { t } = useI18n();
   const router = useRouter();
@@ -107,6 +109,7 @@ export function SupplierOfferSearch({
   }, []);
 
   async function addResult(result: SupplierOfferSearchResult, index: number) {
+    if (isAlreadyAdded(result)) return;
     setImporting(index);
     setError("");
     try {
@@ -141,6 +144,15 @@ export function SupplierOfferSearch({
       availabilityConfirmed: result.availabilityConfirmed,
       b2bPriceConfirmed: result.b2bPriceConfirmed,
       priceIncludesVat: result.priceIncludesVat,
+    });
+  }
+
+  function isAlreadyAdded(result: SupplierOfferSearchResult) {
+    const normalizedUrl = result.productUrl?.replace(/\/$/, "").toLowerCase() ?? null;
+    return imported.includes(results?.indexOf(result) ?? -1) || existingOffers.some((offer) => {
+      const existingUrl = offer.productUrl?.replace(/\/$/, "").toLowerCase() ?? null;
+      if (normalizedUrl && existingUrl) return normalizedUrl === existingUrl;
+      return offer.supplierName.trim().toLowerCase() === result.supplierName.trim().toLowerCase();
     });
   }
 
@@ -305,6 +317,7 @@ export function SupplierOfferSearch({
                   },
                 });
                 const bestChoice = bestChoiceId === index;
+                const alreadyAdded = isAlreadyAdded(result);
                 return (
                   <article className="search-result-card" key={`${result.source}-${result.productUrl}`}>
                     {result.imageUrl ? (
@@ -387,12 +400,13 @@ export function SupplierOfferSearch({
                     </div>
                     <button
                       className="secondary-button"
-                      disabled={!readiness.ready || importing === index || imported.includes(index)}
+                      disabled={!readiness.ready || importing === index || alreadyAdded}
                       onClick={() => addResult(result, index)}
+                      title={!readiness.ready ? t(readinessExplanation(readiness)) : alreadyAdded ? t("Već dodato") : undefined}
                       type="button"
                     >
-                      {imported.includes(index)
-                        ? t("Dodato u projekat")
+                      {alreadyAdded
+                        ? t("Već dodato")
                         : importing === index
                           ? t("Dodavanje...")
                           : t("Dodaj ponudu")}

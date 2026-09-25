@@ -12,7 +12,13 @@ import {
 } from "@/modules/cost-engine/application/calculation-summary";
 import { buildLandedCostBreakdown } from "@/modules/cost-engine/application/landed-cost-breakdown";
 import { getAutomaticVatRate, resolveVatRate } from "@/modules/cost-engine/domain/vat-rates";
-import { CostEvidenceStatuses, VatTreatments, type CostEvidenceStatus } from "@/modules/cost-engine/domain/cost-evidence";
+import {
+  CostEvidenceStatuses,
+  tariffCodeHasDecisionPrecision,
+  VatTreatments,
+  type CostEvidenceStatus,
+  type ShippingEstimateEvidence,
+} from "@/modules/cost-engine/domain/cost-evidence";
 import { getStatusLabel } from "@/modules/i18n/translations";
 import { getEuroDisplay } from "@/modules/fx/euro-display";
 import { FxSourceNote } from "@/components/fx/fx-source-note";
@@ -22,13 +28,23 @@ function EvidenceSelect({
   name,
   defaultValue,
   translate,
+  value,
+  onChange,
 }: {
   name: string;
   defaultValue: CostEvidenceStatus;
   translate: (text: string) => string;
+  value?: CostEvidenceStatus;
+  onChange?: (value: CostEvidenceStatus) => void;
 }) {
   return (
-    <select aria-label={translate("Status stavke")} defaultValue={defaultValue} name={name}>
+    <select
+      aria-label={translate("Status stavke")}
+      defaultValue={value === undefined ? defaultValue : undefined}
+      name={name}
+      onChange={onChange ? (event) => onChange(event.target.value as CostEvidenceStatus) : undefined}
+      value={value}
+    >
       <option value={CostEvidenceStatuses.CONFIRMED}>{translate("Potvrđeno")}</option>
       <option value={CostEvidenceStatuses.ESTIMATED}>{translate("Procenjeno")}</option>
       <option value={CostEvidenceStatuses.UNKNOWN}>{translate("Nepoznato")}</option>
@@ -68,6 +84,8 @@ export function CostCalculatorForm({
   const [pending, setPending] = useState(false);
   const [editing, setEditing] = useState(!latestCalculation || editInitially);
   const [shippingCost, setShippingCost] = useState(values.shippingCost);
+  const [shippingStatus, setShippingStatus] = useState<CostEvidenceStatus>(values.shippingStatus);
+  const [shippingEstimate, setShippingEstimate] = useState<ShippingEstimateEvidence | null>(values.shippingEstimate);
   const [overrideVat, setOverrideVat] = useState(previousVatIsOverride);
   const [manualVatRate, setManualVatRate] = useState(previousVatIsOverride ? values.vatRate : "");
   const panelRef = useRef<HTMLDivElement>(null);
@@ -88,6 +106,11 @@ export function CostCalculatorForm({
   const sourceData = sourceMetadata && typeof sourceMetadata === "object" && !Array.isArray(sourceMetadata)
     ? sourceMetadata as Record<string, unknown>
     : {};
+  const metadataProvenance = sourceData.customsProvenance && typeof sourceData.customsProvenance === "object" && !Array.isArray(sourceData.customsProvenance)
+    ? sourceData.customsProvenance as Record<string, unknown>
+    : {};
+  const customsProvenance = values.customsProvenance ?? metadataProvenance;
+  const tariffCode = typeof customsProvenance.tariffCode === "string" ? customsProvenance.tariffCode : "";
   const breakdown = latestCalculation ? buildLandedCostBreakdown({
     unitPrice: latestCalculation.unitPrice,
     quantity: latestCalculation.quantity,
@@ -148,9 +171,26 @@ export function CostCalculatorForm({
     setPending(true);
     setError("");
     const form = new FormData(event.currentTarget);
-    const body = Object.fromEntries(form.entries());
+    const body: Record<string, unknown> = Object.fromEntries(form.entries());
     body.calculationStatus = form.get("needsReview") ? "NEEDS_REVIEW" : "CALCULATED";
+    body.shippingEstimate = shippingStatus === CostEvidenceStatuses.ESTIMATED ? shippingEstimate : null;
+    body.customsProvenance = {
+      tariffCode: form.get("tariffCode") || null,
+      originCountry: form.get("originCountry") || null,
+      shippingCountry: form.get("shippingCountry") || null,
+      rateType: form.get("customsRateType") || "unknown",
+      sourceName: form.get("customsSourceName") || null,
+      officialUrl: form.get("customsOfficialUrl") || null,
+      checkedAt: form.get("customsCheckedAt") || null,
+      validFrom: null,
+      validUntil: form.get("customsValidUntil") || null,
+      confirmedByOfficialSource: form.get("customsConfirmedByOfficialSource") === "on",
+      classificationSuggested: !tariffCodeHasDecisionPrecision(String(form.get("tariffCode") ?? "")),
+    };
     delete body.needsReview;
+    for (const key of ["tariffCode", "originCountry", "shippingCountry", "customsRateType", "customsSourceName", "customsOfficialUrl", "customsCheckedAt", "customsValidUntil", "customsConfirmedByOfficialSource"]) {
+      delete body[key];
+    }
 
     try {
       const response = await fetch(`/api/offers/${offerId}/cost-calculations`, {
@@ -179,15 +219,32 @@ export function CostCalculatorForm({
           <div className="cost-form-wide">
             <TransportCostAssistant
               currency={currency}
-              onApply={setShippingCost}
+              initialSelection={shippingEstimate}
+              onApply={(selection) => {
+                const { estimatedCostEur, ...evidence } = selection;
+                setShippingCost(estimatedCostEur.toFixed(2));
+                setShippingStatus(CostEvidenceStatuses.ESTIMATED);
+                setShippingEstimate(evidence);
+              }}
+              onClear={() => {
+                setShippingCost("");
+                setShippingStatus(CostEvidenceStatuses.UNKNOWN);
+                setShippingEstimate(null);
+              }}
               productName={productName}
               quantity={quantity}
               sourceMetadata={sourceMetadata}
             />
           </div>
           <label>Transport ({currency})
-            <input min={0} name="shippingCost" onChange={(event) => setShippingCost(event.target.value)} placeholder={t("Nepoznato")} step="0.01" type="number" value={shippingCost} />
-            <EvidenceSelect defaultValue={values.shippingStatus} name="shippingStatus" translate={t} />
+            <input min={0} name="shippingCost" onChange={(event) => { setShippingCost(event.target.value); setShippingEstimate(null); }} placeholder={t("Nepoznato")} step="0.01" type="number" value={shippingCost} />
+            <EvidenceSelect
+              defaultValue={values.shippingStatus}
+              name="shippingStatus"
+              onChange={(status) => { setShippingStatus(status); if (status !== CostEvidenceStatuses.ESTIMATED) setShippingEstimate(null); }}
+              translate={t}
+              value={shippingStatus}
+            />
           </label>
           <label>Carina (%)
             <input defaultValue={values.customsDutyRate} max={500} min={0} name="customsDutyRate" placeholder={t("Nepoznato")} step="0.0001" type="number" />
@@ -228,6 +285,30 @@ export function CostCalculatorForm({
                   <option value={VatTreatments.UNSURE}>{t("Nisam siguran")}</option>
                 </select>
               </label>
+              <fieldset className="customs-provenance-fields">
+                <legend>{t("Dokaz za carinsku stopu")}</legend>
+                <label>{t(tariffCode && !tariffCodeHasDecisionPrecision(tariffCode) ? "Predložena tarifna grupa" : "Puni tarifni kod")}
+                  <input defaultValue={tariffCode} name="tariffCode" placeholder="90049010" />
+                </label>
+                <label>{t("Poreklo robe")}<input defaultValue={String(customsProvenance.originCountry ?? "")} maxLength={2} name="originCountry" /></label>
+                <label>{t("Zemlja slanja")}<input defaultValue={String(customsProvenance.shippingCountry ?? "")} maxLength={2} name="shippingCountry" /></label>
+                <label>{t("Carinski tretman")}
+                  <select defaultValue={String(customsProvenance.rateType ?? "unknown")} name="customsRateType">
+                    <option value="unknown">{t("Nepoznato")}</option>
+                    <option value="standard">{t("Standardni")}</option>
+                    <option value="preferential">{t("Preferencijalni")}</option>
+                  </select>
+                </label>
+                <label>{t("Naziv zvaničnog izvora")}<input defaultValue={String(customsProvenance.sourceName ?? "")} name="customsSourceName" /></label>
+                <label>{t("Zvanični URL")}<input defaultValue={String(customsProvenance.officialUrl ?? "")} name="customsOfficialUrl" type="url" /></label>
+                <label>{t("Datum provere")}<input defaultValue={String(customsProvenance.checkedAt ?? "")} name="customsCheckedAt" type="date" /></label>
+                <label>{t("Datum važenja")}<input defaultValue={String(customsProvenance.validUntil ?? "")} name="customsValidUntil" type="date" /></label>
+                <label className="checkbox-label">
+                  <input defaultChecked={customsProvenance.confirmedByOfficialSource === true} name="customsConfirmedByOfficialSource" type="checkbox" />
+                  {t("Potvrđeno u zvaničnom izvoru")}
+                </label>
+                {tariffCode && !tariffCodeHasDecisionPrecision(tariffCode) && <p className="warning-text">{t("Široka tarifna grupa ne potvrđuje carinsku stopu. Unesite puni tarifni kod.")}</p>}
+              </fieldset>
               <label>{t("Osiguranje")} ({currency})<input defaultValue={values.insuranceCost} min={0} name="insuranceCost" placeholder={t("Nepoznato")} step="0.01" type="number" /><EvidenceSelect defaultValue={values.insuranceStatus} name="insuranceStatus" translate={t} /></label>
               <label>{t("Špedicija")} ({currency})<input defaultValue={values.freightForwardingCost} min={0} name="freightForwardingCost" placeholder={t("Nepoznato")} step="0.01" type="number" /><EvidenceSelect defaultValue={values.freightForwardingStatus} name="freightForwardingStatus" translate={t} /></label>
               <label>Inspekcija ({currency})<input defaultValue={values.inspectionCost} min={0} name="inspectionCost" placeholder={t("Nepoznato")} step="0.01" type="number" /><EvidenceSelect defaultValue={values.inspectionStatus} name="inspectionStatus" translate={t} /></label>
@@ -271,15 +352,23 @@ export function CostCalculatorForm({
               <dl>
                 <div><dt>{t("Cena robe")}</dt><dd>{lineValue(breakdown.goodsCost, breakdown.lines.goods.status)}</dd></div>
                 <div><dt>{t("Međunarodni transport")}</dt><dd>{lineValue(breakdown.internationalShipping, breakdown.lines.shipping.status)}</dd></div>
+                {breakdown.shippingEstimate && (
+                  <div>
+                    <dt>{t("Izabrana procena transporta")}</dt>
+                    <dd>{t(breakdown.shippingEstimate.mode === "AIR" ? "Air" : breakdown.shippingEstimate.mode === "RAIL" ? "Rail" : "Sea")} · {t("Pouzdanost")}: {t(breakdown.shippingEstimate.confidence)} · {breakdown.shippingEstimate.estimatedWeightKg} kg · {breakdown.shippingEstimate.estimatedVolumeCbm} CBM</dd>
+                  </div>
+                )}
                 <div><dt>{t("Osiguranje")}</dt><dd>{lineValue(breakdown.insurance, breakdown.lines.insurance.status)}</dd></div>
                 <div><dt>{t("Carinska vrednost")}</dt><dd>{breakdown.customsValue === null ? t("Nepoznato") : `${breakdown.customsValue.toFixed(2)} ${currency}`} · {evidenceStatusLabel(breakdown.customsValueStatus)}</dd></div>
-                <div><dt>{t("Tarifni/HS broj")}</dt><dd>{breakdown.customsProvenance.tariffCode ?? t("Nije potvrđeno")}</dd></div>
+                <div><dt>{t(breakdown.customsProvenance.tariffCode && !tariffCodeHasDecisionPrecision(breakdown.customsProvenance.tariffCode) ? "Predložena tarifna grupa" : "Puni tarifni kod")}</dt><dd>{breakdown.customsProvenance.tariffCode ?? t("Nije potvrđeno")}</dd></div>
                 <div><dt>{t("Poreklo robe")}</dt><dd>{breakdown.customsProvenance.originCountry ?? t("Nije potvrđeno")}</dd></div>
                 <div><dt>{t("Zemlja slanja")}</dt><dd>{breakdown.customsProvenance.shippingCountry ?? t("Nije potvrđeno")}</dd></div>
+                <div><dt>{t("Carinski tretman")}</dt><dd>{t(breakdown.customsProvenance.rateType === "standard" ? "Standardni" : breakdown.customsProvenance.rateType === "preferential" ? "Preferencijalni" : "Nepoznato")}</dd></div>
                 <div><dt>{t("Carinska stopa")}</dt><dd>{breakdown.customsDutyRate === null ? t("Nepoznato") : `${breakdown.customsDutyRate.toFixed(4)}%`} · {evidenceStatusLabel(breakdown.lines.customsDuty.status)}</dd></div>
                 <div><dt>{t("Iznos carine")}</dt><dd>{lineValue(breakdown.customsDutyAmount, breakdown.lines.customsDuty.status)}</dd></div>
-                <div><dt>{t("Osnovica za PDV")}</dt><dd>{breakdown.vatBase === null ? t("Nepoznato") : `${breakdown.vatBase.toFixed(2)} ${currency}`} · {evidenceStatusLabel(breakdown.vatBaseStatus)}</dd></div>
-                <div><dt>{t("PDV")}</dt><dd>{lineValue(breakdown.vatAmount, breakdown.lines.vat.status)} · {t(breakdown.vatTreatment === VatTreatments.COST ? "Trošak" : breakdown.vatTreatment === VatTreatments.DEDUCTIBLE_INPUT_TAX ? "Potencijalno odbitni pretporez" : "Nisam siguran")}</dd></div>
+                <div><dt>{t("Stopa PDV-a")}</dt><dd>{breakdown.vatRate === null ? t("Nepoznato") : `${breakdown.vatRate}% — ${t(previousVatIsOverride ? "ručno uneta" : "određena prema ciljnoj državi")}`}</dd></div>
+                <div><dt>{t("Osnovica za PDV")}</dt><dd>{breakdown.vatBase === null ? t("nije poznata") : `${breakdown.vatBase.toFixed(2)} ${currency}`} · {evidenceStatusLabel(breakdown.vatBaseStatus)}</dd></div>
+                <div><dt>{t("Iznos PDV-a")}</dt><dd>{breakdown.vatAmount === null ? t("nije moguće izračunati dok carinska osnovica nije poznata") : `${lineValue(breakdown.vatAmount, breakdown.lines.vat.status)} · ${t(breakdown.vatTreatment === VatTreatments.COST ? "Trošak" : breakdown.vatTreatment === VatTreatments.DEDUCTIBLE_INPUT_TAX ? "Potencijalno odbitni pretporez" : "Nisam siguran")}`}</dd></div>
                 <div><dt>{t("Špedicija")}</dt><dd>{lineValue(breakdown.freightForwarding, breakdown.lines.freightForwarding.status)}</dd></div>
                 <div><dt>{t("Skladištenje")}</dt><dd>{lineValue(breakdown.storageCost, breakdown.lines.storage.status)}</dd></div>
                 <div><dt>{t("Inspekcija")}</dt><dd>{lineValue(breakdown.inspectionCost, breakdown.lines.inspection.status)}</dd></div>
@@ -287,6 +376,8 @@ export function CostCalculatorForm({
                 <div><dt>{t("Izvor carinske stope")}</dt><dd>{breakdown.customsProvenance.sourceName ?? t("Nepoznato")}</dd></div>
                 <div><dt>{t("Zvanični URL")}</dt><dd>{breakdown.customsProvenance.officialUrl ? <a href={breakdown.customsProvenance.officialUrl} rel="noreferrer" target="_blank">{breakdown.customsProvenance.officialUrl}</a> : t("Nepoznato")}</dd></div>
                 <div><dt>{t("Datum provere")}</dt><dd>{breakdown.customsProvenance.checkedAt ?? t("Nije provereno")}</dd></div>
+                <div><dt>{t("Datum važenja")}</dt><dd>{breakdown.customsProvenance.validUntil ?? t("Nije potvrđeno")}</dd></div>
+                <div><dt>{t("Status potvrde")}</dt><dd>{breakdown.customsProvenance.confirmedByOfficialSource && tariffCodeHasDecisionPrecision(breakdown.customsProvenance.tariffCode) ? t("Potvrđeno") : t("Nije potvrđeno")}</dd></div>
                 <div><dt>{t("Poznati troškovi do sada")}</dt><dd>{breakdown.knownCostTotal.toFixed(2)} {currency}</dd></div>
                 <div><dt>{t("Ukupna vrednost")}</dt><dd>{breakdown.isConfirmed && breakdown.displayedTotal !== null ? `${breakdown.displayedTotal.toFixed(2)} ${currency}` : t("Čeka potvrđene podatke")}</dd></div>
                 <div><dt>{t("Ukupno po komadu")}</dt><dd>{breakdown.isConfirmed && breakdown.totalPerUnit !== null ? `${breakdown.totalPerUnit.toFixed(2)} ${currency}` : t("Čeka potvrđene podatke")}</dd></div>

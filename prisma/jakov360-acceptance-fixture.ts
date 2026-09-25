@@ -127,7 +127,7 @@ export function buildJakov360AcceptanceSeedPlan() {
     minimumOrderQuantity: 100,
     incoterm: "FOB",
     productUrl: "https://supplier.example/jakov360/usb-c-pd-charger",
-    imageUrl: "/jakov360-acceptance-glasses.svg",
+    imageUrl: "/jakov360-acceptance-usb-c-charger.svg",
     source: "Alibaba acceptance fixture",
     offerType: "DIRECT_IMPORT",
     sellerCountry: "CN",
@@ -200,6 +200,7 @@ export function buildJakov360AcceptanceSeedPlan() {
     incoterm: glasses.incoterm,
     sourceMetadata: {
       title: glasses.title,
+      searchProductName: "Zaštitne naočare",
       productUrl: glasses.productUrl,
       imageUrl: glasses.imageUrl,
       providerSource: glasses.source,
@@ -225,6 +226,7 @@ export function buildJakov360AcceptanceSeedPlan() {
       incoterm: null,
       sourceMetadata: {
         title: dudi.title,
+        searchProductName: "USB-C PD 20W punjač",
         productUrl: dudi.productUrl,
         imageUrl: dudi.imageUrl,
         providerSource: dudi.source,
@@ -250,6 +252,7 @@ export function buildJakov360AcceptanceSeedPlan() {
       incoterm: directImport.incoterm,
       sourceMetadata: {
         title: directImport.title,
+        searchProductName: "USB-C PD 20W punjač",
         productUrl: directImport.productUrl,
         imageUrl: directImport.imageUrl,
         providerSource: directImport.source,
@@ -270,6 +273,7 @@ export function buildJakov360AcceptanceSeedPlan() {
       incoterm: null,
       sourceMetadata: {
         title: unknown.title,
+        searchProductName: "USB-C PD 20W punjač",
         productUrl: unknown.productUrl,
         imageUrl: unknown.imageUrl,
         providerSource: unknown.source,
@@ -321,8 +325,8 @@ export function buildJakov360AcceptanceSeedPlan() {
   };
 
   const searchCaches: AcceptanceSearchCacheFixture[] = [
-    { id: "36000000-0000-4000-8000-000000000100", query: JAKOV360_ACCEPTANCE_PROJECT_NAME, quantity: 1000, targetCountry: "RS", results: [glasses] },
-    { id: "36000000-0000-4000-8000-000000000110", query: JAKOV360_CHARGERS_PROJECT_NAME, quantity: 100, targetCountry: "RS", results: [dudi, directImport, unknown] },
+    { id: "36000000-0000-4000-8000-000000000100", query: "Zaštitne naočare", quantity: 1000, targetCountry: "RS", results: [glasses] },
+    { id: "36000000-0000-4000-8000-000000000110", query: "USB-C PD 20W punjač", quantity: 100, targetCountry: "RS", results: [dudi, directImport, unknown] },
   ];
 
   return {

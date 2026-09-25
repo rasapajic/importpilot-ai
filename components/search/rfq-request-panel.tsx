@@ -13,6 +13,7 @@ export function RfqRequestPanel({
   targetCountry,
   productUrl,
   incoterm,
+  triggerLabel = "Zatraži konačnu ponudu",
 }: {
   productTitle: string;
   supplierName: string;
@@ -20,6 +21,7 @@ export function RfqRequestPanel({
   targetCountry: string;
   productUrl?: string | null;
   incoterm?: string | null;
+  triggerLabel?: string;
 }) {
   const { locale, t } = useI18n();
   const [open, setOpen] = useState(false);
@@ -54,7 +56,7 @@ export function RfqRequestPanel({
   return (
     <div className="rfq-panel">
       <button className="primary-button" onClick={() => setOpen((value) => !value)} type="button">
-        {t("Zatraži konačnu ponudu")}
+        {t(triggerLabel)}
       </button>
       {open && (
         <div className="rfq-box">
@@ -72,7 +74,12 @@ export function RfqRequestPanel({
           </div>
           <textarea aria-label={t("RFQ poruka")} data-no-translate="true" readOnly rows={14} value={message} />
           {validationError && <p className="form-error" role="alert">{validationError}</p>}
-          <button className="secondary-button" onClick={() => void copy()} type="button">
+          <button
+            className="secondary-button"
+            onClick={() => void copy()}
+            title={!deliveryCity.trim() || !postalCode.trim() ? t("Unesite grad i poštanski broj pre kopiranja poruke.") : undefined}
+            type="button"
+          >
             {copied ? t("Poruka je kopirana") : t("Kopiraj RFQ poruku")}
           </button>
           <p className="muted-text">

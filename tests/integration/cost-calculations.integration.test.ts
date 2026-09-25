@@ -101,6 +101,29 @@ describeWithDatabase("cost calculation tenant isolation", () => {
     const assessment = await intelligence.assessSupplierOffer(offerId, organizationId);
     expect(assessment.costCalculationId).toBe(latest.id);
   });
+
+  it("persists the selected transport context and restores an estimated status after refresh", async () => {
+    const calculation = await service.createCostCalculation(offerId, organizationId, {
+      ...completeRequest(),
+      shippingCost: "225",
+      shippingStatus: CostEvidenceStatuses.ESTIMATED,
+      shippingEstimate: {
+        mode: "SEA",
+        confidence: "HIGH",
+        estimatedWeightKg: 300,
+        estimatedVolumeCbm: 1.2,
+        sizeOption: "BOOK",
+        weightOption: "G_100_500",
+      },
+    });
+    const formValues = (await import("@/modules/cost-engine/application/calculation-form-values"))
+      .getCalculationFormValues(calculation);
+
+    expect(calculation.calculationStatus).toBe(CalculationStatus.NEEDS_REVIEW);
+    expect(formValues.shippingStatus).toBe(CostEvidenceStatuses.ESTIMATED);
+    expect(formValues.shippingCost).toBe("225");
+    expect(formValues.shippingEstimate).toMatchObject({ mode: "SEA", confidence: "HIGH" });
+  });
 });
   function completeRequest(overrides: Record<string, string> = {}) {
     return {

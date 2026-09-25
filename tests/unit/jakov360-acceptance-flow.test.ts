@@ -187,7 +187,11 @@ describe("JAKOV360 acceptance import flow fixes", () => {
     expect(fullOrder).toContain("Hello Sales Team,");
     expect(fullOrder).toContain("final quotation for 100 units");
     expect(fullOrder).toContain("final unit price and total price");
-    expect(fullOrder).toContain("carton dimensions, gross weight and net weight");
+    expect(fullOrder).toContain("carton dimensions, carton count, gross weight and net weight");
+    expect(fullOrder).toContain("cargo insurance cost and coverage");
+    expect(fullOrder).toContain("proposed full HS/tariff code");
+    expect(fullOrder).toContain("DDP price and a clear DDP cost breakdown");
+    expect(fullOrder).toContain("treated as a proposal and verified against the official source");
     expect(fullOrder).toContain("11000 Beograd RS");
   });
 
@@ -228,5 +232,9 @@ describe("JAKOV360 acceptance import flow fixes", () => {
     expect(translateText("When you receive the reply, enter the confirmed data by editing the offer and calculation.", "sr"))
       .toBe("Kada dobijete odgovor, unesite potvrđene podatke kroz izmenu ponude i kalkulacije.");
     expect(translateText("Image was not fetched", "sr")).toBe("Slika nije preuzeta");
+    expect(translateText("Calculate profitability", "sr")).toBe("Izračunaj isplativost");
+    expect(translateText("Calculate profitability", "de")).toBe("Rentabilität berechnen");
+    expect(translateText("Calculate profitability", "en")).toBe("Calculate profitability");
+    expect(translateText("Profitability cannot be assessed", "sr")).toBe("Nije moguće proceniti isplativost");
   });
 });

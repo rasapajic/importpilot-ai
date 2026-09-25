@@ -33,9 +33,11 @@ function riskLabel(level: string | undefined) {
 export function AssessmentPanel({
   offerId,
   assessments,
+  calculationReady = false,
 }: {
   offerId: string;
   assessments: OfferAssessment[];
+  calculationReady?: boolean;
 }) {
   const { locale, t } = useI18n();
   const router = useRouter();
@@ -70,8 +72,11 @@ export function AssessmentPanel({
       {error && <p className="form-error">{error}</p>}
       {latest ? (
         <>
-          <div className="recommendation-summary">Preporuka<strong>{getStatusLabel(recommendationBadgeStatus(latest.recommendationStatus), locale)}</strong></div>
-          <p>{t(latest.explanation)}</p>
+          <div className="recommendation-summary">
+            {calculationReady ? t("Preporuka") : t("Status")}
+            <strong>{calculationReady ? getStatusLabel(recommendationBadgeStatus(latest.recommendationStatus), locale) : t("Nije moguće proceniti isplativost")}</strong>
+          </div>
+          <p>{calculationReady ? t(latest.explanation) : t("Prikazana je samo privremena procena rizika. Potvrdite troškove za konačnu preporuku.")}</p>
           <details>
             <summary>Prikaži detaljnu analizu</summary>
             <div className="score-grid assessment-scores">
@@ -99,7 +104,7 @@ export function AssessmentPanel({
             <ul>
               {assessments.map((assessment) => (
                 <li key={assessment.id}>
-                  {assessment.createdAt.toLocaleString(locale)} · {getStatusLabel(assessment.recommendationStatus, locale)} · {assessment.overallScore}/100 · {assessment.assessmentVersion}
+                  {assessment.createdAt.toLocaleString(locale)} · {calculationReady ? getStatusLabel(assessment.recommendationStatus, locale) : t("Privremena procena")} · {assessment.overallScore}/100 · {assessment.assessmentVersion}
                 </li>
               ))}
             </ul>

@@ -6,6 +6,7 @@ import {
   VatTreatments,
   type CostEvidenceSnapshot,
   type CostEvidenceStatus,
+  type ShippingEstimateEvidence,
   type VatTreatment,
 } from "../domain/cost-evidence";
 
@@ -16,6 +17,7 @@ export type CustomsProvenance = {
   officialUrl?: string | null;
   checkedAt?: string | null;
   validFrom?: string | null;
+  validUntil?: string | null;
   tariffCode?: string | null;
   originCountry?: string | null;
   shippingCountry?: string | null;
@@ -84,6 +86,7 @@ export type LandedCostBreakdown = {
   pendingReasons: string[];
   assumptions: string[];
   customsProvenance: Required<CustomsProvenance>;
+  shippingEstimate: ShippingEstimateEvidence | null;
   lines: Record<
     "goods" | "shipping" | "insurance" | "customsDuty" | "vat" | "freightForwarding" | "storage" | "inspection" | "other",
     BreakdownLine
@@ -106,6 +109,7 @@ function normalizeProvenance(provenance?: CustomsProvenance | null): Required<Cu
     officialUrl: provenance?.officialUrl ?? null,
     checkedAt: provenance?.checkedAt ?? null,
     validFrom: provenance?.validFrom ?? null,
+    validUntil: provenance?.validUntil ?? null,
     tariffCode: provenance?.tariffCode ?? null,
     originCountry: provenance?.originCountry ?? null,
     shippingCountry: provenance?.shippingCountry ?? null,
@@ -161,7 +165,7 @@ export function buildLandedCostBreakdown(input: LandedCostBreakdownInput): Lande
   const inspectionCost = nullableNumber(input.inspectionCost);
   const otherCosts = nullableNumber(input.otherCosts);
   const evidence = parseEvidence(input.costEvidence);
-  const provenance = normalizeProvenance(input.customsProvenance);
+  const provenance = normalizeProvenance(evidence?.customsProvenance ?? input.customsProvenance);
   const officialCustoms = isOfficialCustomsEvidenceConfirmed(provenance);
   const lines = {
     goods: line(goodsCost, evidence?.goods.status ?? CostEvidenceStatuses.CONFIRMED),
@@ -250,6 +254,7 @@ export function buildLandedCostBreakdown(input: LandedCostBreakdownInput): Lande
     pendingReasons: [...new Set(pendingReasons)],
     assumptions,
     customsProvenance: provenance,
+    shippingEstimate: evidence?.shippingEstimate ?? null,
     lines,
   };
 }

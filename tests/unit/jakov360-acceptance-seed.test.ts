@@ -63,6 +63,7 @@ describe("JAKOV360 acceptance seed plan", () => {
     const glasses = allResults.find((result) => result.title.includes("naočare"));
     const dudi = allResults.find((result) => result.supplierName === "Dudi Co.");
     const unknown = allResults.find((result) => result.offerType === "UNKNOWN");
+    const charger = allResults.find((result) => result.supplierName === "Dongguan Power Export");
     expect(glasses?.quantityTiers).toHaveLength(4);
     expect(findMatchingQuantityTier(glasses?.quantityTiers, 1000)).toMatchObject({
       minQuantity: 500,
@@ -70,6 +71,9 @@ describe("JAKOV360 acceptance seed plan", () => {
     });
     expect(glasses?.imageUrl).toContain("jakov360-acceptance-glasses.svg");
     expect(unknown?.imageUrl).toContain("missing-image.svg");
+    expect(charger?.imageUrl).toContain("jakov360-acceptance-usb-c-charger.svg");
+    expect(charger?.imageUrl).not.toContain("glasses");
+    expect(plan.searchCaches.map((cache) => cache.query)).toEqual(["Zaštitne naočare", "USB-C PD 20W punjač"]);
 
     expect(dudi).toMatchObject({
       price: 1099,
@@ -116,5 +120,6 @@ describe("JAKOV360 acceptance seed plan", () => {
     expect(provenance.rateType).toBe("unknown");
     expect(plan.rfqExamples.sample).toContain("request a sample");
     expect(plan.rfqExamples.fullOrder).toContain("final quotation for 1000 units");
+    expect(plan.rfqExamples.fullOrder).toContain("proposed full HS/tariff code");
   });
 });

@@ -114,6 +114,24 @@ describe("smart transport cost estimation", () => {
     });
   });
 
+  it("keeps rail and sea calculations distinct for 1,000 glasses and yields the accepted sea estimate", () => {
+    const estimate = estimateProductLogistics({
+      productName: "Zaštitne naočare",
+      quantity: 1000,
+      sizeOption: "BOOK",
+      weightOption: "G_100_500",
+    });
+    expect(estimate).not.toBeNull();
+    const routes = estimateTransportRoutes(estimate!);
+    const rail = routes.find((route) => route.mode === "RAIL");
+    const sea = routes.find((route) => route.mode === "SEA");
+
+    expect(estimate).toMatchObject({ estimatedWeightKg: 300, estimatedVolumeCbm: 1.2, confidence: "HIGH" });
+    expect(sea?.estimatedCostEur).toBe(225);
+    expect(rail?.estimatedCostEur).toBe(350);
+    expect(rail?.estimatedCostEur).not.toBe(sea?.estimatedCostEur);
+  });
+
   it("keeps charger and LED estimates isolated by product", () => {
     const charger = estimateProductLogistics({ productName: "USB-C phone charger", quantity: 100 });
     const light = estimateProductLogistics({ productName: "LED light", quantity: 100 });

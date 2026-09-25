@@ -99,6 +99,29 @@ describe("cost evidence and partial calculation", () => {
     })).toBe(true);
   });
 
+  it("keeps a supplied duty rate unknown until the full code and official evidence are confirmed", () => {
+    const result = calculateProgressiveLandedCost({
+      ...unknownInput,
+      shippingCost: "225",
+      shippingStatus: CostEvidenceStatuses.ESTIMATED,
+      customsDutyRate: "8",
+      customsDutyStatus: CostEvidenceStatuses.CONFIRMED,
+      shippingEstimate: {
+        mode: "SEA",
+        confidence: "HIGH",
+        estimatedWeightKg: 300,
+        estimatedVolumeCbm: 1.2,
+        sizeOption: "BOOK",
+        weightOption: "G_100_500",
+      },
+    });
+
+    expect(result.customsDutyRate).toBeNull();
+    expect(result.landedCostTotal).toBeNull();
+    expect(result.costEvidence.shippingEstimate).toMatchObject({ mode: "SEA", confidence: "HIGH" });
+    expect(result.costEvidence.customsProvenance?.tariffCode).toBe("9004");
+  });
+
   it("separates required cash and deductible-VAT net acquisition cost", () => {
     const result = calculateProgressiveLandedCost({
       ...unknownInput,

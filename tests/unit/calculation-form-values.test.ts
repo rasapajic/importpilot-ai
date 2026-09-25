@@ -20,6 +20,7 @@ describe("calculation edit values", () => {
     expect(getCalculationFormValues(calculation as never)).toEqual({
       shippingCost: "120.5",
       shippingStatus: "UNKNOWN",
+      shippingEstimate: null,
       insuranceCost: "",
       insuranceStatus: "UNKNOWN",
       customsDutyRate: "8.25",
@@ -36,6 +37,7 @@ describe("calculation edit values", () => {
       otherStatus: "UNKNOWN",
       targetSellingPrice: "25",
       vatTreatment: "UNSURE",
+      customsProvenance: null,
       needsReview: true,
     });
   });

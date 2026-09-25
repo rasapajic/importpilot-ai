@@ -27,7 +27,7 @@ export function getMobileWorkflowActions(input: MobileWorkflowActionInput): Mobi
   }
 
   if (!input.hasFinalRecommendation) {
-    return [{ href: "#workflow-step-decision", label: "Generiši preporuku", variant: "PRIMARY" }];
+    return [{ href: "#workflow-step-decision", label: "Izračunaj isplativost", variant: "PRIMARY" }];
   }
 
   return [
@@ -39,7 +39,7 @@ export function getMobileWorkflowActions(input: MobileWorkflowActionInput): Mobi
     },
     {
       href: `/projects/${input.projectId}?newAnalysis=1#workflow-step-decision`,
-      label: "Nova analiza",
+      label: "Izaberi drugu ponudu",
       variant: "SECONDARY",
     },
   ];

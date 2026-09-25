@@ -32,9 +32,10 @@ export async function createCostCalculation(
   const sourceMetadata = offer.sourceMetadata && typeof offer.sourceMetadata === "object" && !Array.isArray(offer.sourceMetadata)
     ? offer.sourceMetadata as Record<string, unknown>
     : {};
-  const customsProvenance = sourceMetadata.customsProvenance && typeof sourceMetadata.customsProvenance === "object" && !Array.isArray(sourceMetadata.customsProvenance)
+  const metadataCustomsProvenance = sourceMetadata.customsProvenance && typeof sourceMetadata.customsProvenance === "object" && !Array.isArray(sourceMetadata.customsProvenance)
     ? sourceMetadata.customsProvenance as never
     : null;
+  const customsProvenance = request.customsProvenance ?? metadataCustomsProvenance;
   const result = calculateProgressiveLandedCost({
     targetCountry: offer.project.targetCountry,
     quantity: offer.project.quantity,
@@ -60,6 +61,7 @@ export async function createCostCalculation(
     targetSellingPrice: request.targetSellingPrice,
     vatTreatment: request.vatTreatment,
     customsProvenance,
+    shippingEstimate: request.shippingEstimate ?? null,
   });
 
   return prisma.$transaction(async (transaction) => {

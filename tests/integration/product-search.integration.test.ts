@@ -79,10 +79,20 @@ describeWithDatabase("supplier search result import and tenant isolation", () =>
       ...result,
       supplierName: "Corrected Supplier Name",
       minimumOrderQuantity: 250,
+      productUrl: `${result.productUrl}-corrected`,
     });
     expect(corrected.supplierName).toBe("Corrected Supplier Name");
     expect(corrected.moq).toBe(250);
-    expect(corrected.sourceMetadata).toMatchObject({ productUrl: result.productUrl });
+    expect(corrected.sourceMetadata).toMatchObject({ productUrl: `${result.productUrl}-corrected` });
+  });
+
+  it("returns the existing offer instead of creating a duplicate product URL", async () => {
+    const before = await prisma.supplierOffer.count({ where: { projectId, organizationId } });
+    const existing = await service.importSearchResult(projectId, organizationId, result);
+    const duplicate = await service.importSearchResult(projectId, organizationId, result);
+
+    expect(duplicate.id).toBe(existing.id);
+    expect(await prisma.supplierOffer.count({ where: { projectId, organizationId } })).toBe(before);
   });
 
   it("passes validated manual comparison values to the provider", async () => {

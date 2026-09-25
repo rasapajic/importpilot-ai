@@ -13,8 +13,8 @@ describe("decision step summary", () => {
   });
 
   it("does not expose NEED_MORE_OFFERS as DODAJ PONUDE in step 5", () => {
-    expect(getDecisionStepSummary("NEED_MORE_OFFERS", "sr")).toBe("Generiši preporuku");
-    expect(getDecisionStepSummary(null, "sr")).toBe("Generiši preporuku");
+    expect(getDecisionStepSummary("NEED_MORE_OFFERS", "sr")).toBe("Izračunaj isplativost");
+    expect(getDecisionStepSummary(null, "sr")).toBe("Izračunaj isplativost");
     expect(isFinalDecisionStatus("NEED_MORE_OFFERS")).toBe(false);
     expect(isFinalDecisionStatus("READY_TO_BUY")).toBe(true);
   });

@@ -15,6 +15,7 @@ import {
 import type { ProjectDecisionResult } from "@/modules/decisions/domain/project-decision";
 import { getEuroDisplay } from "@/modules/fx/euro-display";
 import { getStatusLabel } from "@/modules/i18n/translations";
+import { RfqRequestPanel } from "@/components/search/rfq-request-panel";
 
 type DecisionView = ProjectDecisionResult & { id: string; createdAt: Date };
 type SelectedCalculation = {
@@ -30,6 +31,10 @@ type AnalyzedOfferSummary = {
   quantity: number;
   unitPrice: string | null;
   currency: string | null;
+  calculationReady: boolean;
+  incoterm: string | null;
+  productUrl: string | null;
+  targetCountry: string;
 };
 
 export function ProjectDecisionPanel({
@@ -38,20 +43,24 @@ export function ProjectDecisionPanel({
   selectedCalculation,
   analyzedOffers,
   assessedOfferCount = 0,
+  selectedAnalysisOfferId,
 }: {
   projectId: string;
   decision: DecisionView | null;
   selectedCalculation: SelectedCalculation | null;
   analyzedOffers: AnalyzedOfferSummary[];
   assessedOfferCount?: number;
+  selectedAnalysisOfferId?: string;
 }) {
   const { locale, t } = useI18n();
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const numberLocale = locale === "sr" ? "sr-Latn" : locale;
-  const analysisTitle = analyzedOffers.length === 1
-    ? `${t("Analiza ponude")}: ${analyzedOffers[0].supplierName} — ${new Intl.NumberFormat(numberLocale).format(analyzedOffers[0].quantity)} ${t("kom")}`
+  const focusedOffer = analyzedOffers.find((offer) => offer.offerId === selectedAnalysisOfferId) ?? analyzedOffers[0] ?? null;
+  const decisionReadyOffers = analyzedOffers.filter((offer) => offer.calculationReady);
+  const analysisTitle = analyzedOffers.length === 1 && focusedOffer
+    ? `${t("Analiza ponude")}: ${focusedOffer.supplierName} — ${new Intl.NumberFormat(numberLocale).format(focusedOffer.quantity)} ${t("kom")}`
     : analyzedOffers.length > 1
       ? `${t("Uporedna analiza")} ${analyzedOffers.length} ${t("ponuda")}`
       : t("Da li se isplati?");
@@ -105,21 +114,27 @@ export function ProjectDecisionPanel({
           <h2>{analysisTitle}</h2>
         </div>
         <div className="actions">
-          <button disabled={pending || analyzedOffers.length === 0} onClick={generate} type="button">
-            {pending ? t("Generating...") : hasFinalRecommendation ? t("Save decision") : t("Generate recommendation")}
+          <button
+            disabled={pending || decisionReadyOffers.length === 0}
+            onClick={generate}
+            title={decisionReadyOffers.length === 0 ? t("Potvrdite obavezne troškove pre izračunavanja isplativosti.") : undefined}
+            type="button"
+          >
+            {pending ? t("Računanje...") : hasFinalRecommendation ? t("Ponovo izračunaj isplativost") : t("Izračunaj isplativost")}
           </button>
           {hasFinalRecommendation && <Link className="secondary-link" href={`/projects/${projectId}/summary`}>{t("Izvezi PDF")}</Link>}
-          <Link className="secondary-link" href="#workflow-step-offer">{t("Nova analiza")}</Link>
+          <Link className="secondary-link" href="#workflow-step-offer">{t("Izaberi drugu ponudu")}</Link>
         </div>
       </header>
       {analyzedOffers.length > 0 ? (
         <div className="analyzed-offer-list" aria-label={t("Ponude uključene u analizu")}>
           {analyzedOffers.map((offer) => (
-            <article className="analyzed-offer-summary" key={offer.offerId}>
+            <article className={offer.offerId === focusedOffer?.offerId ? "analyzed-offer-summary analyzed-offer-summary-focused" : "analyzed-offer-summary"} key={offer.offerId}>
               <strong>{offer.productName}</strong>
               <span>{offer.supplierName}</span>
               <span>{new Intl.NumberFormat(numberLocale).format(offer.quantity)} {t("kom")}</span>
               <span>{offer.unitPrice && offer.currency ? `${offer.unitPrice} ${offer.currency}` : t("Cena nije navedena")}</span>
+              <span>{offer.calculationReady ? t("Spremno za procenu isplativosti") : t("Čeka potvrđene podatke")}</span>
             </article>
           ))}
         </div>
@@ -127,6 +142,21 @@ export function ProjectDecisionPanel({
         <p className="warning-text">{assessedOfferCount > 0
           ? t("Analizirane ponude još nemaju kompletan potvrđen obračun. Potvrdite sve troškove pre preporuke.")
           : t("Izaberite i analizirajte najmanje jednu kompletnu ponudu. Potrebni su dobavljač, cena, valuta i MOQ.")}</p>
+      )}
+      {focusedOffer && !focusedOffer.calculationReady && (
+        <div className="calculation-warning profitability-unavailable">
+          <strong>{t("Nije moguće proceniti isplativost")}</strong>
+          <p>{t("Sledeći korak: Zatražite potvrdu podataka i pregovarajte")}</p>
+          <RfqRequestPanel
+            incoterm={focusedOffer.incoterm}
+            productTitle={focusedOffer.productName}
+            productUrl={focusedOffer.productUrl}
+            quantity={focusedOffer.quantity}
+            supplierName={focusedOffer.supplierName}
+            targetCountry={focusedOffer.targetCountry}
+            triggerLabel="Zatraži podatke od dobavljača"
+          />
+        </div>
       )}
       {error && <p className="form-error">{error}</p>}
       {hasFinalRecommendation && decision && summary ? (

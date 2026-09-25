@@ -30,6 +30,8 @@ export function getCalculationFormValues(calculation?: CostCalculation) {
     otherStatus: snapshot?.other.status ?? CostEvidenceStatuses.UNKNOWN,
     targetSellingPrice: calculation?.targetSellingPrice?.toString() ?? "",
     vatTreatment: calculation?.vatTreatment ?? snapshot?.vatTreatment ?? VatTreatments.UNSURE,
+    shippingEstimate: snapshot?.shippingEstimate ?? null,
+    customsProvenance: snapshot?.customsProvenance ?? null,
     needsReview: calculation?.calculationStatus === "NEEDS_REVIEW",
   };
 }

@@ -68,6 +68,15 @@ export async function importSearchResult(
   if (!readiness.ready) {
     throw new ProductSearchResultNotReadyError(readinessExplanation(readiness));
   }
+  const existingOffer = await prisma.supplierOffer.findFirst({
+    where: {
+      projectId,
+      organizationId,
+      sourceMetadata: { path: ["productUrl"], equals: result.productUrl },
+    },
+  });
+  if (existingOffer) return existingOffer;
+
   return prisma.$transaction(async (transaction) => {
     const offer = await transaction.supplierOffer.create({
       data: {

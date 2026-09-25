@@ -11,6 +11,7 @@ import {
   type ProductWeightOption,
   type TransportMode,
 } from "@/modules/transport/domain/transport-estimator";
+import type { ShippingEstimateEvidence } from "@/modules/cost-engine/domain/cost-evidence";
 
 const sizeOptions: Array<{ value: ProductSizeOption; label: string }> = [
   { value: "POCKET", label: "Fits in pocket" },
@@ -39,17 +40,26 @@ export function TransportCostAssistant({
   quantity,
   currency,
   sourceMetadata,
+  initialSelection,
   onApply,
+  onClear,
 }: {
   productName: string;
   quantity: number;
   currency: string;
   sourceMetadata?: unknown;
-  onApply: (value: string) => void;
+  initialSelection?: ShippingEstimateEvidence | null;
+  onApply: (selection: ShippingEstimateEvidence & { estimatedCostEur: number }) => void;
+  onClear: () => void;
 }) {
   const { t } = useI18n();
-  const [sizeOption, setSizeOption] = useState<ProductSizeOption | "">("");
-  const [weightOption, setWeightOption] = useState<ProductWeightOption | "">("");
+  const [sizeOption, setSizeOption] = useState<ProductSizeOption | "">(
+    (initialSelection?.sizeOption as ProductSizeOption | null) ?? "",
+  );
+  const [weightOption, setWeightOption] = useState<ProductWeightOption | "">(
+    (initialSelection?.weightOption as ProductWeightOption | null) ?? "",
+  );
+  const [selectedMode, setSelectedMode] = useState<TransportMode | null>(initialSelection?.mode ?? null);
   const supplierLogistics = useMemo(() => extractSupplierLogisticsData(sourceMetadata), [sourceMetadata]);
   const logisticsEstimate = useMemo(() => estimateProductLogistics({
     productName,
@@ -62,11 +72,28 @@ export function TransportCostAssistant({
     () => logisticsEstimate ? estimateTransportRoutes(logisticsEstimate) : [],
     [logisticsEstimate],
   );
+  const selectedRoute = routes.find((route) => route.mode === selectedMode) ?? null;
   const transportStatus = !logisticsEstimate
     ? "Transport nije poznat"
-    : logisticsEstimate.source === "SUPPLIER"
-      ? "Transport potvrđen"
-      : "Transport procenjen";
+    : selectedRoute
+      ? "Transport procenjen"
+      : "Procene transporta su dostupne";
+
+  function applyRoute(mode: TransportMode) {
+    if (!logisticsEstimate) return;
+    const route = routes.find((candidate) => candidate.mode === mode);
+    if (!route) return;
+    setSelectedMode(mode);
+    onApply({
+      mode,
+      confidence: route.confidence,
+      estimatedCostEur: route.estimatedCostEur,
+      estimatedWeightKg: logisticsEstimate.estimatedWeightKg,
+      estimatedVolumeCbm: logisticsEstimate.estimatedVolumeCbm,
+      sizeOption: sizeOption || null,
+      weightOption: weightOption || null,
+    });
+  }
 
   return (
     <section className="transport-assistant">
@@ -84,7 +111,7 @@ export function TransportCostAssistant({
         <div className="transport-simple-questions">
           <label>
             {t("How large is the product?")}
-            <select onChange={(event) => setSizeOption(event.target.value as ProductSizeOption | "")} value={sizeOption}>
+            <select onChange={(event) => { setSizeOption(event.target.value as ProductSizeOption | ""); setSelectedMode(null); onClear(); }} value={sizeOption}>
               <option value="">{t("Not sure")}</option>
               {sizeOptions.map((option) => (
                 <option key={option.value} value={option.value}>{t(option.label)}</option>
@@ -93,7 +120,7 @@ export function TransportCostAssistant({
           </label>
           <label>
             {t("How heavy is one item?")}
-            <select onChange={(event) => setWeightOption(event.target.value as ProductWeightOption | "")} value={weightOption}>
+            <select onChange={(event) => { setWeightOption(event.target.value as ProductWeightOption | ""); setSelectedMode(null); onClear(); }} value={weightOption}>
               <option value="">{t("Not sure")}</option>
               {weightOptions.map((option) => (
                 <option key={option.value} value={option.value}>{t(option.label)}</option>
@@ -113,16 +140,23 @@ export function TransportCostAssistant({
         <p className="warning-text">{t("Procena nije moguća bez podataka o proizvodu. Izaberite veličinu i težinu jednog komada.")}</p>
       )}
 
+      {selectedRoute && logisticsEstimate && (
+        <p className="transport-selected-estimate">
+          <strong>{t(routeLabel(selectedRoute.mode))}</strong>
+          {` — ${selectedRoute.estimatedCostEur} EUR — ${t("Procenjeno")} — ${t("Pouzdanost")}: ${t(selectedRoute.confidence)}`}
+        </p>
+      )}
+
       <div className="transport-route-grid">
         {routes.map((route) => (
-          <article key={route.mode}>
+          <article className={selectedMode === route.mode ? "transport-route-selected" : undefined} key={route.mode}>
             <strong>{t(routeLabel(route.mode))}</strong>
             <span>{route.estimatedCostEur} EUR</span>
             <small>{route.deliveryTimeDays} {t("days")}</small>
             <small>{t("Confidence")}: {t(route.confidence)}</small>
             <button
               className="secondary-button"
-              onClick={() => onApply(route.estimatedCostEur.toFixed(2))}
+              onClick={() => applyRoute(route.mode)}
               type="button"
             >
               {t("Use this estimate")}

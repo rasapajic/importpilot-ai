@@ -23,6 +23,15 @@ export type CostComponentEvidence = {
   value: string | null;
 };
 
+export type ShippingEstimateEvidence = {
+  mode: "AIR" | "RAIL" | "SEA";
+  confidence: "HIGH" | "MEDIUM" | "LOW";
+  estimatedWeightKg: number;
+  estimatedVolumeCbm: number;
+  sizeOption: string | null;
+  weightOption: string | null;
+};
+
 export type CostEvidenceSnapshot = {
   goods: CostComponentEvidence;
   shipping: CostComponentEvidence;
@@ -34,6 +43,8 @@ export type CostEvidenceSnapshot = {
   inspection: CostComponentEvidence;
   other: CostComponentEvidence;
   vatTreatment: VatTreatment;
+  shippingEstimate?: ShippingEstimateEvidence | null;
+  customsProvenance?: CustomsProvenance | null;
 };
 
 export function tariffCodeHasDecisionPrecision(value?: string | null) {

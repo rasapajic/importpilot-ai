@@ -42,7 +42,7 @@ describe("mobile workflow actions", () => {
       offerCount: 1,
       calculatedOfferCount: 1,
       assessedOfferCount: 1,
-    })[0]).toMatchObject({ href: "#workflow-step-decision", label: "Generiši preporuku" });
+    })[0]).toMatchObject({ href: "#workflow-step-decision", label: "Izračunaj isplativost" });
   });
 
   it("shows compact final actions when the decision is ready", () => {
@@ -56,7 +56,7 @@ describe("mobile workflow actions", () => {
     })).toEqual([
       { href: "/projects/project-1/summary", label: "PDF", variant: "PRIMARY" },
       { href: "#negotiation-assistant", label: "Kontakt", variant: "SECONDARY" },
-      { href: "/projects/project-1?newAnalysis=1#workflow-step-decision", label: "Nova analiza", variant: "SECONDARY" },
+      { href: "/projects/project-1?newAnalysis=1#workflow-step-decision", label: "Izaberi drugu ponudu", variant: "SECONDARY" },
     ]);
   });
 

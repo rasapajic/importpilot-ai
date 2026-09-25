@@ -14,6 +14,37 @@ const evidenceStatus = z.enum([
   CostEvidenceStatuses.UNKNOWN,
   CostEvidenceStatuses.NOT_APPLICABLE,
 ]);
+const nullableTrimmedText = z.preprocess(
+  (value) => value === "" || value === undefined ? null : value,
+  z.string().trim().max(2_000).nullable(),
+);
+const optionalBoolean = z.preprocess(
+  (value) => value === "true" || value === true ? true : value === "false" || value === false ? false : undefined,
+  z.boolean().optional(),
+);
+
+const shippingEstimateSchema = z.object({
+  mode: z.enum(["AIR", "RAIL", "SEA"]),
+  confidence: z.enum(["HIGH", "MEDIUM", "LOW"]),
+  estimatedWeightKg: z.number().positive(),
+  estimatedVolumeCbm: z.number().positive(),
+  sizeOption: z.string().max(32).nullable(),
+  weightOption: z.string().max(32).nullable(),
+}).strict();
+
+const customsProvenanceSchema = z.object({
+  sourceName: nullableTrimmedText,
+  officialUrl: nullableTrimmedText,
+  checkedAt: nullableTrimmedText,
+  validFrom: nullableTrimmedText,
+  validUntil: nullableTrimmedText,
+  tariffCode: nullableTrimmedText,
+  originCountry: nullableTrimmedText,
+  shippingCountry: nullableTrimmedText,
+  rateType: z.enum(["standard", "preferential", "unknown"]).nullable(),
+  confirmedByOfficialSource: optionalBoolean.default(false),
+  classificationSuggested: optionalBoolean.default(false),
+}).strict();
 
 export const costCalculationRequestSchema = z
   .object({
@@ -42,6 +73,8 @@ export const costCalculationRequestSchema = z
     calculationStatus: z
       .enum([CalculationStatus.CALCULATED, CalculationStatus.NEEDS_REVIEW])
       .default(CalculationStatus.CALCULATED),
+    shippingEstimate: shippingEstimateSchema.nullable().optional(),
+    customsProvenance: customsProvenanceSchema.nullable().optional(),
   })
   .strict()
   .superRefine((value, context) => {

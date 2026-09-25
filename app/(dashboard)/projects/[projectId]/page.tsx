@@ -48,6 +48,7 @@ export default async function ProjectPage({
     editCalculationOffer?: string;
     newAnalysis?: string;
     importUrl?: string;
+    analysisOffer?: string;
   }>;
 }) {
   const auth = await requireSession();
@@ -58,7 +59,7 @@ export default async function ProjectPage({
   if (!project) notFound();
 
   const comparison = await compareProjectOffers(projectId, auth.membership.organizationId);
-  const decision = await getLatestProjectDecision(projectId, auth.membership.organizationId);
+  const storedDecision = await getLatestProjectDecision(projectId, auth.membership.organizationId);
   const messages = await listNegotiationMessages(projectId, auth.membership.organizationId);
   const resolvedSearchParams = await searchParams;
   const requestedType = resolvedSearchParams.activityType;
@@ -104,10 +105,14 @@ export default async function ProjectPage({
   const pendingAssessmentOfferIds = analysisReadyOffers
     .filter((offer) => offer.assessments.length === 0)
     .map((offer) => offer.id);
-  const analyzedOfferSummaries = decisionReadyOffers.map((offer) => {
+  const selectedAnalysisOfferId = analyzedOffers.some((offer) => offer.id === resolvedSearchParams.analysisOffer)
+    ? resolvedSearchParams.analysisOffer
+    : analyzedOffers[0]?.id;
+  const analyzedOfferSummaries = analyzedOffers.map((offer) => {
     const metadata = offer.sourceMetadata && typeof offer.sourceMetadata === "object" && !Array.isArray(offer.sourceMetadata)
       ? offer.sourceMetadata as Record<string, unknown>
       : {};
+    const cost = offer.costCalculations[0];
     return {
       offerId: offer.id,
       productName: typeof metadata.title === "string" ? metadata.title : project.name,
@@ -115,8 +120,18 @@ export default async function ProjectPage({
       quantity: project.quantity,
       unitPrice: offer.unitPrice?.toString() ?? null,
       currency: offer.currency,
+      calculationReady: cost?.calculationStatus === "CALCULATED" &&
+        cost.landedCostTotal !== null &&
+        cost.landedCostPerUnit !== null &&
+        cost.grossMarginPercent !== null,
+      incoterm: offer.incoterm,
+      productUrl: typeof metadata.productUrl === "string" ? metadata.productUrl : null,
+      targetCountry: project.targetCountry,
     };
   });
+  const decision = storedDecision && decisionReadyOffers.some((offer) => offer.id === storedDecision.selectedOfferId)
+    ? storedDecision
+    : null;
   const selectedDecisionOffer = decision?.selectedOfferId
     ? project.offers.find((offer) => offer.id === decision.selectedOfferId)
     : null;
@@ -172,7 +187,7 @@ export default async function ProjectPage({
     if (label === "Generiši odluku") return "#workflow-step-decision";
     return "#documents";
   };
-  const advancedDetailsOpen = Boolean(selectedCalculationOfferId) || resolvedSearchParams.newAnalysis === "1";
+  const advancedDetailsOpen = Boolean(selectedCalculationOfferId) || Boolean(selectedAnalysisOfferId) || resolvedSearchParams.newAnalysis === "1";
   const mobileWorkflowActions = getMobileWorkflowActions({
     projectId: project.id,
     offerCount,
@@ -183,6 +198,27 @@ export default async function ProjectPage({
   });
   const targetCountryName = getCountryDisplayName(project.targetCountry, locale);
   const clientOffers = serializePrismaDecimals(project.offers);
+  const focusedClientOffers = selectedAnalysisOfferId
+    ? clientOffers.filter((offer) => offer.id === selectedAnalysisOfferId)
+    : clientOffers.slice(0, 1);
+  const otherClientOffers = clientOffers.filter((offer) => !focusedClientOffers.some((focused) => focused.id === offer.id));
+  const firstMetadata = project.offers
+    .map((offer) => offer.sourceMetadata)
+    .find((value) => value && typeof value === "object" && !Array.isArray(value)) as Record<string, unknown> | undefined;
+  const searchProductName = typeof firstMetadata?.searchProductName === "string"
+    ? firstMetadata.searchProductName
+    : typeof firstMetadata?.title === "string"
+      ? firstMetadata.title
+      : project.name;
+  const existingSearchOffers = project.offers.map((offer) => {
+    const metadata = offer.sourceMetadata && typeof offer.sourceMetadata === "object" && !Array.isArray(offer.sourceMetadata)
+      ? offer.sourceMetadata as Record<string, unknown>
+      : {};
+    return {
+      productUrl: typeof metadata.productUrl === "string" ? metadata.productUrl : null,
+      supplierName: offer.supplierName,
+    };
+  });
   const lockedText = t("Završite prethodni korak da biste nastavili.");
   const statusLabel = (status: ProjectWorkflowStepStatus, activeLabel: string) =>
     status === "COMPLETED"
@@ -237,8 +273,9 @@ export default async function ProjectPage({
           lockedText={lockedText}
         >
           <SupplierOfferSearch
+            existingOffers={existingSearchOffers}
             projectId={project.id}
-            productName={project.name}
+            productName={searchProductName}
             quantity={project.quantity}
             targetCountry={project.targetCountry}
             openUrlImport={resolvedSearchParams.importUrl === "1"}
@@ -278,6 +315,7 @@ export default async function ProjectPage({
             projectId={project.id}
             decision={decision}
             selectedCalculation={selectedDecisionCalculation}
+            selectedAnalysisOfferId={selectedAnalysisOfferId}
           />
           <details
             className="dashboard-card secondary-project-section advanced-decision-details"
@@ -293,7 +331,7 @@ export default async function ProjectPage({
                   projectName={project.name}
                   targetCountry={project.targetCountry}
                   projectQuantity={project.quantity}
-                  offers={clientOffers}
+                  offers={focusedClientOffers}
                   showAddControls={false}
                   showAssessments={false}
                   selectedCalculationOfferId={selectedCalculationOfferId}
@@ -306,7 +344,7 @@ export default async function ProjectPage({
                   projectName={project.name}
                   targetCountry={project.targetCountry}
                   projectQuantity={project.quantity}
-                  offers={clientOffers}
+                  offers={focusedClientOffers}
                   showAddControls={false}
                   showCosts={false}
                   showRecalculationLinks
@@ -319,6 +357,21 @@ export default async function ProjectPage({
               </section>
               <ComparisonView comparison={comparison} />
             </div>
+            {otherClientOffers.length > 0 && (
+              <details className="other-offers-summary">
+                <summary>{t("Ostale ponude")} ({otherClientOffers.length})</summary>
+                <OffersPanel
+                  projectId={project.id}
+                  projectName={project.name}
+                  targetCountry={project.targetCountry}
+                  projectQuantity={project.quantity}
+                  offers={otherClientOffers}
+                  showAddControls={false}
+                  showAssessments={false}
+                  showCosts={false}
+                />
+              </details>
+            )}
           </details>
         </ProjectWorkflowStep>
 

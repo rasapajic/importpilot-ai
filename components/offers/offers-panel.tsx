@@ -152,10 +152,7 @@ export function OffersPanel({
       const response = await fetch(`/api/offers/${offerId}/assessments`, { method: "POST" });
       const result = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(result.error ?? t("Ocena ponude nije završena. Pokušajte ponovo."));
-      router.refresh();
-      requestAnimationFrame(() =>
-        document.getElementById("workflow-step-decision")?.scrollIntoView({ behavior: "smooth", block: "start" }),
-      );
+      router.push(`/projects/${projectId}?analysisOffer=${offerId}#workflow-step-decision`);
     } catch (caught) {
       setError(caught instanceof Error ? t(caught.message) : t("Ocena ponude nije završena. Pokušajte ponovo."));
     } finally {
@@ -180,6 +177,7 @@ export function OffersPanel({
               className="secondary-button"
               disabled={bulkAssessing || bulkAssessmentOfferIds.length === 0}
               onClick={assessAll}
+              title={bulkAssessmentOfferIds.length === 0 ? t("Nema kompletnih ponuda koje čekaju analizu.") : undefined}
               type="button"
             >
               {bulkAssessing ? t("Assessing...") : t("Assess all offers")}
@@ -237,6 +235,10 @@ export function OffersPanel({
           });
 
           const latestCalculation = offer.costCalculations[0];
+          const calculationReady = latestCalculation?.calculationStatus === "CALCULATED" &&
+            latestCalculation.landedCostTotal !== null &&
+            latestCalculation.landedCostPerUnit !== null &&
+            latestCalculation.grossMarginPercent !== null;
           const marginDisplay = latestCalculation?.grossMarginPercent && latestCalculation.targetSellingPrice
             ? `${formatDisplayedPercent(latestCalculation.grossMarginPercent)}% · ${t("Prodajna cena")}: ${latestCalculation.targetSellingPrice.toString()} ${latestCalculation.currency} · ${t("Unos korisnika")}`
             : t("Nije izračunata");
@@ -267,20 +269,26 @@ export function OffersPanel({
                   <strong>{marginDisplay}</strong>
                 </span>
                 <span>
-                  {offer.assessments[0] ? t("Preporuka") : t("Status")}
+                  {offer.assessments[0] && calculationReady ? t("Preporuka") : t("Status")}
                   <strong>
-                    {offer.assessments[0]
+                    {offer.assessments[0] && calculationReady
                       ? getStatusLabel(recommendationBadgeStatus(offer.assessments[0].recommendationStatus), locale)
-                      : t("Čeka analizu")}
+                      : offer.assessments[0]
+                        ? t("Nije moguće proceniti isplativost")
+                        : t("Čeka analizu")}
                   </strong>
                 </span>
               </div>
+              {offer.assessments[0] && !calculationReady && (
+                <p className="warning-text">{t("Sledeći korak: Zatražite potvrdu podataka i pregovarajte")}</p>
+              )}
               {showAnalysisActions && (
                 <div className="offer-analysis-action">
                   <button
                     className="primary-button"
                     disabled={!readiness.ready || assessingOfferId === offer.id}
                     onClick={() => void analyzeOffer(offer.id)}
+                    title={!readiness.ready ? t(readinessExplanation(readiness)) : undefined}
                     type="button"
                   >
                     {assessingOfferId === offer.id
@@ -342,8 +350,9 @@ export function OffersPanel({
                       </dl>
                       <p className="warning-text">{t("Ukupna B2B cena se ne računa dok količinska cena i dostupnost nisu potvrđene.")}</p>
                     </div>
-                  ) : offer.unitPrice && offer.currency && offer.incoterm ? (
+                  ) : classification.kind === "DIRECT_IMPORT" && offer.unitPrice && offer.currency && offer.incoterm ? (
                     <CostCalculatorForm
+                      key={`${offer.id}-${selectedCalculationOfferId === offer.id ? "edit" : "summary"}`}
                       offerId={offer.id}
                       currency={offer.currency}
                       targetCountry={targetCountry}
@@ -353,6 +362,11 @@ export function OffersPanel({
                       latestCalculation={offer.costCalculations[0]}
                       editInitially={selectedCalculationOfferId === offer.id}
                     />
+                  ) : classification.kind === "UNKNOWN" ? (
+                    <div className="calculation-requirements">
+                      <strong>{t("Prvo potvrdite vrstu ponude")}</strong>
+                      <p>{t("Incoterm je potreban samo za direktan uvoz.")}</p>
+                    </div>
                   ) : (
                     <div className="calculation-requirements">
                       <strong>{t("Potrebno za kalkulaciju")}:</strong>
@@ -370,7 +384,7 @@ export function OffersPanel({
                     </div>
                   )
                 )}
-                {showAssessments && <AssessmentPanel offerId={offer.id} assessments={offer.assessments} />}
+                {showAssessments && <AssessmentPanel calculationReady={calculationReady} offerId={offer.id} assessments={offer.assessments} />}
               </ResponsiveOfferDetails>
             </article>
           );

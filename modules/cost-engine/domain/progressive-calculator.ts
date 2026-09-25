@@ -5,6 +5,7 @@ import {
   VatTreatments,
   type CostEvidenceSnapshot,
   type CostEvidenceStatus,
+  type ShippingEstimateEvidence,
   type VatTreatment,
 } from "./cost-evidence";
 import type { CustomsProvenance } from "../application/landed-cost-breakdown";
@@ -34,6 +35,7 @@ export type ProgressiveCostInput = {
   targetSellingPrice: string | null;
   vatTreatment: VatTreatment;
   customsProvenance?: CustomsProvenance | null;
+  shippingEstimate?: ShippingEstimateEvidence | null;
 };
 
 function normalizedValue(value: string | null, status: CostEvidenceStatus) {
@@ -61,10 +63,9 @@ function finite(value: string | null) {
 }
 
 export function calculateProgressiveLandedCost(input: ProgressiveCostInput) {
-  const customsStatus = input.customsDutyStatus === CostEvidenceStatuses.CONFIRMED &&
-    !isOfficialCustomsEvidenceConfirmed(input.customsProvenance)
-    ? CostEvidenceStatuses.ESTIMATED
-    : input.customsDutyStatus;
+  const customsStatus = isOfficialCustomsEvidenceConfirmed(input.customsProvenance)
+    ? input.customsDutyStatus
+    : CostEvidenceStatuses.UNKNOWN;
   const snapshot: CostEvidenceSnapshot = {
     goods: evidence(input.unitPrice, CostEvidenceStatuses.CONFIRMED),
     shipping: evidence(input.shippingCost, input.shippingStatus),
@@ -76,6 +77,10 @@ export function calculateProgressiveLandedCost(input: ProgressiveCostInput) {
     inspection: evidence(input.inspectionCost, input.inspectionStatus),
     other: evidence(input.otherCosts, input.otherStatus),
     vatTreatment: input.vatTreatment,
+    shippingEstimate: input.shippingStatus === CostEvidenceStatuses.ESTIMATED
+      ? input.shippingEstimate ?? null
+      : null,
+    customsProvenance: input.customsProvenance ?? null,
   };
   const monetaryComponents = [
     snapshot.shipping,

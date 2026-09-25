@@ -15,7 +15,7 @@ export function getDecisionStepSummary(
   locale: Locale | string,
 ) {
   if (!isFinalDecisionStatus(status)) {
-    return translateText("Generate recommendation", locale);
+    return translateText("Calculate profitability", locale);
   }
   return getStatusLabel(status!, locale);
 }
