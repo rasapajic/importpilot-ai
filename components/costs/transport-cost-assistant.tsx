@@ -60,6 +60,7 @@ export function TransportCostAssistant({
     (initialSelection?.weightOption as ProductWeightOption | null) ?? "",
   );
   const [selectedMode, setSelectedMode] = useState<TransportMode | null>(initialSelection?.mode ?? null);
+  const [selectionPendingSave, setSelectionPendingSave] = useState(false);
   const supplierLogistics = useMemo(() => extractSupplierLogisticsData(sourceMetadata), [sourceMetadata]);
   const logisticsEstimate = useMemo(() => estimateProductLogistics({
     productName,
@@ -84,6 +85,7 @@ export function TransportCostAssistant({
     const route = routes.find((candidate) => candidate.mode === mode);
     if (!route) return;
     setSelectedMode(mode);
+    setSelectionPendingSave(true);
     onApply({
       mode,
       confidence: route.confidence,
@@ -111,7 +113,7 @@ export function TransportCostAssistant({
         <div className="transport-simple-questions">
           <label>
             {t("How large is the product?")}
-            <select onChange={(event) => { setSizeOption(event.target.value as ProductSizeOption | ""); setSelectedMode(null); onClear(); }} value={sizeOption}>
+            <select onChange={(event) => { setSizeOption(event.target.value as ProductSizeOption | ""); setSelectedMode(null); setSelectionPendingSave(false); onClear(); }} value={sizeOption}>
               <option value="">{t("Not sure")}</option>
               {sizeOptions.map((option) => (
                 <option key={option.value} value={option.value}>{t(option.label)}</option>
@@ -120,7 +122,7 @@ export function TransportCostAssistant({
           </label>
           <label>
             {t("How heavy is one item?")}
-            <select onChange={(event) => { setWeightOption(event.target.value as ProductWeightOption | ""); setSelectedMode(null); onClear(); }} value={weightOption}>
+            <select onChange={(event) => { setWeightOption(event.target.value as ProductWeightOption | ""); setSelectedMode(null); setSelectionPendingSave(false); onClear(); }} value={weightOption}>
               <option value="">{t("Not sure")}</option>
               {weightOptions.map((option) => (
                 <option key={option.value} value={option.value}>{t(option.label)}</option>
@@ -141,10 +143,17 @@ export function TransportCostAssistant({
       )}
 
       {selectedRoute && logisticsEstimate && (
-        <p className="transport-selected-estimate">
-          <strong>{t(routeLabel(selectedRoute.mode))}</strong>
-          {` — ${selectedRoute.estimatedCostEur} EUR — ${t("Procenjeno")} — ${t("Pouzdanost")}: ${t(selectedRoute.confidence)}`}
-        </p>
+        <>
+          <p className="transport-selected-estimate">
+            <strong>{t(routeLabel(selectedRoute.mode))}</strong>
+            {` — ${selectedRoute.estimatedCostEur} EUR — ${t("Procenjeno")} — ${t("Pouzdanost")}: ${t(selectedRoute.confidence)}`}
+          </p>
+          {selectionPendingSave && (
+            <p className="calculation-warning transport-unsaved-warning" role="status">
+              {t("Izbor još nije sačuvan. Kliknite „Izračunaj i sačuvaj“.")}
+            </p>
+          )}
+        </>
       )}
 
       <div className="transport-route-grid">
@@ -154,6 +163,19 @@ export function TransportCostAssistant({
             <span>{route.estimatedCostEur} EUR</span>
             <small>{route.deliveryTimeDays} {t("days")}</small>
             <small>{t("Confidence")}: {t(route.confidence)}</small>
+            <details>
+              <summary>{t("Prikaži detalje")}</summary>
+              <ul>
+                <li>
+                  {t("Osnova obračuna")}: {t(route.pricingBasis === "WEIGHT" ? "Težina" : "Zapremina")}
+                  {` (${route.pricingBasisValue} ${route.pricingBasis === "WEIGHT" ? "kg" : "CBM"})`}.
+                </li>
+                <li>{t("Okvirna cena pre minimalne tarife")}: {route.priceBeforeMinimumEur} EUR.</li>
+                {route.minimumApplied && (
+                  <li>{t("Primenjena minimalna cena transporta")}: {route.minimumCostEur} EUR.</li>
+                )}
+              </ul>
+            </details>
             <button
               className="secondary-button"
               onClick={() => applyRoute(route.mode)}

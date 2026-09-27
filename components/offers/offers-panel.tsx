@@ -22,6 +22,7 @@ import {
 import { classifyOffer } from "@/modules/product-search/domain/offer-classification";
 import { getOfferReadiness, readinessExplanation } from "@/modules/offers/domain/offer-readiness";
 import { formatDisplayedPercent } from "@/modules/cost-engine/application/calculation-summary";
+import { hasReliableDetailedAssessment } from "@/modules/intelligence/domain/assessment-reliability";
 
 type OfferWithDetails = SupplierOffer & {
   costCalculations: CostCalculation[];
@@ -117,7 +118,7 @@ export function OffersPanel({
         const response = await fetch(`/api/offers/${offerId}/assessments`, { method: "POST" });
         if (!response.ok) {
           const result = (await response.json()) as { error?: string };
-          throw new Error(result.error ?? t("Assessment could not be completed. Please try again."));
+          throw new Error(result.error ?? t("Analysis could not be completed. Please try again."));
         }
       }
       router.refresh();
@@ -125,7 +126,7 @@ export function OffersPanel({
       setError(
         caught instanceof Error
           ? caught.message
-          : t("Assessment could not be completed. Please try again."),
+          : t("Analysis could not be completed. Please try again."),
       );
     } finally {
       setBulkAssessing(false);
@@ -172,7 +173,7 @@ export function OffersPanel({
         <h2>{t("Ponude dobavljača")}</h2>
         {assessmentProgress && (
           <div className="actions">
-            <strong>{t("Assessment progress")} {assessmentProgress.assessed}/{assessmentProgress.total}</strong>
+            <strong>{t("Analysis progress")} {assessmentProgress.assessed}/{assessmentProgress.total}</strong>
             <button
               className="secondary-button"
               disabled={bulkAssessing || bulkAssessmentOfferIds.length === 0}
@@ -180,7 +181,7 @@ export function OffersPanel({
               title={bulkAssessmentOfferIds.length === 0 ? t("Nema kompletnih ponuda koje čekaju analizu.") : undefined}
               type="button"
             >
-              {bulkAssessing ? t("Assessing...") : t("Assess all offers")}
+              {bulkAssessing ? t("Analyzing...") : t("Analyze all offers")}
             </button>
           </div>
         )}
@@ -226,6 +227,7 @@ export function OffersPanel({
           });
           const productUrl = typeof data.productUrl === "string" ? data.productUrl : null;
           const title = typeof data.title === "string" ? data.title : projectName;
+          const rfqProductName = typeof data.rfqProductNameEn === "string" ? data.rfqProductNameEn : null;
           const readiness = getOfferReadiness({
             supplierName: offer.supplierName,
             unitPrice: offer.unitPrice,
@@ -239,6 +241,12 @@ export function OffersPanel({
             latestCalculation.landedCostTotal !== null &&
             latestCalculation.landedCostPerUnit !== null &&
             latestCalculation.grossMarginPercent !== null;
+          const recommendationReady = calculationReady && Boolean(
+            offer.assessments[0] && hasReliableDetailedAssessment({
+              confidenceScore: Number(offer.assessments[0].confidenceScore),
+              scoreBreakdown: offer.assessments[0].scoreBreakdown,
+            }),
+          );
           const marginDisplay = latestCalculation?.grossMarginPercent && latestCalculation.targetSellingPrice
             ? `${formatDisplayedPercent(latestCalculation.grossMarginPercent)}% · ${t("Prodajna cena")}: ${latestCalculation.targetSellingPrice.toString()} ${latestCalculation.currency} · ${t("Unos korisnika")}`
             : t("Nije izračunata");
@@ -269,9 +277,9 @@ export function OffersPanel({
                   <strong>{marginDisplay}</strong>
                 </span>
                 <span>
-                  {offer.assessments[0] && calculationReady ? t("Preporuka") : t("Status")}
+                  {offer.assessments[0] && recommendationReady ? t("Preporuka") : t("Status")}
                   <strong>
-                    {offer.assessments[0] && calculationReady
+                    {offer.assessments[0] && recommendationReady
                       ? getStatusLabel(recommendationBadgeStatus(offer.assessments[0].recommendationStatus), locale)
                       : offer.assessments[0]
                         ? t("Nije moguće proceniti isplativost")
@@ -279,7 +287,7 @@ export function OffersPanel({
                   </strong>
                 </span>
               </div>
-              {offer.assessments[0] && !calculationReady && (
+              {offer.assessments[0] && !recommendationReady && (
                 <p className="warning-text">{t("Sledeći korak: Zatražite potvrdu podataka i pregovarajte")}</p>
               )}
               {showAnalysisActions && (
@@ -316,6 +324,7 @@ export function OffersPanel({
                 <RfqRequestPanel
                   incoterm={offer.incoterm}
                   productTitle={title}
+                  rfqProductName={rfqProductName}
                   productUrl={productUrl}
                   quantity={projectQuantity}
                   supplierName={offer.supplierName}
@@ -384,7 +393,7 @@ export function OffersPanel({
                     </div>
                   )
                 )}
-                {showAssessments && <AssessmentPanel calculationReady={calculationReady} offerId={offer.id} assessments={offer.assessments} />}
+                {showAssessments && <AssessmentPanel calculationReady={recommendationReady} offerId={offer.id} assessments={offer.assessments} />}
               </ResponsiveOfferDetails>
             </article>
           );

@@ -95,6 +95,7 @@ export async function importSearchResult(
           productUrl: result.productUrl,
           imageUrl: result.imageUrl,
           providerSource: result.source,
+          rfqProductNameEn: result.rfqProductNameEn ?? null,
           offerType: classification.kind,
           sellerCountry: result.sellerCountry ?? null,
           originCountry: result.originCountry ?? null,

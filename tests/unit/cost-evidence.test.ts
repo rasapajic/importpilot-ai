@@ -120,6 +120,7 @@ describe("cost evidence and partial calculation", () => {
     expect(result.landedCostTotal).toBeNull();
     expect(result.costEvidence.shippingEstimate).toMatchObject({ mode: "SEA", confidence: "HIGH" });
     expect(result.costEvidence.customsProvenance?.tariffCode).toBe("9004");
+    expect(result.costEvidence.customsProvenance?.confirmedByOfficialSource).toBe(false);
   });
 
   it("separates required cash and deductible-VAT net acquisition cost", () => {

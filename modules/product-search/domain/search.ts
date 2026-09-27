@@ -47,6 +47,7 @@ export const supplierOfferSearchResultSchema = z
       "Image URL must be valid.",
     ),
     source: z.string().trim().min(1).max(100),
+    rfqProductNameEn: optionalText(300).optional(),
     offerType: z.enum(["DOMESTIC", "DIRECT_IMPORT", "UNKNOWN"]).optional(),
     sellerCountry: z.preprocess(
       (value) => (value === "" || value === undefined || value === null ? null : String(value).toUpperCase()),

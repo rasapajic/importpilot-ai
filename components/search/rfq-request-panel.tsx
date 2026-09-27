@@ -8,6 +8,7 @@ import { getCountryDisplayName } from "@/modules/i18n/country-names";
 
 export function RfqRequestPanel({
   productTitle,
+  rfqProductName,
   supplierName,
   quantity,
   targetCountry,
@@ -16,6 +17,7 @@ export function RfqRequestPanel({
   triggerLabel = "Zatraži konačnu ponudu",
 }: {
   productTitle: string;
+  rfqProductName?: string | null;
   supplierName: string;
   quantity: number;
   targetCountry: string;
@@ -32,6 +34,7 @@ export function RfqRequestPanel({
   const [validationError, setValidationError] = useState("");
   const message = useMemo(() => generateRfqMessage({
     productTitle,
+    rfqProductName,
     supplierName,
     quantity,
     deliveryCountry: targetCountry,
@@ -40,7 +43,7 @@ export function RfqRequestPanel({
     orderType,
     incoterm,
     productUrl,
-  }), [deliveryCity, incoterm, orderType, postalCode, productTitle, productUrl, quantity, supplierName, targetCountry]);
+  }), [deliveryCity, incoterm, orderType, postalCode, productTitle, productUrl, quantity, rfqProductName, supplierName, targetCountry]);
 
   async function copy() {
     if (!deliveryCity.trim() || !postalCode.trim()) {

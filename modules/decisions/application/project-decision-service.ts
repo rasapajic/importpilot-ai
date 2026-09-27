@@ -16,6 +16,7 @@ import type { SupplierRiskLevel } from "@/modules/intelligence/domain/supplier-r
 import { recordProjectActivity } from "@/modules/timeline/application/timeline-service";
 import { getOfferReadiness } from "@/modules/offers/domain/offer-readiness";
 import { DEFAULT_EUR_FX_SNAPSHOT, getFxSnapshotStatus } from "@/modules/fx/euro-display";
+import { hasReliableDetailedAssessment } from "@/modules/intelligence/domain/assessment-reliability";
 
 export class DecisionProjectNotFoundError extends Error {}
 export class DecisionNoAnalyzedOffersError extends Error {}
@@ -55,8 +56,13 @@ export async function generateProjectDecision(projectId: string, organizationId:
       sourceMetadata: offer.sourceMetadata,
     });
     const cost = offer.costCalculations[0];
+    const assessment = offer.assessments[0];
     return readiness.ready &&
-      offer.assessments[0] !== undefined &&
+      assessment !== undefined &&
+      hasReliableDetailedAssessment({
+        confidenceScore: assessment.confidenceScore.toNumber(),
+        scoreBreakdown: assessment.scoreBreakdown,
+      }) &&
       cost?.calculationStatus === CalculationStatus.CALCULATED &&
       cost.landedCostTotal !== null &&
       cost.landedCostPerUnit !== null &&

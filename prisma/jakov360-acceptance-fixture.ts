@@ -89,6 +89,7 @@ export function buildJakov360AcceptanceSeedPlan() {
     productUrl: "https://supplier.example/jakov360/safety-glasses",
     imageUrl: "/jakov360-acceptance-glasses.svg",
     source: "Made-in-China acceptance fixture",
+    rfqProductNameEn: "Protective safety glasses — direct import",
     offerType: "DIRECT_IMPORT",
     sellerCountry: "CN",
     originCountry: "CN",
@@ -129,6 +130,7 @@ export function buildJakov360AcceptanceSeedPlan() {
     productUrl: "https://supplier.example/jakov360/usb-c-pd-charger",
     imageUrl: "/jakov360-acceptance-usb-c-charger.svg",
     source: "Alibaba acceptance fixture",
+    rfqProductNameEn: "USB-C PD 20W charger — direct import",
     offerType: "DIRECT_IMPORT",
     sellerCountry: "CN",
     originCountry: "CN",
@@ -168,6 +170,7 @@ export function buildJakov360AcceptanceSeedPlan() {
   const rfqExamples = {
     sample: generateRfqMessage({
       productTitle: glasses.title,
+      rfqProductName: glasses.rfqProductNameEn,
       supplierName: glasses.supplierName,
       quantity: 1000,
       deliveryCountry: "RS",
@@ -179,6 +182,7 @@ export function buildJakov360AcceptanceSeedPlan() {
     }),
     fullOrder: generateRfqMessage({
       productTitle: glasses.title,
+      rfqProductName: glasses.rfqProductNameEn,
       supplierName: glasses.supplierName,
       quantity: 1000,
       deliveryCountry: "RS",
@@ -204,6 +208,7 @@ export function buildJakov360AcceptanceSeedPlan() {
       productUrl: glasses.productUrl,
       imageUrl: glasses.imageUrl,
       providerSource: glasses.source,
+      rfqProductNameEn: glasses.rfqProductNameEn,
       offerType: glasses.offerType,
       sellerCountry: glasses.sellerCountry,
       originCountry: glasses.originCountry,
@@ -256,6 +261,7 @@ export function buildJakov360AcceptanceSeedPlan() {
         productUrl: directImport.productUrl,
         imageUrl: directImport.imageUrl,
         providerSource: directImport.source,
+        rfqProductNameEn: directImport.rfqProductNameEn,
         offerType: directImport.offerType,
         sellerCountry: directImport.sellerCountry,
         originCountry: directImport.originCountry,

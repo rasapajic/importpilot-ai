@@ -392,6 +392,7 @@ export function SupplierOfferSearch({
                       <RfqRequestPanel
                         incoterm={result.incoterm}
                         productTitle={result.title}
+                        rfqProductName={result.rfqProductNameEn}
                         productUrl={result.productUrl}
                         quantity={Number(searchQuantity)}
                         supplierName={result.supplierName}

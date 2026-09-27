@@ -63,7 +63,8 @@ function finite(value: string | null) {
 }
 
 export function calculateProgressiveLandedCost(input: ProgressiveCostInput) {
-  const customsStatus = isOfficialCustomsEvidenceConfirmed(input.customsProvenance)
+  const customsEvidenceConfirmed = isOfficialCustomsEvidenceConfirmed(input.customsProvenance);
+  const customsStatus = customsEvidenceConfirmed
     ? input.customsDutyStatus
     : CostEvidenceStatuses.UNKNOWN;
   const snapshot: CostEvidenceSnapshot = {
@@ -80,7 +81,9 @@ export function calculateProgressiveLandedCost(input: ProgressiveCostInput) {
     shippingEstimate: input.shippingStatus === CostEvidenceStatuses.ESTIMATED
       ? input.shippingEstimate ?? null
       : null,
-    customsProvenance: input.customsProvenance ?? null,
+    customsProvenance: input.customsProvenance
+      ? { ...input.customsProvenance, confirmedByOfficialSource: customsEvidenceConfirmed }
+      : null,
   };
   const monetaryComponents = [
     snapshot.shipping,

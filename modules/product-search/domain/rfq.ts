@@ -2,6 +2,7 @@ export type RfqOrderType = "SAMPLE" | "FULL_ORDER";
 
 export type RfqInput = {
   productTitle: string;
+  rfqProductName?: string | null;
   supplierName: string;
   quantity: number;
   deliveryCountry: string;
@@ -32,10 +33,15 @@ function greeting(supplierName: string) {
 export function generateRfqMessage(input: RfqInput) {
   const city = input.deliveryCity?.trim() || input.deliveryPlace?.trim();
   const delivery = [input.postalCode?.trim(), city, input.deliveryCountry].filter(Boolean).join(" ");
+  const rfqProductName = input.rfqProductName?.trim() || input.productTitle;
+  const originalTitle = rfqProductName !== input.productTitle.trim()
+    ? input.productTitle.trim()
+    : null;
   const introduction = [
     greeting(input.supplierName),
     "",
-    `I am interested in your product: ${input.productTitle}.`,
+    `I am interested in your product: ${rfqProductName}.`,
+    originalTitle ? `Original offer title: ${originalTitle}.` : null,
     input.productUrl ? `Product link: ${input.productUrl}` : null,
   ].filter((line): line is string => line !== null);
 

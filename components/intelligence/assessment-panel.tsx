@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useI18n } from "@/components/i18n/i18n-provider";
 import { getStatusLabel } from "@/modules/i18n/translations";
 import { recommendationBadgeStatus } from "@/modules/intelligence/application/recommendation-display";
+import { hasReliableDetailedAssessment } from "@/modules/intelligence/domain/assessment-reliability";
 
 type AssessmentBreakdown = {
   moq?: { status: string; label: string; message: string };
@@ -30,6 +31,12 @@ function riskLabel(level: string | undefined) {
   return "Rizik nepoznat";
 }
 
+function confidenceLabel(score: number) {
+  if (score >= 70) return "Visoka";
+  if (score >= 40) return "Srednja";
+  return "Niska";
+}
+
 export function AssessmentPanel({
   offerId,
   assessments,
@@ -45,6 +52,10 @@ export function AssessmentPanel({
   const [error, setError] = useState("");
   const latest = assessments[0];
   const breakdown = latest ? assessmentBreakdown(latest) : {};
+  const detailedScoresReliable = latest ? hasReliableDetailedAssessment({
+    confidenceScore: Number(latest.confidenceScore),
+    scoreBreakdown: latest.scoreBreakdown,
+  }) : false;
 
   async function assess() {
     setPending(true);
@@ -52,7 +63,7 @@ export function AssessmentPanel({
     try {
       const response = await fetch(`/api/offers/${offerId}/assessments`, { method: "POST" });
       const result = (await response.json()) as { error?: string };
-      if (!response.ok) setError(result.error ?? "Ocena ponude nije završena. Pokušajte ponovo.");
+      if (!response.ok) setError(result.error ?? t("Analiza ponude nije završena. Pokušajte ponovo."));
       else router.refresh();
     } catch {
       setError("Veza sa serverom nije dostupna. Pokušajte ponovo.");
@@ -66,7 +77,7 @@ export function AssessmentPanel({
       <header className="section-header">
         <h3>{t("Analiza ponude")}</h3>
         <button className="secondary-button" disabled={pending} onClick={assess} type="button">
-          {pending ? "Ocenjivanje..." : latest ? "Ponovo oceni" : "Oceni ponudu"}
+          {pending ? t("Analiza je u toku...") : latest ? t("Ponovo analiziraj ponudu") : t("Analiziraj ponudu")}
         </button>
       </header>
       {error && <p className="form-error">{error}</p>}
@@ -80,10 +91,16 @@ export function AssessmentPanel({
           <details>
             <summary>Prikaži detaljnu analizu</summary>
             <div className="score-grid assessment-scores">
-              <span>Ukupna ocena<strong>{latest.overallScore}/100</strong></span>
-              <span>Rizik<strong>{latest.supplierRiskScore}/100</strong></span>
-              <span>Kvalitet<strong>{latest.offerQualityScore}/100</strong></span>
-              <span>Pouzdanost<strong>{latest.confidenceScore.toString()}%</strong></span>
+              {detailedScoresReliable ? (
+                <>
+                  <span>{t("Ukupna ocena")}<strong>{latest.overallScore}/100</strong></span>
+                  <span>{t("Rizik")}<strong>{latest.supplierRiskScore}/100</strong></span>
+                  <span>{t("Kvalitet")}<strong>{latest.offerQualityScore}/100</strong></span>
+                </>
+              ) : (
+                <span className="assessment-score-unavailable">{t("Nije moguće pouzdano oceniti")}</span>
+              )}
+              <span>{t("Pouzdanost")}<strong>{latest.confidenceScore.toString()}% — {t(confidenceLabel(Number(latest.confidenceScore)))}</strong></span>
             </div>
             <div className="assessment-risk-detail">
               <p><strong>{t("Rizik dobavljača")}:</strong> {t(riskLabel(breakdown.supplierRiskV2?.riskLevel))}</p>
@@ -100,18 +117,24 @@ export function AssessmentPanel({
             </div>
           </details>
           <details>
-            <summary>Istorija procena ({assessments.length})</summary>
+            <summary>{t("Istorija analiza")} ({assessments.length})</summary>
             <ul>
-              {assessments.map((assessment) => (
-                <li key={assessment.id}>
-                  {assessment.createdAt.toLocaleString(locale)} · {calculationReady ? getStatusLabel(assessment.recommendationStatus, locale) : t("Privremena procena")} · {assessment.overallScore}/100 · {assessment.assessmentVersion}
-                </li>
-              ))}
+              {assessments.map((assessment) => {
+                const reliable = hasReliableDetailedAssessment({
+                  confidenceScore: Number(assessment.confidenceScore),
+                  scoreBreakdown: assessment.scoreBreakdown,
+                });
+                return (
+                  <li key={assessment.id}>
+                    {assessment.createdAt.toLocaleString(locale)} · {calculationReady ? getStatusLabel(assessment.recommendationStatus, locale) : t("Privremena procena")} · {reliable ? `${assessment.overallScore}/100` : t("Nije moguće pouzdano oceniti")} · {assessment.assessmentVersion}
+                  </li>
+                );
+              })}
             </ul>
           </details>
         </>
       ) : (
-        <p>Ponuda još nije ocenjena.</p>
+        <p>{t("Ponuda još nije analizirana.")}</p>
       )}
     </div>
   );

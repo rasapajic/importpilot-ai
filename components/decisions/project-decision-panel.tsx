@@ -27,6 +27,7 @@ type SelectedCalculation = {
 type AnalyzedOfferSummary = {
   offerId: string;
   productName: string;
+  rfqProductName: string | null;
   supplierName: string;
   quantity: number;
   unitPrice: string | null;
@@ -150,6 +151,7 @@ export function ProjectDecisionPanel({
           <RfqRequestPanel
             incoterm={focusedOffer.incoterm}
             productTitle={focusedOffer.productName}
+            rfqProductName={focusedOffer.rfqProductName}
             productUrl={focusedOffer.productUrl}
             quantity={focusedOffer.quantity}
             supplierName={focusedOffer.supplierName}

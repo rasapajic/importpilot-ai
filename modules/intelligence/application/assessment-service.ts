@@ -8,6 +8,7 @@ import {
 } from "@/modules/intelligence/domain/scoring";
 import { recordProjectActivity } from "@/modules/timeline/application/timeline-service";
 import { getOfferReadiness, readinessExplanation } from "@/modules/offers/domain/offer-readiness";
+import { hasReliableDetailedAssessment } from "@/modules/intelligence/domain/assessment-reliability";
 
 export class AssessmentOfferNotFoundError extends Error {}
 export class AssessmentProjectNotFoundError extends Error {}
@@ -132,6 +133,10 @@ export async function compareProjectOffers(projectId: string, organizationId: st
     offers.map((offer) => {
       const cost = offer.costCalculations[0] ?? null;
       const assessment = offer.assessments[0] ?? null;
+      const assessmentReliable = assessment ? hasReliableDetailedAssessment({
+        confidenceScore: assessment.confidenceScore.toNumber(),
+        scoreBreakdown: assessment.scoreBreakdown,
+      }) : undefined;
       const readiness = getOfferReadiness({
         supplierName: offer.supplierName,
         unitPrice: offer.unitPrice,
@@ -153,6 +158,8 @@ export async function compareProjectOffers(projectId: string, organizationId: st
         supplierRiskScore: assessment?.supplierRiskScore ?? null,
         overallScore: assessment?.overallScore ?? null,
         recommendationStatus: assessment?.recommendationStatus ?? null,
+        analyzed: assessment !== null,
+        assessmentReliable,
         complete: readiness.ready && cost?.calculationStatus === "CALCULATED" && cost.landedCostTotal !== null && cost.grossMarginPercent !== null,
         exclusionReasons,
       };

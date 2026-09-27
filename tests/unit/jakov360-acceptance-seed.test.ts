@@ -73,6 +73,8 @@ describe("JAKOV360 acceptance seed plan", () => {
     expect(unknown?.imageUrl).toContain("missing-image.svg");
     expect(charger?.imageUrl).toContain("jakov360-acceptance-usb-c-charger.svg");
     expect(charger?.imageUrl).not.toContain("glasses");
+    expect(glasses?.rfqProductNameEn).toBe("Protective safety glasses — direct import");
+    expect(charger?.rfqProductNameEn).toBe("USB-C PD 20W charger — direct import");
     expect(plan.searchCaches.map((cache) => cache.query)).toEqual(["Zaštitne naočare", "USB-C PD 20W punjač"]);
 
     expect(dudi).toMatchObject({
@@ -119,6 +121,7 @@ describe("JAKOV360 acceptance seed plan", () => {
     expect(provenance.confirmedByOfficialSource).toBe(false);
     expect(provenance.rateType).toBe("unknown");
     expect(plan.rfqExamples.sample).toContain("request a sample");
+    expect(plan.rfqExamples.sample).toContain("Protective safety glasses — direct import");
     expect(plan.rfqExamples.fullOrder).toContain("final quotation for 1000 units");
     expect(plan.rfqExamples.fullOrder).toContain("proposed full HS/tariff code");
   });

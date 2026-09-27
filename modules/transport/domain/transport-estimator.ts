@@ -35,6 +35,11 @@ export type TransportRouteEstimate = {
   deliveryTimeDays: string;
   confidence: TransportConfidence;
   reasons: string[];
+  pricingBasis: "WEIGHT" | "VOLUME";
+  pricingBasisValue: number;
+  priceBeforeMinimumEur: number;
+  minimumCostEur: number;
+  minimumApplied: boolean;
 };
 
 const productProfiles = [
@@ -171,22 +176,62 @@ function routeConfidence(base: TransportConfidence, mode: TransportMode, estimat
 
 export function estimateTransportRoutes(estimate: ProductLogisticsEstimate): TransportRouteEstimate[] {
   const chargeableAirKg = Math.max(estimate.estimatedWeightKg, estimate.estimatedVolumeCbm * 167);
-  const railBase = Math.max(estimate.estimatedWeightKg * 0.9, estimate.estimatedVolumeCbm * 120);
-  const seaBase = Math.max(estimate.estimatedWeightKg * 0.28, estimate.estimatedVolumeCbm * 85);
+  const railUsesWeight = estimate.estimatedWeightKg * 0.9 >= estimate.estimatedVolumeCbm * 120;
+  const seaUsesWeight = estimate.estimatedWeightKg * 0.28 >= estimate.estimatedVolumeCbm * 85;
 
-  const routes: Array<{ mode: TransportMode; cost: number; days: string; reason: string }> = [
-    { mode: "AIR", cost: 65 + chargeableAirKg * 5.5, days: "7-10", reason: "Fastest option, priced by chargeable weight." },
-    { mode: "RAIL", cost: 80 + railBase, days: "20-30", reason: "Balanced option for Europe." },
-    { mode: "SEA", cost: 120 + seaBase, days: "35-50", reason: "Cheapest for larger volume, slower delivery." },
+  const routes: Array<{
+    mode: TransportMode;
+    costBeforeMinimum: number;
+    minimumCostEur: number;
+    days: string;
+    reason: string;
+    pricingBasis: "WEIGHT" | "VOLUME";
+    pricingBasisValue: number;
+  }> = [
+    {
+      mode: "AIR",
+      costBeforeMinimum: 65 + chargeableAirKg * 5.5,
+      minimumCostEur: 65,
+      days: "7-10",
+      reason: "Fastest option, priced by chargeable weight.",
+      pricingBasis: "WEIGHT",
+      pricingBasisValue: chargeableAirKg,
+    },
+    {
+      mode: "RAIL",
+      costBeforeMinimum: 80 + Math.max(estimate.estimatedWeightKg * 0.9, estimate.estimatedVolumeCbm * 120),
+      minimumCostEur: 225,
+      days: "20-30",
+      reason: "Balanced option for Europe.",
+      pricingBasis: railUsesWeight ? "WEIGHT" : "VOLUME",
+      pricingBasisValue: railUsesWeight ? estimate.estimatedWeightKg : estimate.estimatedVolumeCbm,
+    },
+    {
+      mode: "SEA",
+      costBeforeMinimum: 120 + Math.max(estimate.estimatedWeightKg * 0.28, estimate.estimatedVolumeCbm * 85),
+      minimumCostEur: 225,
+      days: "35-50",
+      reason: "Cheapest for larger volume, slower delivery.",
+      pricingBasis: seaUsesWeight ? "WEIGHT" : "VOLUME",
+      pricingBasisValue: seaUsesWeight ? estimate.estimatedWeightKg : estimate.estimatedVolumeCbm,
+    },
   ];
 
-  return routes.map((route) => ({
-    mode: route.mode,
-    estimatedCostEur: Math.ceil(route.cost / 5) * 5,
-    deliveryTimeDays: route.days,
-    confidence: routeConfidence(estimate.confidence, route.mode, estimate),
-    reasons: [route.reason, ...estimate.reasons].slice(0, 3),
-  }));
+  return routes.map((route) => {
+    const minimumApplied = route.costBeforeMinimum <= route.minimumCostEur;
+    return {
+      mode: route.mode,
+      estimatedCostEur: Math.ceil(Math.max(route.costBeforeMinimum, route.minimumCostEur) / 5) * 5,
+      deliveryTimeDays: route.days,
+      confidence: routeConfidence(estimate.confidence, route.mode, estimate),
+      reasons: [route.reason, ...estimate.reasons].slice(0, 3),
+      pricingBasis: route.pricingBasis,
+      pricingBasisValue: round(route.pricingBasisValue, route.pricingBasis === "VOLUME" ? 2 : 0),
+      priceBeforeMinimumEur: Math.round(route.costBeforeMinimum),
+      minimumCostEur: route.minimumCostEur,
+      minimumApplied,
+    };
+  });
 }
 
 function readNumber(record: Record<string, unknown>, keys: string[]) {

@@ -195,6 +195,33 @@ describe("JAKOV360 acceptance import flow fixes", () => {
     expect(fullOrder).toContain("11000 Beograd RS");
   });
 
+  it("uses a verified English RFQ name and keeps the original offer title for identification", () => {
+    const charger = generateRfqMessage({
+      productTitle: "USB-C PD 20W punjač — direktan uvoz",
+      rfqProductName: "USB-C PD 20W charger — direct import",
+      supplierName: "Dongguan Power Export",
+      quantity: 100,
+      deliveryCountry: "RS",
+      deliveryCity: "Beograd",
+      postalCode: "11000",
+      orderType: "FULL_ORDER",
+    });
+    expect(charger).toContain("I am interested in your product: USB-C PD 20W charger — direct import.");
+    expect(charger).toContain("Original offer title: USB-C PD 20W punjač — direktan uvoz.");
+
+    const glasses = generateRfqMessage({
+      productTitle: "Zaštitne naočare — JAKOV360 acceptance primer",
+      rfqProductName: "Protective safety glasses — direct import",
+      supplierName: "Shenzhen Vision Safety",
+      quantity: 1000,
+      deliveryCountry: "RS",
+      deliveryCity: "Beograd",
+      postalCode: "11000",
+      orderType: "SAMPLE",
+    });
+    expect(glasses).toContain("I am interested in your product: Protective safety glasses — direct import.");
+  });
+
   it("selects at most one best choice from a genuinely comparable cohort", () => {
     const direct = classifyOffer({
       offerType: "DIRECT_IMPORT",
@@ -236,5 +263,26 @@ describe("JAKOV360 acceptance import flow fixes", () => {
     expect(translateText("Calculate profitability", "de")).toBe("Rentabilität berechnen");
     expect(translateText("Calculate profitability", "en")).toBe("Calculate profitability");
     expect(translateText("Profitability cannot be assessed", "sr")).toBe("Nije moguće proceniti isplativost");
+    expect(translateText("Analysis progress", "sr")).toBe("Analizirano");
+    expect(translateText("Product size: size of a book.", "sr")).toBe("Veličina proizvoda: veličine knjige.");
+    expect(translateText("Item weight: less than 100 g.", "sr")).toBe("Težina komada: manje od 100 g.");
+    expect(translateText("Product size: larger item.", "sr")).toBe("Veličina proizvoda: veći predmet.");
+    expect(translateText("Item weight: more than 10 kg.", "sr")).toBe("Težina komada: više od 10 kg.");
+    for (const detail of [
+      "Product size: fits in pocket.",
+      "Product size: size of a book.",
+      "Product size: size of a shoebox.",
+      "Product size: microwave sized.",
+      "Product size: larger item.",
+      "Item weight: less than 100 g.",
+      "Item weight: 100-500 g.",
+      "Item weight: 0.5-2 kg.",
+      "Item weight: 2-10 kg.",
+      "Item weight: more than 10 kg.",
+    ]) {
+      expect(translateText(detail, "sr")).not.toBe(detail);
+    }
+    expect(translateText("Matched product category: Phone charger.", "sr"))
+      .toBe("Prepoznata kategorija proizvoda: Punjač za telefon.");
   });
 });

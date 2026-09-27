@@ -122,7 +122,14 @@ describeWithDatabase("cost calculation tenant isolation", () => {
     expect(calculation.calculationStatus).toBe(CalculationStatus.NEEDS_REVIEW);
     expect(formValues.shippingStatus).toBe(CostEvidenceStatuses.ESTIMATED);
     expect(formValues.shippingCost).toBe("225");
-    expect(formValues.shippingEstimate).toMatchObject({ mode: "SEA", confidence: "HIGH" });
+    expect(formValues.shippingEstimate).toEqual({
+      mode: "SEA",
+      confidence: "HIGH",
+      estimatedWeightKg: 300,
+      estimatedVolumeCbm: 1.2,
+      sizeOption: "BOOK",
+      weightOption: "G_100_500",
+    });
   });
 });
   function completeRequest(overrides: Record<string, string> = {}) {

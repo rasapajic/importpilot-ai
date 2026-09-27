@@ -25,6 +25,7 @@ import { getCountryDisplayName } from "@/modules/i18n/country-names";
 import { getServerLocale } from "@/modules/i18n/server";
 import { getStatusLabel, translateText } from "@/modules/i18n/translations";
 import { compareProjectOffers } from "@/modules/intelligence/application/assessment-service";
+import { hasReliableDetailedAssessment } from "@/modules/intelligence/domain/assessment-reliability";
 import { listNegotiationMessages } from "@/modules/negotiation/application/negotiation-service";
 import { getProject } from "@/modules/projects/application/project-service";
 import { canDeleteEmptySearch } from "@/modules/projects/domain/empty-search-deletion";
@@ -96,10 +97,15 @@ export default async function ProjectPage({
   const analyzedOffers = analysisReadyOffers.filter((offer) => offer.assessments.length > 0);
   const decisionReadyOffers = analyzedOffers.filter((offer) => {
     const cost = offer.costCalculations[0];
+    const assessment = offer.assessments[0];
     return cost?.calculationStatus === "CALCULATED" &&
       cost.landedCostTotal !== null &&
       cost.landedCostPerUnit !== null &&
-      cost.grossMarginPercent !== null;
+      cost.grossMarginPercent !== null &&
+      Boolean(assessment && hasReliableDetailedAssessment({
+        confidenceScore: assessment.confidenceScore.toNumber(),
+        scoreBreakdown: assessment.scoreBreakdown,
+      }));
   });
   const assessedOfferCount = analyzedOffers.length;
   const pendingAssessmentOfferIds = analysisReadyOffers
@@ -116,6 +122,7 @@ export default async function ProjectPage({
     return {
       offerId: offer.id,
       productName: typeof metadata.title === "string" ? metadata.title : project.name,
+      rfqProductName: typeof metadata.rfqProductNameEn === "string" ? metadata.rfqProductNameEn : null,
       supplierName: offer.supplierName,
       quantity: project.quantity,
       unitPrice: offer.unitPrice?.toString() ?? null,
@@ -123,7 +130,11 @@ export default async function ProjectPage({
       calculationReady: cost?.calculationStatus === "CALCULATED" &&
         cost.landedCostTotal !== null &&
         cost.landedCostPerUnit !== null &&
-        cost.grossMarginPercent !== null,
+        cost.grossMarginPercent !== null &&
+        hasReliableDetailedAssessment({
+          confidenceScore: offer.assessments[0].confidenceScore.toNumber(),
+          scoreBreakdown: offer.assessments[0].scoreBreakdown,
+        }),
       incoterm: offer.incoterm,
       productUrl: typeof metadata.productUrl === "string" ? metadata.productUrl : null,
       targetCountry: project.targetCountry,

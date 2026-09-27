@@ -132,6 +132,36 @@ describe("smart transport cost estimation", () => {
     expect(rail?.estimatedCostEur).not.toBe(sea?.estimatedCostEur);
   });
 
+  it("explains equal rail and sea prices when both use the configured minimum charge", () => {
+    const estimate = estimateProductLogistics({
+      productName: "Zaštitne naočare",
+      quantity: 1000,
+      sizeOption: "BOOK",
+      weightOption: "UNDER_100G",
+    });
+    expect(estimate).not.toBeNull();
+    const routes = estimateTransportRoutes(estimate!);
+    const rail = routes.find((route) => route.mode === "RAIL");
+    const sea = routes.find((route) => route.mode === "SEA");
+
+    expect(rail).toMatchObject({
+      estimatedCostEur: 225,
+      minimumCostEur: 225,
+      minimumApplied: true,
+      priceBeforeMinimumEur: 224,
+      pricingBasis: "VOLUME",
+      pricingBasisValue: 1.2,
+    });
+    expect(sea).toMatchObject({
+      estimatedCostEur: 225,
+      minimumCostEur: 225,
+      minimumApplied: true,
+      priceBeforeMinimumEur: 222,
+      pricingBasis: "VOLUME",
+      pricingBasisValue: 1.2,
+    });
+  });
+
   it("keeps charger and LED estimates isolated by product", () => {
     const charger = estimateProductLogistics({ productName: "USB-C phone charger", quantity: 100 });
     const light = estimateProductLogistics({ productName: "LED light", quantity: 100 });

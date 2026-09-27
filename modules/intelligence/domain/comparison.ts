@@ -16,6 +16,8 @@ export type ComparableOffer = {
   supplierRiskScore: number | null;
   overallScore: number | null;
   recommendationStatus: RecommendationStatusValue | null;
+  analyzed?: boolean;
+  assessmentReliable?: boolean;
   complete?: boolean;
   exclusionReasons?: string[];
   landedCostTotalEur?: number | null;
@@ -95,8 +97,14 @@ export function compareOffers(
   const excluded: OfferComparison["excluded"] = [];
   const eligible = offers.flatMap((offer) => {
     const reasons = [...(offer.exclusionReasons ?? [])];
-    if (offer.complete === false) reasons.push("Ponuda nema kompletan potvrđen obračun.");
-    if (offer.recommendationStatus === null) reasons.push("Ponuda nije analizirana.");
+    const analyzed = offer.analyzed ?? offer.recommendationStatus !== null;
+    if (offer.complete === false) {
+      reasons.push(analyzed
+        ? "Ponuda je privremeno analizirana, ali nije podobna za rangiranje dok se ne potvrde svi obavezni troškovi."
+        : "Ponuda nema kompletan potvrđen obračun.");
+    }
+    if (!analyzed) reasons.push("Ponuda nije analizirana.");
+    if (offer.assessmentReliable === false) reasons.push("Nije moguće pouzdano oceniti.");
     if (!offer.currency) reasons.push("Valuta nije potvrđena.");
     if (offer.landedCostTotal === null) reasons.push("Ukupna nabavna cena nije potvrđena.");
     if (offer.grossMarginPercent === null) reasons.push("Ostvarena marža nije izračunata.");

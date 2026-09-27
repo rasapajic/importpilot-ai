@@ -14,6 +14,7 @@ import { buildLandedCostBreakdown } from "@/modules/cost-engine/application/land
 import { getAutomaticVatRate, resolveVatRate } from "@/modules/cost-engine/domain/vat-rates";
 import {
   CostEvidenceStatuses,
+  isOfficialCustomsEvidenceConfirmed,
   tariffCodeHasDecisionPrecision,
   VatTreatments,
   type CostEvidenceStatus,
@@ -23,6 +24,10 @@ import { getStatusLabel } from "@/modules/i18n/translations";
 import { getEuroDisplay } from "@/modules/fx/euro-display";
 import { FxSourceNote } from "@/components/fx/fx-source-note";
 import { TransportCostAssistant } from "@/components/costs/transport-cost-assistant";
+
+function customsRateType(value: string): "standard" | "preferential" | "unknown" {
+  return value === "standard" || value === "preferential" ? value : "unknown";
+}
 
 function EvidenceSelect({
   name,
@@ -75,6 +80,23 @@ export function CostCalculatorForm({
   const { locale, t } = useI18n();
   const router = useRouter();
   const values = getCalculationFormValues(latestCalculation);
+  const sourceData = sourceMetadata && typeof sourceMetadata === "object" && !Array.isArray(sourceMetadata)
+    ? sourceMetadata as Record<string, unknown>
+    : {};
+  const metadataProvenance = sourceData.customsProvenance && typeof sourceData.customsProvenance === "object" && !Array.isArray(sourceData.customsProvenance)
+    ? sourceData.customsProvenance as Record<string, unknown>
+    : {};
+  const customsProvenance = values.customsProvenance ?? metadataProvenance;
+  const initialCustomsFields = {
+    tariffCode: String(customsProvenance.tariffCode ?? ""),
+    originCountry: String(customsProvenance.originCountry ?? ""),
+    shippingCountry: String(customsProvenance.shippingCountry ?? ""),
+    rateType: String(customsProvenance.rateType ?? "unknown"),
+    sourceName: String(customsProvenance.sourceName ?? ""),
+    officialUrl: String(customsProvenance.officialUrl ?? ""),
+    checkedAt: String(customsProvenance.checkedAt ?? ""),
+    validUntil: String(customsProvenance.validUntil ?? ""),
+  };
   const automaticVatRate = getAutomaticVatRate(targetCountry);
   const previousVatIsOverride = Boolean(
     latestCalculation &&
@@ -86,6 +108,15 @@ export function CostCalculatorForm({
   const [shippingCost, setShippingCost] = useState(values.shippingCost);
   const [shippingStatus, setShippingStatus] = useState<CostEvidenceStatus>(values.shippingStatus);
   const [shippingEstimate, setShippingEstimate] = useState<ShippingEstimateEvidence | null>(values.shippingEstimate);
+  const [customsFields, setCustomsFields] = useState(initialCustomsFields);
+  const [customsConfirmed, setCustomsConfirmed] = useState(
+    customsProvenance.confirmedByOfficialSource === true &&
+      isOfficialCustomsEvidenceConfirmed({
+        ...initialCustomsFields,
+        rateType: customsRateType(initialCustomsFields.rateType),
+        confirmedByOfficialSource: true,
+      }),
+  );
   const [overrideVat, setOverrideVat] = useState(previousVatIsOverride);
   const [manualVatRate, setManualVatRate] = useState(previousVatIsOverride ? values.vatRate : "");
   const panelRef = useRef<HTMLDivElement>(null);
@@ -103,14 +134,12 @@ export function CostCalculatorForm({
     landedCostTotal: latestCalculation.landedCostTotal ? getEuroDisplay(latestCalculation.landedCostTotal, currency) : null,
     expectedProfit: profit ? getEuroDisplay(profit.totalProfit, currency) : null,
   } : null;
-  const sourceData = sourceMetadata && typeof sourceMetadata === "object" && !Array.isArray(sourceMetadata)
-    ? sourceMetadata as Record<string, unknown>
-    : {};
-  const metadataProvenance = sourceData.customsProvenance && typeof sourceData.customsProvenance === "object" && !Array.isArray(sourceData.customsProvenance)
-    ? sourceData.customsProvenance as Record<string, unknown>
-    : {};
-  const customsProvenance = values.customsProvenance ?? metadataProvenance;
-  const tariffCode = typeof customsProvenance.tariffCode === "string" ? customsProvenance.tariffCode : "";
+  const customsConfirmationCandidate = {
+    ...customsFields,
+    rateType: customsRateType(customsFields.rateType),
+    confirmedByOfficialSource: true,
+  };
+  const canConfirmCustoms = isOfficialCustomsEvidenceConfirmed(customsConfirmationCandidate);
   const breakdown = latestCalculation ? buildLandedCostBreakdown({
     unitPrice: latestCalculation.unitPrice,
     quantity: latestCalculation.quantity,
@@ -166,6 +195,18 @@ export function CostCalculatorForm({
     panelRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [editInitially]);
 
+  function updateCustomsField(field: keyof typeof customsFields, value: string) {
+    const nextFields = { ...customsFields, [field]: value };
+    setCustomsFields(nextFields);
+    if (!isOfficialCustomsEvidenceConfirmed({
+      ...nextFields,
+      rateType: customsRateType(nextFields.rateType),
+      confirmedByOfficialSource: true,
+    })) {
+      setCustomsConfirmed(false);
+    }
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setPending(true);
@@ -175,17 +216,17 @@ export function CostCalculatorForm({
     body.calculationStatus = form.get("needsReview") ? "NEEDS_REVIEW" : "CALCULATED";
     body.shippingEstimate = shippingStatus === CostEvidenceStatuses.ESTIMATED ? shippingEstimate : null;
     body.customsProvenance = {
-      tariffCode: form.get("tariffCode") || null,
-      originCountry: form.get("originCountry") || null,
-      shippingCountry: form.get("shippingCountry") || null,
-      rateType: form.get("customsRateType") || "unknown",
-      sourceName: form.get("customsSourceName") || null,
-      officialUrl: form.get("customsOfficialUrl") || null,
-      checkedAt: form.get("customsCheckedAt") || null,
+      tariffCode: customsFields.tariffCode || null,
+      originCountry: customsFields.originCountry || null,
+      shippingCountry: customsFields.shippingCountry || null,
+      rateType: customsFields.rateType || "unknown",
+      sourceName: customsFields.sourceName || null,
+      officialUrl: customsFields.officialUrl || null,
+      checkedAt: customsFields.checkedAt || null,
       validFrom: null,
-      validUntil: form.get("customsValidUntil") || null,
-      confirmedByOfficialSource: form.get("customsConfirmedByOfficialSource") === "on",
-      classificationSuggested: !tariffCodeHasDecisionPrecision(String(form.get("tariffCode") ?? "")),
+      validUntil: customsFields.validUntil || null,
+      confirmedByOfficialSource: customsConfirmed && canConfirmCustoms,
+      classificationSuggested: !tariffCodeHasDecisionPrecision(customsFields.tariffCode),
     };
     delete body.needsReview;
     for (const key of ["tariffCode", "originCountry", "shippingCountry", "customsRateType", "customsSourceName", "customsOfficialUrl", "customsCheckedAt", "customsValidUntil", "customsConfirmedByOfficialSource"]) {
@@ -287,27 +328,34 @@ export function CostCalculatorForm({
               </label>
               <fieldset className="customs-provenance-fields">
                 <legend>{t("Dokaz za carinsku stopu")}</legend>
-                <label>{t(tariffCode && !tariffCodeHasDecisionPrecision(tariffCode) ? "Predložena tarifna grupa" : "Puni tarifni kod")}
-                  <input defaultValue={tariffCode} name="tariffCode" placeholder="90049010" />
+                <label>{t(customsFields.tariffCode && !tariffCodeHasDecisionPrecision(customsFields.tariffCode) ? "Predložena tarifna grupa" : "Puni tarifni kod")}
+                  <input name="tariffCode" onChange={(event) => updateCustomsField("tariffCode", event.target.value)} placeholder="90049010" value={customsFields.tariffCode} />
                 </label>
-                <label>{t("Poreklo robe")}<input defaultValue={String(customsProvenance.originCountry ?? "")} maxLength={2} name="originCountry" /></label>
-                <label>{t("Zemlja slanja")}<input defaultValue={String(customsProvenance.shippingCountry ?? "")} maxLength={2} name="shippingCountry" /></label>
+                <label>{t("Poreklo robe")}<input maxLength={2} name="originCountry" onChange={(event) => updateCustomsField("originCountry", event.target.value)} value={customsFields.originCountry} /></label>
+                <label>{t("Zemlja slanja")}<input maxLength={2} name="shippingCountry" onChange={(event) => updateCustomsField("shippingCountry", event.target.value)} value={customsFields.shippingCountry} /></label>
                 <label>{t("Carinski tretman")}
-                  <select defaultValue={String(customsProvenance.rateType ?? "unknown")} name="customsRateType">
+                  <select name="customsRateType" onChange={(event) => updateCustomsField("rateType", event.target.value)} value={customsFields.rateType}>
                     <option value="unknown">{t("Nepoznato")}</option>
                     <option value="standard">{t("Standardni")}</option>
                     <option value="preferential">{t("Preferencijalni")}</option>
                   </select>
                 </label>
-                <label>{t("Naziv zvaničnog izvora")}<input defaultValue={String(customsProvenance.sourceName ?? "")} name="customsSourceName" /></label>
-                <label>{t("Zvanični URL")}<input defaultValue={String(customsProvenance.officialUrl ?? "")} name="customsOfficialUrl" type="url" /></label>
-                <label>{t("Datum provere")}<input defaultValue={String(customsProvenance.checkedAt ?? "")} name="customsCheckedAt" type="date" /></label>
-                <label>{t("Datum važenja")}<input defaultValue={String(customsProvenance.validUntil ?? "")} name="customsValidUntil" type="date" /></label>
+                <label>{t("Naziv zvaničnog izvora")}<input name="customsSourceName" onChange={(event) => updateCustomsField("sourceName", event.target.value)} value={customsFields.sourceName} /></label>
+                <label>{t("Zvanični URL")}<input name="customsOfficialUrl" onChange={(event) => updateCustomsField("officialUrl", event.target.value)} type="url" value={customsFields.officialUrl} /></label>
+                <label>{t("Datum provere")}<input name="customsCheckedAt" onChange={(event) => updateCustomsField("checkedAt", event.target.value)} type="date" value={customsFields.checkedAt} /></label>
+                <label>{t("Datum važenja")}<input name="customsValidUntil" onChange={(event) => updateCustomsField("validUntil", event.target.value)} type="date" value={customsFields.validUntil} /></label>
                 <label className="checkbox-label">
-                  <input defaultChecked={customsProvenance.confirmedByOfficialSource === true} name="customsConfirmedByOfficialSource" type="checkbox" />
+                  <input
+                    checked={customsConfirmed}
+                    disabled={!canConfirmCustoms}
+                    name="customsConfirmedByOfficialSource"
+                    onChange={(event) => setCustomsConfirmed(event.target.checked && canConfirmCustoms)}
+                    type="checkbox"
+                  />
                   {t("Potvrđeno u zvaničnom izvoru")}
                 </label>
-                {tariffCode && !tariffCodeHasDecisionPrecision(tariffCode) && <p className="warning-text">{t("Široka tarifna grupa ne potvrđuje carinsku stopu. Unesite puni tarifni kod.")}</p>}
+                {customsFields.tariffCode && !tariffCodeHasDecisionPrecision(customsFields.tariffCode) && <p className="warning-text">{t("Široka tarifna grupa ne potvrđuje carinsku stopu. Unesite puni tarifni kod.")}</p>}
+                {!canConfirmCustoms && <p className="muted-text">{t("Za potvrdu unesite puni tarifni kod, zvanični HTTPS izvor, datum provere, poreklo i zemlju slanja.")}</p>}
               </fieldset>
               <label>{t("Osiguranje")} ({currency})<input defaultValue={values.insuranceCost} min={0} name="insuranceCost" placeholder={t("Nepoznato")} step="0.01" type="number" /><EvidenceSelect defaultValue={values.insuranceStatus} name="insuranceStatus" translate={t} /></label>
               <label>{t("Špedicija")} ({currency})<input defaultValue={values.freightForwardingCost} min={0} name="freightForwardingCost" placeholder={t("Nepoznato")} step="0.01" type="number" /><EvidenceSelect defaultValue={values.freightForwardingStatus} name="freightForwardingStatus" translate={t} /></label>

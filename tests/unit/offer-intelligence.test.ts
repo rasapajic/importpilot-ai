@@ -241,6 +241,53 @@ describe("supplier offer intelligence", () => {
     expect(comparison.excluded[0].reasons).toContain("Ponuda nije analizirana.");
   });
 
+  it("distinguishes a temporary analysis from ranking eligibility", () => {
+    const comparison = compareOffers([
+      {
+        offerId: "temporary",
+        supplierName: "Dongguan Power Export",
+        currency: "EUR",
+        landedCostTotal: null,
+        grossMarginPercent: null,
+        deliveryTimeDays: 20,
+        supplierRiskScore: 50,
+        overallScore: 54,
+        recommendationStatus: RecommendationStatuses.OK_WITH_RISK,
+        analyzed: true,
+        assessmentReliable: true,
+        complete: false,
+      },
+    ]);
+
+    expect(comparison.groups).toHaveLength(0);
+    expect(comparison.excluded[0].reasons).toContain(
+      "Ponuda je privremeno analizirana, ali nije podobna za rangiranje dok se ne potvrde svi obavezni troškovi.",
+    );
+    expect(comparison.excluded[0].reasons).not.toContain("Ponuda nije analizirana.");
+  });
+
+  it("does not rank a very low-confidence assessment with unknown supplier risk", () => {
+    const comparison = compareOffers([
+      {
+        offerId: "unreliable",
+        supplierName: "Sparse Supplier",
+        currency: "EUR",
+        landedCostTotal: 100,
+        grossMarginPercent: 30,
+        deliveryTimeDays: 20,
+        supplierRiskScore: 50,
+        overallScore: 54,
+        recommendationStatus: RecommendationStatuses.OK_WITH_RISK,
+        analyzed: true,
+        assessmentReliable: false,
+        complete: true,
+      },
+    ]);
+
+    expect(comparison.groups).toHaveLength(0);
+    expect(comparison.excluded[0].reasons).toContain("Nije moguće pouzdano oceniti.");
+  });
+
   it("excludes an offer from EUR ranking when its FX rate is unavailable", () => {
     const comparison = compareOffers([
       { offerId: "eur", supplierName: "EUR", currency: "EUR", landedCostTotal: 100, grossMarginPercent: 20, deliveryTimeDays: 20, supplierRiskScore: 10, overallScore: 80, recommendationStatus: RecommendationStatuses.RECOMMENDED },
