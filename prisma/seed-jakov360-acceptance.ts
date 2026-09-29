@@ -25,6 +25,7 @@ async function main() {
     nodeEnv: process.env.NODE_ENV,
     databaseUrl: process.env.DATABASE_URL,
     explicitConfirmation: process.env.JAKOV360_ACCEPTANCE_SEED,
+    stagingSafetyConfirmation: process.env.JAKOV360_ACCEPTANCE_STAGING_SEED,
   });
   const plan = buildJakov360AcceptanceSeedPlan();
   const user = await prisma.user.findUnique({

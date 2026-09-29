@@ -4,6 +4,7 @@ import {
   assertJakov360AcceptanceSeedAllowed,
   buildJakov360AcceptanceSeedPlan,
   JAKOV360_ACCEPTANCE_PROJECT_NAME,
+  JAKOV360_ACCEPTANCE_STAGING_DATABASE_NAME,
 } from "../../prisma/jakov360-acceptance-fixture";
 import { canShowBestChoice, classifyOffer, findMatchingQuantityTier } from "../../modules/product-search/domain/offer-classification";
 import { supplierOfferSearchResultsSchema } from "../../modules/product-search/domain/search";
@@ -39,6 +40,61 @@ describe("JAKOV360 acceptance seed guard", () => {
       databaseUrl: local,
       explicitConfirmation: "1",
     })).toEqual({ databaseHost: "localhost", databaseName: "tradepilot" });
+  });
+
+  it("allows only the exact Render acceptance staging database with both safety flags", () => {
+    const renderDatabase = `postgresql://user:secret@dpg-example-a.frankfurt-postgres.render.com:5432/${JAKOV360_ACCEPTANCE_STAGING_DATABASE_NAME}`;
+
+    expect(() => assertJakov360AcceptanceSeedAllowed({
+      nodeEnv: "production",
+      databaseUrl: renderDatabase,
+      explicitConfirmation: "1",
+    })).toThrow("JAKOV360_ACCEPTANCE_STAGING_SEED=1");
+    expect(() => assertJakov360AcceptanceSeedAllowed({
+      nodeEnv: "development",
+      databaseUrl: renderDatabase,
+      explicitConfirmation: "1",
+      stagingSafetyConfirmation: "1",
+    })).toThrow("requires NODE_ENV=production");
+    expect(assertJakov360AcceptanceSeedAllowed({
+      nodeEnv: "production",
+      databaseUrl: renderDatabase,
+      explicitConfirmation: "1",
+      stagingSafetyConfirmation: "1",
+    })).toEqual({
+      databaseHost: "dpg-example-a.frankfurt-postgres.render.com",
+      databaseName: JAKOV360_ACCEPTANCE_STAGING_DATABASE_NAME,
+    });
+    expect(assertJakov360AcceptanceSeedAllowed({
+      nodeEnv: "production",
+      databaseUrl: `postgresql://user:secret@dpg-example-a:5432/${JAKOV360_ACCEPTANCE_STAGING_DATABASE_NAME}`,
+      explicitConfirmation: "1",
+      stagingSafetyConfirmation: "1",
+    })).toEqual({
+      databaseHost: "dpg-example-a",
+      databaseName: JAKOV360_ACCEPTANCE_STAGING_DATABASE_NAME,
+    });
+  });
+
+  it("rejects non-Render, unexpected and production-like remote databases", () => {
+    const confirmed = {
+      nodeEnv: "production",
+      explicitConfirmation: "1",
+      stagingSafetyConfirmation: "1",
+    } as const;
+
+    expect(() => assertJakov360AcceptanceSeedAllowed({
+      ...confirmed,
+      databaseUrl: `postgresql://user:secret@db.example.com:5432/${JAKOV360_ACCEPTANCE_STAGING_DATABASE_NAME}`,
+    })).toThrow("Refusing non-Render database host");
+    expect(() => assertJakov360AcceptanceSeedAllowed({
+      ...confirmed,
+      databaseUrl: "postgresql://user:secret@dpg-example-a:5432/other_acceptance_staging",
+    })).toThrow("Refusing unexpected staging database name");
+    expect(() => assertJakov360AcceptanceSeedAllowed({
+      ...confirmed,
+      databaseUrl: "postgresql://user:secret@dpg-example-a:5432/jakov360_acceptance_staging_prod",
+    })).toThrow("Refusing production-like database name");
   });
 });
 

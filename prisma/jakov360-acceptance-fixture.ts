@@ -8,11 +8,13 @@ export const JAKOV360_ACCEPTANCE_PROJECT_NAME = "JAKOV360 Acceptance pregled —
 export const JAKOV360_CHARGERS_PROJECT_NAME = "JAKOV360 Acceptance pregled — USB-C punjači";
 export const JAKOV360_DEMO_EMAIL = "owner@tradepilot.local";
 export const JAKOV360_DEMO_ORGANIZATION_ID = "00000000-0000-4000-8000-000000000001";
+export const JAKOV360_ACCEPTANCE_STAGING_DATABASE_NAME = "jakov360_acceptance_staging";
 
 export type AcceptanceSeedEnvironment = {
   nodeEnv?: string;
   databaseUrl?: string;
   explicitConfirmation?: string;
+  stagingSafetyConfirmation?: string;
 };
 
 export type AcceptanceOfferFixture = {
@@ -35,13 +37,11 @@ export type AcceptanceSearchCacheFixture = {
 };
 
 const localDatabaseHosts = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
+const renderDatabaseHostPattern = /^dpg-[a-z0-9-]+(?:\.[a-z0-9-]+\.render\.com)?$/i;
 
 export function assertJakov360AcceptanceSeedAllowed(environment: AcceptanceSeedEnvironment) {
   if (environment.explicitConfirmation !== "1") {
     throw new Error("Set JAKOV360_ACCEPTANCE_SEED=1 to confirm the local acceptance seed.");
-  }
-  if (environment.nodeEnv !== "development" && environment.nodeEnv !== "test") {
-    throw new Error("JAKOV360 acceptance seed requires NODE_ENV=development or test.");
   }
   if (!environment.databaseUrl) {
     throw new Error("DATABASE_URL is required for the JAKOV360 acceptance seed.");
@@ -57,14 +57,37 @@ export function assertJakov360AcceptanceSeedAllowed(environment: AcceptanceSeedE
   if (!new Set(["postgres:", "postgresql:"]).has(databaseUrl.protocol)) {
     throw new Error("JAKOV360 acceptance seed supports PostgreSQL only.");
   }
-  if (!localDatabaseHosts.has(databaseUrl.hostname)) {
-    throw new Error(`Refusing non-local database host: ${databaseUrl.hostname}`);
-  }
 
   const databaseName = decodeURIComponent(databaseUrl.pathname.replace(/^\//, ""));
   if (!databaseName) throw new Error("DATABASE_URL must include a database name.");
   if (/(^|[-_])(prod|production|live)([-_]|$)/i.test(databaseName)) {
     throw new Error(`Refusing production-like database name: ${databaseName}`);
+  }
+
+  if (localDatabaseHosts.has(databaseUrl.hostname)) {
+    if (environment.nodeEnv !== "development" && environment.nodeEnv !== "test") {
+      throw new Error("JAKOV360 acceptance seed requires NODE_ENV=development or test.");
+    }
+    return { databaseHost: databaseUrl.hostname, databaseName };
+  }
+
+  if (environment.stagingSafetyConfirmation !== "1") {
+    if (environment.nodeEnv === "development" || environment.nodeEnv === "test") {
+      throw new Error(`Refusing non-local database host: ${databaseUrl.hostname}`);
+    }
+    throw new Error("Set JAKOV360_ACCEPTANCE_STAGING_SEED=1 to confirm the Render staging seed.");
+  }
+  if (environment.nodeEnv !== "production") {
+    throw new Error("JAKOV360 Render staging seed requires NODE_ENV=production.");
+  }
+  if (!renderDatabaseHostPattern.test(databaseUrl.hostname)) {
+    throw new Error(`Refusing non-Render database host: ${databaseUrl.hostname}`);
+  }
+  if (databaseName !== JAKOV360_ACCEPTANCE_STAGING_DATABASE_NAME) {
+    throw new Error(`Refusing unexpected staging database name: ${databaseName}`);
+  }
+  if (!databaseName.includes("staging") || !databaseName.includes("acceptance")) {
+    throw new Error(`Refusing unsafe staging database name: ${databaseName}`);
   }
 
   return { databaseHost: databaseUrl.hostname, databaseName };
