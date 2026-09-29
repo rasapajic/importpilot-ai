@@ -51,13 +51,14 @@ export function getOfferReadiness(input: OfferReadinessInput): OfferReadiness {
 
   const metadata = metadataRecord(input.sourceMetadata);
   const confirmationIssues: OfferReadiness["confirmationIssues"] = [];
-  if (metadata.availabilityConfirmed === false) confirmationIssues.push("AVAILABILITY");
+  if (metadata.availabilityConfirmed !== true) confirmationIssues.push("AVAILABILITY");
   if (metadata.offerType === "UNKNOWN") confirmationIssues.push("OFFER_TYPE");
-  if (metadata.offerType === "DOMESTIC" && metadata.b2bPriceConfirmed !== true) {
-    confirmationIssues.push("B2B_PRICE");
-  } else if (metadata.b2bPriceConfirmed === false) {
-    confirmationIssues.push("B2B_PRICE");
-  }
+  const price = classifyOfferPrice({
+    unitPrice: input.unitPrice,
+    currency: input.currency,
+    sourceMetadata: input.sourceMetadata,
+  });
+  if (!price.analysisEligible) confirmationIssues.push("B2B_PRICE");
 
   return {
     ready: missingFields.length === 0 && confirmationIssues.length === 0,
@@ -71,7 +72,7 @@ export function readinessExplanation(readiness: OfferReadiness) {
     return "Supplier, price, currency and MOQ are required before analysis.";
   }
   if (readiness.confirmationIssues.includes("B2B_PRICE")) {
-    return "The wholesale/B2B price must be confirmed.";
+    return "Potvrdite veleprodajnu/B2B cenu pre analize.";
   }
   if (readiness.confirmationIssues.includes("AVAILABILITY")) {
     return "Availability of the requested quantity must be confirmed.";
@@ -81,3 +82,4 @@ export function readinessExplanation(readiness: OfferReadiness) {
   }
   return "The offer is ready for analysis.";
 }
+import { classifyOfferPrice } from "./offer-price-classification";

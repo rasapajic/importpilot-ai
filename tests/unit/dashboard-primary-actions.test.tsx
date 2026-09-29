@@ -18,7 +18,7 @@ describe("dashboard primary actions", () => {
 
   it("opens URL import after creating a project from the link flow", () => {
     expect(getProjectCreationDestination("project-1", "url"))
-      .toBe("/projects/project-1?importUrl=1#workflow-step-offer");
+      .toBe("/projects/project-1/offers?importUrl=1");
     expect(getProjectCreationDestination("project-1", "search")).toBe("/projects/project-1");
   });
 

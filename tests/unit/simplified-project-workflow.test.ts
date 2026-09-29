@@ -4,52 +4,46 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { translateText } from "../../modules/i18n/translations";
+import { getProjectStepHref, projectStepLabels } from "../../modules/projects/domain/project-step-routes";
 
-const pageSource = readFileSync(
-  join(process.cwd(), "app/(dashboard)/projects/[projectId]/page.tsx"),
-  "utf8",
-);
+const root = process.cwd();
+const workflowSource = readFileSync(join(root, "components/projects/project-workflow-page.tsx"), "utf8");
+const decisionSource = readFileSync(join(root, "components/decisions/project-decision-panel.tsx"), "utf8");
 
-describe("simplified project workflow", () => {
-  it("uses the simplified user-facing section labels", () => {
-    expect(pageSource).toContain("Šta želite da kupite?");
-    expect(pageSource).toContain("Ponude dobavljača");
-    expect(pageSource).toContain("Da li se isplati?");
-    expect(pageSource).toContain("Sledeći korak");
-    expect(pageSource).not.toContain('title={t("Izračunajte ukupnu nabavnu cenu")}');
-    expect(pageSource).not.toContain('title={t("Analizirajte ponudu")}');
-    expect(pageSource).not.toContain('title={t("Donesite odluku")}');
+describe("five-page project workflow", () => {
+  it("uses five distinct, stable routes", () => {
+    expect(projectStepLabels).toEqual({
+      PRODUCT: "Šta želite da kupite?",
+      OFFERS: "Izbor ponude",
+      ANALYSIS: "Analiza ponude",
+      COSTS: "Troškovi uvoza",
+      DECISION: "Poređenje i odluka",
+    });
+    expect(getProjectStepHref("project-1", "PRODUCT")).toBe("/projects/project-1");
+    expect(getProjectStepHref("project-1", "OFFERS")).toBe("/projects/project-1/offers");
+    expect(getProjectStepHref("project-1", "ANALYSIS")).toBe("/projects/project-1/analysis");
+    expect(getProjectStepHref("project-1", "COSTS")).toBe("/projects/project-1/costs");
+    expect(getProjectStepHref("project-1", "DECISION")).toBe("/projects/project-1/decision");
   });
 
-  it("keeps advanced decision details collapsed by default", () => {
-    expect(pageSource).toContain("advanced-decision-details");
-    expect(pageSource).toContain("open={advancedDetailsOpen}");
-    expect(pageSource).toContain("Prikaži detalje");
+  it("renders only the requested page section", () => {
+    for (const step of ["PRODUCT", "OFFERS", "ANALYSIS", "COSTS", "DECISION"]) {
+      expect(workflowSource).toContain(`currentStep === "${step}"`);
+    }
+    expect(workflowSource).toContain("ProjectStepNavigation");
   });
 
-  it("adds the mobile workflow action bar without changing workflow sections", () => {
-    expect(pageSource).toContain("MobileWorkflowActionBar");
-    expect(pageSource).toContain("getMobileWorkflowActions");
-    expect(pageSource).toContain('id="workflow-step-next"');
+  it("links selection, analysis, costs and decision actions", () => {
+    expect(workflowSource).toContain('getProjectStepHref(project.id, "ANALYSIS")');
+    expect(workflowSource).toContain('getProjectStepHref(project.id, "COSTS")');
+    expect(workflowSource).toContain('getProjectStepHref(project.id, "DECISION")');
+    expect(decisionSource).toContain('getProjectStepHref(projectId, "OFFERS")');
+    expect(decisionSource).toContain('triggerLabel="Zatraži podatke od dobavljača"');
   });
 
-  it("keeps profitability active until a final recommendation exists", () => {
-    expect(pageSource).toContain("const hasFinalRecommendation = isFinalDecisionStatus(decision?.status)");
-    expect(pageSource).toContain("const decisionAreaStatus");
-    expect(pageSource).toContain("!offerCount");
-    expect(pageSource).toContain("hasFinalRecommendation");
-    expect(pageSource).toContain('? "COMPLETED"');
-    expect(pageSource).toContain(': "ACTIVE"');
-    expect(pageSource).toContain('summary={hasFinalRecommendation ? getDecisionStepSummary(decision?.status, locale) : t("Nakon preporuke")}');
-  });
-
-  it("localizes simplified labels in EN/DE/SR", () => {
-    expect(translateText("Da li se isplati?", "en")).toBe("Does it pay off?");
-    expect(translateText("Da li se isplati?", "de")).toBe("Lohnt es sich?");
-    expect(translateText("Šta želite da kupite?", "sr")).toBe("Šta želite da kupite?");
-    expect(translateText("Realna nabavna cena", "en")).toBe("Real purchase price");
-    expect(translateText("Sledeći korak", "de")).toBe("Nächster Schritt");
-    expect(translateText("Traži bolju cenu", "en")).toBe("Ask for a better price");
-    expect(translateText("Ubaci drugi link", "de")).toBe("Anderen Link einfügen");
+  it("localizes the new labels in EN, DE and SR", () => {
+    expect(translateText("Izbor ponude", "en")).toBe("Offer selection");
+    expect(translateText("Troškovi uvoza", "de")).toBe("Importkosten");
+    expect(translateText("Poređenje i odluka", "sr")).toBe("Poređenje i odluka");
   });
 });

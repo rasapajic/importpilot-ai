@@ -5,30 +5,32 @@ import { describe, expect, it } from "vitest";
 const root = process.cwd();
 const offersPanel = readFileSync(join(root, "components/offers/offers-panel.tsx"), "utf8");
 const decisionPanel = readFileSync(join(root, "components/decisions/project-decision-panel.tsx"), "utf8");
-const projectPage = readFileSync(join(root, "app/(dashboard)/projects/[projectId]/page.tsx"), "utf8");
+const workflowPage = readFileSync(join(root, "components/projects/project-workflow-page.tsx"), "utf8");
 const rfqPanel = readFileSync(join(root, "components/search/rfq-request-panel.tsx"), "utf8");
 const supplierSearch = readFileSync(join(root, "components/search/supplier-offer-search.tsx"), "utf8");
 const styles = readFileSync(join(root, "app/globals.css"), "utf8");
 const costForm = readFileSync(join(root, "components/costs/cost-calculator-form.tsx"), "utf8");
 const transportAssistant = readFileSync(join(root, "components/costs/transport-cost-assistant.tsx"), "utf8");
+const timeline = readFileSync(join(root, "components/timeline/project-timeline.tsx"), "utf8");
 
 describe("offer-linked analysis flow", () => {
   it("starts analysis from a concrete offer card", () => {
     expect(offersPanel).toContain('t("Analiziraj ponudu")');
     expect(offersPanel).toContain("analyzeOffer(offer.id)");
-    expect(projectPage).toContain("showAnalysisActions");
+    expect(workflowPage).toContain("showAnalysisActions");
   });
 
   it("shows analyzed offer facts and disables recommendation without them", () => {
     expect(decisionPanel).toContain("analyzedOffers.map");
     expect(decisionPanel).toContain("offer.productName");
     expect(decisionPanel).toContain("offer.supplierName");
-    expect(decisionPanel).toContain("pending || decisionReadyOffers.length === 0");
-    expect(decisionPanel).toContain('href="#workflow-step-offer"');
+    expect(decisionPanel).toContain('getProjectStepHref(projectId, "OFFERS")');
     expect(decisionPanel).toContain('t("Izračunaj isplativost")');
     expect(decisionPanel).toContain('t("Nije moguće proceniti isplativost")');
     expect(decisionPanel).toContain('triggerLabel="Zatraži podatke od dobavljača"');
-    expect(projectPage).toContain("analysisOffer");
+    expect(workflowPage).toContain("searchParams.offer");
+    expect(offersPanel).toContain('"&rfq=1"');
+    expect(rfqPanel).toContain("useState(initiallyOpen)");
   });
 
   it("requires a city and postal code before copying an RFQ", () => {
@@ -39,8 +41,8 @@ describe("offer-linked analysis flow", () => {
   });
 
   it("uses the real product query and prevents duplicate offer imports", () => {
-    expect(projectPage).toContain("searchProductName");
-    expect(projectPage).toContain("existingSearchOffers");
+    expect(workflowPage).toContain("searchProductName");
+    expect(workflowPage).toContain("existingSearchOffers");
     expect(supplierSearch).toContain("isAlreadyAdded(result)");
     expect(supplierSearch).toContain('t("Već dodato")');
   });
@@ -77,5 +79,12 @@ describe("offer-linked analysis flow", () => {
     expect(costForm).toContain(
       'panelRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })',
     );
+  });
+
+  it("uses public analysis history text and a non-overlapping date layout", () => {
+    expect(timeline).toContain('ASSESSMENT_COMPLETED: "Ponuda je analizirana"');
+    expect(timeline).toContain("containsInternalAcceptanceText");
+    expect(styles).toMatch(/\.timeline-list time\s*{[^}]*display:\s*block/s);
+    expect(styles).toMatch(/\.timeline-list li > div:last-child\s*{[^}]*min-width:\s*0/s);
   });
 });

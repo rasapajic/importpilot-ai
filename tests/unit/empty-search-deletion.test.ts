@@ -15,7 +15,7 @@ const supplierSearchSource = readFileSync(
   "utf8",
 );
 const projectPageSource = readFileSync(
-  join(process.cwd(), "app/(dashboard)/projects/[projectId]/page.tsx"),
+  join(process.cwd(), "components/projects/project-workflow-page.tsx"),
   "utf8",
 );
 

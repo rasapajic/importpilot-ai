@@ -9,6 +9,7 @@ import {
 import { recordProjectActivity } from "@/modules/timeline/application/timeline-service";
 import { getOfferReadiness, readinessExplanation } from "@/modules/offers/domain/offer-readiness";
 import { hasReliableDetailedAssessment } from "@/modules/intelligence/domain/assessment-reliability";
+import { getOfferMinimumQuality } from "@/modules/offers/domain/offer-minimum-quality";
 
 export class AssessmentOfferNotFoundError extends Error {}
 export class AssessmentProjectNotFoundError extends Error {}
@@ -23,6 +24,20 @@ export async function assessSupplierOffer(offerId: string, organizationId: strin
     },
   });
   if (!offer) throw new AssessmentOfferNotFoundError();
+  const metadata = offer.sourceMetadata && typeof offer.sourceMetadata === "object" && !Array.isArray(offer.sourceMetadata)
+    ? offer.sourceMetadata as Record<string, unknown>
+    : {};
+  const quality = getOfferMinimumQuality({
+    productTitle: typeof metadata.title === "string" ? metadata.title : offer.project.name,
+    requestedProduct: offer.project.name,
+    supplierName: offer.supplierName,
+    unitPrice: offer.unitPrice,
+    currency: offer.currency,
+    productUrl: typeof metadata.productUrl === "string" ? metadata.productUrl : null,
+    contactEmail: offer.contactEmail,
+    contactPhone: offer.contactPhone,
+  });
+  if (!quality.ready) throw new AssessmentOfferNotReadyError("Ponuda ne ispunjava minimalni kvalitet za analizu.");
   const readiness = getOfferReadiness({
     supplierName: offer.supplierName,
     unitPrice: offer.unitPrice,
@@ -42,7 +57,13 @@ export async function assessSupplierOffer(offerId: string, organizationId: strin
           currency: offer.currency,
           unitPrice: { not: null },
         },
-        select: { unitPrice: true },
+        select: {
+          unitPrice: true,
+          supplierName: true,
+          currency: true,
+          moq: true,
+          sourceMetadata: true,
+        },
       })
     : [];
   const latestCost = offer.costCalculations[0] ?? null;
@@ -74,9 +95,16 @@ export async function assessSupplierOffer(offerId: string, organizationId: strin
     offer.currency
       ? {
           currency: offer.currency,
-          unitPrices: comparableOffers.flatMap((item) =>
-            item.unitPrice ? [item.unitPrice.toNumber()] : [],
-          ),
+          unitPrices: comparableOffers.flatMap((item) => {
+            const candidateReadiness = getOfferReadiness({
+              supplierName: item.supplierName,
+              unitPrice: item.unitPrice,
+              currency: item.currency,
+              moq: item.moq,
+              sourceMetadata: item.sourceMetadata,
+            });
+            return item.unitPrice && candidateReadiness.ready ? [item.unitPrice.toNumber()] : [];
+          }),
         }
       : undefined,
   );
@@ -102,7 +130,7 @@ export async function assessSupplierOffer(offerId: string, organizationId: strin
       organizationId,
       projectId: offer.projectId,
       type: ProjectActivityType.ASSESSMENT_COMPLETED,
-      title: "Ocena ponude je završena",
+      title: "Ponuda je analizirana",
       description: offer.supplierName,
       metadata: {
         offerId,
@@ -117,7 +145,7 @@ export async function assessSupplierOffer(offerId: string, organizationId: strin
 export async function compareProjectOffers(projectId: string, organizationId: string) {
   const project = await prisma.importProject.findFirst({
     where: { id: projectId, organizationId },
-    select: { id: true },
+    select: { id: true, name: true },
   });
   if (!project) throw new AssessmentProjectNotFoundError();
 
@@ -130,7 +158,21 @@ export async function compareProjectOffers(projectId: string, organizationId: st
   });
 
   return compareOffers(
-    offers.map((offer) => {
+    offers.flatMap((offer) => {
+      const metadata = offer.sourceMetadata && typeof offer.sourceMetadata === "object" && !Array.isArray(offer.sourceMetadata)
+        ? offer.sourceMetadata as Record<string, unknown>
+        : {};
+      const quality = getOfferMinimumQuality({
+        productTitle: typeof metadata.title === "string" ? metadata.title : project.name,
+        requestedProduct: project.name,
+        supplierName: offer.supplierName,
+        unitPrice: offer.unitPrice,
+        currency: offer.currency,
+        productUrl: typeof metadata.productUrl === "string" ? metadata.productUrl : null,
+        contactEmail: offer.contactEmail,
+        contactPhone: offer.contactPhone,
+      });
+      if (!quality.ready) return [];
       const cost = offer.costCalculations[0] ?? null;
       const assessment = offer.assessments[0] ?? null;
       const assessmentReliable = assessment ? hasReliableDetailedAssessment({
@@ -148,7 +190,7 @@ export async function compareProjectOffers(projectId: string, organizationId: st
         ...(!readiness.ready ? [readinessExplanation(readiness)] : []),
         ...(cost?.calculationStatus !== "CALCULATED" ? ["Obračun čeka potvrđene podatke."] : []),
       ];
-      return {
+      return [{
         offerId: offer.id,
         supplierName: offer.supplierName,
         currency: offer.currency,
@@ -162,7 +204,7 @@ export async function compareProjectOffers(projectId: string, organizationId: st
         assessmentReliable,
         complete: readiness.ready && cost?.calculationStatus === "CALCULATED" && cost.landedCostTotal !== null && cost.grossMarginPercent !== null,
         exclusionReasons,
-      };
+      }];
     }),
   );
 }

@@ -82,8 +82,8 @@ export function classifyOffer(input: OfferClassificationInput): OfferClassificat
       label: "Direktan uvoz",
       reason: directBySource ? "Izvor je međunarodna dobavljačka platforma." : "Lokacija dobavljača se razlikuje od ciljne zemlje.",
       directImportCostsForBuyer: true,
-      canUseAsConfirmedB2BPrice: input.b2bPriceConfirmed !== false,
-      needsSupplierConfirmation: input.availabilityConfirmed !== true,
+      canUseAsConfirmedB2BPrice: input.b2bPriceConfirmed === true && input.availabilityConfirmed === true,
+      needsSupplierConfirmation: input.b2bPriceConfirmed !== true || input.availabilityConfirmed !== true,
     };
   }
 

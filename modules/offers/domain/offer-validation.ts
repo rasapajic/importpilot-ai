@@ -27,7 +27,7 @@ export const manualOfferSchema = z
     ),
     contactPhone: optionalText(60),
     moq: optionalNumber(z.number().int().positive()),
-    unitPrice: optionalNumber(z.number().nonnegative().finite()),
+    unitPrice: optionalNumber(z.number().positive().finite()),
     currency: z.preprocess(
       (value) => (value === "" ? null : String(value).toUpperCase()),
       z.string().regex(/^[A-Z]{3}$/).nullable(),
@@ -56,6 +56,20 @@ export const manualOfferSchema = z
         code: "custom",
         path: ["currency"],
         message: "Cena i valuta moraju biti navedene zajedno.",
+      });
+    }
+    if (!offer.contactEmail && !offer.contactPhone) {
+      context.addIssue({
+        code: "custom",
+        path: ["contactEmail"],
+        message: "Unesite email ili telefon prodavca.",
+      });
+    }
+    if (offer.unitPrice === null || offer.currency === null) {
+      context.addIssue({
+        code: "custom",
+        path: ["unitPrice"],
+        message: "Cena i valuta su obavezne.",
       });
     }
   });

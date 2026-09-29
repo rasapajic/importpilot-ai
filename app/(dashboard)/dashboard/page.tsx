@@ -8,6 +8,7 @@ import { getCountryDisplayName } from "@/modules/i18n/country-names";
 import { getServerLocale } from "@/modules/i18n/server";
 import { getStatusLabel, translateText } from "@/modules/i18n/translations";
 import { isDemoProjectName } from "@/modules/projects/domain/project-access";
+import { publicProjectName } from "@/modules/projects/domain/public-demo-text";
 import { getDashboardProjectStage } from "@/modules/projects/application/dashboard-project-stage";
 import { listProjects } from "@/modules/projects/application/project-service";
 import { listProjectsSchema } from "@/modules/projects/domain/validation";
@@ -106,7 +107,7 @@ export default async function DashboardPage({
           <article className="project-row project-list-row" key={project.id}>
             <Link className="project-row-link" href={`/projects/${project.id}`}>
               <span className="project-card-content">
-                <strong>{translateText(project.name, locale)}</strong>
+                <strong>{translateText(publicProjectName(project.name), locale)}</strong>
                 <span className="project-card-meta">
                   <small><span aria-hidden="true">📍</span> {getCountryDisplayName(project.targetCountry, locale)}</small>
                   <small><span aria-hidden="true">📦</span> {project.quantity} {translateText("kom", locale)}</small>

@@ -16,6 +16,7 @@ import type { ProjectDecisionResult } from "@/modules/decisions/domain/project-d
 import { getEuroDisplay } from "@/modules/fx/euro-display";
 import { getStatusLabel } from "@/modules/i18n/translations";
 import { RfqRequestPanel } from "@/components/search/rfq-request-panel";
+import { getProjectStepHref } from "@/modules/projects/domain/project-step-routes";
 
 type DecisionView = ProjectDecisionResult & { id: string; createdAt: Date };
 type SelectedCalculation = {
@@ -115,16 +116,24 @@ export function ProjectDecisionPanel({
           <h2>{analysisTitle}</h2>
         </div>
         <div className="actions">
-          <button
-            disabled={pending || decisionReadyOffers.length === 0}
-            onClick={generate}
-            title={decisionReadyOffers.length === 0 ? t("Potvrdite obavezne troškove pre izračunavanja isplativosti.") : undefined}
-            type="button"
-          >
-            {pending ? t("Računanje...") : hasFinalRecommendation ? t("Ponovo izračunaj isplativost") : t("Izračunaj isplativost")}
-          </button>
+          {focusedOffer && !focusedOffer.calculationReady ? (
+            <RfqRequestPanel
+              incoterm={focusedOffer.incoterm}
+              productTitle={focusedOffer.productName}
+              rfqProductName={focusedOffer.rfqProductName}
+              productUrl={focusedOffer.productUrl}
+              quantity={focusedOffer.quantity}
+              supplierName={focusedOffer.supplierName}
+              targetCountry={focusedOffer.targetCountry}
+              triggerLabel="Zatraži podatke od dobavljača"
+            />
+          ) : decisionReadyOffers.length > 0 ? (
+            <button disabled={pending} onClick={generate} type="button">
+              {pending ? t("Računanje...") : hasFinalRecommendation ? t("Ponovo izračunaj isplativost") : t("Izračunaj isplativost")}
+            </button>
+          ) : null}
           {hasFinalRecommendation && <Link className="secondary-link" href={`/projects/${projectId}/summary`}>{t("Izvezi PDF")}</Link>}
-          <Link className="secondary-link" href="#workflow-step-offer">{t("Izaberi drugu ponudu")}</Link>
+          <Link className="secondary-link" href={getProjectStepHref(projectId, "OFFERS")}>{t("Izaberi drugu ponudu")}</Link>
         </div>
       </header>
       {analyzedOffers.length > 0 ? (
@@ -148,16 +157,6 @@ export function ProjectDecisionPanel({
         <div className="calculation-warning profitability-unavailable">
           <strong>{t("Nije moguće proceniti isplativost")}</strong>
           <p>{t("Sledeći korak: Zatražite potvrdu podataka i pregovarajte")}</p>
-          <RfqRequestPanel
-            incoterm={focusedOffer.incoterm}
-            productTitle={focusedOffer.productName}
-            rfqProductName={focusedOffer.rfqProductName}
-            productUrl={focusedOffer.productUrl}
-            quantity={focusedOffer.quantity}
-            supplierName={focusedOffer.supplierName}
-            targetCountry={focusedOffer.targetCountry}
-            triggerLabel="Zatraži podatke od dobavljača"
-          />
         </div>
       )}
       {error && <p className="form-error">{error}</p>}

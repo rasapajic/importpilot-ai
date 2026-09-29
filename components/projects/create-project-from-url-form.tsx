@@ -137,7 +137,7 @@ export function CreateProjectFromUrlForm() {
     const imported = (await importResponse.json()) as { error?: string };
     if (!importResponse.ok) throw new Error(imported.error);
 
-    router.push(`/projects/${project.id}#workflow-step-offer`);
+    router.push(`${getProjectStepHref(project.id, "OFFERS")}?importUrl=1`);
     router.refresh();
   }
 
@@ -258,3 +258,4 @@ export function CreateProjectFromUrlForm() {
     </div>
   );
 }
+import { getProjectStepHref } from "@/modules/projects/domain/project-step-routes";

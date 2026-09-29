@@ -195,16 +195,15 @@ describe("supplier offer intelligence", () => {
     expect(result.recommendationStatus).not.toBe(RecommendationStatuses.RECOMMENDED);
   });
 
-  it("converts mixed currencies into one EUR comparison group", () => {
+  it("keeps mixed currencies in separate groups even when EUR display conversion exists", () => {
     const comparison = compareOffers([
       { offerId: "usd", supplierName: "USD Supplier", currency: "USD", landedCostTotal: 100, grossMarginPercent: 20, deliveryTimeDays: 20, supplierRiskScore: 10, overallScore: 80, recommendationStatus: RecommendationStatuses.RECOMMENDED },
       { offerId: "eur", supplierName: "EUR Supplier", currency: "EUR", landedCostTotal: 90, grossMarginPercent: 25, deliveryTimeDays: 10, supplierRiskScore: 5, overallScore: 90, recommendationStatus: RecommendationStatuses.RECOMMENDED },
     ], freshFx, freshFxNow);
     const { groups } = comparison;
-    expect(groups).toHaveLength(1);
-    expect(groups[0].currency).toBe("EUR");
-    expect(groups[0].offers.map((offer) => offer.offerId)).toEqual(["usd", "eur"]);
-    expect(groups[0].bestTotalCost?.offerId).toBe("eur");
+    expect(groups).toHaveLength(2);
+    expect(groups.map((group) => group.currency).sort()).toEqual(["EUR", "USD"]);
+    expect(groups.every((group) => group.bestTotalCost === null)).toBe(true);
   });
 
   it("selects comparison winners only inside one currency group", () => {

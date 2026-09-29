@@ -7,15 +7,14 @@ import { useI18n } from "@/components/i18n/i18n-provider";
 export function ComparisonView({ comparison }: { comparison: OfferComparison }) {
   const { t } = useI18n();
   const { groups } = comparison;
+  const comparableGroups = groups.filter((group) => group.offers.length >= 2);
   const winner = (name: string | undefined) => name ?? t("Unavailable");
   return (
     <section className="dashboard-card">
       <h2>{t("Offer comparison")}</h2>
-      <p>{comparison.fxReliable
-        ? t("Offers are converted to EUR for comparison while original currencies remain unchanged.")
-        : t("Zastareo/testni kurs nije korišćen za rangiranje. Ponude se porede samo unutar iste valute.")}</p>
+      <p>{t("Ponude se rangiraju samo kada postoje najmanje dve potvrđene ponude u istoj valuti.")}</p>
       <div className="comparison-list">
-        {groups.map((group) => (
+        {comparableGroups.map((group) => (
           <article key={group.currency}>
             <h3>{group.currency}</h3>
             <dl>
@@ -26,7 +25,12 @@ export function ComparisonView({ comparison }: { comparison: OfferComparison }) 
             </dl>
           </article>
         ))}
-        {groups.length === 0 && <div className="empty-state"><h3>{t("No analysis yet.")}</h3><p>{t("Add at least two offers with a specified currency.")}</p></div>}
+        {comparableGroups.length === 0 && (
+          <div className="empty-state">
+            <h3>{t("Nema dovoljno uporedivih ponuda.")}</h3>
+            <p>{t("Potrebne su najmanje dve potvrđene ponude u istoj valuti.")}</p>
+          </div>
+        )}
       </div>
       {comparison.excluded.length > 0 && (
         <details>

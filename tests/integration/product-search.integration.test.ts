@@ -43,7 +43,7 @@ describeWithDatabase("supplier search result import and tenant isolation", () =>
       data: {
         organizationId: organization.id,
         createdById: user.id,
-        name: "Search Project",
+        name: "Industrial fan",
         targetCountry: "DE",
         quantity: 500,
         targetMargin: 20,

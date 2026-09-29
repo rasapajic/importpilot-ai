@@ -27,7 +27,18 @@ describeWithDatabase("offer assessment history and tenant isolation", () => {
       data: { organizationId: organization.id, createdById: user.id, name: "Assessment Project", targetCountry: "DE", quantity: 100, targetMargin: 20 },
     });
     const offer = await prisma.supplierOffer.create({
-      data: { organizationId: organization.id, projectId: project.id, supplierName: "Assessment Supplier", moq: 100, unitPrice: 10, currency: "EUR", incoterm: "FOB", supplierVerified: true },
+      data: {
+        organizationId: organization.id,
+        projectId: project.id,
+        supplierName: "Assessment Supplier",
+        contactEmail: "sales@assessment.example",
+        moq: 100,
+        unitPrice: 10,
+        currency: "EUR",
+        incoterm: "FOB",
+        supplierVerified: true,
+        sourceMetadata: { b2bPriceConfirmed: true, availabilityConfirmed: true },
+      },
     });
     userId = user.id;
     organizationId = organization.id;

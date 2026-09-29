@@ -10,39 +10,42 @@ const baseInput = {
   assessedOfferCount: 0,
   hasFinalRecommendation: false,
   decisionStatus: null,
+  currentStep: "OFFERS" as const,
 };
 
 describe("mobile workflow actions", () => {
   it("starts with adding an offer when offers are missing", () => {
     expect(getMobileWorkflowActions(baseInput)).toEqual([
-      { href: "#workflow-step-offer", label: "Dodaj ponudu", variant: "PRIMARY" },
+      { href: "/projects/project-1/offers", label: "Dodaj ponudu", variant: "PRIMARY" },
     ]);
   });
 
-  it("asks for calculation before analysis", () => {
+  it("continues from offer selection to analysis", () => {
     expect(getMobileWorkflowActions({
       ...baseInput,
       offerCount: 2,
       calculatedOfferCount: 1,
-    })[0]).toMatchObject({ href: "#workflow-step-decision", label: "Izračunaj" });
+    })[0]).toMatchObject({ href: "/projects/project-1/analysis", label: "Nastavi na analizu" });
   });
 
-  it("asks for analysis before recommendation", () => {
+  it("continues from analysis to costs after assessment", () => {
     expect(getMobileWorkflowActions({
       ...baseInput,
       offerCount: 2,
-      calculatedOfferCount: 2,
-      assessedOfferCount: 1,
-    })[0]).toMatchObject({ href: "#workflow-step-decision", label: "Oceni" });
+      calculatedOfferCount: 1,
+      assessedOfferCount: 2,
+      currentStep: "ANALYSIS",
+    })[0]).toMatchObject({ href: "/projects/project-1/costs", label: "Nastavi na troškove uvoza" });
   });
 
-  it("asks for recommendation before final next actions", () => {
+  it("does not add a misleading sticky action on an incomplete decision page", () => {
     expect(getMobileWorkflowActions({
       ...baseInput,
       offerCount: 1,
       calculatedOfferCount: 1,
       assessedOfferCount: 1,
-    })[0]).toMatchObject({ href: "#workflow-step-decision", label: "Izračunaj isplativost" });
+      currentStep: "DECISION",
+    })).toEqual([]);
   });
 
   it("shows compact final actions when the decision is ready", () => {
@@ -53,16 +56,17 @@ describe("mobile workflow actions", () => {
       assessedOfferCount: 1,
       hasFinalRecommendation: true,
       decisionStatus: "NEGOTIATE_FIRST",
+      currentStep: "DECISION",
     })).toEqual([
       { href: "/projects/project-1/summary", label: "PDF", variant: "PRIMARY" },
-      { href: "#negotiation-assistant", label: "Kontakt", variant: "SECONDARY" },
-      { href: "/projects/project-1?newAnalysis=1#workflow-step-decision", label: "Izaberi drugu ponudu", variant: "SECONDARY" },
+      { href: "/projects/project-1/decision#negotiation-assistant", label: "Kontakt", variant: "SECONDARY" },
+      { href: "/projects/project-1/offers", label: "Izaberi drugu ponudu", variant: "SECONDARY" },
     ]);
   });
 
   it("localizes mobile labels", () => {
     expect(translateText("Izračunaj", "en")).toBe("Calculate");
-    expect(translateText("Oceni", "de")).toBe("Bewerten");
+    expect(translateText("Analiziraj", "de")).toBe("Analysieren");
     expect(translateText("Kontakt", "sr")).toBe("Kontakt");
   });
 });

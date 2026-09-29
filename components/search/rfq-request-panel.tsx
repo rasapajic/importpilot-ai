@@ -15,6 +15,7 @@ export function RfqRequestPanel({
   productUrl,
   incoterm,
   triggerLabel = "Zatraži konačnu ponudu",
+  initiallyOpen = false,
 }: {
   productTitle: string;
   rfqProductName?: string | null;
@@ -24,9 +25,10 @@ export function RfqRequestPanel({
   productUrl?: string | null;
   incoterm?: string | null;
   triggerLabel?: string;
+  initiallyOpen?: boolean;
 }) {
   const { locale, t } = useI18n();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(initiallyOpen);
   const [orderType, setOrderType] = useState<RfqOrderType>("FULL_ORDER");
   const [deliveryCity, setDeliveryCity] = useState("");
   const [postalCode, setPostalCode] = useState("");

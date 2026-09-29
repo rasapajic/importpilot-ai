@@ -11,11 +11,28 @@ import { getSupplierOfferSearchProvider } from "../infrastructure/provider";
 import { getSupplierOfferUrlImportProvider } from "../infrastructure/url-import-provider";
 import { recordProjectActivity } from "../../timeline/application/timeline-service";
 import { searchSupplierOffersWithPersistentFallback } from "./search-fallback";
-import { getOfferReadiness, readinessExplanation } from "../../offers/domain/offer-readiness";
+import {
+  getOfferMinimumQuality,
+  minimumQualityExplanation,
+} from "../../offers/domain/offer-minimum-quality";
 import { classifyOffer } from "../domain/offer-classification";
 
 export class ProductSearchProjectNotFoundError extends Error {}
 export class ProductSearchResultNotReadyError extends Error {}
+
+export function filterMinimumQualitySearchResults(
+  requestedProduct: string,
+  results: SupplierOfferSearchResult[],
+) {
+  return results.filter((result) => getOfferMinimumQuality({
+    productTitle: result.title,
+    requestedProduct,
+    supplierName: result.supplierName,
+    unitPrice: result.price,
+    currency: result.currency,
+    productUrl: result.productUrl,
+  }).ready);
+}
 
 export async function searchProjectSupplierOffers(
   projectId: string,
@@ -30,7 +47,11 @@ export async function searchProjectSupplierOffers(
   if (!project) throw new ProductSearchProjectNotFoundError();
 
   const input = supplierOfferSearchInputSchema.parse(searchInput);
-  return searchSupplierOffersWithPersistentFallback(input, provider);
+  const outcome = await searchSupplierOffersWithPersistentFallback(input, provider);
+  return {
+    ...outcome,
+    results: filterMinimumQualitySearchResults(input.query, outcome.results),
+  };
 }
 
 export async function importSearchResult(
@@ -41,7 +62,7 @@ export async function importSearchResult(
   const result = supplierOfferSearchResultsSchema.element.parse(input);
   const project = await prisma.importProject.findFirst({
     where: { id: projectId, organizationId },
-    select: { id: true, targetCountry: true },
+    select: { id: true, name: true, targetCountry: true },
   });
   if (!project) throw new ProductSearchProjectNotFoundError();
   const classification = classifyOffer({
@@ -54,19 +75,16 @@ export async function importSearchResult(
     availabilityConfirmed: result.availabilityConfirmed,
     b2bPriceConfirmed: result.b2bPriceConfirmed,
   });
-  const readiness = getOfferReadiness({
+  const quality = getOfferMinimumQuality({
+    productTitle: result.title,
+    requestedProduct: project.name,
     supplierName: result.supplierName,
     unitPrice: result.price,
     currency: result.currency,
-    moq: result.minimumOrderQuantity,
-    sourceMetadata: {
-      offerType: classification.kind,
-      availabilityConfirmed: result.availabilityConfirmed ?? null,
-      b2bPriceConfirmed: result.b2bPriceConfirmed ?? null,
-    },
+    productUrl: result.productUrl,
   });
-  if (!readiness.ready) {
-    throw new ProductSearchResultNotReadyError(readinessExplanation(readiness));
+  if (!quality.ready) {
+    throw new ProductSearchResultNotReadyError(minimumQualityExplanation());
   }
   const existingOffer = await prisma.supplierOffer.findFirst({
     where: {

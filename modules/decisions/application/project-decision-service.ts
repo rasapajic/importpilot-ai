@@ -17,6 +17,7 @@ import { recordProjectActivity } from "@/modules/timeline/application/timeline-s
 import { getOfferReadiness } from "@/modules/offers/domain/offer-readiness";
 import { DEFAULT_EUR_FX_SNAPSHOT, getFxSnapshotStatus } from "@/modules/fx/euro-display";
 import { hasReliableDetailedAssessment } from "@/modules/intelligence/domain/assessment-reliability";
+import { getOfferMinimumQuality } from "@/modules/offers/domain/offer-minimum-quality";
 
 export class DecisionProjectNotFoundError extends Error {}
 export class DecisionNoAnalyzedOffersError extends Error {}
@@ -48,6 +49,19 @@ export async function generateProjectDecision(projectId: string, organizationId:
   if (!project) throw new DecisionProjectNotFoundError();
 
   const analyzedOffers = project.offers.filter((offer) => {
+    const metadata = offer.sourceMetadata && typeof offer.sourceMetadata === "object" && !Array.isArray(offer.sourceMetadata)
+      ? offer.sourceMetadata as Record<string, unknown>
+      : {};
+    const quality = getOfferMinimumQuality({
+      productTitle: typeof metadata.title === "string" ? metadata.title : project.name,
+      requestedProduct: project.name,
+      supplierName: offer.supplierName,
+      unitPrice: offer.unitPrice,
+      currency: offer.currency,
+      productUrl: typeof metadata.productUrl === "string" ? metadata.productUrl : null,
+      contactEmail: offer.contactEmail,
+      contactPhone: offer.contactPhone,
+    });
     const readiness = getOfferReadiness({
       supplierName: offer.supplierName,
       unitPrice: offer.unitPrice,
@@ -57,7 +71,7 @@ export async function generateProjectDecision(projectId: string, organizationId:
     });
     const cost = offer.costCalculations[0];
     const assessment = offer.assessments[0];
-    return readiness.ready &&
+    return quality.ready && readiness.ready &&
       assessment !== undefined &&
       hasReliableDetailedAssessment({
         confidenceScore: assessment.confidenceScore.toNumber(),

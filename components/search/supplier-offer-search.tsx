@@ -16,6 +16,9 @@ import {
   type OfferClassification,
 } from "@/modules/product-search/domain/offer-classification";
 import { getOfferReadiness, readinessExplanation } from "@/modules/offers/domain/offer-readiness";
+import { getOfferMinimumQuality } from "@/modules/offers/domain/offer-minimum-quality";
+import { classifyOfferPrice } from "@/modules/offers/domain/offer-price-classification";
+import { publicOfferTitle } from "@/modules/projects/domain/public-demo-text";
 
 type ProviderStatus = "connected" | "not_configured" | "error";
 type ResultOrigin = "live" | "cache";
@@ -163,6 +166,15 @@ export function SupplierOfferSearch({
       unknown: [] as Array<{ result: SupplierOfferSearchResult; index: number; classification: OfferClassification }>,
     };
     results?.forEach((result, index) => {
+      const quality = getOfferMinimumQuality({
+        productTitle: result.title,
+        requestedProduct: query,
+        supplierName: result.supplierName,
+        unitPrice: result.price,
+        currency: result.currency,
+        productUrl: result.productUrl,
+      });
+      if (!quality.ready || isAlreadyAdded(result)) return;
       const classification = classificationFor(result);
       const item = { result, index, classification };
       if (classification.kind === "DOMESTIC") groups.domestic.push(item);
@@ -171,6 +183,9 @@ export function SupplierOfferSearch({
     });
     return groups;
   }
+
+  const resultGroups = groupedResults();
+  const visibleResultCount = resultGroups.domestic.length + resultGroups.direct.length + resultGroups.unknown.length;
 
   return (
     <section className="dashboard-card supplier-search">
@@ -282,12 +297,15 @@ export function SupplierOfferSearch({
           </div>
         </div>
       )}
-      {hasSupplierSearchResultCards(results) && results && (
+      {hasSupplierSearchResultCards(results) && results && visibleResultCount === 0 && (
+        <p className="muted-text">{t("Sve validne pronađene ponude već su sačuvane.")}</p>
+      )}
+      {visibleResultCount > 0 && results && (
         <div className="search-result-list">
           {([
-            [t("Domaće ponude"), groupedResults().domestic],
-            [t("Direktan uvoz"), groupedResults().direct],
-            [t("Vrsta ponude nije potvrđena"), groupedResults().unknown],
+            [t("Domaće ponude"), resultGroups.domestic],
+            [t("Direktan uvoz"), resultGroups.direct],
+            [t("Vrsta ponude nije potvrđena"), resultGroups.unknown],
           ] as const).map(([groupTitle, groupItems]) => {
             if (groupItems.length === 0) return null;
             const bestChoiceId = selectBestChoiceId(groupItems.map(({ result, index, classification }) => ({
@@ -312,6 +330,25 @@ export function SupplierOfferSearch({
                   moq: result.minimumOrderQuantity,
                   sourceMetadata: {
                     offerType: classification.kind,
+                    availabilityConfirmed: result.availabilityConfirmed ?? null,
+                    b2bPriceConfirmed: result.b2bPriceConfirmed ?? null,
+                  },
+                });
+                const minimumQuality = getOfferMinimumQuality({
+                  productTitle: result.title,
+                  requestedProduct: query,
+                  supplierName: result.supplierName,
+                  unitPrice: result.price,
+                  currency: result.currency,
+                  productUrl: result.productUrl,
+                });
+                const priceClassification = classifyOfferPrice({
+                  unitPrice: result.price,
+                  currency: result.currency,
+                  sourceMetadata: {
+                    offerType: classification.kind,
+                    priceIncludesVat: result.priceIncludesVat ?? null,
+                    retailPriceOnly: classification.kind === "DOMESTIC" && result.b2bPriceConfirmed !== true,
                     availabilityConfirmed: result.availabilityConfirmed ?? null,
                     b2bPriceConfirmed: result.b2bPriceConfirmed ?? null,
                   },
@@ -350,9 +387,10 @@ export function SupplierOfferSearch({
                         {t(classification.label)}
                       </span>
                       {bestChoice && <span className="best-choice-badge">{t("Najbolji izbor")}</span>}
-                      {!readiness.ready && <span className="candidate-badge">{t("Potrebna potvrda dobavljača")}</span>}
-                      <h3>{result.title}</h3>
+                      {!readiness.ready && <span className="candidate-badge">{t(priceClassification.statusLabel)}</span>}
+                      <h3>{publicOfferTitle(result.title)}</h3>
                       <p><strong>{result.supplierName}</strong>{result.supplierCountry ? ` · ${result.supplierCountry}` : ""}</p>
+                      <p><strong>{t(priceClassification.label)}</strong></p>
                       <p>
                         {result.price !== null ? `${result.price} ${result.currency}` : t("Cena nije navedena")}
                         {classification.kind === "DOMESTIC" && result.priceIncludesVat === true ? ` · ${t("Cena sa PDV-om")}` : ""}
@@ -391,7 +429,7 @@ export function SupplierOfferSearch({
                       )}
                       <RfqRequestPanel
                         incoterm={result.incoterm}
-                        productTitle={result.title}
+                        productTitle={publicOfferTitle(result.title)}
                         rfqProductName={result.rfqProductNameEn}
                         productUrl={result.productUrl}
                         quantity={Number(searchQuantity)}
@@ -401,9 +439,9 @@ export function SupplierOfferSearch({
                     </div>
                     <button
                       className="secondary-button"
-                      disabled={!readiness.ready || importing === index || alreadyAdded}
+                      disabled={!minimumQuality.ready || importing === index || alreadyAdded}
                       onClick={() => addResult(result, index)}
-                      title={!readiness.ready ? t(readinessExplanation(readiness)) : alreadyAdded ? t("Već dodato") : undefined}
+                      title={!minimumQuality.ready ? t("Ponuda ne ispunjava minimalni kvalitet.") : alreadyAdded ? t("Već dodato") : undefined}
                       type="button"
                     >
                       {alreadyAdded

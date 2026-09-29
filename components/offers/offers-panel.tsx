@@ -23,6 +23,9 @@ import { classifyOffer } from "@/modules/product-search/domain/offer-classificat
 import { getOfferReadiness, readinessExplanation } from "@/modules/offers/domain/offer-readiness";
 import { formatDisplayedPercent } from "@/modules/cost-engine/application/calculation-summary";
 import { hasReliableDetailedAssessment } from "@/modules/intelligence/domain/assessment-reliability";
+import { classifyOfferPrice } from "@/modules/offers/domain/offer-price-classification";
+import { getProjectStepHref } from "@/modules/projects/domain/project-step-routes";
+import { publicOfferTitle } from "@/modules/projects/domain/public-demo-text";
 
 type OfferWithDetails = SupplierOffer & {
   costCalculations: CostCalculation[];
@@ -51,9 +54,12 @@ export function OffersPanel({
   showAssessments = true,
   showRecalculationLinks = false,
   showAnalysisActions = false,
+  showSelectionActions = false,
+  openRfqOfferId,
   selectedCalculationOfferId,
   assessmentProgress,
   bulkAssessmentOfferIds = [],
+  title = "Ponude dobavljača",
 }: {
   projectId: string;
   projectName: string;
@@ -64,9 +70,12 @@ export function OffersPanel({
   showAssessments?: boolean;
   showRecalculationLinks?: boolean;
   showAnalysisActions?: boolean;
+  showSelectionActions?: boolean;
+  openRfqOfferId?: string;
   selectedCalculationOfferId?: string;
   assessmentProgress?: { assessed: number; total: number };
   bulkAssessmentOfferIds?: string[];
+  title?: string;
   offers: OfferWithDetails[];
 }) {
   const { locale, t } = useI18n();
@@ -153,7 +162,7 @@ export function OffersPanel({
       const response = await fetch(`/api/offers/${offerId}/assessments`, { method: "POST" });
       const result = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(result.error ?? t("Ocena ponude nije završena. Pokušajte ponovo."));
-      router.push(`/projects/${projectId}?analysisOffer=${offerId}#workflow-step-decision`);
+      router.push(`${getProjectStepHref(projectId, "ANALYSIS")}?offer=${offerId}`);
     } catch (caught) {
       setError(caught instanceof Error ? t(caught.message) : t("Ocena ponude nije završena. Pokušajte ponovo."));
     } finally {
@@ -170,19 +179,26 @@ export function OffersPanel({
   return (
     <section className="dashboard-card">
       <header className="section-header">
-        <h2>{t("Ponude dobavljača")}</h2>
+        <h2>{t(title)}</h2>
         {assessmentProgress && (
           <div className="actions">
             <strong>{t("Analysis progress")} {assessmentProgress.assessed}/{assessmentProgress.total}</strong>
-            <button
-              className="secondary-button"
-              disabled={bulkAssessing || bulkAssessmentOfferIds.length === 0}
-              onClick={assessAll}
-              title={bulkAssessmentOfferIds.length === 0 ? t("Nema kompletnih ponuda koje čekaju analizu.") : undefined}
-              type="button"
-            >
-              {bulkAssessing ? t("Analyzing...") : t("Analyze all offers")}
-            </button>
+            {bulkAssessmentOfferIds.length > 0 ? (
+              <button
+                className="secondary-button"
+                disabled={bulkAssessing}
+                onClick={assessAll}
+                type="button"
+              >
+                {bulkAssessing ? t("Analyzing...") : t("Analyze all offers")}
+              </button>
+            ) : (
+              <span className="muted-text">
+                {assessmentProgress.total > 0 && assessmentProgress.assessed >= assessmentProgress.total
+                  ? t("Sve podobne ponude su analizirane.")
+                  : t("Nema dovoljno podobnih ponuda za grupnu analizu.")}
+              </span>
+            )}
           </div>
         )}
         {showAddControls && (
@@ -226,13 +242,18 @@ export function OffersPanel({
             priceIncludesVat: typeof data.priceIncludesVat === "boolean" ? data.priceIncludesVat : undefined,
           });
           const productUrl = typeof data.productUrl === "string" ? data.productUrl : null;
-          const title = typeof data.title === "string" ? data.title : projectName;
+          const title = publicOfferTitle(typeof data.title === "string" ? data.title : projectName);
           const rfqProductName = typeof data.rfqProductNameEn === "string" ? data.rfqProductNameEn : null;
           const readiness = getOfferReadiness({
             supplierName: offer.supplierName,
             unitPrice: offer.unitPrice,
             currency: offer.currency,
             moq: offer.moq,
+            sourceMetadata: offer.sourceMetadata,
+          });
+          const priceClassification = classifyOfferPrice({
+            unitPrice: offer.unitPrice,
+            currency: offer.currency,
             sourceMetadata: offer.sourceMetadata,
           });
 
@@ -264,7 +285,7 @@ export function OffersPanel({
               </div>
               <div className="offer-highlights">
                 <span>
-                  {t("Supplier price")}
+                  {t(priceClassification.label)}
                   <strong>
                     {offer.unitPrice ? (() => {
                       const display = getEuroDisplay(offer.unitPrice, offer.currency);
@@ -281,6 +302,8 @@ export function OffersPanel({
                   <strong>
                     {offer.assessments[0] && recommendationReady
                       ? getStatusLabel(recommendationBadgeStatus(offer.assessments[0].recommendationStatus), locale)
+                      : !priceClassification.analysisEligible
+                        ? t(priceClassification.statusLabel)
                       : offer.assessments[0]
                         ? t("Nije moguće proceniti isplativost")
                         : t("Čeka analizu")}
@@ -290,21 +313,44 @@ export function OffersPanel({
               {offer.assessments[0] && !recommendationReady && (
                 <p className="warning-text">{t("Sledeći korak: Zatražite potvrdu podataka i pregovarajte")}</p>
               )}
+              {showSelectionActions && (
+                <div className="offer-analysis-action">
+                  <Link
+                    className="primary-button"
+                    href={`${getProjectStepHref(projectId, "ANALYSIS")}?offer=${offer.id}${readiness.ready ? "" : "&rfq=1"}`}
+                  >
+                    {readiness.ready ? t("Dodaj u analizu") : t("Zatraži podatke od dobavljača")}
+                  </Link>
+                </div>
+              )}
               {showAnalysisActions && (
                 <div className="offer-analysis-action">
-                  <button
-                    className="primary-button"
-                    disabled={!readiness.ready || assessingOfferId === offer.id}
-                    onClick={() => void analyzeOffer(offer.id)}
-                    title={!readiness.ready ? t(readinessExplanation(readiness)) : undefined}
-                    type="button"
-                  >
-                    {assessingOfferId === offer.id
-                      ? t("Analiza je u toku...")
-                      : offer.assessments.length > 0
-                        ? t("Ponovo analiziraj ponudu")
-                        : t("Analiziraj ponudu")}
-                  </button>
+                  {readiness.ready ? (
+                    <button
+                      className="primary-button"
+                      disabled={assessingOfferId === offer.id}
+                      onClick={() => void analyzeOffer(offer.id)}
+                      type="button"
+                    >
+                      {assessingOfferId === offer.id
+                        ? t("Analiza je u toku...")
+                        : offer.assessments.length > 0
+                          ? t("Ponovo analiziraj ponudu")
+                          : t("Analiziraj ponudu")}
+                    </button>
+                  ) : (
+                    <RfqRequestPanel
+                      incoterm={offer.incoterm}
+                      initiallyOpen={openRfqOfferId === offer.id}
+                      productTitle={title}
+                      rfqProductName={rfqProductName}
+                      productUrl={productUrl}
+                      quantity={projectQuantity}
+                      supplierName={offer.supplierName}
+                      targetCountry={targetCountry}
+                      triggerLabel="Zatraži podatke od dobavljača"
+                    />
+                  )}
                   {!readiness.ready && <p className="warning-text">{t(readinessExplanation(readiness))}</p>}
                 </div>
               )}
@@ -321,15 +367,17 @@ export function OffersPanel({
                 {isSupplierProductUrl(productUrl) && (
                   <a href={productUrl} rel="noreferrer" target="_blank">{t("Otvori ponudu dobavljača")}</a>
                 )}
-                <RfqRequestPanel
-                  incoterm={offer.incoterm}
-                  productTitle={title}
-                  rfqProductName={rfqProductName}
-                  productUrl={productUrl}
-                  quantity={projectQuantity}
-                  supplierName={offer.supplierName}
-                  targetCountry={targetCountry}
-                />
+                {(!showAnalysisActions || readiness.ready) && (
+                  <RfqRequestPanel
+                    incoterm={offer.incoterm}
+                    productTitle={title}
+                    rfqProductName={rfqProductName}
+                    productUrl={productUrl}
+                    quantity={projectQuantity}
+                    supplierName={offer.supplierName}
+                    targetCountry={targetCountry}
+                  />
+                )}
                 {showAddControls && (
                   <div className="actions">
                     <button className="secondary-button" onClick={() => setEditing(editing === offer.id ? null : offer.id)} type="button">{t("Izmeni")}</button>
@@ -342,7 +390,7 @@ export function OffersPanel({
                 {showRecalculationLinks && offer.costCalculations[0] && (
                   <Link
                     className="secondary-button"
-                    href={`/projects/${projectId}?editCalculationOffer=${offer.id}#workflow-step-cost`}
+                    href={`${getProjectStepHref(projectId, "COSTS")}?offer=${offer.id}&edit=1`}
                   >
                     {t("Izmeni vrednosti za kalkulaciju")}
                   </Link>

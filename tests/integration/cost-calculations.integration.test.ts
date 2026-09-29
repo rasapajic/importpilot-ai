@@ -42,11 +42,14 @@ describeWithDatabase("cost calculation tenant isolation", () => {
         organizationId: organization.id,
         projectId: project.id,
         supplierName: "Cost Supplier",
+        contactEmail: "sales@cost.example",
         moq: 100,
         unitPrice: 10,
         currency: "EUR",
         incoterm: "FOB",
         sourceMetadata: {
+          b2bPriceConfirmed: true,
+          availabilityConfirmed: true,
           customsProvenance: {
             sourceName: "TARIC",
             officialUrl: "https://taxation-customs.ec.europa.eu/taric",

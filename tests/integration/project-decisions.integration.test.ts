@@ -35,12 +35,14 @@ describeWithDatabase("project decision history and tenant isolation", () => {
         organizationId: organization.id,
         projectId: project.id,
         supplierName: "Decision Supplier",
+        contactEmail: "sales@decision.example",
         moq: 100,
         unitPrice: 10,
         currency: "EUR",
         incoterm: "FOB",
         sampleAvailable: true,
         shippingClarityScore: 80,
+        sourceMetadata: { b2bPriceConfirmed: true, availabilityConfirmed: true },
       },
     });
     const calculation = await prisma.costCalculation.create({
