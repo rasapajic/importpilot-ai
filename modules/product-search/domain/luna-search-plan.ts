@@ -112,9 +112,22 @@ function normalizeSearchText(value: string) {
 
 function findCatalogEntry(query: string) {
   const normalizedQuery = normalizeSearchText(query);
-  return LUNA_SEARCH_CATALOG.find((entry) =>
-    entry.keywords.some((keyword) => normalizedQuery.includes(normalizeSearchText(keyword))),
-  ) ?? null;
+  let best: { entry: LunaCatalogEntry; keywordLength: number } | null = null;
+
+  for (const entry of LUNA_SEARCH_CATALOG) {
+    for (const keyword of entry.keywords) {
+      const normalizedKeyword = normalizeSearchText(keyword);
+      if (!normalizedKeyword || !normalizedQuery.includes(normalizedKeyword)) continue;
+      // Shorter generic keywords such as "gadzeti" are prefixes of more
+      // specific categories ("kuhinjski gadzeti", "auto gadzeti"). The longest
+      // match keeps those searches on the category that was actually requested.
+      if (!best || normalizedKeyword.length > best.keywordLength) {
+        best = { entry, keywordLength: normalizedKeyword.length };
+      }
+    }
+  }
+
+  return best?.entry ?? null;
 }
 
 function uniqueQueries(queries: Array<string | null | undefined>) {
@@ -149,14 +162,22 @@ function requestedMlVolumes(query: string) {
 }
 
 function requestedDiopters(query: string) {
-  const values = [...query.matchAll(/[+]?\\d+(?:[.,]\\d+)?/g)]
+  const values = [...query.matchAll(/[+]?\d+(?:[.,]\d+)?/g)]
     .map((match) => Number(match[0].replace(",", ".")))
     .filter((value) => Number.isFinite(value) && value >= 0.25 && value <= 10);
   return [...new Set(values)].sort((left, right) => left - right);
 }
 
+function formatDiopterNumber(value: number) {
+  // Quarter-diopter steps (+1.25, +1.75) must survive. toFixed(1) rounds
+  // 1.25 to 1.3 and would send suppliers the wrong strength.
+  const hundredths = Math.round(value * 100);
+  const decimals = hundredths % 10 === 0 ? 1 : 2;
+  return (hundredths / 100).toFixed(decimals);
+}
+
 function formatDiopter(value: number) {
-  return `+${value.toFixed(1)}`;
+  return `+${formatDiopterNumber(value)}`;
 }
 
 function requirementDrivenReadingGlassesQueries(
@@ -171,7 +192,7 @@ function requirementDrivenReadingGlassesQueries(
     ? `${formatDiopter(minimum)} to ${formatDiopter(maximum)} diopter`
     : "assorted diopter";
   const chineseRange = minimum !== null && maximum !== null
-    ? `${minimum.toFixed(1)} ${maximum.toFixed(1)}度`
+    ? `${formatDiopterNumber(minimum)} ${formatDiopterNumber(maximum)}度`
     : "多度数";
 
   return {

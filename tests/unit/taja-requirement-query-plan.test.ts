@@ -118,4 +118,53 @@ describe("reading glasses search plan", () => {
     expect(plan.chinese1688Query).not.toBeNull();
     expect(plan.warnings).not.toContain("CHINESE_QUERY_UNCONFIRMED");
   });
+
+  it("reads an unsigned Serbian diopter range and keeps quarter-diopter steps", () => {
+    const plan = createLunaSearchPlan({
+      query: "naočare za čitanje od 1,25 do 2,75 dioptrija",
+      quantity: 500,
+      targetCountry: "RS",
+      strictPriceLimit: false,
+      avoidComplexCompliance: false,
+      privateLabel: false,
+    });
+
+    expect(plan.category).toBe("reading-glasses");
+    expect(plan.providerQueries).toContain(
+      "reading glasses +1.25 to +2.75 diopter wholesale manufacturer supplier",
+    );
+    expect(plan.chinese1688Queries).toContain("老花镜 1.25 2.75度 厂家 批发");
+    expect(plan.providerQueries.join(" ")).not.toContain("+1.3");
+    expect(plan.providerQueries.join(" ")).not.toContain("+2.8");
+  });
+});
+
+describe("catalog category specificity", () => {
+  function planFor(query: string) {
+    return createLunaSearchPlan({
+      query,
+      quantity: 100,
+      targetCountry: "RS",
+      strictPriceLimit: false,
+      avoidComplexCompliance: false,
+      privateLabel: false,
+    });
+  }
+
+  it("keeps kitchen and car gadget searches on their own categories", () => {
+    const kitchen = planFor("Kuhinjski gadžeti");
+    const car = planFor("auto gadzeti");
+    const generic = planFor("viralni gadzeti");
+
+    expect(kitchen.category).toBe("kitchen-gadgets");
+    expect(kitchen.providerQuery).toContain("creative kitchen gadgets");
+    expect(kitchen.chinese1688Query).toContain("创意厨房用品");
+
+    expect(car.category).toBe("car-gadgets");
+    expect(car.providerQuery).toContain("creative car gadgets and accessories");
+    expect(car.chinese1688Query).toContain("汽车创意用品");
+
+    expect(generic.category).toBe("creative-household-gadgets");
+    expect(generic.providerQuery).toContain("creative household gadgets viral products");
+  });
 });

@@ -14,6 +14,8 @@ const ignoredTokens = new Set([
   "with",
   "oem",
   "supplier",
+  "wholesale",
+  "manufacturer",
   "automatic",
   "high",
   "quality",
