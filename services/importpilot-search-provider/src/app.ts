@@ -105,22 +105,42 @@ function idempotencyScope(key: string, input: SearchRequest) {
   return `${key}:${searchFingerprint(input)}`;
 }
 
+const SEARCH_TIMEOUT_PARTIAL_GRACE_MS = 2_000;
+
 async function withTimeout<T>(
   timeoutMs: number,
   task: (signal: AbortSignal) => Promise<T>,
 ) {
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
+  const taskPromise = task(controller.signal).then(
+    (value) => ({ status: "value" as const, value }),
+    (error: unknown) => ({ status: "error" as const, error }),
+  );
   try {
-    return await Promise.race([
-      task(controller.signal),
-      new Promise<T>((_resolve, reject) => {
+    const first = await Promise.race([
+      taskPromise.then((settled) => ({ timedOut: false as const, settled })),
+      new Promise<{ timedOut: true }>((resolve) => {
         timer = setTimeout(() => {
           controller.abort();
-          reject(new Error("UPSTREAM_TIMEOUT"));
+          resolve({ timedOut: true });
         }, timeoutMs);
       }),
     ]);
+    if (!first.timedOut) {
+      if (first.settled.status === "error") throw first.settled.error;
+      return first.settled.value;
+    }
+
+    const late = await Promise.race([
+      taskPromise,
+      new Promise<{ status: "timeout" }>((resolve) => {
+        setTimeout(() => resolve({ status: "timeout" }), SEARCH_TIMEOUT_PARTIAL_GRACE_MS);
+      }),
+    ]);
+    if (late.status === "value") return late.value;
+    if (late.status === "error") throw late.error;
+    throw new Error("UPSTREAM_TIMEOUT");
   } finally {
     if (timer) clearTimeout(timer);
   }

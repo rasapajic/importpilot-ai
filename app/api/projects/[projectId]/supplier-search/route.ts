@@ -3,14 +3,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest } from "@/modules/auth/infrastructure/request-auth";
 import { getServerLocale } from "@/modules/i18n/server";
 import {
+  SupplierSearchRequestTimeoutError,
+  withSearchDeadline,
+} from "@/modules/product-search/application/search-deadline";
+import {
   ProductSearchProjectNotFoundError,
   searchProjectSupplierOffers,
 } from "@/modules/product-search/application/product-search-service";
 import { projectSupplierSearchRequestSchema } from "@/modules/product-search/domain/search";
 import {
   SupplierSearchProviderError,
+  SupplierSearchProviderTimeoutError,
   SupplierSearchProviderUnavailableError,
 } from "@/modules/product-search/infrastructure/http-provider";
+import type { SupplierSearchFailureCode } from "@/modules/product-search/domain/search-outcome";
 import {
   releaseSupplierSearchQuotaReservation,
   reserveMonthlySupplierSearchQuota,
@@ -21,13 +27,6 @@ import {
 } from "@/modules/subscriptions/application/supplier-search-quota-service";
 
 const SUPPLIER_SEARCH_REQUEST_TIMEOUT_MS = 60_000;
-
-class SupplierSearchRequestTimeoutError extends Error {
-  constructor() {
-    super("Supplier search request exceeded its maximum duration.");
-    this.name = "SupplierSearchRequestTimeoutError";
-  }
-}
 
 function developmentStatus(status: "connected" | "not_configured" | "error") {
   return process.env.NODE_ENV === "development" ? { providerStatus: status } : {};
@@ -61,17 +60,21 @@ async function quotaExceededMessage(quota: SupplierSearchQuotaStatus) {
   return `Mesečni limit pretraga je potrošen (${quota.used}/${quota.limit}). Sačuvani projekti i rezultati ostaju dostupni.`;
 }
 
-function withSearchDeadline<T>(operation: Promise<T>) {
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  const deadline = new Promise<never>((_resolve, reject) => {
-    timeout = setTimeout(
-      () => reject(new SupplierSearchRequestTimeoutError()),
-      SUPPLIER_SEARCH_REQUEST_TIMEOUT_MS,
-    );
-  });
-
-  return Promise.race([operation, deadline]).finally(() => {
-    if (timeout) clearTimeout(timeout);
+function failedSearchResponse(
+  failureCode: SupplierSearchFailureCode,
+  error: string,
+  extra: Record<string, unknown> = {},
+) {
+  return NextResponse.json({
+    results: [],
+    resultOrigin: null,
+    liveProviderFailed: true,
+    cacheHit: false,
+    returnedFromCache: false,
+    searchDisposition: "failed",
+    failureCode,
+    error,
+    ...extra,
   });
 }
 
@@ -111,13 +114,15 @@ export async function POST(
     });
 
     const outcome = await withSearchDeadline(
-      searchProjectSupplierOffers(
+      (signal) => searchProjectSupplierOffers(
         projectId,
         auth.membership.organizationId,
         parsed.data,
         undefined,
         null,
+        { signal },
       ),
+      SUPPLIER_SEARCH_REQUEST_TIMEOUT_MS,
     );
     developmentLog("supplier_search_request_completed", {
       project_id: projectId,
@@ -168,22 +173,24 @@ export async function POST(
       return NextResponse.json({ error: "Projekat nije pronađen." }, { status: 404 });
     }
     if (error instanceof SupplierSearchRequestTimeoutError) {
-      return NextResponse.json(
-        {
-          error: "Pretraga je trajala predugo i prekinuta je. Pokušajte ponovo ili uvezite konkretnu ponudu iz linka.",
-        },
-        { status: 504 },
+      return failedSearchResponse(
+        "timeout",
+        "Pretraga je trajala predugo i prekinuta je. Sačuvane ponude nisu prikazane kao nove, a cena nije izmišljena.",
       );
     }
     if (error instanceof SupplierSearchProviderUnavailableError) {
-      return NextResponse.json({
-        results: [],
+      return failedSearchResponse("no_verified_offers", error.reason, {
         reason: error.reason,
         ...developmentStatus("connected"),
       });
     }
-    if (error instanceof SupplierSearchProviderError) {
-      return NextResponse.json({ results: [], ...developmentStatus("error") });
+    if (
+      error instanceof SupplierSearchProviderTimeoutError ||
+      error instanceof SupplierSearchProviderError
+    ) {
+      return failedSearchResponse("provider_error", "Pretraga trenutno nije dostupna. Pokušajte ponovo.", {
+        ...developmentStatus(error instanceof SupplierSearchProviderTimeoutError ? "connected" : "error"),
+      });
     }
     return NextResponse.json(
       { error: "Pretraga trenutno nije dostupna. Pokušajte ponovo." },

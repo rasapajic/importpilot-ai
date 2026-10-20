@@ -174,6 +174,51 @@ describe("TAJA Deep Search phase 1", () => {
     });
   });
 
+  it("keeps finished marketplace results when another source is aborted", async () => {
+    const controller = new AbortController();
+    const source = createAggregatingSupplierSearchSource([
+      trustedSource("alibaba", [
+        result(
+          "Foldable car trunk organizer",
+          "Alibaba Supplier",
+          "https://www.alibaba.com/product-detail/organizer_1.html",
+          "Alibaba",
+        ),
+      ], []),
+      {
+        name: "slow-openai",
+        implemented: true,
+        trustedRelevance: true,
+        async search(_input, signal) {
+          await new Promise((_resolve, reject) => {
+            signal.addEventListener("abort", () => {
+              reject(new Error("aborted"));
+            }, { once: true });
+          });
+          return { results: [] };
+        },
+      },
+      trustedSource("made-in-china", [
+        result(
+          "Car trunk organizer kit",
+          "Made-in-China Supplier",
+          "https://supplier.en.made-in-china.com/product/organizer.html",
+          "Made-in-China",
+        ),
+      ], []),
+    ]);
+
+    const pending = source.search(input, controller.signal);
+    controller.abort();
+    const outcome = await pending;
+    expect(Array.isArray(outcome)).toBe(false);
+    if (Array.isArray(outcome)) throw new Error("Expected structured outcome.");
+    expect(outcome.results.map((candidate) => candidate.source).sort()).toEqual([
+      "Alibaba",
+      "Made-in-China",
+    ]);
+  });
+
   it("keeps useful results when one source fails", async () => {
     const source = createAggregatingSupplierSearchSource([
       {

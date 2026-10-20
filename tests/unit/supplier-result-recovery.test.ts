@@ -84,4 +84,23 @@ describe("supplier result exact-page recovery", () => {
       minimumOrderQuantity: 2,
     });
   });
+
+  it("does not present a partial preview price as a real supplier price", () => {
+    const partial = {
+      ...preview(),
+      isPartial: true,
+      price: 99,
+      currency: "USD",
+      details: {
+        ...preview().details!,
+        priceTiers: [{ price: 99, currency: "USD", minQuantity: 1, maxQuantity: null }],
+      },
+    };
+
+    expect(mergeRecoveredSupplierPreview(result(), partial)).toMatchObject({
+      price: null,
+      currency: null,
+      marketplaceDetails: null,
+    });
+  });
 });

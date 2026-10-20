@@ -104,6 +104,52 @@ afterEach(async () => {
 });
 
 describe("ImportPilot Search Provider service", () => {
+  it("returns offers collected before the deadline instead of HTTP 504", async () => {
+    const offer = {
+      title: "Foldable car trunk organizer",
+      supplierName: "Ningbo Example Auto Accessories Co., Ltd.",
+      supplierCountry: "CN",
+      price: 4.8,
+      currency: "USD",
+      minimumOrderQuantity: 100,
+      incoterm: "FOB",
+      productUrl: "https://www.alibaba.com/product-detail/trunk-organizer_1.html",
+      imageUrl: null,
+      source: "Alibaba",
+    };
+    const source: SupplierSearchSource = {
+      name: "deadline-partial",
+      implemented: true,
+      async search(_input, signal) {
+        await new Promise<void>((resolve) => {
+          if (signal.aborted) {
+            resolve();
+            return;
+          }
+          signal.addEventListener("abort", () => resolve(), { once: true });
+        });
+        return { results: [offer] };
+      },
+    };
+    const server = createServer(createSearchProviderApp({
+      token,
+      source,
+      timeoutMs: 20,
+    }));
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address() as AddressInfo;
+    const response = await request(`http://127.0.0.1:${address.port}`, "/search", {
+      method: "POST",
+      body: JSON.stringify(validSearchInput),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      results: [expect.objectContaining({ productUrl: offer.productUrl })],
+    });
+  });
+
 
   it("returns structured voice intake from the authenticated provider endpoint", async () => {
     const voiceIntake = vi.fn(async () => ({

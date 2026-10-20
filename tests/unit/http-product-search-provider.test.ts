@@ -95,7 +95,10 @@ describe("HTTP supplier search provider", () => {
 
     const expected = { results: [result], summary };
     await expect(provider.searchSupplierOffers(input)).resolves.toEqual(expected);
-    await expect(provider.searchSupplierOffers(input)).resolves.toEqual(expected);
+    await expect(provider.searchSupplierOffers(input)).resolves.toEqual({
+      ...expected,
+      servedFromMemoryCache: true,
+    });
     expect(calls).toBe(1);
   });
 
@@ -221,7 +224,10 @@ describe("HTTP supplier search provider", () => {
 
     await expect(provider.searchSupplierOffers(input)).resolves.toEqual([result]);
     time += 9 * 60 * 1_000;
-    await expect(provider.searchSupplierOffers(input)).resolves.toEqual([result]);
+    await expect(provider.searchSupplierOffers(input)).resolves.toEqual({
+      results: [result],
+      servedFromMemoryCache: true,
+    });
     expect(calls).toBe(1);
   });
 
@@ -236,7 +242,10 @@ describe("HTTP supplier search provider", () => {
     });
 
     await expect(provider.searchSupplierOffers(input)).resolves.toEqual([]);
-    await expect(provider.searchSupplierOffers(input)).resolves.toEqual([]);
+    await expect(provider.searchSupplierOffers(input)).resolves.toEqual({
+      results: [],
+      servedFromMemoryCache: true,
+    });
     expect(calls).toBe(1);
   });
 
@@ -252,6 +261,45 @@ describe("HTTP supplier search provider", () => {
 
     await expect(provider.searchSupplierOffers(input))
       .rejects.toBeInstanceOf(SupplierSearchProviderUnavailableError);
+  });
+
+  it("labels an idempotent provider replay instead of presenting it as a new live search", async () => {
+    const provider = createHttpSupplierOfferSearchProvider({
+      endpoint: "https://search-provider.example/offers",
+      fetcher: async () => new Response(JSON.stringify({ results: [result] }), {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+          "x-importpilot-idempotency": "completed-replay",
+        },
+      }),
+    });
+
+    await expect(provider.searchSupplierOffers(input)).resolves.toEqual({
+      results: [result],
+      servedFromProviderReplay: true,
+    });
+  });
+
+  it("stops a provider request when the caller aborts the search deadline", async () => {
+    const controller = new AbortController();
+    let sawAbort = false;
+    const provider = createHttpSupplierOfferSearchProvider({
+      endpoint: "https://search-provider.example/offers",
+      timeoutMs: 5_000,
+      fetcher: async (_url, init) => new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => {
+          sawAbort = true;
+          reject(new DOMException("Aborted", "AbortError"));
+        });
+      }),
+    });
+
+    const pending = provider.searchSupplierOffers(input, { signal: controller.signal });
+    controller.abort();
+
+    await expect(pending).rejects.toBeInstanceOf(SupplierSearchProviderTimeoutError);
+    expect(sawAbort).toBe(true);
   });
 
   it("checks configured provider health without performing a search", async () => {

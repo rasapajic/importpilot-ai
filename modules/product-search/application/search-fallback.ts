@@ -28,7 +28,12 @@ type SupplierSearchCacheAccess = {
 
 function providerOutcomeParts(outcome: SupplierOfferSearchProviderOutcome) {
   return Array.isArray(outcome)
-    ? { results: outcome, summary: undefined }
+    ? {
+        results: outcome,
+        summary: undefined,
+        servedFromMemoryCache: false,
+        servedFromProviderReplay: false,
+      }
     : outcome;
 }
 
@@ -48,15 +53,31 @@ export async function searchSupplierOffersWithPersistentFallback(
     store: storeSuccessfulSupplierSearch,
     find: findLastSuccessfulSupplierSearch,
   },
+  options?: { signal?: AbortSignal },
 ) {
   try {
     const providerOutcome = providerOutcomeParts(
-      await provider.searchSupplierOffers(input),
+      await provider.searchSupplierOffers(input, { signal: options?.signal }),
     );
     const results = supplierOfferSearchResultsSchema.parse(providerOutcome.results);
     const summary = providerOutcome.summary
       ? supplierOfferSearchSummarySchema.parse(providerOutcome.summary)
       : undefined;
+    if (providerOutcome.servedFromMemoryCache || providerOutcome.servedFromProviderReplay) {
+      developmentLog("supplier_search_cache_hit", {
+        returned_from_cache: true,
+        memory_cache: Boolean(providerOutcome.servedFromMemoryCache),
+        provider_replay: Boolean(providerOutcome.servedFromProviderReplay),
+      });
+      return {
+        results,
+        ...(summary ? { summary } : {}),
+        resultOrigin: "cache",
+        liveProviderFailed: false,
+        cacheHit: true,
+        returnedFromCache: true,
+      } satisfies ProjectSupplierSearchOutcome;
+    }
     if (results.length > 0) {
       await cache.store(input, results).catch((error: unknown) => {
         developmentLog("supplier_search_cache_write_failed", {

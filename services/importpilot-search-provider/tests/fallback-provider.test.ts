@@ -161,9 +161,8 @@ describe("supplier provider fallback chain", () => {
       },
     ]);
 
-    await expect(source.search(input, controller.signal)).rejects.toMatchObject({
-      name: "AbortError",
-    });
+    const outcome = await source.search(input, controller.signal);
+    expect(Array.isArray(outcome) ? outcome : outcome.results).toEqual([]);
     expect(fallbackCalls).toBe(0);
   });
 

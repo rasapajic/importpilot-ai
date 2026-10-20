@@ -108,18 +108,12 @@ function mergePreview(
 
   let price = result.price;
   let currency = result.currency;
-  if (preview.price !== null && preview.currency !== null) {
+  if (authoritative && preview.price !== null && preview.currency !== null) {
     if (price === null && currency === null) {
       price = preview.price;
       currency = preview.currency;
       fieldsFilled.push("price");
-    } else if (
-      authoritative &&
-      (
-        changedNumber(price, preview.price) ||
-        currency !== preview.currency
-      )
-    ) {
+    } else if (changedNumber(price, preview.price) || currency !== preview.currency) {
       price = preview.price;
       currency = preview.currency;
       fieldsCorrected.push("price");
@@ -174,7 +168,8 @@ function mergePreview(
   }
 
   let marketplaceDetails = result.marketplaceDetails ?? null;
-  if (preview.details) {
+  const previewHasPriceTiers = (preview.details?.priceTiers.length ?? 0) > 0;
+  if (preview.details && (authoritative || !previewHasPriceTiers)) {
     if (!marketplaceDetails) {
       marketplaceDetails = preview.details;
       fieldsFilled.push("marketplaceDetails");

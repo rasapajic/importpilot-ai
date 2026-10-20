@@ -233,10 +233,15 @@ export type SupplierOfferSearchProviderOutcome =
   | {
       results: SupplierOfferSearchResult[];
       summary?: SupplierOfferSearchSummary;
+      servedFromMemoryCache?: boolean;
+      servedFromProviderReplay?: boolean;
     };
 
 export interface SupplierOfferSearchProvider {
-  searchSupplierOffers(input: SupplierOfferSearchInput): Promise<SupplierOfferSearchProviderOutcome>;
+  searchSupplierOffers(
+    input: SupplierOfferSearchInput,
+    options?: { signal?: AbortSignal },
+  ): Promise<SupplierOfferSearchProviderOutcome>;
   healthCheck?(): Promise<boolean>;
 }
 

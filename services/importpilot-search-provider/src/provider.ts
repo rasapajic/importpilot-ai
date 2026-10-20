@@ -242,7 +242,6 @@ export function createAggregatingSupplierSearchSource(
               error_name: error instanceof Error ? error.name : "UnknownError",
               error_message: sanitizeProviderErrorMessage(error),
             });
-            if (signal.aborted) throw error;
             return {
               source,
               parsedResultCount: 0,
@@ -388,7 +387,7 @@ export function createFallbackSupplierSearchSource(
             error_name: error instanceof Error ? error.name : "UnknownError",
             error_message: sanitizeProviderErrorMessage(error),
           });
-          if (signal.aborted) throw error;
+          if (signal.aborted) break;
           logger("provider_attempt", {
             provider_name: source.name,
             parsed_results: 0,
