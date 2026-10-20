@@ -57,4 +57,28 @@ describe("supplier search relevance", () => {
   it("prioritizes a focused car trunk organizer provider query", () => {
     expect(createSupplierSearchQueryVariants(query)[0]).toBe("car trunk organizer");
   });
+
+  it("does not require B2B sourcing boilerplate before a product title can match", () => {
+    const providerQuery = "reading glasses +1.0 to +3.5 diopter wholesale manufacturer supplier";
+
+    expect(coreProductTokens(providerQuery)).toEqual(["reading", "glass", "diopter"]);
+    expect(rankRelevantSupplierResults(providerQuery, [
+      result("Reading Glasses +1.00 +1.50 +2.00 +2.50 +3.00 +3.50", 1),
+      result("Wholesale Manufacturer Supplier Catalog", 2),
+      result("Plastic Food Container 500ml", 3),
+    ], 10).map((item) => item.title)).toEqual([
+      "Reading Glasses +1.00 +1.50 +2.00 +2.50 +3.00 +3.50",
+    ]);
+  });
+
+  it("keeps an on-topic greenhouse title when the provider query includes sourcing terms", () => {
+    const providerQuery = "greenhouse equipment and accessories wholesale manufacturer supplier";
+
+    expect(rankRelevantSupplierResults(providerQuery, [
+      result("Greenhouse Equipment Kit", 1),
+      result("Car Trunk Organizer", 2),
+    ], 10).map((item) => item.title)).toEqual([
+      "Greenhouse Equipment Kit",
+    ]);
+  });
 });
