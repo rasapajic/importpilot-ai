@@ -18,6 +18,10 @@ import {
   SupplierSearchProviderTimeoutError,
   SupplierSearchProviderUnavailableError,
 } from "@/modules/product-search/infrastructure/http-provider";
+import {
+  classifySupplierSearchProviderFailure,
+  supplierSearchProviderFailureLog,
+} from "@/modules/product-search/infrastructure/provider-failure";
 import type { SupplierSearchFailureCode } from "@/modules/product-search/domain/search-outcome";
 import {
   getMonthlySupplierSearchQuotaStatus,
@@ -261,7 +265,13 @@ export async function POST(
       error instanceof SupplierSearchProviderTimeoutError ||
       error instanceof SupplierSearchProviderError
     ) {
+      const providerFailure = classifySupplierSearchProviderFailure(error);
+      console.info(JSON.stringify(supplierSearchProviderFailureLog({
+        durationMs: Date.now() - startedAt,
+        error,
+      })));
       return failedSearchResponse("provider_error", "Pretraga trenutno nije dostupna. Pokušajte ponovo.", {
+        ...providerFailure,
         ...developmentStatus(error instanceof SupplierSearchProviderTimeoutError ? "connected" : "error"),
         ...quotaPayload,
       });
