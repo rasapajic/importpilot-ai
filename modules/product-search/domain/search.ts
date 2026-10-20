@@ -108,6 +108,7 @@ export const supplierOfferSearchResultSchema = z
       "Image URL must be valid.",
     ),
     source: z.string().trim().min(1).max(100),
+    priceEvidence: z.enum(["MARKETPLACE_SEARCH", "PRODUCT_PAGE"]).optional(),
     marketplaceDetails: supplierOfferMarketplaceDetailsSchema.nullable().optional(),
     supplierLogistics: supplierOfferLogisticsSchema.nullable().optional(),
     provenance: supplierOfferSearchProvenanceSchema.optional(),

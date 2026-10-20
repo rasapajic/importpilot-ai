@@ -305,6 +305,11 @@ async function buildSearchPresentation(input: SearchPresentationInput) {
   });
   const results = productFormAnalysis.rankedResults.map((result) => ({
     ...result,
+    ...(result.priceEvidence
+      ? {}
+      : result.price !== null && result.currency !== null
+        ? { priceEvidence: "MARKETPLACE_SEARCH" as const }
+        : {}),
     ...(resultOrigin
       ? {
           provenance: {

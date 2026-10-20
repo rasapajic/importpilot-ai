@@ -7,10 +7,12 @@ import {
   withSearchDeadline,
 } from "@/modules/product-search/application/search-deadline";
 import {
+  loadCachedProjectSupplierOffers,
   ProductSearchProjectNotFoundError,
   searchProjectSupplierOffers,
 } from "@/modules/product-search/application/product-search-service";
 import { projectSupplierSearchRequestSchema } from "@/modules/product-search/domain/search";
+import { supplierSearchConsumesLiveQuota } from "@/modules/product-search/domain/search-outcome";
 import {
   SupplierSearchProviderError,
   SupplierSearchProviderTimeoutError,
@@ -18,6 +20,7 @@ import {
 } from "@/modules/product-search/infrastructure/http-provider";
 import type { SupplierSearchFailureCode } from "@/modules/product-search/domain/search-outcome";
 import {
+  getMonthlySupplierSearchQuotaStatus,
   releaseSupplierSearchQuotaReservation,
   reserveMonthlySupplierSearchQuota,
   SupplierSearchQuotaExceededError,
@@ -78,6 +81,26 @@ function failedSearchResponse(
   });
 }
 
+async function quotaAfterRefund(
+  organizationId: string,
+  reservation: SupplierSearchQuotaReservation,
+): Promise<SupplierSearchQuotaStatus> {
+  try {
+    return await getMonthlySupplierSearchQuotaStatus(
+      organizationId,
+      reservation.periodStart,
+    );
+  } catch {
+    if (reservation.source !== "MONTHLY") return reservation;
+    const used = Math.max(reservation.used - 1, 0);
+    return {
+      ...reservation,
+      used,
+      remaining: Math.max(0, reservation.limit - used),
+    };
+  }
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ projectId: string }> },
@@ -96,6 +119,7 @@ export async function POST(
   const startedAt = Date.now();
   const projectId = (await params).projectId;
   let quotaReservation: SupplierSearchQuotaReservation | null = null;
+  let quotaReleased = false;
 
   try {
     quotaReservation = await reserveMonthlySupplierSearchQuota({
@@ -124,15 +148,32 @@ export async function POST(
       ),
       SUPPLIER_SEARCH_REQUEST_TIMEOUT_MS,
     );
+    const quotaCharged = supplierSearchConsumesLiveQuota(outcome);
+    if (!quotaCharged) {
+      await releaseSupplierSearchQuotaReservation({
+        organizationId: auth.membership.organizationId,
+        reservation: quotaReservation,
+      });
+      quotaReleased = true;
+    }
+    const quota = quotaCharged
+      ? quotaReservation
+      : await getMonthlySupplierSearchQuotaStatus(
+          auth.membership.organizationId,
+          quotaReservation.periodStart,
+        );
     developmentLog("supplier_search_request_completed", {
       project_id: projectId,
       duration_ms: Date.now() - startedAt,
       result_count: outcome.results.length,
+      search_disposition: outcome.searchDisposition,
+      quota_charged: quotaCharged,
       exact_page_enrichment: "deferred_until_offer_selection",
     });
     return NextResponse.json({
       ...outcome,
-      quota: serializedQuota(quotaReservation),
+      quota: serializedQuota(quota),
+      quotaCharged,
       ...developmentStatus(
         process.env.SUPPLIER_SEARCH_PROVIDER_URL ? "connected" : "not_configured",
       ),
@@ -144,11 +185,24 @@ export async function POST(
       error_name: error instanceof Error ? error.name : "UnknownError",
     });
     if (error instanceof SupplierSearchQuotaExceededError) {
+      const cached = await loadCachedProjectSupplierOffers(
+        projectId,
+        auth.membership.organizationId,
+        parsed.data,
+      ).catch(() => null);
+      if (cached && cached.results.length > 0) {
+        return NextResponse.json({
+          ...cached,
+          quota: serializedQuota(error.quota),
+          quotaCharged: false,
+        });
+      }
       return NextResponse.json(
         {
           code: "SEARCH_LIMIT_REACHED",
           error: await quotaExceededMessage(error.quota),
           quota: serializedQuota(error.quota),
+          quotaCharged: false,
         },
         { status: 429 },
       );
@@ -157,31 +211,50 @@ export async function POST(
       return NextResponse.json({ error: "Projekat nije pronađen." }, { status: 404 });
     }
 
-    if (quotaReservation) {
-      await releaseSupplierSearchQuotaReservation({
-        organizationId: auth.membership.organizationId,
-        reservation: quotaReservation,
-      }).catch((releaseError: unknown) => {
+    if (quotaReservation && !quotaReleased) {
+      try {
+        await releaseSupplierSearchQuotaReservation({
+          organizationId: auth.membership.organizationId,
+          reservation: quotaReservation,
+        });
+        quotaReleased = true;
+      } catch (releaseError: unknown) {
         developmentLog("supplier_search_quota_release_failed", {
           project_id: projectId,
           error_name: releaseError instanceof Error ? releaseError.name : "UnknownError",
         });
-      });
+      }
     }
 
+    const quotaCharged = Boolean(quotaReservation) && !quotaReleased;
+    const quotaSnapshot = !quotaReservation
+      ? null
+      : quotaReleased
+        ? await quotaAfterRefund(auth.membership.organizationId, quotaReservation)
+        : quotaReservation;
+    const quotaPayload = {
+      quotaCharged,
+      ...(quotaSnapshot ? { quota: serializedQuota(quotaSnapshot) } : {}),
+    };
+
     if (error instanceof ProductSearchProjectNotFoundError) {
-      return NextResponse.json({ error: "Projekat nije pronađen." }, { status: 404 });
+      return NextResponse.json(
+        { error: "Projekat nije pronađen.", ...quotaPayload },
+        { status: 404 },
+      );
     }
     if (error instanceof SupplierSearchRequestTimeoutError) {
       return failedSearchResponse(
         "timeout",
         "Pretraga je trajala predugo i prekinuta je. Sačuvane ponude nisu prikazane kao nove, a cena nije izmišljena.",
+        quotaPayload,
       );
     }
     if (error instanceof SupplierSearchProviderUnavailableError) {
       return failedSearchResponse("no_verified_offers", error.reason, {
         reason: error.reason,
         ...developmentStatus("connected"),
+        ...quotaPayload,
       });
     }
     if (
@@ -190,10 +263,11 @@ export async function POST(
     ) {
       return failedSearchResponse("provider_error", "Pretraga trenutno nije dostupna. Pokušajte ponovo.", {
         ...developmentStatus(error instanceof SupplierSearchProviderTimeoutError ? "connected" : "error"),
+        ...quotaPayload,
       });
     }
     return NextResponse.json(
-      { error: "Pretraga trenutno nije dostupna. Pokušajte ponovo." },
+      { error: "Pretraga trenutno nije dostupna. Pokušajte ponovo.", ...quotaPayload },
       { status: 502 },
     );
   }

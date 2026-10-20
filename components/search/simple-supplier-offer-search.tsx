@@ -28,6 +28,10 @@ import {
   type SupplierSearchDisposition,
   type SupplierSearchFailureCode,
 } from "@/modules/product-search/domain/search-outcome";
+import {
+  displayedSupplierPriceEvidence,
+  supplierPriceEvidenceLabel,
+} from "@/modules/product-search/domain/supplier-price-evidence";
 import type { TajaCandidateAnalysisWithProductForm } from "@/modules/product-search/domain/taja-product-form-policy";
 
 type ResultOrigin = "live" | "cache";
@@ -488,6 +492,11 @@ export function mergeRecoveredSupplierPreview(
     // that was not read from the full offer.
     price: previewHasPrice ? preview.price : result.price,
     currency: previewHasPrice ? preview.currency : result.currency,
+    ...(previewHasPrice
+      ? { priceEvidence: "PRODUCT_PAGE" as const }
+      : result.priceEvidence
+        ? { priceEvidence: result.priceEvidence }
+        : {}),
     minimumOrderQuantity: preview.minimumOrderQuantity !== null && !preview.isPartial
       ? preview.minimumOrderQuantity
       : result.minimumOrderQuantity ?? preview.minimumOrderQuantity,
@@ -506,6 +515,7 @@ function selectionReasons(
   analysis: TajaCandidateAnalysisWithProductForm | undefined,
   quantity: number | null,
   text: Copy,
+  locale: Locale,
 ) {
   const reasons: string[] = [];
 
@@ -526,11 +536,12 @@ function selectionReasons(
     reasons.push(text.reasonMoqFits);
   }
 
-  if (result.price !== null && result.currency) {
-    reasons.push(text.reasonPriceKnown);
-  } else {
-    reasons.push(text.reasonPriceOnRequest);
-  }
+  const priceLabel = supplierPriceEvidenceLabel(
+    displayedSupplierPriceEvidence(result),
+    locale,
+  );
+  if (priceLabel) reasons.push(priceLabel);
+  else reasons.push(text.reasonPriceOnRequest);
 
   if (analysis && analysis.confidenceScore >= 70) {
     reasons.push(text.reasonDataConfidence);
@@ -884,7 +895,11 @@ export function SimpleSupplierOfferSearch({
             const deliveryEstimate = liveEstimate ?? analysis?.preliminaryCostEstimate ?? null;
             const selecting = selectingUrl === result.productUrl;
             const selected = selectedUrls.includes(result.productUrl);
-            const reasons = selectionReasons(effectiveResult, analysis, quantity, text);
+            const reasons = selectionReasons(effectiveResult, analysis, quantity, text, locale);
+            const priceEvidenceLabel = supplierPriceEvidenceLabel(
+              displayedSupplierPriceEvidence(effectiveResult),
+              locale,
+            );
             return (
               <article className={`search-result-card${index === 0 ? " search-result-card-best" : ""}`} key={`${result.source}-${result.productUrl}`}>
                 <SearchResultImage src={result.imageUrl} title={t(result.title)} />
@@ -916,6 +931,9 @@ export function SimpleSupplierOfferSearch({
                             )} / ${text.pieces}`
                           : text.priceOnRequest}
                       </strong>
+                      {priceEvidenceLabel && (
+                        <small className="supplier-fx-note">{priceEvidenceLabel}</small>
+                      )}
                       {effectiveResult.price !== null && effectiveResult.currency && quantity && (
                         <small className="supplier-order-total">
                           {text.supplierOrderTotal(formatQuantity(quantity, locale))}:{" "}

@@ -82,6 +82,7 @@ describe("supplier result exact-page recovery", () => {
       price: 6.16,
       currency: "EUR",
       minimumOrderQuantity: 2,
+      priceEvidence: "PRODUCT_PAGE",
     });
   });
 
@@ -102,5 +103,6 @@ describe("supplier result exact-page recovery", () => {
       currency: null,
       marketplaceDetails: null,
     });
+    expect(mergeRecoveredSupplierPreview(result(), partial).priceEvidence).toBeUndefined();
   });
 });

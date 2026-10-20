@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import { withSearchDeadline, SupplierSearchRequestTimeoutError } from "../../modules/product-search/application/search-deadline";
-import { classifySupplierSearchOutcome } from "../../modules/product-search/domain/search-outcome";
+import {
+  classifySupplierSearchOutcome,
+  supplierSearchConsumesLiveQuota,
+} from "../../modules/product-search/domain/search-outcome";
+import {
+  displayedSupplierPriceEvidence,
+  supplierPriceEvidenceLabel,
+} from "../../modules/product-search/domain/supplier-price-evidence";
 
 describe("supplier search outcome classification", () => {
   it("keeps a successful provider response distinct from cache and failure", () => {
@@ -40,6 +47,43 @@ describe("supplier search outcome classification", () => {
       returnedFromCache: false,
       resultCount: 0,
     })).toEqual({ searchDisposition: "failed", failureCode: "no_verified_offers" });
+  });
+
+  it("charges a live-search credit only for a new live result set", () => {
+    expect(supplierSearchConsumesLiveQuota({ searchDisposition: "live" })).toBe(true);
+    expect(supplierSearchConsumesLiveQuota({ searchDisposition: "cache" })).toBe(false);
+    expect(supplierSearchConsumesLiveQuota({ searchDisposition: "failed" })).toBe(false);
+  });
+});
+
+describe("supplier price evidence", () => {
+  it("does not present a marketplace search price as page-confirmed", () => {
+    expect(displayedSupplierPriceEvidence({
+      price: 4.5,
+      currency: "USD",
+    })).toBe("MARKETPLACE_SEARCH");
+    expect(displayedSupplierPriceEvidence({
+      price: 4.5,
+      currency: "USD",
+      priceEvidence: "MARKETPLACE_SEARCH",
+    })).toBe("MARKETPLACE_SEARCH");
+    expect(supplierPriceEvidenceLabel("MARKETPLACE_SEARCH", "sr"))
+      .toContain("Nije posebno potvrđeno");
+  });
+
+  it("marks only a complete offer-page review as confirmed", () => {
+    expect(displayedSupplierPriceEvidence({
+      price: 6.16,
+      currency: "EUR",
+      priceEvidence: "PRODUCT_PAGE",
+    })).toBe("PRODUCT_PAGE");
+    expect(displayedSupplierPriceEvidence({
+      price: null,
+      currency: null,
+      priceEvidence: "PRODUCT_PAGE",
+    })).toBeNull();
+    expect(supplierPriceEvidenceLabel("PRODUCT_PAGE", "sr"))
+      .toContain("kompletne stranice");
   });
 });
 

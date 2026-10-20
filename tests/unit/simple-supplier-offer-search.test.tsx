@@ -29,7 +29,7 @@ describe("ImportPilot 1.0 simple supplier results", () => {
     expect(resultsSource).toContain("Ovo nije ukupan broj kandidata nove pretrage.");
     expect(resultsSource).toContain('origin === "cache"');
     expect(resultsSource).toContain('whySelected: "Zašto je izdvojena"');
-    expect(resultsSource).toContain("selectionReasons(effectiveResult, analysis, quantity, text)");
+    expect(resultsSource).toContain("selectionReasons(effectiveResult, analysis, quantity, text, locale)");
     expect(resultsSource).toContain('className="supplier-selection-summary"');
     expect(resultsSource).toContain('className="selection-reasons"');
     expect(resultCss).toContain(".supplier-selection-summary");

@@ -27,6 +27,10 @@ import {
 } from "@/modules/product-search/domain/recovery-search";
 import type { SupplierOfferSearchResult } from "@/modules/product-search/domain/search";
 import {
+  displayedSupplierPriceEvidence,
+  supplierPriceEvidenceLabel,
+} from "@/modules/product-search/domain/supplier-price-evidence";
+import {
   classifySupplierSearchOutcome,
   type SupplierSearchDisposition,
   type SupplierSearchFailureCode,
@@ -558,6 +562,10 @@ export function SupplierOfferSearch({
     recommendationRank?: number,
   ) {
     const analysis = candidateAnalysisByUrl.get(result.productUrl);
+    const priceEvidenceLabel = supplierPriceEvidenceLabel(
+      displayedSupplierPriceEvidence(result),
+      locale,
+    );
     const recommendationLabel = analysis?.status === "FINAL"
       ? analysisText.recommendation[analysis.recommendationStatus]
       : analysisText.preliminary;
@@ -591,6 +599,7 @@ export function SupplierOfferSearch({
           <p><strong>{t(result.supplierName)}</strong>{result.supplierCountry ? ` · ${t(result.supplierCountry)}` : ""}</p>
           <p>
             {result.price !== null ? `${result.price} ${result.currency}` : t("Cena nije navedena")}
+            {priceEvidenceLabel ? ` · ${priceEvidenceLabel}` : ""}
             {" · "}
             {result.minimumOrderQuantity !== null
               ? `${t("Minimalna količina (MOQ)")}: ${result.minimumOrderQuantity}`

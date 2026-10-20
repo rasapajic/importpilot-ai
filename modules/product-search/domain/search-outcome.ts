@@ -45,3 +45,10 @@ export function classifySupplierSearchOutcome(input: {
     failureCode: input.failureCode ?? "no_verified_offers",
   };
 }
+
+/** Only a live result set spends a monthly or one-off live-search credit. */
+export function supplierSearchConsumesLiveQuota(input: {
+  searchDisposition: SupplierSearchDisposition;
+}) {
+  return input.searchDisposition === "live";
+}

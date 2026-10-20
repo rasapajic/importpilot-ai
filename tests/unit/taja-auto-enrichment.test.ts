@@ -61,6 +61,7 @@ describe("TAJA finalist auto-enrichment", () => {
       supplierCountry: "CN",
       price: 12,
       currency: "USD",
+      priceEvidence: "PRODUCT_PAGE",
       minimumOrderQuantity: 100,
       incoterm: "FOB",
       imageUrl: "https://example.com/fan.jpg",
@@ -268,6 +269,7 @@ describe("TAJA finalist auto-enrichment", () => {
       currency: null,
       marketplaceDetails: null,
     });
+    expect(outcome.results[0]?.priceEvidence).toBeUndefined();
     expect(outcome.summary.reports[0]?.fieldsFilled).not.toContain("price");
   });
 

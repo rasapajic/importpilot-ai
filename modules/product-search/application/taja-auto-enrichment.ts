@@ -108,6 +108,7 @@ function mergePreview(
 
   let price = result.price;
   let currency = result.currency;
+  let priceEvidence = result.priceEvidence;
   if (authoritative && preview.price !== null && preview.currency !== null) {
     if (price === null && currency === null) {
       price = preview.price;
@@ -118,6 +119,7 @@ function mergePreview(
       currency = preview.currency;
       fieldsCorrected.push("price");
     }
+    priceEvidence = "PRODUCT_PAGE";
   }
 
   let supplierCountry = result.supplierCountry;
@@ -203,6 +205,7 @@ function mergePreview(
       supplierCountry,
       price,
       currency,
+      ...(priceEvidence ? { priceEvidence } : {}),
       minimumOrderQuantity,
       incoterm,
       imageUrl,
