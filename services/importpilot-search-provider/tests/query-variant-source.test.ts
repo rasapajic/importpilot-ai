@@ -106,6 +106,41 @@ describe("direct supplier source query expansion", () => {
     ]));
   });
 
+  it("returns offers collected before the parent deadline aborts later variants", async () => {
+    const controller = new AbortController();
+    const underlying: SupplierSearchSource = {
+      name: "alibaba-test",
+      implemented: true,
+      async search(variantInput, signal) {
+        if (variantInput.productQuery.includes("outdoor mist")) {
+          await new Promise((_resolve, reject) => {
+            signal.addEventListener("abort", () => {
+              reject(new Error("aborted"));
+            }, { once: true });
+          });
+        }
+        return {
+          results: [result(
+            "Patio Misting System with Pump and 20 Nozzles",
+            "https://www.alibaba.com/product-detail/misting_1.html",
+          )],
+        };
+      },
+    };
+    const source = createQueryVariantExpandingSource(underlying);
+    const pending = source.search(input, controller.signal);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    controller.abort();
+
+    const outcome = await pending;
+    if (Array.isArray(outcome)) throw new Error("Expected structured outcome.");
+    expect(outcome.results).toEqual([
+      expect.objectContaining({
+        productUrl: "https://www.alibaba.com/product-detail/misting_1.html",
+      }),
+    ]);
+  });
+
   it("deduplicates the same product returned by multiple variants", async () => {
     const repeated = result(
       "Patio Misting System with Pump and 20 Nozzles",

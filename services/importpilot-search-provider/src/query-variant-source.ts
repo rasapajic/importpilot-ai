@@ -105,6 +105,7 @@ export function createQueryVariantExpandingSource(
       let lastReason: string | undefined;
 
       for (const [variantIndex, query] of queries.entries()) {
+        if (signal.aborted) break;
         try {
           const outcome = outcomeParts(await source.search({
             ...input,
@@ -134,7 +135,6 @@ export function createQueryVariantExpandingSource(
             new_results: accepted,
           });
         } catch (error) {
-          if (signal.aborted) throw error;
           lastReason = error instanceof Error
             ? error.message
             : "Direct supplier source query variant failed.";
@@ -145,6 +145,7 @@ export function createQueryVariantExpandingSource(
             error_name: error instanceof Error ? error.name : "UnknownError",
             error_message: lastReason,
           });
+          if (signal.aborted) break;
         }
       }
 

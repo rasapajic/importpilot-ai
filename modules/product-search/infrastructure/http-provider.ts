@@ -119,18 +119,26 @@ export function createHttpSupplierOfferSearchProvider({
     url: URL,
     init: RequestInit,
     requestTimeoutMs = timeoutMs,
+    parentSignal?: AbortSignal,
   ) {
+    if (parentSignal?.aborted) throw new SupplierSearchProviderTimeoutError();
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
+    const abortFromParent = () => controller.abort();
+    parentSignal?.addEventListener("abort", abortFromParent, { once: true });
     try {
       return await fetcher(url, { ...init, signal: controller.signal });
     } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") {
+      if (
+        (error instanceof DOMException && error.name === "AbortError") ||
+        (error instanceof Error && error.name === "AbortError")
+      ) {
         throw new SupplierSearchProviderTimeoutError();
       }
       throw new SupplierSearchProviderError("Supplier search provider request failed.");
     } finally {
       clearTimeout(timeout);
+      parentSignal?.removeEventListener("abort", abortFromParent);
     }
   }
 
@@ -161,11 +169,15 @@ export function createHttpSupplierOfferSearchProvider({
       }
     },
 
-    async searchSupplierOffers(rawInput) {
+    async searchSupplierOffers(rawInput, options) {
       const input = supplierOfferSearchInputSchema.parse(rawInput);
       const key = requestKey(providerUrl, input);
       const cached = cache.get(key);
-      if (cached && cached.expiresAt > now()) return cached.outcome;
+      if (cached && cached.expiresAt > now()) {
+        return Array.isArray(cached.outcome)
+          ? { results: cached.outcome, servedFromMemoryCache: true }
+          : { ...cached.outcome, servedFromMemoryCache: true };
+      }
       if (cached) cache.delete(key);
 
       for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
@@ -178,7 +190,7 @@ export function createHttpSupplierOfferSearchProvider({
               "idempotency-key": idempotencyKey(providerUrl, input),
             },
             body: JSON.stringify(input),
-          });
+          }, timeoutMs, options?.signal);
           if (!response.ok) {
             if (isRetryableStatus(response.status) && attempt < maxAttempts) {
               await wait(retryDelayMs * attempt);
@@ -218,11 +230,18 @@ export function createHttpSupplierOfferSearchProvider({
             if (parsed.length === 0 && typeof reason === "string") {
               throw new SupplierSearchProviderUnavailableError(reason);
             }
-            const outcome: SupplierOfferSearchProviderOutcome = summary
+            const servedFromProviderReplay =
+              response.headers.get("x-importpilot-idempotency") === "completed-replay";
+            const stored: SupplierOfferSearchProviderOutcome = summary
               ? { results: parsed, summary }
               : parsed;
-            cache.set(key, { expiresAt: now() + cacheTtlMs, outcome });
-            return outcome;
+            cache.set(key, { expiresAt: now() + cacheTtlMs, outcome: stored });
+            if (!servedFromProviderReplay) return stored;
+            return {
+              results: parsed,
+              ...(summary ? { summary } : {}),
+              servedFromProviderReplay: true,
+            };
           } catch (error) {
             if (error instanceof SupplierSearchProviderUnavailableError) throw error;
             throw new SupplierSearchProviderInvalidResponseError();

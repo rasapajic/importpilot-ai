@@ -337,8 +337,10 @@ export function createOpenAI1688SearchSource(
           }, signal);
           results = restorePartialLogistics(enriched.results, discovered);
           enrichmentUsage = enriched.aiUsage ?? [];
-        } catch (error) {
-          if (signal.aborted) throw error;
+        } catch {
+          // Enrichment is optional. An aborted or failed exact-page pass must
+          // not discard discovery rows that already have commercial evidence,
+          // and must not fail Alibaba or Made-in-China results gathered in parallel.
         }
       }
 

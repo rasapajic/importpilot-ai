@@ -36,6 +36,10 @@ describe("supplier-search end-to-end deadline contract", () => {
     expect(service).toBeLessThan(appProvider);
     expect(appProvider + finalist).toBeLessThan(route);
     expect(providerSource).toContain("boundedProviderTimeout");
+    expect(routeSource).toContain("withSearchDeadline");
+    expect(routeSource).toContain('searchDisposition: "failed"');
+    expect(routeSource).toContain('"timeout"');
+    expect(routeSource).not.toContain("{ status: 504 }");
   });
 
   it("keeps every configured source path inside the service deadline", () => {

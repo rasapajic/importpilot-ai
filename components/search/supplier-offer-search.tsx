@@ -26,6 +26,15 @@ import {
   type RecoverySearchCriteria,
 } from "@/modules/product-search/domain/recovery-search";
 import type { SupplierOfferSearchResult } from "@/modules/product-search/domain/search";
+import {
+  displayedSupplierPriceEvidence,
+  supplierPriceEvidenceLabel,
+} from "@/modules/product-search/domain/supplier-price-evidence";
+import {
+  classifySupplierSearchOutcome,
+  type SupplierSearchDisposition,
+  type SupplierSearchFailureCode,
+} from "@/modules/product-search/domain/search-outcome";
 import type { TajaMissingDataKey } from "@/modules/product-search/domain/taja-candidate-analysis";
 import { TajaProductFormMatchStatuses } from "@/modules/product-search/domain/taja-product-form";
 import type { TajaCandidateAnalysisWithProductForm } from "@/modules/product-search/domain/taja-product-form-policy";
@@ -46,6 +55,9 @@ export type SupplierSearchInitialOutcome = {
   lunaPlan: LunaSearchPlan;
   fetchedAt: string;
   unfilteredResultCount: number;
+  liveProviderFailed?: boolean;
+  returnedFromCache?: boolean;
+  failureCode?: SupplierSearchFailureCode | null;
 };
 
 const INITIAL_OTHER_RESULTS = 7;
@@ -284,8 +296,23 @@ export function SupplierOfferSearch({
   const [reviewingUrl, setReviewingUrl] = useState(false);
   const [urlImportOpen, setUrlImportOpen] = useState(openUrlImport);
   const [providerStatus, setProviderStatus] = useState<ProviderStatus | null>(null);
+  const initialClassification = initialOutcome
+    ? classifySupplierSearchOutcome({
+        resultOrigin: initialOutcome.resultOrigin,
+        liveProviderFailed: initialOutcome.liveProviderFailed ?? false,
+        returnedFromCache: initialOutcome.returnedFromCache ?? initialOutcome.resultOrigin === "cache",
+        resultCount: initialOutcome.results.length,
+        failureCode: initialOutcome.failureCode,
+      })
+    : null;
   const [resultOrigin, setResultOrigin] = useState<ResultOrigin | null>(
     initialOutcome?.resultOrigin ?? null,
+  );
+  const [searchDisposition, setSearchDisposition] = useState<SupplierSearchDisposition | null>(
+    initialClassification?.searchDisposition ?? null,
+  );
+  const [failureCode, setFailureCode] = useState<SupplierSearchFailureCode | null>(
+    initialClassification?.failureCode ?? null,
   );
   const [lunaPlan, setLunaPlan] = useState<LunaSearchPlan | null>(
     initialOutcome?.lunaPlan ?? null,
@@ -342,23 +369,41 @@ export function SupplierOfferSearch({
         providerStatus?: ProviderStatus;
         reason?: string;
         resultOrigin?: ResultOrigin | null;
+        liveProviderFailed?: boolean;
+        returnedFromCache?: boolean;
+        failureCode?: SupplierSearchFailureCode | null;
         lunaPlan?: LunaSearchPlan;
         fetchedAt?: string;
         unfilteredResultCount?: number;
       };
-      if (!response.ok) throw new Error(payload.error);
+      if (!response.ok) throw new Error(payload.error || lunaCopy.failedSearchNotice);
+      const nextResults = payload.results ?? [];
+      const classification = classifySupplierSearchOutcome({
+        resultOrigin: payload.resultOrigin ?? null,
+        liveProviderFailed: Boolean(payload.liveProviderFailed),
+        returnedFromCache: Boolean(payload.returnedFromCache),
+        resultCount: nextResults.length,
+        failureCode: payload.failureCode,
+      });
       setProviderStatus(payload.providerStatus ?? null);
       setResultOrigin(payload.resultOrigin ?? null);
-      setResults(payload.results ?? []);
+      setSearchDisposition(classification.searchDisposition);
+      setFailureCode(classification.failureCode);
+      setResults(nextResults);
       setCandidateAnalyses(payload.candidateAnalyses ?? []);
       setLunaPlan(payload.lunaPlan ?? null);
       setFetchedAt(payload.fetchedAt ?? null);
       setUnfilteredResultCount(payload.unfilteredResultCount ?? null);
+      if (classification.searchDisposition === "failed" && classification.failureCode !== "no_verified_offers") {
+        setError(payload.error || lunaCopy.failedSearchNotice);
+      }
     } catch (searchError) {
       setError(searchError instanceof Error && searchError.message
         ? searchError.message
         : t("Pretraga trenutno nije dostupna. Pokušajte ponovo."));
       setProviderStatus("error");
+      setSearchDisposition("failed");
+      setFailureCode("provider_error");
       setResults([]);
       setCandidateAnalyses([]);
       setLunaPlan(null);
@@ -377,6 +422,7 @@ export function SupplierOfferSearch({
     query,
     searchCountry,
     searchQuantity,
+    lunaCopy.failedSearchNotice,
     strictPriceLimit,
     t,
     targetMarginPercent,
@@ -516,6 +562,10 @@ export function SupplierOfferSearch({
     recommendationRank?: number,
   ) {
     const analysis = candidateAnalysisByUrl.get(result.productUrl);
+    const priceEvidenceLabel = supplierPriceEvidenceLabel(
+      displayedSupplierPriceEvidence(result),
+      locale,
+    );
     const recommendationLabel = analysis?.status === "FINAL"
       ? analysisText.recommendation[analysis.recommendationStatus]
       : analysisText.preliminary;
@@ -549,6 +599,7 @@ export function SupplierOfferSearch({
           <p><strong>{t(result.supplierName)}</strong>{result.supplierCountry ? ` · ${t(result.supplierCountry)}` : ""}</p>
           <p>
             {result.price !== null ? `${result.price} ${result.currency}` : t("Cena nije navedena")}
+            {priceEvidenceLabel ? ` · ${priceEvidenceLabel}` : ""}
             {" · "}
             {result.minimumOrderQuantity !== null
               ? `${t("Minimalna količina (MOQ)")}: ${result.minimumOrderQuantity}`
@@ -759,8 +810,16 @@ export function SupplierOfferSearch({
         </button>
       </form>
       {loading && <TajaSearchLoadingNotice />}
-      {resultOrigin === "cache" && results && results.length > 0 && !loading && (
-        <p className="muted-text" role="status">{lunaCopy.cachedResultsNotice}</p>
+      {searchDisposition === "live" && results && results.length > 0 && !loading && (
+        <p className="muted-text" role="status">{lunaCopy.liveResultsNotice}</p>
+      )}
+      {searchDisposition === "cache" && results && results.length > 0 && !loading && (
+        <p className="muted-text" role="status">
+          {failureCode ? lunaCopy.cachedAfterFailureNotice : lunaCopy.cachedResultsNotice}
+        </p>
+      )}
+      {searchDisposition === "failed" && !error && !loading && (
+        <p className="form-error" role="alert">{lunaCopy.failedSearchNotice}</p>
       )}
       {error && <p className="form-error" role="alert">{t(error)}</p>}
       {lunaPlan && (

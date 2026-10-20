@@ -37,11 +37,29 @@ describe("JAKOV360 supplier-search quota contract", () => {
     expect(route).toContain("reserveMonthlySupplierSearchQuota");
     expect(route.indexOf("reserveMonthlySupplierSearchQuota"))
       .toBeLessThan(route.indexOf("searchProjectSupplierOffers("));
+    expect(route.indexOf("supplierSearchConsumesLiveQuota(outcome)"))
+      .toBeGreaterThan(route.indexOf("searchProjectSupplierOffers("));
+    expect(route).toContain("quotaCharged");
+  });
+
+  it("returns saved results without a new charge when the monthly quota is already exhausted", () => {
+    const exceeded = route.indexOf("SupplierSearchQuotaExceededError");
+    const cached = route.indexOf("loadCachedProjectSupplierOffers", exceeded);
+    expect(exceeded).toBeGreaterThan(0);
+    expect(cached).toBeGreaterThan(exceeded);
+    expect(route).toContain("quotaCharged: false");
   });
 
   it("refunds quota when a technical live-search request fails", () => {
     expect(route).toContain("releaseSupplierSearchQuotaReservation");
     expect(service).toContain('GREATEST("used" - 1, 0)');
+    const release = route.lastIndexOf("await releaseSupplierSearchQuotaReservation");
+    const releasedFlag = route.indexOf("quotaReleased = true", release);
+    const failed = route.indexOf("failedSearchResponse(", releasedFlag);
+    expect(release).toBeGreaterThan(0);
+    expect(releasedFlag).toBeGreaterThan(release);
+    expect(failed).toBeGreaterThan(releasedFlag);
+    expect(route).toContain("quotaCharged = Boolean(quotaReservation) && !quotaReleased");
   });
 
   it("uses a paid Full Import Analysis entitlement only after monthly quota is exhausted", () => {

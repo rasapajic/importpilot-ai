@@ -134,4 +134,51 @@ describeWithDatabase("monthly supplier search quota", () => {
     );
     expect(status.used).toBe(0);
   });
+
+  it("lets only one parallel reservation take the last monthly slot", async () => {
+    const now = new Date("2026-12-15T12:00:00.000Z");
+    await prisma.organization.update({
+      where: { id: organizationId },
+      data: { subscriptionPlan: SubscriptionPlan.FREE },
+    });
+    await quota.reserveMonthlySupplierSearchQuota({ organizationId, projectId, now });
+    await quota.reserveMonthlySupplierSearchQuota({ organizationId, projectId, now });
+
+    const raced = await Promise.allSettled(
+      Array.from({ length: 6 }, () => quota.reserveMonthlySupplierSearchQuota({
+        organizationId,
+        projectId,
+        now,
+      })),
+    );
+
+    expect(raced.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(raced.filter((result) => result.status === "rejected")).toHaveLength(5);
+    const status = await quota.getMonthlySupplierSearchQuotaStatus(organizationId, now);
+    expect(status).toMatchObject({ plan: "FREE", used: 3, limit: 3, remaining: 0 });
+  });
+
+  it("returns a released slot after the monthly quota was exhausted", async () => {
+    const now = new Date("2026-12-15T12:00:00.000Z");
+    const exhausted = await quota.getMonthlySupplierSearchQuotaStatus(organizationId, now);
+    expect(exhausted.remaining).toBe(0);
+
+    await quota.releaseMonthlySupplierSearchQuotaReservation({
+      organizationId,
+      periodStart: quota.supplierSearchQuotaPeriod(now).periodStart,
+    });
+
+    const restored = await quota.getMonthlySupplierSearchQuotaStatus(organizationId, now);
+    expect(restored).toMatchObject({ used: 2, remaining: 1 });
+
+    const reserved = await quota.reserveMonthlySupplierSearchQuota({
+      organizationId,
+      projectId,
+      now,
+    });
+    expect(reserved).toMatchObject({ used: 3, remaining: 0, source: "MONTHLY" });
+    await expect(
+      quota.reserveMonthlySupplierSearchQuota({ organizationId, projectId, now }),
+    ).rejects.toMatchObject({ name: "SupplierSearchQuotaExceededError" });
+  });
 });

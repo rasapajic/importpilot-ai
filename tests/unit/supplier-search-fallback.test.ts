@@ -102,6 +102,31 @@ describe("supplier search persistent fallback", () => {
     expect(outcome).not.toHaveProperty("summary");
   });
 
+  it("labels a short provider cache replay as cache instead of a new live search", async () => {
+    const store = vi.fn();
+    const outcome = await searchSupplierOffersWithPersistentFallback(
+      input,
+      {
+        searchSupplierOffers: vi.fn().mockResolvedValue({
+          results: [result],
+          summary,
+          servedFromMemoryCache: true,
+        }),
+      },
+      { store, find: vi.fn() },
+    );
+
+    expect(outcome).toMatchObject({
+      results: [result],
+      summary,
+      resultOrigin: "cache",
+      liveProviderFailed: false,
+      cacheHit: true,
+      returnedFromCache: true,
+    });
+    expect(store).not.toHaveBeenCalled();
+  });
+
   it("keeps the provider error when no cached result exists", async () => {
     const providerError = new Error("upstream failed");
     await expect(searchSupplierOffersWithPersistentFallback(

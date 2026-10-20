@@ -23,6 +23,15 @@ import type {
 } from "@/modules/product-search/domain/search";
 import type { SupplierOfferMarketplaceSupplierProfile } from "@/modules/product-search/domain/marketplace-product-details";
 import { estimateTajaPreliminaryLandedCost } from "@/modules/product-search/domain/taja-preliminary-cost-estimate";
+import {
+  classifySupplierSearchOutcome,
+  type SupplierSearchDisposition,
+  type SupplierSearchFailureCode,
+} from "@/modules/product-search/domain/search-outcome";
+import {
+  displayedSupplierPriceEvidence,
+  supplierPriceEvidenceLabel,
+} from "@/modules/product-search/domain/supplier-price-evidence";
 import type { TajaCandidateAnalysisWithProductForm } from "@/modules/product-search/domain/taja-product-form-policy";
 
 type ResultOrigin = "live" | "cache";
@@ -34,6 +43,9 @@ type SimpleSupplierSearchInitialOutcome = {
   fetchedAt: string;
   unfilteredResultCount?: number;
   summary?: SupplierOfferSearchSummary;
+  liveProviderFailed?: boolean;
+  returnedFromCache?: boolean;
+  failureCode?: SupplierSearchFailureCode | null;
 };
 
 type Copy = {
@@ -74,6 +86,10 @@ type Copy = {
   continueWithSelected: string;
   continuing: string;
   cached: string;
+  liveNotice: string;
+  cachedAfterFailure: string;
+  failedSearch: string;
+  failedSearchText: string;
   liveRefresh: string;
   selectionOverview: (reviewed: number, shown: number) => string;
   cachedSelectionOverview: (shown: number) => string;
@@ -137,6 +153,10 @@ const copy: Record<Locale, Copy> = {
     continueWithSelected: "Nastavi sa odabranim ponudama",
     continuing: "Otvaranje sledećeg koraka...",
     cached: "Prikazani su poslednji sačuvani rezultati.",
+    liveNotice: "Ovo su nove ponude iz trenutne pretrage.",
+    cachedAfterFailure: "Nova pretraga nije uspela. Prikazani su poslednji sačuvani rezultati, ne nove ponude.",
+    failedSearch: "Pretraga nije uspela",
+    failedSearchText: "Nema sačuvanih rezultata za ovaj upit. JAKOV360 ne izmišlja cene niti prikazuje neproverene ponude kao stvarne.",
     liveRefresh: "Ponovi živu pretragu",
     selectionOverview: (reviewed, shown) => `JAKOV360 je pregledao ${reviewed} kandidata i prikazuje svih ${shown} dostupnih ponuda.`,
     cachedSelectionOverview: (shown) => `Prikazano je ${shown} sačuvanih ponuda iz prethodne pretrage. Ovo nije ukupan broj kandidata nove pretrage.`,
@@ -198,6 +218,10 @@ const copy: Record<Locale, Copy> = {
     continueWithSelected: "Mit ausgewählten Angeboten fortfahren",
     continuing: "Nächster Schritt wird geöffnet...",
     cached: "Die letzten gespeicherten Ergebnisse werden angezeigt.",
+    liveNotice: "Dies sind neue Angebote aus der aktuellen Suche.",
+    cachedAfterFailure: "Die neue Suche ist fehlgeschlagen. Angezeigt werden die letzten gespeicherten Ergebnisse, nicht neue Angebote.",
+    failedSearch: "Die Suche ist fehlgeschlagen",
+    failedSearchText: "Für diese Anfrage gibt es keine gespeicherten Ergebnisse. JAKOV360 erfindet keine Preise und zeigt ungeprüfte Angebote nicht als reale Angebote an.",
     liveRefresh: "Live-Suche wiederholen",
     selectionOverview: (reviewed, shown) => `JAKOV360 hat ${reviewed} Kandidaten geprüft und zeigt alle ${shown} verfügbaren Angebote.`,
     cachedSelectionOverview: (shown) => `${shown} gespeicherte Angebote aus der vorherigen Suche werden angezeigt. Dies ist nicht die Gesamtzahl der Kandidaten einer neuen Suche.`,
@@ -259,6 +283,10 @@ const copy: Record<Locale, Copy> = {
     continueWithSelected: "Continue with selected offers",
     continuing: "Opening the next step...",
     cached: "Showing the latest saved results.",
+    liveNotice: "These are new offers from the current search.",
+    cachedAfterFailure: "The new search failed. Showing the latest saved results, not new offers.",
+    failedSearch: "The search failed",
+    failedSearchText: "There are no saved results for this query. JAKOV360 does not invent prices or present unverified offers as real.",
     liveRefresh: "Run live search again",
     selectionOverview: (reviewed, shown) => `JAKOV360 reviewed ${reviewed} candidates and displays all ${shown} available offers.`,
     cachedSelectionOverview: (shown) => `Showing ${shown} saved offers from the previous search. This is not the total candidate count for a new search.`,
@@ -448,8 +476,8 @@ export function mergeRecoveredSupplierPreview(
   result: SupplierOfferSearchResult,
   preview: SupplierOfferUrlPreview,
 ) {
-  const previewHasPrice = preview.price !== null && preview.currency !== null;
-  const resultHasPrice = result.price !== null && result.currency !== null;
+  const authoritative = !preview.isPartial && !preview.titleFromSlug;
+  const previewHasPrice = authoritative && preview.price !== null && preview.currency !== null;
   const recoveredImage = isLikelyProductImageUrl(preview.imageUrl)
     ? preview.imageUrl
     : null;
@@ -459,11 +487,16 @@ export function mergeRecoveredSupplierPreview(
 
   return {
     ...result,
-    // A complete exact product page is stronger evidence than a search card or
-    // an old cache entry. It must be allowed to correct values such as a
-    // localized `5,45` price that an older parser misread as `545`.
-    price: previewHasPrice && !preview.isPartial ? preview.price : resultHasPrice ? result.price : preview.price,
-    currency: previewHasPrice && !preview.isPartial ? preview.currency : resultHasPrice ? result.currency : preview.currency,
+    // Only a complete exact product page may introduce or correct a price.
+    // Partial and slug-only previews stay visible as leads, without a price
+    // that was not read from the full offer.
+    price: previewHasPrice ? preview.price : result.price,
+    currency: previewHasPrice ? preview.currency : result.currency,
+    ...(previewHasPrice
+      ? { priceEvidence: "PRODUCT_PAGE" as const }
+      : result.priceEvidence
+        ? { priceEvidence: result.priceEvidence }
+        : {}),
     minimumOrderQuantity: preview.minimumOrderQuantity !== null && !preview.isPartial
       ? preview.minimumOrderQuantity
       : result.minimumOrderQuantity ?? preview.minimumOrderQuantity,
@@ -471,7 +504,9 @@ export function mergeRecoveredSupplierPreview(
       ? preview.incoterm
       : result.incoterm ?? preview.incoterm,
     imageUrl: recoveredImage ?? currentImage,
-    marketplaceDetails: preview.details ?? result.marketplaceDetails ?? null,
+    marketplaceDetails: authoritative
+      ? preview.details ?? result.marketplaceDetails ?? null
+      : result.marketplaceDetails ?? null,
   } satisfies SupplierOfferSearchResult;
 }
 
@@ -480,6 +515,7 @@ function selectionReasons(
   analysis: TajaCandidateAnalysisWithProductForm | undefined,
   quantity: number | null,
   text: Copy,
+  locale: Locale,
 ) {
   const reasons: string[] = [];
 
@@ -500,11 +536,12 @@ function selectionReasons(
     reasons.push(text.reasonMoqFits);
   }
 
-  if (result.price !== null && result.currency) {
-    reasons.push(text.reasonPriceKnown);
-  } else {
-    reasons.push(text.reasonPriceOnRequest);
-  }
+  const priceLabel = supplierPriceEvidenceLabel(
+    displayedSupplierPriceEvidence(result),
+    locale,
+  );
+  if (priceLabel) reasons.push(priceLabel);
+  else reasons.push(text.reasonPriceOnRequest);
 
   if (analysis && analysis.confidenceScore >= 70) {
     reasons.push(text.reasonDataConfidence);
@@ -531,9 +568,24 @@ export function SimpleSupplierOfferSearch({
   const { locale, t } = useI18n();
   const text = copy[locale];
   const router = useRouter();
+  const initialClassification = initialOutcome
+    ? classifySupplierSearchOutcome({
+        resultOrigin: initialOutcome.resultOrigin,
+        liveProviderFailed: initialOutcome.liveProviderFailed ?? false,
+        returnedFromCache: initialOutcome.returnedFromCache ?? initialOutcome.resultOrigin === "cache",
+        resultCount: initialOutcome.results.length,
+        failureCode: initialOutcome.failureCode,
+      })
+    : null;
   const [results, setResults] = useState<SupplierOfferSearchResult[] | null>(initialOutcome?.results ?? null);
   const [analyses, setAnalyses] = useState<TajaCandidateAnalysisWithProductForm[]>(initialOutcome?.candidateAnalyses ?? []);
   const [origin, setOrigin] = useState<ResultOrigin | null>(initialOutcome?.resultOrigin ?? null);
+  const [disposition, setDisposition] = useState<SupplierSearchDisposition | null>(
+    initialClassification?.searchDisposition ?? null,
+  );
+  const [failureCode, setFailureCode] = useState<SupplierSearchFailureCode | null>(
+    initialClassification?.failureCode ?? null,
+  );
   const [reviewedCount, setReviewedCount] = useState(
     initialOutcome?.unfilteredResultCount ?? initialOutcome?.results.length ?? 0,
   );
@@ -573,6 +625,9 @@ export function SimpleSupplierOfferSearch({
         results?: SupplierOfferSearchResult[];
         candidateAnalyses?: TajaCandidateAnalysisWithProductForm[];
         resultOrigin?: ResultOrigin | null;
+        liveProviderFailed?: boolean;
+        returnedFromCache?: boolean;
+        failureCode?: SupplierSearchFailureCode | null;
         unfilteredResultCount?: number;
         summary?: SupplierOfferSearchSummary;
         code?: string;
@@ -580,24 +635,36 @@ export function SimpleSupplierOfferSearch({
       } | null;
       if (!response.ok) {
         if (payload?.code === "SEARCH_LIMIT_REACHED") setLimitReached(true);
-        throw new Error(payload?.error || text.noResultsText);
+        throw new Error(payload?.error || text.failedSearchText);
       }
-      setResults(payload?.results ?? []);
+      const nextResults = payload?.results ?? [];
+      const classification = classifySupplierSearchOutcome({
+        resultOrigin: payload?.resultOrigin ?? null,
+        liveProviderFailed: Boolean(payload?.liveProviderFailed),
+        returnedFromCache: Boolean(payload?.returnedFromCache),
+        resultCount: nextResults.length,
+        failureCode: payload?.failureCode,
+      });
+      setResults(nextResults);
       setAnalyses(payload?.candidateAnalyses ?? []);
       setOrigin(payload?.resultOrigin ?? null);
-      setReviewedCount(payload?.unfilteredResultCount ?? payload?.results?.length ?? 0);
-      setSearchSummary(payload?.summary ?? null);
+      setDisposition(classification.searchDisposition);
+      setFailureCode(classification.failureCode);
+      setReviewedCount(payload?.unfilteredResultCount ?? nextResults.length);
+      setSearchSummary(classification.searchDisposition === "live" ? payload?.summary ?? null : null);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : text.noResultsText);
+      setError(caught instanceof Error ? caught.message : text.failedSearchText);
       setResults([]);
       setAnalyses([]);
       setOrigin(null);
+      setDisposition("failed");
+      setFailureCode("provider_error");
       setReviewedCount(0);
       setSearchSummary(null);
     } finally {
       setLoading(false);
     }
-  }, [productName, projectId, quantity, targetCountry, text.noResultsText]);
+  }, [productName, projectId, quantity, targetCountry, text.failedSearchText]);
 
   useEffect(() => {
     if (!autoStart || automaticSearchStarted.current || !quantity || !targetCountry || productName.trim().length < 2) return;
@@ -736,15 +803,21 @@ export function SimpleSupplierOfferSearch({
       </header>
 
       {loading && <p className="muted-text" role="status">{text.searching}</p>}
-      {origin === "cache" && !loading && (
+      {disposition === "live" && results && results.length > 0 && !loading && (
+        <p className="muted-text" role="status">{text.liveNotice}</p>
+      )}
+      {disposition === "cache" && !loading && (
         <div className="cached-result-notice" role="status">
-          <p className="muted-text">{text.cached}</p>
+          <p className="muted-text">{failureCode ? text.cachedAfterFailure : text.cached}</p>
           <button className="secondary-button" onClick={() => void runSearch()} type="button">
             {text.liveRefresh}
           </button>
         </div>
       )}
       {error && <p className="form-error" role="alert">{error}</p>}
+      {error && !loading && results?.length === 0 && !limitReached && (
+        <button className="secondary-button" onClick={() => void runSearch()} type="button">{text.retry}</button>
+      )}
       {limitReached && (
         <p>
           <a
@@ -760,7 +833,17 @@ export function SimpleSupplierOfferSearch({
         <button className="primary-button" onClick={() => void runSearch()} type="button">{text.search}</button>
       )}
 
-      {results?.length === 0 && !loading && (
+      {results?.length === 0 && !loading && !error && disposition === "failed" && failureCode !== "no_verified_offers" && (
+        <div className="empty-state">
+          <h3>{text.failedSearch}</h3>
+          <p>{text.failedSearchText}</p>
+          {!limitReached && (
+            <button className="secondary-button" onClick={() => void runSearch()} type="button">{text.retry}</button>
+          )}
+        </div>
+      )}
+
+      {results?.length === 0 && !loading && !error && (disposition !== "failed" || failureCode === "no_verified_offers") && (
         <div className="empty-state">
           <h3>{text.noResults}</h3>
           <p>{text.noResultsText}</p>
@@ -812,7 +895,11 @@ export function SimpleSupplierOfferSearch({
             const deliveryEstimate = liveEstimate ?? analysis?.preliminaryCostEstimate ?? null;
             const selecting = selectingUrl === result.productUrl;
             const selected = selectedUrls.includes(result.productUrl);
-            const reasons = selectionReasons(effectiveResult, analysis, quantity, text);
+            const reasons = selectionReasons(effectiveResult, analysis, quantity, text, locale);
+            const priceEvidenceLabel = supplierPriceEvidenceLabel(
+              displayedSupplierPriceEvidence(effectiveResult),
+              locale,
+            );
             return (
               <article className={`search-result-card${index === 0 ? " search-result-card-best" : ""}`} key={`${result.source}-${result.productUrl}`}>
                 <SearchResultImage src={result.imageUrl} title={t(result.title)} />
@@ -844,6 +931,9 @@ export function SimpleSupplierOfferSearch({
                             )} / ${text.pieces}`
                           : text.priceOnRequest}
                       </strong>
+                      {priceEvidenceLabel && (
+                        <small className="supplier-fx-note">{priceEvidenceLabel}</small>
+                      )}
                       {effectiveResult.price !== null && effectiveResult.currency && quantity && (
                         <small className="supplier-order-total">
                           {text.supplierOrderTotal(formatQuantity(quantity, locale))}:{" "}

@@ -45,6 +45,7 @@ import { getDetailedSupplierOfferUrlImportProvider } from "../infrastructure/det
 import { recordProjectActivity } from "../../timeline/application/timeline-service";
 import { extractSupplierLogisticsData } from "../../transport/domain/transport-estimator";
 import { autoEnrichTajaCandidates } from "./taja-auto-enrichment";
+import { classifySupplierSearchOutcome } from "../domain/search-outcome";
 import { searchSupplierOffersWithPersistentFallback } from "./search-fallback";
 
 export class ProductSearchProjectNotFoundError extends Error {}
@@ -304,15 +305,24 @@ async function buildSearchPresentation(input: SearchPresentationInput) {
   });
   const results = productFormAnalysis.rankedResults.map((result) => ({
     ...result,
-    provenance: {
-      fetchedAt,
-      resultOrigin: resultOrigin ?? "live",
-      originalQuery: effectiveRequest.query,
-      providerQuery: lunaPlan.providerQuery,
-      chinese1688Query: lunaPlan.chinese1688Query,
-      targetCountry: effectiveRequest.targetCountry,
-      quantity: effectiveRequest.quantity,
-    },
+    ...(result.priceEvidence
+      ? {}
+      : result.price !== null && result.currency !== null
+        ? { priceEvidence: "MARKETPLACE_SEARCH" as const }
+        : {}),
+    ...(resultOrigin
+      ? {
+          provenance: {
+            fetchedAt,
+            resultOrigin,
+            originalQuery: effectiveRequest.query,
+            providerQuery: lunaPlan.providerQuery,
+            chinese1688Query: lunaPlan.chinese1688Query,
+            targetCountry: effectiveRequest.targetCountry,
+            quantity: effectiveRequest.quantity,
+          },
+        }
+      : {}),
   }));
 
   return {
@@ -331,6 +341,7 @@ export async function searchProjectSupplierOffers(
   searchInput: unknown,
   provider?: SupplierOfferSearchProvider,
   urlImportProvider?: SupplierOfferUrlImportProvider | null,
+  options?: { signal?: AbortSignal },
 ) {
   const project = await findSearchProject(projectId, organizationId);
   const activeProvider = provider ?? getSupplierOfferSearchProvider({
@@ -343,7 +354,12 @@ export async function searchProjectSupplierOffers(
   const providerInput = supplierOfferSearchInputSchema.parse(
     buildLunaProviderSearchInput(lunaPlan, effectiveRequest),
   );
-  const outcome = await searchSupplierOffersWithPersistentFallback(providerInput, activeProvider);
+  const outcome = await searchSupplierOffersWithPersistentFallback(
+    providerInput,
+    activeProvider,
+    undefined,
+    { signal: options?.signal },
+  );
   const presentation = await buildSearchPresentation({
     projectId,
     organizationId,
@@ -370,6 +386,12 @@ export async function searchProjectSupplierOffers(
   return {
     ...outcome,
     ...presentation,
+    ...classifySupplierSearchOutcome({
+      resultOrigin: outcome.resultOrigin,
+      liveProviderFailed: outcome.liveProviderFailed,
+      returnedFromCache: outcome.returnedFromCache,
+      resultCount: presentation.results.length,
+    }),
   };
 }
 
@@ -415,6 +437,12 @@ export async function loadCachedProjectSupplierOffers(
     cacheHit: true,
     returnedFromCache: true,
     liveProviderFailed: false,
+    ...classifySupplierSearchOutcome({
+      resultOrigin: "cache",
+      liveProviderFailed: false,
+      returnedFromCache: true,
+      resultCount: presentation.results.length,
+    }),
   };
 }
 

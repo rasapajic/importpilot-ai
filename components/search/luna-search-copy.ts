@@ -16,6 +16,9 @@ type LunaSearchCopy = {
   repeatSearch: string;
   idlePrompt: string;
   cachedResultsNotice: string;
+  liveResultsNotice: string;
+  cachedAfterFailureNotice: string;
+  failedSearchNotice: string;
   preparedQueries: string;
   chineseConfirmationRequired: string;
   filteredResultsPrefix: string;
@@ -38,6 +41,9 @@ const copy: Record<Locale, LunaSearchCopy> = {
     repeatSearch: "Ponovi živu pretragu",
     idlePrompt: "Pokrenite pretragu da biste pronašli aktuelne ponude.",
     cachedResultsNotice: "Prikazani su poslednji sačuvani rezultati. Nova internet pretraga pokreće se samo kada izaberete „Ponovi živu pretragu“.",
+    liveResultsNotice: "Ovo su nove ponude iz trenutne pretrage.",
+    cachedAfterFailureNotice: "Nova pretraga nije uspela. Prikazani su poslednji sačuvani rezultati, ne nove ponude.",
+    failedSearchNotice: "Pretraga nije uspela. Nema sačuvanih rezultata, a neproverene ponude i izmišljene cene nisu prikazane.",
     preparedQueries: `${ASSISTANT_DISPLAY_NAME} je pripremila pretragu`,
     chineseConfirmationRequired: "Kineski upit zahteva ručnu potvrdu.",
     filteredResultsPrefix: `${ASSISTANT_DISPLAY_NAME} kriterijumi su uklonili`,
@@ -63,6 +69,9 @@ const copy: Record<Locale, LunaSearchCopy> = {
     repeatSearch: "Live-Suche wiederholen",
     idlePrompt: "Starten Sie die Suche, um aktuelle Angebote zu finden.",
     cachedResultsNotice: "Die zuletzt gespeicherten Ergebnisse werden angezeigt. Eine neue Internetsuche startet erst mit „Live-Suche wiederholen“.",
+    liveResultsNotice: "Dies sind neue Angebote aus der aktuellen Suche.",
+    cachedAfterFailureNotice: "Die neue Suche ist fehlgeschlagen. Angezeigt werden die letzten gespeicherten Ergebnisse, nicht neue Angebote.",
+    failedSearchNotice: "Die Suche ist fehlgeschlagen. Es gibt keine gespeicherten Ergebnisse, und ungeprüfte Angebote oder erfundene Preise werden nicht angezeigt.",
     preparedQueries: `${ASSISTANT_DISPLAY_NAME} hat die Suche vorbereitet`,
     chineseConfirmationRequired: "Die chinesische Suchanfrage muss manuell bestätigt werden.",
     filteredResultsPrefix: `Durch die ${ASSISTANT_DISPLAY_NAME}-Kriterien entfernt`,
@@ -88,6 +97,9 @@ const copy: Record<Locale, LunaSearchCopy> = {
     repeatSearch: "Repeat live search",
     idlePrompt: "Start the search to find current offers.",
     cachedResultsNotice: "The latest saved results are shown. A new web search starts only when you choose “Repeat live search”.",
+    liveResultsNotice: "These are new offers from the current search.",
+    cachedAfterFailureNotice: "The new search failed. Showing the latest saved results, not new offers.",
+    failedSearchNotice: "The search failed. There are no saved results, and unverified offers or invented prices are not shown.",
     preparedQueries: `${ASSISTANT_DISPLAY_NAME} prepared the search`,
     chineseConfirmationRequired: "The Chinese query requires manual confirmation.",
     filteredResultsPrefix: `Removed by ${ASSISTANT_DISPLAY_NAME} criteria`,

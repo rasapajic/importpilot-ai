@@ -108,6 +108,7 @@ export const supplierOfferSearchResultSchema = z
       "Image URL must be valid.",
     ),
     source: z.string().trim().min(1).max(100),
+    priceEvidence: z.enum(["MARKETPLACE_SEARCH", "PRODUCT_PAGE"]).optional(),
     marketplaceDetails: supplierOfferMarketplaceDetailsSchema.nullable().optional(),
     supplierLogistics: supplierOfferLogisticsSchema.nullable().optional(),
     provenance: supplierOfferSearchProvenanceSchema.optional(),
@@ -233,10 +234,15 @@ export type SupplierOfferSearchProviderOutcome =
   | {
       results: SupplierOfferSearchResult[];
       summary?: SupplierOfferSearchSummary;
+      servedFromMemoryCache?: boolean;
+      servedFromProviderReplay?: boolean;
     };
 
 export interface SupplierOfferSearchProvider {
-  searchSupplierOffers(input: SupplierOfferSearchInput): Promise<SupplierOfferSearchProviderOutcome>;
+  searchSupplierOffers(
+    input: SupplierOfferSearchInput,
+    options?: { signal?: AbortSignal },
+  ): Promise<SupplierOfferSearchProviderOutcome>;
   healthCheck?(): Promise<boolean>;
 }
 
