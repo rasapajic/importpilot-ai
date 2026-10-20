@@ -29,7 +29,7 @@
     "@aws-sdk/s3-request-presigner": "3.1067.0",
     "@prisma/client": "6.19.3",
     "argon2": "0.44.0",
-    "next": "16.3.5",
+    "next": "16.3.8",
     "react": "19.2.7",
     "react-dom": "19.2.7",
     "zod": "4.4.3"
@@ -39,13 +39,15 @@
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
     "eslint": "9.39.2",
-    "eslint-config-next": "16.3.5",
+    "eslint-config-next": "16.3.8",
     "prisma": "6.19.3",
     "tsx": "4.20.6",
     "typescript": "5.9.3",
     "vitest": "3.2.6"
   },
   "overrides": {
-    "deepmerge-ts": "8.0.2"
+    "deepmerge-ts": "8.0.2",
+    "sharp": "0.35.5",
+    "source-map-js": "1.2.2"
   }
 }

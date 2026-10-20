@@ -125,6 +125,14 @@ try {
   const health = await request("/api/health");
   if (health.status !== 200) throw new Error(`Health check returned ${health.status}.`);
 
+  for (const path of ["/pwa-icon-192", "/pwa-icon-512"]) {
+    const icon = await request(path);
+    const contentType = icon.headers.get("content-type") ?? "";
+    if (icon.status !== 200 || !contentType.startsWith("image/")) {
+      throw new Error(`${path} returned ${icon.status} ${contentType}, expected an image.`);
+    }
+  }
+
   for (const path of ["/", "/login", "/register"]) {
     const response = await request(path, { redirect: "manual" });
     if (response.status !== 200) throw new Error(`${path} returned ${response.status}.`);
