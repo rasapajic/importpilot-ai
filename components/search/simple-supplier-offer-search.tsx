@@ -23,7 +23,10 @@ import type {
 } from "@/modules/product-search/domain/search";
 import type { SupplierOfferMarketplaceSupplierProfile } from "@/modules/product-search/domain/marketplace-product-details";
 import { estimateTajaPreliminaryLandedCost } from "@/modules/product-search/domain/taja-preliminary-cost-estimate";
-import { assessSupplierOfferQuantityPrice } from "@/modules/product-search/domain/supplier-quantity-pricing";
+import {
+  assessSupplierOfferQuantityPrice,
+  assessSupplierOrderTerms,
+} from "@/modules/product-search/domain/supplier-quantity-pricing";
 import {
   classifySupplierSearchOutcome,
   type SupplierSearchDisposition,
@@ -101,6 +104,7 @@ type Copy = {
   reasonProductMatch: string;
   reasonProductLikely: string;
   reasonMoqFits: string;
+  variantMixUnconfirmed: string;
   reasonPriceKnown: string;
   reasonPriceOnRequest: string;
   informationalPrice: string;
@@ -170,6 +174,7 @@ const copy: Record<Locale, Copy> = {
     reasonProductMatch: "Proizvod odgovara traženom tipu ili specifikaciji.",
     reasonProductLikely: "Ponuda je relevantna za traženi proizvod, ali deo specifikacije još treba potvrditi.",
     reasonMoqFits: "MOQ odgovara traženoj količini.",
+    variantMixUnconfirmed: "Mešanje varijanti u jednoj narudžbini nije potvrđeno.",
     reasonPriceKnown: "Cena dobavljača je dostupna za poređenje.",
     reasonPriceOnRequest: "Cena nije uspešno preuzeta; proverite izvornu ponudu.",
     informationalPrice: "Oglašena cena. Nije potvrđena za traženu količinu i nije nabavni trošak.",
@@ -237,6 +242,7 @@ const copy: Record<Locale, Copy> = {
     reasonProductMatch: "Das Produkt entspricht dem gesuchten Typ oder der Spezifikation.",
     reasonProductLikely: "Das Angebot ist relevant, ein Teil der Spezifikation muss jedoch noch bestätigt werden.",
     reasonMoqFits: "Das MOQ passt zur gewünschten Menge.",
+    variantMixUnconfirmed: "Das Mischen von Varianten in einer Bestellung ist nicht bestätigt.",
     reasonPriceKnown: "Der Lieferantenpreis ist für den Vergleich verfügbar.",
     reasonPriceOnRequest: "Der Preis wurde nicht erfolgreich abgerufen; prüfen Sie das Quellangebot.",
     informationalPrice: "Angebotspreis. Für die gewünschte Menge nicht bestätigt und kein bestätigter Einkaufspreis.",
@@ -304,6 +310,7 @@ const copy: Record<Locale, Copy> = {
     reasonProductMatch: "The product matches the requested type or specification.",
     reasonProductLikely: "The offer is relevant, but part of the specification still needs confirmation.",
     reasonMoqFits: "The MOQ fits the requested quantity.",
+    variantMixUnconfirmed: "Mixing variants in one order is not confirmed.",
     reasonPriceKnown: "A supplier price is available for comparison.",
     reasonPriceOnRequest: "The price was not retrieved successfully; check the source offer.",
     informationalPrice: "Advertised price. Not confirmed for the requested quantity and not a confirmed procurement cost.",
@@ -888,6 +895,12 @@ export function SimpleSupplierOfferSearch({
             const priceSnapshots = quantityPriceSnapshots(result, quantity);
             const priceTierSnapshots = supplierPriceTierSnapshots(result);
             const variantFacts = supplierOfferVariantFacts(result);
+            const orderTerms = assessSupplierOrderTerms({
+              requestedQuantity: quantity ?? 0,
+              variantMixRequested: variantFacts.groups.length > 0,
+              mixingExplicitlyConfirmed: null,
+              conditions: [],
+            });
             const supplierPlatformSummary = supplierPlatformProfileSummary(
               result.marketplaceDetails?.supplierProfile,
               locale,
@@ -901,7 +914,9 @@ export function SimpleSupplierOfferSearch({
                   fxSnapshot: quantityPrice.quantityCurrency === "EUR" ? null : fxSnapshot,
                 })
               : null;
-            const deliveryEstimate = liveEstimate ?? analysis?.preliminaryCostEstimate ?? null;
+            const deliveryEstimate = quantityPrice.procurementCostConfirmed
+              ? (liveEstimate ?? analysis?.preliminaryCostEstimate ?? null)
+              : null;
             const selecting = selectingUrl === result.productUrl;
             const selected = selectedUrls.includes(result.productUrl);
             const reasons = selectionReasons(result, analysis, quantity, text);
@@ -1009,6 +1024,10 @@ export function SimpleSupplierOfferSearch({
                       </span>
                     )}
                   </div>
+
+                  {orderTerms.mixingStatus === "UNCONFIRMED" && (
+                    <p className="muted-text">{text.variantMixUnconfirmed}</p>
+                  )}
 
                   {(variantFacts.groups.length > 0 || variantFacts.types.length > 0) && (
                     <p className="muted-text">

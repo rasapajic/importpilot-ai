@@ -113,15 +113,9 @@ describeWithDatabase("persisted TAJA supplier logistics", () => {
       productUrl: repeatedUrl,
       status: "PRELIMINARY",
       finalEligible: false,
-      landedCostStatus: "ESTIMATED",
-      preliminaryCostEstimate: {
-        version: "TAJA_PRELIMINARY_LANDED_COST_V3",
-        confidence: "MEDIUM",
-        pricingBasisIncoterm: "EXW",
-        pricingBasisAssumed: true,
-        chinaDomesticTransportEur: 30,
-        sourcingAgentFeeEur: 35,
-      },
+      landedCostStatus: "UNAVAILABLE",
+      preliminaryCostEstimate: null,
     });
+    expect(outcome.candidateAnalyses[0]?.explanation ?? "").not.toContain("Preliminarni ukupni trošak");
   });
 });

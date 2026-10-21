@@ -50,6 +50,35 @@ function yougeOffer(): SupplierOfferSearchResult {
 }
 
 describe("quantity-aware supplier pricing", () => {
+  it("does not let a search-snippet tier confirm the price for 500 pieces", () => {
+    const snippet = offer({
+      marketplaceDetails: {
+        adapter: "made-in-china-search-card",
+        evidence: "SEARCH_SNIPPET",
+        priceTiers: yougeTiers,
+        attributes: [],
+        variants: [],
+        packaging: null,
+      },
+    });
+
+    expect(assessSupplierOfferQuantityPrice(snippet, 500)).toMatchObject({
+      advertisedPrice: 0.7,
+      quantityUnitPrice: null,
+      basis: "INFORMATIONAL",
+      procurementCostConfirmed: false,
+      supplierOrderQuote: false,
+    });
+    expect(applySupplierOfferQuantityPrice(snippet, 500).price).toBe(0.7);
+    expect(estimateTajaPreliminaryLandedCost({
+      result: { ...snippet, currency: "EUR", price: 0.7 },
+      quantity: 500,
+      targetCountry: "RS",
+      targetMarginPercent: 0,
+      fxSnapshot: null,
+    })).toBeNull();
+  });
+
   it("uses the Youge tier of 1.10 USD for 500 pieces when that tier is published", () => {
     const pricing = assessSupplierOfferQuantityPrice(yougeOffer(), 500);
 

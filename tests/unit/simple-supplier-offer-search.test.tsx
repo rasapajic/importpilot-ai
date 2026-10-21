@@ -68,6 +68,9 @@ describe("ImportPilot 1.0 simple supplier results", () => {
     expect(resultsSource).toContain("quantityPrice.quantityUnitPrice * quantity");
     expect(resultsSource).toContain("quantityPrice.procurementCostConfirmed");
     expect(resultsSource).toContain("informationalPrice:");
+    expect(resultsSource).toContain("assessSupplierOrderTerms");
+    expect(resultsSource).toContain('variantMixUnconfirmed: "Mešanje varijanti u jednoj narudžbini nije potvrđeno."');
+    expect(resultsSource).toContain("orderTerms.mixingStatus === \"UNCONFIRMED\"");
     expect(resultsSource).not.toContain("effectiveResult.price * quantity");
     expect(resultsSource).toContain('className="supplier-order-total"');
     expect(resultsSource).toContain('fxConversionNote: "Preračunato po kursu korišćenom za obračun uvoza."');

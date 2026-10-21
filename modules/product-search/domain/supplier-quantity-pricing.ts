@@ -41,16 +41,19 @@ function positivePrice(value: number | null | undefined) {
 
 /**
  * Uses a published quantity tier only when that tier covers the requested
- * quantity. The advertised unit price stays available as information, but it
- * is not treated as the price of this quantity and cannot confirm procurement
- * cost. A matching tier is still only a product-page price, not a supplier
- * quotation for the order.
+ * quantity and the tier was read from a complete product page. A search
+ * snippet tier, or an advertised unit price, stays informational and cannot
+ * confirm procurement cost. A matching page tier is still not a supplier
+ * quotation for this order.
  */
 export function assessSupplierOfferQuantityPrice(
   result: SupplierOfferSearchResult,
   quantity: number | null | undefined,
 ): SupplierQuantityPriceAssessment {
-  const tier = selectSupplierOfferPriceTier(result.marketplaceDetails, quantity);
+  const details = result.marketplaceDetails;
+  const tier = details?.evidence === "PRODUCT_PAGE"
+    ? selectSupplierOfferPriceTier(details, quantity)
+    : null;
   const tierCurrency = tier?.currency ?? result.currency;
   const confirmed = Boolean(
     tier &&
