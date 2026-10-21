@@ -55,6 +55,7 @@ type SimpleSupplierSearchInitialOutcome = {
 type Copy = {
   title: string;
   description: string;
+  emptyDescription: string;
   searching: string;
   search: string;
   retry: string;
@@ -125,6 +126,7 @@ const copy: Record<Locale, Copy> = {
   sr: {
     title: "Najbolje ponude",
     description: "JAKOV360 je izdvojio ponude koje najviše odgovaraju proizvodu, količini i destinaciji.",
+    emptyDescription: "Pokrenite pretragu za ovaj proizvod, količinu i destinaciju.",
     searching: "Tražim i upoređujem ponude...",
     search: "Pronađi ponude",
     retry: "Pokušaj ponovo",
@@ -193,6 +195,7 @@ const copy: Record<Locale, Copy> = {
   de: {
     title: "Beste Angebote",
     description: "JAKOV360 zeigt die Angebote, die am besten zu Produkt, Menge und Zielland passen.",
+    emptyDescription: "Starten Sie die Suche für dieses Produkt, die Menge und das Zielland.",
     searching: "Angebote werden gesucht und verglichen...",
     search: "Angebote finden",
     retry: "Erneut versuchen",
@@ -261,6 +264,7 @@ const copy: Record<Locale, Copy> = {
   en: {
     title: "Best offers",
     description: "JAKOV360 highlights the offers that best fit the product, quantity, and destination.",
+    emptyDescription: "Start a search for this product, quantity, and destination.",
     searching: "Finding and comparing offers...",
     search: "Find offers",
     retry: "Try again",
@@ -805,13 +809,14 @@ export function SimpleSupplierOfferSearch({
     (!analysis || analysis.supplierRiskLevel === "UNKNOWN") &&
     !supplierPlatformProfileSummary(result.marketplaceDetails?.supplierProfile, locale)
   );
+  const awaitingSearch = results === null && !loading;
 
   return (
-    <section className="dashboard-card supplier-search">
+    <section className={`dashboard-card supplier-search${awaitingSearch ? " supplier-search-awaiting" : ""}`}>
       <header className="section-header">
         <div>
           <h2>{text.title}</h2>
-          <p>{text.description}</p>
+          <p>{visible.length > 0 ? text.description : text.emptyDescription}</p>
         </div>
       </header>
 
