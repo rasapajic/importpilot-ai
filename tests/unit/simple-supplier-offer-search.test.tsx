@@ -29,7 +29,7 @@ describe("ImportPilot 1.0 simple supplier results", () => {
     expect(resultsSource).toContain("Ovo nije ukupan broj kandidata nove pretrage.");
     expect(resultsSource).toContain('origin === "cache"');
     expect(resultsSource).toContain('whySelected: "Zašto je izdvojena"');
-    expect(resultsSource).toContain("selectionReasons(effectiveResult, analysis, quantity, text, locale)");
+    expect(resultsSource).toContain("selectionReasons(result, analysis, quantity, text)");
     expect(resultsSource).toContain('className="supplier-selection-summary"');
     expect(resultsSource).toContain('className="selection-reasons"');
     expect(resultCss).toContain(".supplier-selection-summary");
@@ -65,7 +65,13 @@ describe("ImportPilot 1.0 simple supplier results", () => {
     expect(resultsSource).toContain('supplierOrderTotal: (quantity) => `Za ${quantity} kom`');
     expect(resultsSource).toContain("formatSupplierPriceWithEuro(");
     expect(resultsSource).toContain("formatSupplierOrderTotalWithEuro(");
-    expect(resultsSource).toContain("effectiveResult.price * quantity");
+    expect(resultsSource).toContain("quantityPrice.quantityUnitPrice * quantity");
+    expect(resultsSource).toContain("quantityPrice.procurementCostConfirmed");
+    expect(resultsSource).toContain("informationalPrice:");
+    expect(resultsSource).toContain("assessSupplierOrderTerms");
+    expect(resultsSource).toContain('variantMixUnconfirmed: "Mešanje varijanti u jednoj narudžbini nije potvrđeno."');
+    expect(resultsSource).toContain("orderTerms.mixingStatus === \"UNCONFIRMED\"");
+    expect(resultsSource).not.toContain("effectiveResult.price * quantity");
     expect(resultsSource).toContain('className="supplier-order-total"');
     expect(resultsSource).toContain('fxConversionNote: "Preračunato po kursu korišćenom za obračun uvoza."');
     expect(resultsSource).toContain('className="supplier-fx-note"');
@@ -84,7 +90,7 @@ describe("ImportPilot 1.0 simple supplier results", () => {
   it("recalculates visible non-EUR preliminary landed cost with fresh ECB FX", () => {
     expect(resultsSource).toContain('fetch("/api/fx/latest"');
     expect(resultsSource).toContain("estimateTajaPreliminaryLandedCost");
-    expect(resultsSource).toContain('fxSnapshot: effectiveResult.currency === "EUR" ? null : fxSnapshot');
+    expect(resultsSource).toContain('fxSnapshot: quantityPrice.quantityCurrency === "EUR" ? null : fxSnapshot');
     expect(resultsSource).toContain("targetMarginPercent: 0");
     expect(resultsSource).toContain("const liveEstimate = quantity && targetCountry");
     expect(resultsSource).toContain("liveEstimate.basePerUnitEur");

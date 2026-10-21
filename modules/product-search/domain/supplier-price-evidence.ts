@@ -18,15 +18,15 @@ export function displayedSupplierPriceEvidence(result: {
 const labels: Record<Locale, Record<SupplierPriceEvidence, string>> = {
   sr: {
     MARKETPLACE_SEARCH: "Očitano iz rezultata pretrage. Nije posebno potvrđeno pregledom stranice ponude.",
-    PRODUCT_PAGE: "Potvrđeno pregledom kompletne stranice ponude.",
+    PRODUCT_PAGE: "Potvrđeno pregledom kompletne stranice ponude. Nije ponuda dobavljača za konkretnu narudžbinu.",
   },
   de: {
     MARKETPLACE_SEARCH: "Aus dem Suchergebnis gelesen. Nicht gesondert durch die vollständige Angebotsseite bestätigt.",
-    PRODUCT_PAGE: "Durch Prüfung der vollständigen Angebotsseite bestätigt.",
+    PRODUCT_PAGE: "Durch Prüfung der vollständigen Angebotsseite bestätigt. Kein Lieferantenangebot für diesen konkreten Auftrag.",
   },
   en: {
     MARKETPLACE_SEARCH: "Read from the search result. Not separately confirmed by reviewing the complete offer page.",
-    PRODUCT_PAGE: "Confirmed by reviewing the complete offer page.",
+    PRODUCT_PAGE: "Confirmed by reviewing the complete offer page. Not a supplier quotation for this specific order.",
   },
 };
 

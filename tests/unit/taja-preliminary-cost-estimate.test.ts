@@ -18,18 +18,52 @@ const freshFx: FxSnapshot = {
 function offer(
   overrides: Partial<SupplierOfferSearchResult> = {},
 ): SupplierOfferSearchResult {
-  return {
+  const price = overrides.price === undefined ? 5 : overrides.price;
+  const currency = overrides.currency === undefined ? "USD" : overrides.currency;
+  const minimumOrderQuantity = overrides.minimumOrderQuantity === undefined
+    ? 100
+    : overrides.minimumOrderQuantity;
+  const hasExplicitDetails = Object.prototype.hasOwnProperty.call(
+    overrides,
+    "marketplaceDetails",
+  );
+  const base: SupplierOfferSearchResult = {
     title: "65W USB-C phone charger",
     supplierName: "Shenzhen Charger Factory",
     supplierCountry: "CN",
-    price: 5,
-    currency: "USD",
-    minimumOrderQuantity: 100,
+    price,
+    currency,
+    minimumOrderQuantity,
     incoterm: "FOB",
     productUrl: "https://supplier.example/charger",
     imageUrl: null,
     source: "TAJA web",
     ...overrides,
+  };
+  if (
+    hasExplicitDetails ||
+    price === null ||
+    currency === null ||
+    !Number.isInteger(minimumOrderQuantity) ||
+    (minimumOrderQuantity ?? 0) <= 0
+  ) {
+    return base;
+  }
+  return {
+    ...base,
+    marketplaceDetails: {
+      adapter: "confirmed-flat-tier",
+      evidence: "PRODUCT_PAGE",
+      priceTiers: [{
+        price,
+        currency,
+        minQuantity: minimumOrderQuantity!,
+        maxQuantity: null,
+      }],
+      attributes: [],
+      variants: [],
+      packaging: null,
+    },
   };
 }
 
@@ -104,6 +138,20 @@ describe("TAJA preliminary landed-cost estimate", () => {
       targetMarginPercent: 0,
       fxSnapshot: null,
     })).not.toBeNull();
+  });
+
+  it("does not turn an advertised price without a quantity tier into procurement cost", () => {
+    expect(estimateTajaPreliminaryLandedCost({
+      result: offer({
+        price: 0.7,
+        currency: "USD",
+        minimumOrderQuantity: 12,
+        marketplaceDetails: null,
+      }),
+      quantity: 500,
+      targetCountry: "RS",
+      targetMarginPercent: 30,
+    })).toBeNull();
   });
 
   it("does not calculate a 100-unit landed cost from a price whose MOQ is 1000", () => {

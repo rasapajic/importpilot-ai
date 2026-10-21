@@ -24,6 +24,10 @@ import type {
 import type { SupplierOfferMarketplaceSupplierProfile } from "@/modules/product-search/domain/marketplace-product-details";
 import { estimateTajaPreliminaryLandedCost } from "@/modules/product-search/domain/taja-preliminary-cost-estimate";
 import {
+  assessSupplierOfferQuantityPrice,
+  assessSupplierOrderTerms,
+} from "@/modules/product-search/domain/supplier-quantity-pricing";
+import {
   classifySupplierSearchOutcome,
   type SupplierSearchDisposition,
   type SupplierSearchFailureCode,
@@ -100,8 +104,11 @@ type Copy = {
   reasonProductMatch: string;
   reasonProductLikely: string;
   reasonMoqFits: string;
+  variantMixUnconfirmed: string;
   reasonPriceKnown: string;
   reasonPriceOnRequest: string;
+  informationalPrice: string;
+  pageTierNote: string;
   reasonDataConfidence: string;
   unknown: string;
   priceOnRequest: string;
@@ -167,8 +174,11 @@ const copy: Record<Locale, Copy> = {
     reasonProductMatch: "Proizvod odgovara traženom tipu ili specifikaciji.",
     reasonProductLikely: "Ponuda je relevantna za traženi proizvod, ali deo specifikacije još treba potvrditi.",
     reasonMoqFits: "MOQ odgovara traženoj količini.",
+    variantMixUnconfirmed: "Mešanje varijanti u jednoj narudžbini nije potvrđeno.",
     reasonPriceKnown: "Cena dobavljača je dostupna za poređenje.",
     reasonPriceOnRequest: "Cena nije uspešno preuzeta; proverite izvornu ponudu.",
+    informationalPrice: "Oglašena cena. Nije potvrđena za traženu količinu i nije nabavni trošak.",
+    pageTierNote: "Cena objavljenog količinskog razreda na stranici proizvoda. Nije ponuda dobavljača za ovu narudžbinu.",
     reasonDataConfidence: "Dostupni podaci imaju dobru pouzdanost.",
     unknown: "nije poznato",
     priceOnRequest: "Cena nije preuzeta",
@@ -232,8 +242,11 @@ const copy: Record<Locale, Copy> = {
     reasonProductMatch: "Das Produkt entspricht dem gesuchten Typ oder der Spezifikation.",
     reasonProductLikely: "Das Angebot ist relevant, ein Teil der Spezifikation muss jedoch noch bestätigt werden.",
     reasonMoqFits: "Das MOQ passt zur gewünschten Menge.",
+    variantMixUnconfirmed: "Das Mischen von Varianten in einer Bestellung ist nicht bestätigt.",
     reasonPriceKnown: "Der Lieferantenpreis ist für den Vergleich verfügbar.",
     reasonPriceOnRequest: "Der Preis wurde nicht erfolgreich abgerufen; prüfen Sie das Quellangebot.",
+    informationalPrice: "Angebotspreis. Für die gewünschte Menge nicht bestätigt und kein bestätigter Einkaufspreis.",
+    pageTierNote: "Preis der auf der Produktseite veröffentlichten Mengenstaffel. Kein Lieferantenangebot für diesen Auftrag.",
     reasonDataConfidence: "Die verfügbaren Daten haben eine gute Zuverlässigkeit.",
     unknown: "unbekannt",
     priceOnRequest: "Preis nicht abgerufen",
@@ -297,8 +310,11 @@ const copy: Record<Locale, Copy> = {
     reasonProductMatch: "The product matches the requested type or specification.",
     reasonProductLikely: "The offer is relevant, but part of the specification still needs confirmation.",
     reasonMoqFits: "The MOQ fits the requested quantity.",
+    variantMixUnconfirmed: "Mixing variants in one order is not confirmed.",
     reasonPriceKnown: "A supplier price is available for comparison.",
     reasonPriceOnRequest: "The price was not retrieved successfully; check the source offer.",
+    informationalPrice: "Advertised price. Not confirmed for the requested quantity and not a confirmed procurement cost.",
+    pageTierNote: "Price from the quantity tier published on the product page. Not a supplier quotation for this order.",
     reasonDataConfidence: "The available data has good confidence.",
     unknown: "unknown",
     priceOnRequest: "Price not retrieved",
@@ -515,7 +531,6 @@ function selectionReasons(
   analysis: TajaCandidateAnalysisWithProductForm | undefined,
   quantity: number | null,
   text: Copy,
-  locale: Locale,
 ) {
   const reasons: string[] = [];
 
@@ -536,11 +551,9 @@ function selectionReasons(
     reasons.push(text.reasonMoqFits);
   }
 
-  const priceLabel = supplierPriceEvidenceLabel(
-    displayedSupplierPriceEvidence(result),
-    locale,
-  );
-  if (priceLabel) reasons.push(priceLabel);
+  const quantityPrice = assessSupplierOfferQuantityPrice(result, quantity);
+  if (quantityPrice.procurementCostConfirmed) reasons.push(text.pageTierNote);
+  else if (quantityPrice.basis === "INFORMATIONAL") reasons.push(text.informationalPrice);
   else reasons.push(text.reasonPriceOnRequest);
 
   if (analysis && analysis.confidenceScore >= 70) {
@@ -875,31 +888,46 @@ export function SimpleSupplierOfferSearch({
           <div className="search-result-list">
           {visible.map(({ result, analysis }, index) => {
             const decision = simpleDecision(analysis);
-            const effectiveResult = supplierOfferForQuantity(result, quantity);
+            const quantityPrice = assessSupplierOfferQuantityPrice(result, quantity);
+            const effectiveResult = quantityPrice.procurementCostConfirmed
+              ? supplierOfferForQuantity(result, quantity)
+              : { ...result, price: null, currency: null };
             const priceSnapshots = quantityPriceSnapshots(result, quantity);
             const priceTierSnapshots = supplierPriceTierSnapshots(result);
             const variantFacts = supplierOfferVariantFacts(result);
+            const orderTerms = assessSupplierOrderTerms({
+              requestedQuantity: quantity ?? 0,
+              variantMixRequested: variantFacts.groups.length > 0,
+              mixingExplicitlyConfirmed: null,
+              conditions: [],
+            });
             const supplierPlatformSummary = supplierPlatformProfileSummary(
               result.marketplaceDetails?.supplierProfile,
               locale,
             );
-            const liveEstimate = quantity && targetCountry
+            const liveEstimate = quantity && targetCountry && quantityPrice.procurementCostConfirmed
               ? estimateTajaPreliminaryLandedCost({
-                  result: effectiveResult,
+                  result,
                   quantity,
                   targetCountry,
                   targetMarginPercent: 0,
-                  fxSnapshot: effectiveResult.currency === "EUR" ? null : fxSnapshot,
+                  fxSnapshot: quantityPrice.quantityCurrency === "EUR" ? null : fxSnapshot,
                 })
               : null;
-            const deliveryEstimate = liveEstimate ?? analysis?.preliminaryCostEstimate ?? null;
+            const deliveryEstimate = quantityPrice.procurementCostConfirmed
+              ? (liveEstimate ?? analysis?.preliminaryCostEstimate ?? null)
+              : null;
             const selecting = selectingUrl === result.productUrl;
             const selected = selectedUrls.includes(result.productUrl);
-            const reasons = selectionReasons(effectiveResult, analysis, quantity, text, locale);
-            const priceEvidenceLabel = supplierPriceEvidenceLabel(
-              displayedSupplierPriceEvidence(effectiveResult),
-              locale,
-            );
+            const reasons = selectionReasons(result, analysis, quantity, text);
+            const priceEvidenceLabel = quantityPrice.procurementCostConfirmed
+              ? text.pageTierNote
+              : quantityPrice.basis === "INFORMATIONAL"
+                ? text.informationalPrice
+                : supplierPriceEvidenceLabel(
+                    displayedSupplierPriceEvidence(result),
+                    locale,
+                  );
             return (
               <article className={`search-result-card${index === 0 ? " search-result-card-best" : ""}`} key={`${result.source}-${result.productUrl}`}>
                 <SearchResultImage src={result.imageUrl} title={t(result.title)} />
@@ -922,34 +950,53 @@ export function SimpleSupplierOfferSearch({
                     <span>
                       {text.supplierPrice}
                       <strong>
-                        {effectiveResult.price !== null && effectiveResult.currency
+                        {quantityPrice.procurementCostConfirmed &&
+                        quantityPrice.quantityUnitPrice !== null &&
+                        quantityPrice.quantityCurrency
                           ? `${formatSupplierPriceWithEuro(
-                              effectiveResult.price,
-                              effectiveResult.currency,
+                              quantityPrice.quantityUnitPrice,
+                              quantityPrice.quantityCurrency,
                               locale,
                               fxSnapshot,
                             )} / ${text.pieces}`
-                          : text.priceOnRequest}
+                          : quantityPrice.basis === "INFORMATIONAL" &&
+                            quantityPrice.advertisedPrice !== null &&
+                            quantityPrice.advertisedCurrency
+                            ? `${formatSupplierPriceWithEuro(
+                                quantityPrice.advertisedPrice,
+                                quantityPrice.advertisedCurrency,
+                                locale,
+                                fxSnapshot,
+                              )} / ${text.pieces}`
+                            : text.priceOnRequest}
                       </strong>
                       {priceEvidenceLabel && (
                         <small className="supplier-fx-note">{priceEvidenceLabel}</small>
                       )}
-                      {effectiveResult.price !== null && effectiveResult.currency && quantity && (
+                      {quantityPrice.procurementCostConfirmed &&
+                        quantityPrice.quantityUnitPrice !== null &&
+                        quantityPrice.quantityCurrency &&
+                        quantity && (
                         <small className="supplier-order-total">
                           {text.supplierOrderTotal(formatQuantity(quantity, locale))}:{" "}
                           {formatSupplierOrderTotalWithEuro(
-                            effectiveResult.price * quantity,
-                            effectiveResult.currency,
+                            quantityPrice.quantityUnitPrice * quantity,
+                            quantityPrice.quantityCurrency,
                             locale,
                             fxSnapshot,
                           )}
                         </small>
                       )}
-                      {effectiveResult.price !== null &&
-                        effectiveResult.currency &&
-                        effectiveResult.currency !== "EUR" &&
+                      {quantityPrice.procurementCostConfirmed &&
+                        quantityPrice.quantityUnitPrice !== null &&
+                        quantityPrice.quantityCurrency &&
+                        quantityPrice.quantityCurrency !== "EUR" &&
                         fxSnapshot &&
-                        convertToEur(effectiveResult.price, effectiveResult.currency, fxSnapshot) !== null && (
+                        convertToEur(
+                          quantityPrice.quantityUnitPrice,
+                          quantityPrice.quantityCurrency,
+                          fxSnapshot,
+                        ) !== null && (
                           <small className="supplier-fx-note">{text.fxConversionNote}</small>
                         )}
                     </span>
@@ -977,6 +1024,10 @@ export function SimpleSupplierOfferSearch({
                       </span>
                     )}
                   </div>
+
+                  {orderTerms.mixingStatus === "UNCONFIRMED" && (
+                    <p className="muted-text">{text.variantMixUnconfirmed}</p>
+                  )}
 
                   {(variantFacts.groups.length > 0 || variantFacts.types.length > 0) && (
                     <p className="muted-text">
