@@ -21,7 +21,15 @@ export const SUPPLIER_SEARCH_MAX_RESPONSE_BYTES = 1_000_000;
 export const SUPPLIER_SEARCH_CACHE_TTL_MS = 10 * 60 * 1_000;
 
 export class SupplierSearchProviderError extends Error {}
-export class SupplierSearchProviderHttpError extends SupplierSearchProviderError {}
+export class SupplierSearchProviderHttpError extends SupplierSearchProviderError {
+  readonly status: number;
+
+  constructor(status: number) {
+    super(`Provider returned ${status}.`);
+    this.name = "SupplierSearchProviderHttpError";
+    this.status = status;
+  }
+}
 export class SupplierSearchProviderTimeoutError extends SupplierSearchProviderError {}
 export class SupplierSearchProviderResponseTooLargeError extends SupplierSearchProviderError {}
 export class SupplierSearchProviderInvalidResponseError extends SupplierSearchProviderError {}
@@ -196,7 +204,7 @@ export function createHttpSupplierOfferSearchProvider({
               await wait(retryDelayMs * attempt);
               continue;
             }
-            throw new SupplierSearchProviderHttpError(`Provider returned ${response.status}.`);
+            throw new SupplierSearchProviderHttpError(response.status);
           }
 
           const contentLength = Number(response.headers.get("content-length") ?? 0);
