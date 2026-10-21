@@ -22,6 +22,8 @@ describe("workflow navigation priority", () => {
     expect(workflowStepSource).toContain("if (explicitHash !== currentHash) return");
     expect(workflowStepSource).toContain("stepRef.current.open = true");
     expect(workflowStepSource).toContain("scrollIntoView({ block: \"start\" })");
+    expect(workflowStepSource).toContain("scrollIntoView({ block: \"nearest\" })");
+    expect(workflowStepSource).toContain("bounds.bottom > window.innerHeight");
   });
 
   it("does not let another active step steal an explicit hash target", () => {

@@ -38,6 +38,11 @@ describe("ImportPilot 1.0 simple supplier results", () => {
 
   it("keeps the main result card focused on the buying decision", () => {
     expect(resultsSource).toContain("Najbolje ponude");
+    expect(resultsSource).toContain('emptyDescription: "Pokrenite pretragu za ovaj proizvod, količinu i destinaciju."');
+    expect(resultsSource).toContain('emptyDescription: "Starten Sie die Suche für dieses Produkt, die Menge und das Zielland."');
+    expect(resultsSource).toContain('emptyDescription: "Start a search for this product, quantity, and destination."');
+    expect(resultsSource).toContain("visible.length > 0 ? text.description : text.emptyDescription");
+    expect(resultsSource).toContain("supplier-search-awaiting");
     expect(resultsSource).toContain("Cena dobavljača");
     expect(resultsSource).toContain("Ukupno sa cenom uvoza");
     expect(resultsSource).toContain("Rizik dobavljača");

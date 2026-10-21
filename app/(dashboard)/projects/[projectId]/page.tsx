@@ -143,7 +143,7 @@ export default async function ProjectPage({
   const legacyUrlImport = resolvedSearchParams.importUrl === "1";
 
   return (
-    <main className="dashboard-shell">
+    <main className="dashboard-shell project-page">
       <nav aria-label={t("Back to projects")}>
         <ProjectBackLink label={t("Back to projects")} />
       </nav>
