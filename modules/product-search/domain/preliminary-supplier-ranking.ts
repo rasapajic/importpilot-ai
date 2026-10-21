@@ -6,6 +6,7 @@ import {
   tajaProductFormRank,
 } from "./taja-product-form";
 import { evaluateTajaRequirementMatch } from "./taja-requirement-match";
+import { assessSupplierOfferQuantityPrice } from "./supplier-quantity-pricing";
 
 type PreliminaryRankingContext = {
   quantity: number;
@@ -27,22 +28,33 @@ function comparableResults(
   );
 }
 
+function confirmedUnitPrice(
+  result: SupplierOfferSearchResult,
+  quantity: number,
+) {
+  const pricing = assessSupplierOfferQuantityPrice(result, quantity);
+  return pricing.procurementCostConfirmed ? pricing.quantityUnitPrice : null;
+}
+
 function priceCompetitiveness(
   result: SupplierOfferSearchResult,
   results: SupplierOfferSearchResult[],
+  quantity: number,
   productQuery?: string,
 ) {
-  if (result.price === null || result.currency === null) return 0;
+  const price = confirmedUnitPrice(result, quantity);
+  if (price === null || result.currency === null) return 0;
 
   const comparablePrices = comparableResults(result, results, productQuery)
-    .filter((candidate) =>
-      candidate.price !== null && candidate.currency === result.currency,
-    )
-    .map((candidate) => candidate.price as number)
+    .flatMap((candidate) => {
+      if (candidate.currency !== result.currency) return [];
+      const candidatePrice = confirmedUnitPrice(candidate, quantity);
+      return candidatePrice === null ? [] : [candidatePrice];
+    })
     .sort((left, right) => left - right);
 
   if (comparablePrices.length <= 1) return 10;
-  const position = comparablePrices.findIndex((price) => price >= result.price!);
+  const position = comparablePrices.findIndex((candidatePrice) => candidatePrice >= price);
   const normalizedPosition = position < 0 ? comparablePrices.length - 1 : position;
   return Math.round(20 * (1 - normalizedPosition / (comparablePrices.length - 1)));
 }
@@ -52,9 +64,14 @@ function preliminaryScore(
   results: SupplierOfferSearchResult[],
   context: PreliminaryRankingContext,
 ) {
-  let score = priceCompetitiveness(result, results, context.productQuery);
+  let score = priceCompetitiveness(
+    result,
+    results,
+    context.quantity,
+    context.productQuery,
+  );
 
-  if (result.price !== null && result.currency !== null) score += 20;
+  if (confirmedUnitPrice(result, context.quantity) !== null) score += 20;
 
   if (result.minimumOrderQuantity !== null) {
     // A known MOQ above the requested quantity is a hard commercial mismatch,

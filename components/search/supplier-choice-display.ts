@@ -1,8 +1,8 @@
-import {
-  selectSupplierOfferPriceTier,
-} from "@/modules/product-search/domain/marketplace-product-details";
 import type { SupplierOfferSearchResult } from "@/modules/product-search/domain/search";
-import { applySupplierOfferQuantityPrice } from "@/modules/product-search/domain/supplier-quantity-pricing";
+import {
+  applySupplierOfferQuantityPrice,
+  assessSupplierOfferQuantityPrice,
+} from "@/modules/product-search/domain/supplier-quantity-pricing";
 
 export type QuantityPriceSnapshot = {
   quantity: number;
@@ -39,26 +39,13 @@ export function quantityPriceSnapshots(
 ) {
   const quantities = uniquePositiveQuantities([requestedQuantity, 500, 1_000]);
   return quantities.map((quantity): QuantityPriceSnapshot => {
-    const tier = selectSupplierOfferPriceTier(result.marketplaceDetails, quantity);
-    const tierCurrency = tier?.currency ?? result.currency;
-    if (tier && tierCurrency) {
+    const pricing = assessSupplierOfferQuantityPrice(result, quantity);
+    if (pricing.procurementCostConfirmed) {
       return {
         quantity,
-        price: tier.price,
-        currency: tierCurrency,
+        price: pricing.quantityUnitPrice,
+        currency: pricing.quantityCurrency,
         confirmedByTier: true,
-      };
-    }
-    if (
-      quantity === requestedQuantity &&
-      result.price !== null &&
-      result.currency !== null
-    ) {
-      return {
-        quantity,
-        price: result.price,
-        currency: result.currency,
-        confirmedByTier: false,
       };
     }
     return {
