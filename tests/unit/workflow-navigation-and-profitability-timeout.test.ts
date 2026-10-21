@@ -30,6 +30,12 @@ describe("workflow navigation priority", () => {
     expect(workflowStepSource.indexOf("if (explicitHash && currentHash)"))
       .toBeLessThan(workflowStepSource.indexOf('status === "ACTIVE"'));
   });
+
+  it("keeps a forced workflow step open without taking over another hash target", () => {
+    expect(workflowStepSource).toContain("if (forceOpen) element.open = true");
+    expect(workflowStepSource.indexOf("if (explicitHash !== currentHash) return"))
+      .toBeLessThan(workflowStepSource.indexOf("if (forceOpen) element.open = true"));
+  });
 });
 
 describe("profitability check timeout", () => {
@@ -49,5 +55,13 @@ describe("profitability check timeout", () => {
     expect(profitabilityControlSource).toContain("setPending(false)");
     expect(profitabilityControlSource).toContain("pendingRef.current = false");
     expect(profitabilityControlSource).toContain("aria-busy={pending}");
+  });
+
+  it("opens the decision step from the same profitability response", () => {
+    expect(profitabilityControlSource).toContain('window.history.replaceState(window.history.state, "", decisionUrl)');
+    expect(profitabilityControlSource).toContain('document.getElementById("workflow-step-decision")');
+    expect(profitabilityControlSource).toContain("step.open = true");
+    expect(profitabilityControlSource).toContain("await router.refresh()");
+    expect(profitabilityControlSource.match(/fetch\(actionUrl/g)).toHaveLength(1);
   });
 });

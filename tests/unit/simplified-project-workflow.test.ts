@@ -68,6 +68,9 @@ describe("simple client workflow", () => {
     expect(pageSource).toContain('hasFinalRecommendation\n      ? "COMPLETED"\n      : "ACTIVE"');
     expect(pageSource).toContain("const decisionStepSummary = getDecisionStepSummary(visibleDecisionStatus, locale)");
     expect(pageSource).toContain("summary={decisionStepSummary}");
+    expect(pageSource).toContain("getStatusLabel(project.status, locale)");
+    expect(pageSource).toContain("`${getStatusLabel(project.status, locale)} · ${decisionStepTitle}`");
+    expect(pageSource).toContain("forceOpen={Boolean(selectedCalculationOfferId || focusedOfferId || hasFinalRecommendation)}");
   });
 
   it("keeps 2.0 workspace tools outside the frozen 1.0 flow", () => {

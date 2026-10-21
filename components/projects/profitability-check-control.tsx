@@ -86,6 +86,13 @@ export function ProfitabilityCheckControl({
 
   useEffect(() => () => controllerRef.current?.abort(), []);
 
+  function revealDecisionStep() {
+    const step = document.getElementById("workflow-step-decision");
+    if (!(step instanceof HTMLDetailsElement)) return;
+    step.open = true;
+    step.scrollIntoView({ block: "start" });
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (disabled || pendingRef.current) return;
@@ -125,8 +132,10 @@ export function ProfitabilityCheckControl({
         throw new Error(localizedError(code, locale));
       }
 
-      window.history.replaceState(null, "", decisionUrl);
-      router.refresh();
+      window.history.replaceState(window.history.state, "", decisionUrl);
+      revealDecisionStep();
+      await router.refresh();
+      revealDecisionStep();
     } catch (requestError) {
       const message = controller.signal.aborted
         ? localizedError("CHECK_TIMEOUT", locale)
