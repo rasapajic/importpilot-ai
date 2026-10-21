@@ -149,7 +149,11 @@ export default async function ProjectPage({
       </nav>
       <header className="dashboard-header">
         <div>
-          <p className="eyebrow">{getStatusLabel(project.status, locale)}</p>
+          <p className="eyebrow">
+            {visibleDecisionStatus
+              ? `${getStatusLabel(project.status, locale)} · ${decisionStepTitle}`
+              : getStatusLabel(project.status, locale)}
+          </p>
           <h1>{projectDisplayName}</h1>
         </div>
       </header>
@@ -213,7 +217,7 @@ export default async function ProjectPage({
         </ProjectWorkflowStep>
 
         <ProjectWorkflowStep
-          forceOpen={Boolean(selectedCalculationOfferId || focusedOfferId)}
+          forceOpen={Boolean(selectedCalculationOfferId || focusedOfferId || hasFinalRecommendation)}
           id="workflow-step-decision"
           number={3}
           title={decisionStepTitle}

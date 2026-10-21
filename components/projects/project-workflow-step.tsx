@@ -47,6 +47,7 @@ export function ProjectWorkflowStep({
     if (forceOpen || status === "ACTIVE") {
       const element = stepRef.current;
       if (!element) return;
+      if (forceOpen) element.open = true;
       const bounds = element.getBoundingClientRect();
       const outsideViewport = bounds.top < 0 || bounds.bottom > window.innerHeight;
       if (outsideViewport) element.scrollIntoView({ block: "nearest" });
