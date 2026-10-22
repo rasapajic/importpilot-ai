@@ -73,11 +73,14 @@ function preliminaryScore(
 
   if (confirmedUnitPrice(result, context.quantity) !== null) score += 20;
 
-  if (result.minimumOrderQuantity !== null) {
-    // A known MOQ above the requested quantity is a hard commercial mismatch,
-    // not a small data-quality disadvantage. It must not be hidden by a low
-    // displayed unit price or otherwise complete marketplace metadata.
-    score += result.minimumOrderQuantity <= context.quantity ? 25 : -100;
+  if (
+    result.minimumOrderQuantity !== null &&
+    result.minimumOrderQuantity > context.quantity
+  ) {
+    // A published minimum already above the requested quantity is a hard
+    // commercial mismatch. A minimum at or below the quantity is not evidence
+    // that stock, production, or variant terms accept the order.
+    score -= 100;
   }
 
   if (result.incoterm !== null) score += 15;
@@ -103,7 +106,9 @@ function preliminaryScore(
  * supplier pages. When the user requests a complete system, compatible systems
  * are ordered before unclear offers, while pumps, nozzles and other components
  * are kept out of the finalist enrichment budget. Prices are compared only
- * inside compatible product-form groups. A known MOQ conflict remains blocking.
+ * inside compatible product-form groups. A listed minimum above the requested
+ * quantity remains blocking. A listed minimum that is merely below the
+ * quantity does not raise the score.
  * Final landed-cost, supplier-risk and compliance verification happen later.
  */
 export function rankPreliminarySupplierOffers(

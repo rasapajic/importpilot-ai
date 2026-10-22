@@ -24,18 +24,15 @@ import type {
 import type { SupplierOfferMarketplaceSupplierProfile } from "@/modules/product-search/domain/marketplace-product-details";
 import { estimateTajaPreliminaryLandedCost } from "@/modules/product-search/domain/taja-preliminary-cost-estimate";
 import {
-  assessSupplierOfferQuantityPrice,
-  assessSupplierOrderTerms,
+  presentSupplierOfferPrice,
+  presentSupplierOrderTerms,
+  type SupplierOfferPricePresentation,
 } from "@/modules/product-search/domain/supplier-quantity-pricing";
 import {
   classifySupplierSearchOutcome,
   type SupplierSearchDisposition,
   type SupplierSearchFailureCode,
 } from "@/modules/product-search/domain/search-outcome";
-import {
-  displayedSupplierPriceEvidence,
-  supplierPriceEvidenceLabel,
-} from "@/modules/product-search/domain/supplier-price-evidence";
 import type { TajaCandidateAnalysisWithProductForm } from "@/modules/product-search/domain/taja-product-form-policy";
 
 type ResultOrigin = "live" | "cache";
@@ -76,7 +73,6 @@ type Copy = {
   supplierPlatformVerification: string;
   supplierBusinessHistory: string;
   supplierPlatformSignalsAvailable: string;
-  moq: string;
   incoterm: string;
   details: string;
   confidence: string;
@@ -104,12 +100,22 @@ type Copy = {
   whySelected: string;
   reasonProductMatch: string;
   reasonProductLikely: string;
-  reasonMoqFits: string;
   variantMixUnconfirmed: string;
+  mixingConfirmed: string;
+  orderTermsUnconfirmed: string;
+  stockMoq: (quantity: string) => string;
+  productionMoq: (quantity: string) => string;
+  variantMoq: (quantity: string) => string;
   reasonPriceKnown: string;
   reasonPriceOnRequest: string;
   informationalPrice: string;
   pageTierNote: string;
+  publishedTierPrice: string;
+  writtenQuotePrice: string;
+  quantityPriceUnconfirmed: (quantity: string | null) => string;
+  advertisedPriceLabel: string;
+  advertisedNotForQuantity: string;
+  advertisedAppliesFrom: (quantity: string) => string;
   reasonDataConfidence: string;
   unknown: string;
   priceOnRequest: string;
@@ -147,7 +153,6 @@ const copy: Record<Locale, Copy> = {
     supplierPlatformVerification: "verifikacija na platformi",
     supplierBusinessHistory: "istorija poslovanja",
     supplierPlatformSignalsAvailable: "dostupni su pokazatelji sa platforme",
-    moq: "Minimalna količina (MOQ)",
     incoterm: "Uslov isporuke (Incoterm)",
     details: "Detalji analize",
     confidence: "Pouzdanost podataka",
@@ -175,12 +180,24 @@ const copy: Record<Locale, Copy> = {
     whySelected: "Zašto je izdvojena",
     reasonProductMatch: "Proizvod odgovara traženom tipu ili specifikaciji.",
     reasonProductLikely: "Ponuda je relevantna za traženi proizvod, ali deo specifikacije još treba potvrditi.",
-    reasonMoqFits: "MOQ odgovara traženoj količini.",
     variantMixUnconfirmed: "Mešanje varijanti u jednoj narudžbini nije potvrđeno.",
+    mixingConfirmed: "Mešanje varijanti u jednoj narudžbini je izričito potvrđeno.",
+    orderTermsUnconfirmed: "Uslovi za traženu količinu nisu potvrđeni.",
+    stockMoq: (quantity) => `MOQ za robu sa lagera: ${quantity}`,
+    productionMoq: (quantity) => `MOQ za proizvodnju: ${quantity}`,
+    variantMoq: (quantity) => `MOQ po modelu, boji ili varijanti: ${quantity}`,
     reasonPriceKnown: "Cena dobavljača je dostupna za poređenje.",
     reasonPriceOnRequest: "Cena nije uspešno preuzeta; proverite izvornu ponudu.",
     informationalPrice: "Oglašena cena. Nije potvrđena za traženu količinu i nije nabavni trošak.",
     pageTierNote: "Cena objavljenog količinskog razreda na stranici proizvoda. Nije ponuda dobavljača za ovu narudžbinu.",
+    publishedTierPrice: "Cena objavljenog razreda",
+    writtenQuotePrice: "Pisana ponuda dobavljača",
+    quantityPriceUnconfirmed: (quantity) => quantity
+      ? `Cena za ${quantity} komada nije potvrđena`
+      : "Cena za traženu količinu nije potvrđena",
+    advertisedPriceLabel: "Reklamirana cena",
+    advertisedNotForQuantity: "Nije potvrđena za traženu količinu.",
+    advertisedAppliesFrom: (quantity) => `Važi tek od ${quantity} komada.`,
     reasonDataConfidence: "Dostupni podaci imaju dobru pouzdanost.",
     unknown: "nije poznato",
     priceOnRequest: "Cena nije preuzeta",
@@ -216,7 +233,6 @@ const copy: Record<Locale, Copy> = {
     supplierPlatformVerification: "Plattform-Verifizierung",
     supplierBusinessHistory: "Geschäftshistorie",
     supplierPlatformSignalsAvailable: "Plattformdaten sind verfügbar",
-    moq: "MOQ",
     incoterm: "Incoterm",
     details: "Analysedetails",
     confidence: "Datenzuverlässigkeit",
@@ -244,12 +260,24 @@ const copy: Record<Locale, Copy> = {
     whySelected: "Warum ausgewählt",
     reasonProductMatch: "Das Produkt entspricht dem gesuchten Typ oder der Spezifikation.",
     reasonProductLikely: "Das Angebot ist relevant, ein Teil der Spezifikation muss jedoch noch bestätigt werden.",
-    reasonMoqFits: "Das MOQ passt zur gewünschten Menge.",
     variantMixUnconfirmed: "Das Mischen von Varianten in einer Bestellung ist nicht bestätigt.",
+    mixingConfirmed: "Das Mischen von Varianten in einer Bestellung ist ausdrücklich bestätigt.",
+    orderTermsUnconfirmed: "Die Bedingungen für die gewünschte Menge sind nicht bestätigt.",
+    stockMoq: (quantity) => `MOQ für Lagerware: ${quantity}`,
+    productionMoq: (quantity) => `MOQ für die Produktion: ${quantity}`,
+    variantMoq: (quantity) => `MOQ je Modell, Farbe oder Variante: ${quantity}`,
     reasonPriceKnown: "Der Lieferantenpreis ist für den Vergleich verfügbar.",
     reasonPriceOnRequest: "Der Preis wurde nicht erfolgreich abgerufen; prüfen Sie das Quellangebot.",
     informationalPrice: "Angebotspreis. Für die gewünschte Menge nicht bestätigt und kein bestätigter Einkaufspreis.",
     pageTierNote: "Preis der auf der Produktseite veröffentlichten Mengenstaffel. Kein Lieferantenangebot für diesen Auftrag.",
+    publishedTierPrice: "Preis der veröffentlichten Staffel",
+    writtenQuotePrice: "Schriftliches Lieferantenangebot",
+    quantityPriceUnconfirmed: (quantity) => quantity
+      ? `Preis für ${quantity} Stück ist nicht bestätigt`
+      : "Preis für die gewünschte Menge ist nicht bestätigt",
+    advertisedPriceLabel: "Beworbener Preis",
+    advertisedNotForQuantity: "Für die gewünschte Menge nicht bestätigt.",
+    advertisedAppliesFrom: (quantity) => `Gilt erst ab ${quantity} Stück.`,
     reasonDataConfidence: "Die verfügbaren Daten haben eine gute Zuverlässigkeit.",
     unknown: "unbekannt",
     priceOnRequest: "Preis nicht abgerufen",
@@ -285,7 +313,6 @@ const copy: Record<Locale, Copy> = {
     supplierPlatformVerification: "platform verification",
     supplierBusinessHistory: "business history",
     supplierPlatformSignalsAvailable: "platform indicators are available",
-    moq: "MOQ",
     incoterm: "Incoterm",
     details: "Analysis details",
     confidence: "Data confidence",
@@ -313,12 +340,24 @@ const copy: Record<Locale, Copy> = {
     whySelected: "Why it was selected",
     reasonProductMatch: "The product matches the requested type or specification.",
     reasonProductLikely: "The offer is relevant, but part of the specification still needs confirmation.",
-    reasonMoqFits: "The MOQ fits the requested quantity.",
     variantMixUnconfirmed: "Mixing variants in one order is not confirmed.",
+    mixingConfirmed: "Mixing variants in one order is explicitly confirmed.",
+    orderTermsUnconfirmed: "The terms for the requested quantity are not confirmed.",
+    stockMoq: (quantity) => `Stock MOQ: ${quantity}`,
+    productionMoq: (quantity) => `Production MOQ: ${quantity}`,
+    variantMoq: (quantity) => `MOQ per model, color, or variant: ${quantity}`,
     reasonPriceKnown: "A supplier price is available for comparison.",
     reasonPriceOnRequest: "The price was not retrieved successfully; check the source offer.",
     informationalPrice: "Advertised price. Not confirmed for the requested quantity and not a confirmed procurement cost.",
     pageTierNote: "Price from the quantity tier published on the product page. Not a supplier quotation for this order.",
+    publishedTierPrice: "Published tier price",
+    writtenQuotePrice: "Written supplier quotation",
+    quantityPriceUnconfirmed: (quantity) => quantity
+      ? `Price for ${quantity} pieces is not confirmed`
+      : "Price for the requested quantity is not confirmed",
+    advertisedPriceLabel: "Advertised price",
+    advertisedNotForQuantity: "Not confirmed for the requested quantity.",
+    advertisedAppliesFrom: (quantity) => `Applies only from ${quantity} pieces.`,
     reasonDataConfidence: "The available data has good confidence.",
     unknown: "unknown",
     priceOnRequest: "Price not retrieved",
@@ -422,6 +461,25 @@ export function formatSupplierOrderTotalWithEuro(
 
 function formatQuantity(value: number, locale: Locale) {
   return new Intl.NumberFormat(numberLocale(locale), { maximumFractionDigits: 0 }).format(value);
+}
+
+function advertisedPriceNote(
+  presentation: SupplierOfferPricePresentation,
+  text: Copy,
+  locale: Locale,
+  fxSnapshot: FxSnapshot | null,
+) {
+  if (presentation.advertisedPrice === null || presentation.advertisedCurrency === null) return null;
+  const amount = formatSupplierPriceWithEuro(
+    presentation.advertisedPrice,
+    presentation.advertisedCurrency,
+    locale,
+    fxSnapshot,
+  );
+  const threshold = presentation.advertisedAppliesFromQuantity === null
+    ? text.advertisedNotForQuantity
+    : text.advertisedAppliesFrom(formatQuantity(presentation.advertisedAppliesFromQuantity, locale));
+  return `${text.advertisedPriceLabel}: ${amount}. ${threshold}`;
 }
 
 export function formatDeliveryTimeDays(value: string | number, locale: Locale) {
@@ -547,17 +605,10 @@ function selectionReasons(
     reasons.push(text.reasonProductLikely);
   }
 
-  if (
-    quantity &&
-    result.minimumOrderQuantity !== null &&
-    result.minimumOrderQuantity <= quantity
-  ) {
-    reasons.push(text.reasonMoqFits);
-  }
-
-  const quantityPrice = assessSupplierOfferQuantityPrice(result, quantity);
-  if (quantityPrice.procurementCostConfirmed) reasons.push(text.pageTierNote);
-  else if (quantityPrice.basis === "INFORMATIONAL") reasons.push(text.informationalPrice);
+  const pricePresentation = presentSupplierOfferPrice(result, quantity);
+  if (pricePresentation.supplierOrderQuote) reasons.push(text.writtenQuotePrice);
+  else if (pricePresentation.kind === "PUBLISHED_TIER") reasons.push(text.pageTierNote);
+  else if (pricePresentation.kind === "ADVERTISED_ONLY") reasons.push(text.informationalPrice);
   else reasons.push(text.reasonPriceOnRequest);
 
   if (analysis && analysis.confidenceScore >= 70) {
@@ -893,14 +944,15 @@ export function SimpleSupplierOfferSearch({
           <div className="search-result-list">
           {visible.map(({ result, analysis }, index) => {
             const decision = simpleDecision(analysis);
-            const quantityPrice = assessSupplierOfferQuantityPrice(result, quantity);
-            const effectiveResult = quantityPrice.procurementCostConfirmed
+            const pricePresentation = presentSupplierOfferPrice(result, quantity);
+            const publishedTier = pricePresentation.kind === "PUBLISHED_TIER";
+            const effectiveResult = publishedTier
               ? supplierOfferForQuantity(result, quantity)
               : { ...result, price: null, currency: null };
             const priceSnapshots = quantityPriceSnapshots(result, quantity);
             const priceTierSnapshots = supplierPriceTierSnapshots(result);
             const variantFacts = supplierOfferVariantFacts(result);
-            const orderTerms = assessSupplierOrderTerms({
+            const orderTerms = presentSupplierOrderTerms({
               requestedQuantity: quantity ?? 0,
               variantMixRequested: variantFacts.groups.length > 0,
               mixingExplicitlyConfirmed: null,
@@ -910,29 +962,27 @@ export function SimpleSupplierOfferSearch({
               result.marketplaceDetails?.supplierProfile,
               locale,
             );
-            const liveEstimate = quantity && targetCountry && quantityPrice.procurementCostConfirmed
+            const liveEstimate = quantity && targetCountry && publishedTier
               ? estimateTajaPreliminaryLandedCost({
                   result,
                   quantity,
                   targetCountry,
                   targetMarginPercent: 0,
-                  fxSnapshot: quantityPrice.quantityCurrency === "EUR" ? null : fxSnapshot,
+                  fxSnapshot: pricePresentation.quantityCurrency === "EUR" ? null : fxSnapshot,
                 })
               : null;
-            const deliveryEstimate = quantityPrice.procurementCostConfirmed
+            const deliveryEstimate = publishedTier
               ? (liveEstimate ?? analysis?.preliminaryCostEstimate ?? null)
               : null;
             const selecting = selectingUrl === result.productUrl;
             const selected = selectedUrls.includes(result.productUrl);
             const reasons = selectionReasons(result, analysis, quantity, text);
-            const priceEvidenceLabel = quantityPrice.procurementCostConfirmed
-              ? text.pageTierNote
-              : quantityPrice.basis === "INFORMATIONAL"
-                ? text.informationalPrice
-                : supplierPriceEvidenceLabel(
-                    displayedSupplierPriceEvidence(result),
-                    locale,
-                  );
+            const showAdvertisedPrice = pricePresentation.advertisedPrice !== null &&
+              pricePresentation.advertisedCurrency !== null &&
+              (
+                !publishedTier ||
+                pricePresentation.advertisedPrice !== pricePresentation.quantityUnitPrice
+              );
             return (
               <article className={`search-result-card${index === 0 ? " search-result-card-best" : ""}`} key={`${result.source}-${result.productUrl}`}>
                 <SearchResultImage src={result.imageUrl} title={t(result.title)} />
@@ -953,53 +1003,73 @@ export function SimpleSupplierOfferSearch({
                   <h3>{t(result.title)}</h3>
                   <div className="offer-highlights">
                     <span>
-                      {text.supplierPrice}
-                      <strong>
-                        {quantityPrice.procurementCostConfirmed &&
-                        quantityPrice.quantityUnitPrice !== null &&
-                        quantityPrice.quantityCurrency
-                          ? `${formatSupplierPriceWithEuro(
-                              quantityPrice.quantityUnitPrice,
-                              quantityPrice.quantityCurrency,
-                              locale,
-                              fxSnapshot,
-                            )} / ${text.pieces}`
-                          : quantityPrice.basis === "INFORMATIONAL" &&
-                            quantityPrice.advertisedPrice !== null &&
-                            quantityPrice.advertisedCurrency
-                            ? `${formatSupplierPriceWithEuro(
-                                quantityPrice.advertisedPrice,
-                                quantityPrice.advertisedCurrency,
-                                locale,
-                                fxSnapshot,
-                              )} / ${text.pieces}`
-                            : text.priceOnRequest}
-                      </strong>
-                      {priceEvidenceLabel && (
-                        <small className="supplier-fx-note">{priceEvidenceLabel}</small>
+                      {pricePresentation.supplierOrderQuote
+                        ? text.writtenQuotePrice
+                        : publishedTier
+                          ? text.publishedTierPrice
+                          : text.supplierPrice}
+                      {pricePresentation.supplierOrderQuote &&
+                      pricePresentation.quantityUnitPrice !== null &&
+                      pricePresentation.quantityCurrency ? (
+                        <strong>
+                          {formatSupplierPriceWithEuro(
+                            pricePresentation.quantityUnitPrice,
+                            pricePresentation.quantityCurrency,
+                            locale,
+                            fxSnapshot,
+                          )} / {text.pieces}
+                        </strong>
+                      ) : publishedTier &&
+                        pricePresentation.quantityUnitPrice !== null &&
+                        pricePresentation.quantityCurrency ? (
+                        <strong>
+                          {formatSupplierPriceWithEuro(
+                            pricePresentation.quantityUnitPrice,
+                            pricePresentation.quantityCurrency,
+                            locale,
+                            fxSnapshot,
+                          )} / {text.pieces}
+                        </strong>
+                      ) : (
+                        <>
+                          <strong className="supplier-price-unconfirmed">
+                            {text.quantityPriceUnconfirmed(quantity ? formatQuantity(quantity, locale) : null)}
+                          </strong>
+                          {pricePresentation.kind === "UNAVAILABLE" && (
+                            <small className="supplier-fx-note">{text.priceOnRequest}</small>
+                          )}
+                        </>
                       )}
-                      {quantityPrice.procurementCostConfirmed &&
-                        quantityPrice.quantityUnitPrice !== null &&
-                        quantityPrice.quantityCurrency &&
+                      {publishedTier && (
+                        <small className="supplier-fx-note">{text.pageTierNote}</small>
+                      )}
+                      {showAdvertisedPrice && (
+                        <small className="supplier-fx-note">
+                          {advertisedPriceNote(pricePresentation, text, locale, fxSnapshot)}
+                        </small>
+                      )}
+                      {publishedTier &&
+                        pricePresentation.quantityUnitPrice !== null &&
+                        pricePresentation.quantityCurrency &&
                         quantity && (
                         <small className="supplier-order-total">
                           {text.supplierOrderTotal(formatQuantity(quantity, locale))}:{" "}
                           {formatSupplierOrderTotalWithEuro(
-                            quantityPrice.quantityUnitPrice * quantity,
-                            quantityPrice.quantityCurrency,
+                            pricePresentation.quantityUnitPrice * quantity,
+                            pricePresentation.quantityCurrency,
                             locale,
                             fxSnapshot,
                           )}
                         </small>
                       )}
-                      {quantityPrice.procurementCostConfirmed &&
-                        quantityPrice.quantityUnitPrice !== null &&
-                        quantityPrice.quantityCurrency &&
-                        quantityPrice.quantityCurrency !== "EUR" &&
+                      {publishedTier &&
+                        pricePresentation.quantityUnitPrice !== null &&
+                        pricePresentation.quantityCurrency &&
+                        pricePresentation.quantityCurrency !== "EUR" &&
                         fxSnapshot &&
                         convertToEur(
-                          quantityPrice.quantityUnitPrice,
-                          quantityPrice.quantityCurrency,
+                          pricePresentation.quantityUnitPrice,
+                          pricePresentation.quantityCurrency,
                           fxSnapshot,
                         ) !== null && (
                           <small className="supplier-fx-note">{text.fxConversionNote}</small>
@@ -1030,9 +1100,28 @@ export function SimpleSupplierOfferSearch({
                     )}
                   </div>
 
-                  {orderTerms.mixingStatus === "UNCONFIRMED" && (
-                    <p className="muted-text">{text.variantMixUnconfirmed}</p>
+                  {!orderTerms.confirmedForRequestedQuantity && (
+                    <p className="supplier-terms-warning">{text.orderTermsUnconfirmed}</p>
                   )}
+                  {(orderTerms.stockMoq !== null ||
+                    orderTerms.productionMoq !== null ||
+                    orderTerms.variantMoq !== null) && (
+                    <p className="muted-text">
+                      {orderTerms.stockMoq !== null && text.stockMoq(formatQuantity(orderTerms.stockMoq, locale))}
+                      {orderTerms.stockMoq !== null && orderTerms.productionMoq !== null ? " · " : ""}
+                      {orderTerms.productionMoq !== null && text.productionMoq(formatQuantity(orderTerms.productionMoq, locale))}
+                      {(orderTerms.stockMoq !== null || orderTerms.productionMoq !== null) &&
+                      orderTerms.variantMoq !== null
+                        ? " · "
+                        : ""}
+                      {orderTerms.variantMoq !== null && text.variantMoq(formatQuantity(orderTerms.variantMoq, locale))}
+                    </p>
+                  )}
+                  {orderTerms.mixingStatus === "CONFIRMED" ? (
+                    <p className="muted-text">{text.mixingConfirmed}</p>
+                  ) : variantFacts.groups.length > 0 && orderTerms.mixingStatus === "UNCONFIRMED" ? (
+                    <p className="muted-text">{text.variantMixUnconfirmed}</p>
+                  ) : null}
 
                   {(variantFacts.groups.length > 0 || variantFacts.types.length > 0) && (
                     <p className="muted-text">
@@ -1082,7 +1171,7 @@ export function SimpleSupplierOfferSearch({
 
                   <details>
                     <summary>{text.details}</summary>
-                    <p>{text.moq}: {result.minimumOrderQuantity ?? text.unknown} · {text.incoterm}: {result.incoterm ?? text.unknown}</p>
+                    <p>{text.incoterm}: {result.incoterm ?? text.unknown}</p>
                     {liveEstimate && (
                       <p>
                         {text.landedCost}: {formatMoney(liveEstimate.lowPerUnitEur, locale)} – {formatMoney(liveEstimate.highPerUnitEur, locale)} / {text.pieces}

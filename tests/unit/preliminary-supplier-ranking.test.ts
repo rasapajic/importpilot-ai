@@ -89,6 +89,37 @@ describe("preliminary supplier ranking", () => {
     )[0]?.title).toBe("Suitable");
   });
 
+  it("does not raise an offer only because its listed MOQ is below the requested quantity", () => {
+    const coveringTier = (price: number) => ({
+      adapter: "confirmed-flat-tier",
+      evidence: "PRODUCT_PAGE" as const,
+      priceTiers: [{
+        price,
+        currency: "USD",
+        minQuantity: 12,
+        maxQuantity: null,
+      }],
+      attributes: [],
+      variants: [],
+      packaging: null,
+    });
+    const listedMoq = result("Listed MOQ", {
+      price: 1.1,
+      minimumOrderQuantity: 12,
+      marketplaceDetails: coveringTier(1.1),
+    });
+    const cheaperWithoutListedMoq = result("Cheaper without listed MOQ", {
+      price: 1,
+      minimumOrderQuantity: null,
+      marketplaceDetails: coveringTier(1),
+    });
+
+    expect(rankPreliminarySupplierOffers(
+      [listedMoq, cheaperWithoutListedMoq],
+      { quantity: 500 },
+    )[0]?.title).toBe("Cheaper without listed MOQ");
+  });
+
   it("does not rank an advertised floor price ahead of a confirmed quantity tier", () => {
     const advertisedFloor = result("Advertised floor", {
       price: 0.7,

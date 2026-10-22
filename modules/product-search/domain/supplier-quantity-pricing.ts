@@ -76,6 +76,103 @@ export function assessSupplierOfferQuantityPrice(
   };
 }
 
+export type SupplierOfferPriceKind =
+  | "WRITTEN_QUOTE"
+  | "PUBLISHED_TIER"
+  | "ADVERTISED_ONLY"
+  | "UNAVAILABLE";
+
+/**
+ * Separates a published quantity tier, an advertised price, and a written
+ * supplier quotation. A written quotation is shown only when the assessment
+ * carries that evidence. Current listings do not.
+ */
+export type SupplierOfferPricePresentation = {
+  kind: SupplierOfferPriceKind;
+  quantityUnitPrice: number | null;
+  quantityCurrency: string | null;
+  advertisedPrice: number | null;
+  advertisedCurrency: string | null;
+  advertisedAppliesFromQuantity: number | null;
+  supplierOrderQuote: boolean;
+};
+
+function sameMoney(left: number, right: number) {
+  return Math.abs(left - right) < 1e-9;
+}
+
+/**
+ * Reads the later published tier that matches the advertised unit price.
+ * Search snippets and marketing text are not used. If that advertised price
+ * already covers the requested quantity, no later threshold is reported.
+ */
+function advertisedAppliesFromQuantity(
+  result: SupplierOfferSearchResult,
+  advertisedPrice: number | null,
+  advertisedCurrency: string | null,
+  requestedQuantity: number | null | undefined,
+) {
+  if (
+    advertisedPrice === null ||
+    advertisedCurrency === null ||
+    !Number.isInteger(requestedQuantity) ||
+    Number(requestedQuantity) <= 0
+  ) {
+    return null;
+  }
+  const details = result.marketplaceDetails;
+  if (!details || details.evidence !== "PRODUCT_PAGE") return null;
+  const quantity = Number(requestedQuantity);
+  const matching = details.priceTiers.filter((tier) => {
+    const currency = tier.currency ?? result.currency;
+    return currency === advertisedCurrency && sameMoney(tier.price, advertisedPrice);
+  });
+  if (matching.length === 0) return null;
+  const coversRequest = matching.some((tier) =>
+    quantity >= tier.minQuantity &&
+    (tier.maxQuantity === null || quantity <= tier.maxQuantity),
+  );
+  if (coversRequest) return null;
+  const laterMinimums = matching
+    .map((tier) => tier.minQuantity)
+    .filter((minQuantity) => minQuantity > quantity);
+  return laterMinimums.length > 0 ? Math.min(...laterMinimums) : null;
+}
+
+export function presentSupplierOfferPrice(
+  result: SupplierOfferSearchResult,
+  quantity: number | null | undefined,
+): SupplierOfferPricePresentation {
+  const pricing = assessSupplierOfferQuantityPrice(result, quantity);
+  const appliesFrom = advertisedAppliesFromQuantity(
+    result,
+    pricing.advertisedPrice,
+    pricing.advertisedCurrency,
+    quantity,
+  );
+  const kind: SupplierOfferPriceKind = pricing.supplierOrderQuote
+    ? "WRITTEN_QUOTE"
+    : pricing.procurementCostConfirmed
+      ? "PUBLISHED_TIER"
+      : pricing.basis === "INFORMATIONAL"
+        ? "ADVERTISED_ONLY"
+        : "UNAVAILABLE";
+
+  return {
+    kind,
+    quantityUnitPrice: kind === "ADVERTISED_ONLY" || kind === "UNAVAILABLE"
+      ? null
+      : pricing.quantityUnitPrice,
+    quantityCurrency: kind === "ADVERTISED_ONLY" || kind === "UNAVAILABLE"
+      ? null
+      : pricing.quantityCurrency,
+    advertisedPrice: pricing.advertisedPrice,
+    advertisedCurrency: pricing.advertisedCurrency,
+    advertisedAppliesFromQuantity: appliesFrom,
+    supplierOrderQuote: pricing.supplierOrderQuote,
+  };
+}
+
 /**
  * Applies only a source-published price tier that explicitly covers the
  * requested quantity. Without that tier the advertised price is left in place
@@ -162,6 +259,36 @@ export function assessSupplierOrderTerms(input: {
     conditionsReliable,
     mixingStatus,
     orderQuantityConfirmed,
+  };
+}
+
+export type SupplierOrderTermsPresentation = {
+  confirmedForRequestedQuantity: boolean;
+  stockMoq: number | null;
+  productionMoq: number | null;
+  variantMoq: number | null;
+  mixingStatus: "CONFIRMED" | "UNCONFIRMED";
+};
+
+/**
+ * Shows stock, production and variant minimums only when each kind is
+ * internally consistent. A single listing MOQ is not an input and cannot
+ * confirm the requested quantity or a variant mix.
+ */
+export function presentSupplierOrderTerms(input: {
+  requestedQuantity: number;
+  variantMixRequested: boolean;
+  conditions: SupplierMoqCondition[];
+  mixingExplicitlyConfirmed: boolean | null;
+}): SupplierOrderTermsPresentation {
+  const terms = assessSupplierOrderTerms(input);
+  return {
+    confirmedForRequestedQuantity: terms.orderQuantityConfirmed === true &&
+      (!input.variantMixRequested || terms.mixingStatus === "CONFIRMED"),
+    stockMoq: terms.stockMoq,
+    productionMoq: terms.productionMoq,
+    variantMoq: terms.variantMoq,
+    mixingStatus: terms.mixingStatus,
   };
 }
 

@@ -70,12 +70,19 @@ describe("ImportPilot 1.0 simple supplier results", () => {
     expect(resultsSource).toContain('supplierOrderTotal: (quantity) => `Za ${quantity} kom`');
     expect(resultsSource).toContain("formatSupplierPriceWithEuro(");
     expect(resultsSource).toContain("formatSupplierOrderTotalWithEuro(");
-    expect(resultsSource).toContain("quantityPrice.quantityUnitPrice * quantity");
-    expect(resultsSource).toContain("quantityPrice.procurementCostConfirmed");
+    expect(resultsSource).toContain("pricePresentation.quantityUnitPrice * quantity");
+    expect(resultsSource).toContain('pricePresentation.kind === "PUBLISHED_TIER"');
     expect(resultsSource).toContain("informationalPrice:");
-    expect(resultsSource).toContain("assessSupplierOrderTerms");
+    expect(resultsSource).toContain("presentSupplierOrderTerms");
+    expect(resultsSource).toContain("mixingExplicitlyConfirmed: null");
+    expect(resultsSource).toContain("conditions: []");
+    expect(resultsSource).toContain('orderTermsUnconfirmed: "Uslovi za traženu količinu nisu potvrđeni."');
+    expect(resultsSource).toContain("Cena za ${quantity} komada nije potvrđena");
+    expect(resultsSource).toContain("Preis für ${quantity} Stück ist nicht bestätigt");
+    expect(resultsSource).toContain("Price for ${quantity} pieces is not confirmed");
     expect(resultsSource).toContain('variantMixUnconfirmed: "Mešanje varijanti u jednoj narudžbini nije potvrđeno."');
     expect(resultsSource).toContain("orderTerms.mixingStatus === \"UNCONFIRMED\"");
+    expect(resultsSource).not.toContain("MOQ odgovara traženoj količini");
     expect(resultsSource).not.toContain("effectiveResult.price * quantity");
     expect(resultsSource).toContain('className="supplier-order-total"');
     expect(resultsSource).toContain('fxConversionNote: "Preračunato po kursu korišćenom za obračun uvoza."');
@@ -95,7 +102,7 @@ describe("ImportPilot 1.0 simple supplier results", () => {
   it("recalculates visible non-EUR preliminary landed cost with fresh ECB FX", () => {
     expect(resultsSource).toContain('fetch("/api/fx/latest"');
     expect(resultsSource).toContain("estimateTajaPreliminaryLandedCost");
-    expect(resultsSource).toContain('fxSnapshot: quantityPrice.quantityCurrency === "EUR" ? null : fxSnapshot');
+    expect(resultsSource).toContain('fxSnapshot: pricePresentation.quantityCurrency === "EUR" ? null : fxSnapshot');
     expect(resultsSource).toContain("targetMarginPercent: 0");
     expect(resultsSource).toContain("const liveEstimate = quantity && targetCountry");
     expect(resultsSource).toContain("liveEstimate.basePerUnitEur");

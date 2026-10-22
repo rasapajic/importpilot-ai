@@ -6,6 +6,8 @@ import {
   applySupplierOfferQuantityPrice,
   assessSupplierOfferQuantityPrice,
   assessSupplierOrderTerms,
+  presentSupplierOfferPrice,
+  presentSupplierOrderTerms,
 } from "../../modules/product-search/domain/supplier-quantity-pricing";
 import { estimateTajaPreliminaryLandedCost } from "../../modules/product-search/domain/taja-preliminary-cost-estimate";
 
@@ -69,6 +71,12 @@ describe("quantity-aware supplier pricing", () => {
       procurementCostConfirmed: false,
       supplierOrderQuote: false,
     });
+    expect(presentSupplierOfferPrice(snippet, 500)).toMatchObject({
+      kind: "ADVERTISED_ONLY",
+      quantityUnitPrice: null,
+      advertisedAppliesFromQuantity: null,
+      supplierOrderQuote: false,
+    });
     expect(applySupplierOfferQuantityPrice(snippet, 500).price).toBe(0.7);
     expect(estimateTajaPreliminaryLandedCost({
       result: { ...snippet, currency: "EUR", price: 0.7 },
@@ -89,6 +97,14 @@ describe("quantity-aware supplier pricing", () => {
       basis: "PRODUCT_PAGE_TIER",
       supplierOrderQuote: false,
       procurementCostConfirmed: true,
+    });
+    expect(presentSupplierOfferPrice(yougeOffer(), 500)).toMatchObject({
+      kind: "PUBLISHED_TIER",
+      quantityUnitPrice: 1.1,
+      quantityCurrency: "USD",
+      advertisedPrice: 0.7,
+      advertisedAppliesFromQuantity: 5_000,
+      supplierOrderQuote: false,
     });
     expect(applySupplierOfferQuantityPrice(yougeOffer(), 500).price).toBe(1.1);
     expect(quantityPriceSnapshots(yougeOffer(), 500)).toEqual(
@@ -158,6 +174,33 @@ describe("quantity-aware supplier pricing", () => {
     expect(estimate?.assumptions.join(" ")).toContain("not a supplier quotation");
   });
 
+  it("keeps the Ouyuan advertised price of 0.35 USD unconfirmed for mixed 500 pieces", () => {
+    const ouyuan = offer({
+      title: "Ultra-light reading glasses",
+      supplierName: "Wenzhou Ouyuan Optical Co., Ltd.",
+      price: 0.35,
+      minimumOrderQuantity: 100,
+      productUrl: "https://wzouyuan.en.made-in-china.com/product/example.html",
+      marketplaceDetails: null,
+    });
+
+    expect(presentSupplierOfferPrice(ouyuan, 500)).toEqual({
+      kind: "ADVERTISED_ONLY",
+      quantityUnitPrice: null,
+      quantityCurrency: null,
+      advertisedPrice: 0.35,
+      advertisedCurrency: "USD",
+      advertisedAppliesFromQuantity: null,
+      supplierOrderQuote: false,
+    });
+    expect(estimateTajaPreliminaryLandedCost({
+      result: ouyuan,
+      quantity: 500,
+      targetCountry: "RS",
+      targetMarginPercent: 0,
+    })).toBeNull();
+  });
+
   it("leaves the Zlin price for exactly 500 unknown without a covering tier", () => {
     const zlin = offer({
       title: "Zlin reading glasses",
@@ -174,6 +217,13 @@ describe("quantity-aware supplier pricing", () => {
       quantityUnitPrice: null,
       basis: "INFORMATIONAL",
       procurementCostConfirmed: false,
+      supplierOrderQuote: false,
+    });
+    expect(presentSupplierOfferPrice(zlin, 500)).toMatchObject({
+      kind: "ADVERTISED_ONLY",
+      quantityUnitPrice: null,
+      advertisedPrice: 1.2,
+      advertisedAppliesFromQuantity: null,
       supplierOrderQuote: false,
     });
     expect(estimateTajaPreliminaryLandedCost({
@@ -231,6 +281,52 @@ describe("quantity-aware supplier pricing", () => {
       conditionsReliable: false,
       mixingStatus: "UNCONFIRMED",
       orderQuantityConfirmed: null,
+    });
+  });
+
+  it("does not confirm order terms from a listing MOQ or contradictory production minimums", () => {
+    expect(presentSupplierOrderTerms({
+      requestedQuantity: 500,
+      variantMixRequested: true,
+      mixingExplicitlyConfirmed: null,
+      conditions: [],
+    })).toEqual({
+      confirmedForRequestedQuantity: false,
+      stockMoq: null,
+      productionMoq: null,
+      variantMoq: null,
+      mixingStatus: "UNCONFIRMED",
+    });
+
+    expect(presentSupplierOrderTerms({
+      requestedQuantity: 500,
+      variantMixRequested: true,
+      mixingExplicitlyConfirmed: null,
+      conditions: [
+        { kind: "PRODUCTION", quantity: 600, scope: "MODEL" },
+        { kind: "PRODUCTION", quantity: 1_200, scope: "MODEL" },
+      ],
+    })).toMatchObject({
+      confirmedForRequestedQuantity: false,
+      productionMoq: null,
+      mixingStatus: "UNCONFIRMED",
+    });
+
+    expect(presentSupplierOrderTerms({
+      requestedQuantity: 500,
+      variantMixRequested: true,
+      mixingExplicitlyConfirmed: null,
+      conditions: [
+        { kind: "STOCK", quantity: 12, scope: "COLOR" },
+        { kind: "PRODUCTION", quantity: 1_200, scope: "MODEL" },
+        { kind: "VARIANT", quantity: 12, scope: "COLOR" },
+      ],
+    })).toEqual({
+      confirmedForRequestedQuantity: false,
+      stockMoq: 12,
+      productionMoq: 1_200,
+      variantMoq: 12,
+      mixingStatus: "UNCONFIRMED",
     });
   });
 });
