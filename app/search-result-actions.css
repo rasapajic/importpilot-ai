@@ -51,6 +51,17 @@
   overflow-wrap: anywhere;
 }
 
+.offer-highlights strong.supplier-price-unconfirmed {
+  color: #8a3b12;
+}
+
+.supplier-terms-warning {
+  color: #8a3b12;
+  font-size: 0.92rem;
+  font-weight: 700;
+  margin: 0.35rem 0 0;
+}
+
 .supplier-order-total,
 .supplier-fx-note,
 .supplier-risk-detail {
