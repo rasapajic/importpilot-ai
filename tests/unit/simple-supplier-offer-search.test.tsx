@@ -83,12 +83,30 @@ describe("ImportPilot 1.0 simple supplier results", () => {
     expect(resultsSource).toContain('variantMixUnconfirmed: "Mešanje varijanti u jednoj narudžbini nije potvrđeno."');
     expect(resultsSource).toContain("orderTerms.mixingStatus === \"UNCONFIRMED\"");
     expect(resultsSource).not.toContain("MOQ odgovara traženoj količini");
+    expect(resultsSource).toContain("text.listedMoq(formatQuantity(result.minimumOrderQuantity, locale))");
     expect(resultsSource).not.toContain("effectiveResult.price * quantity");
     expect(resultsSource).toContain('className="supplier-order-total"');
     expect(resultsSource).toContain('fxConversionNote: "Preračunato po kursu korišćenom za obračun uvoza."');
     expect(resultsSource).toContain('className="supplier-fx-note"');
     expect(resultCss).toContain(".supplier-fx-note");
     expect(resultsSource).not.toContain('/ ${formatQuantity(quantity, locale)} ${text.pieces}');
+  });
+
+  it("shows the listing MOQ as information without confirming the order", () => {
+    const termsStart = resultsSource.indexOf("presentSupplierOrderTerms({");
+    const termsEnd = resultsSource.indexOf("});", termsStart);
+    const termsCall = resultsSource.slice(termsStart, termsEnd);
+
+    expect(termsStart).toBeGreaterThanOrEqual(0);
+    expect(termsCall).toContain("conditions: []");
+    expect(termsCall).not.toContain("minimumOrderQuantity");
+    expect(resultsSource).toContain("result.minimumOrderQuantity !== null");
+    expect(resultsSource).toContain("text.listedMoq(formatQuantity(result.minimumOrderQuantity, locale))");
+    expect(resultsSource).toContain("MOQ iz oglasa: ${quantity} komada — ne potvrđuje mogućnost narudžbine tražene količine ili mešanja varijanti.");
+    expect(resultsSource).toContain("MOQ aus der Anzeige: ${quantity} Stück — bestätigt weder, dass die gewünschte Menge bestellt werden kann, noch dass Varianten gemischt werden dürfen.");
+    expect(resultsSource).toContain("Listing MOQ: ${quantity} pieces — does not confirm that the requested quantity can be ordered or that variants can be mixed.");
+    expect(resultsSource).not.toContain('kind: "PRODUCTION"');
+    expect(resultsSource).not.toContain('kind: "STOCK"');
   });
 
   it("uses the same fresh FX snapshot for the main price, order total, and quantity tiers", () => {

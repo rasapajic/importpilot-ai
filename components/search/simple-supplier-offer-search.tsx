@@ -103,6 +103,7 @@ type Copy = {
   variantMixUnconfirmed: string;
   mixingConfirmed: string;
   orderTermsUnconfirmed: string;
+  listedMoq: (quantity: string) => string;
   stockMoq: (quantity: string) => string;
   productionMoq: (quantity: string) => string;
   variantMoq: (quantity: string) => string;
@@ -183,6 +184,7 @@ const copy: Record<Locale, Copy> = {
     variantMixUnconfirmed: "Mešanje varijanti u jednoj narudžbini nije potvrđeno.",
     mixingConfirmed: "Mešanje varijanti u jednoj narudžbini je izričito potvrđeno.",
     orderTermsUnconfirmed: "Uslovi za traženu količinu nisu potvrđeni.",
+    listedMoq: (quantity) => `MOQ iz oglasa: ${quantity} komada — ne potvrđuje mogućnost narudžbine tražene količine ili mešanja varijanti.`,
     stockMoq: (quantity) => `MOQ za robu sa lagera: ${quantity}`,
     productionMoq: (quantity) => `MOQ za proizvodnju: ${quantity}`,
     variantMoq: (quantity) => `MOQ po modelu, boji ili varijanti: ${quantity}`,
@@ -263,6 +265,7 @@ const copy: Record<Locale, Copy> = {
     variantMixUnconfirmed: "Das Mischen von Varianten in einer Bestellung ist nicht bestätigt.",
     mixingConfirmed: "Das Mischen von Varianten in einer Bestellung ist ausdrücklich bestätigt.",
     orderTermsUnconfirmed: "Die Bedingungen für die gewünschte Menge sind nicht bestätigt.",
+    listedMoq: (quantity) => `MOQ aus der Anzeige: ${quantity} Stück — bestätigt weder, dass die gewünschte Menge bestellt werden kann, noch dass Varianten gemischt werden dürfen.`,
     stockMoq: (quantity) => `MOQ für Lagerware: ${quantity}`,
     productionMoq: (quantity) => `MOQ für die Produktion: ${quantity}`,
     variantMoq: (quantity) => `MOQ je Modell, Farbe oder Variante: ${quantity}`,
@@ -343,6 +346,7 @@ const copy: Record<Locale, Copy> = {
     variantMixUnconfirmed: "Mixing variants in one order is not confirmed.",
     mixingConfirmed: "Mixing variants in one order is explicitly confirmed.",
     orderTermsUnconfirmed: "The terms for the requested quantity are not confirmed.",
+    listedMoq: (quantity) => `Listing MOQ: ${quantity} pieces — does not confirm that the requested quantity can be ordered or that variants can be mixed.`,
     stockMoq: (quantity) => `Stock MOQ: ${quantity}`,
     productionMoq: (quantity) => `Production MOQ: ${quantity}`,
     variantMoq: (quantity) => `MOQ per model, color, or variant: ${quantity}`,
@@ -1102,6 +1106,11 @@ export function SimpleSupplierOfferSearch({
 
                   {!orderTerms.confirmedForRequestedQuantity && (
                     <p className="supplier-terms-warning">{text.orderTermsUnconfirmed}</p>
+                  )}
+                  {result.minimumOrderQuantity !== null && (
+                    <p className="muted-text">
+                      {text.listedMoq(formatQuantity(result.minimumOrderQuantity, locale))}
+                    </p>
                   )}
                   {(orderTerms.stockMoq !== null ||
                     orderTerms.productionMoq !== null ||
