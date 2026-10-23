@@ -462,7 +462,15 @@ export function SimpleProfitabilityPanel({
   const goodsValue = calculation
     ? numberValue(calculation.unitPrice)! * calculation.quantity
     : null;
-  const calculationNeedsReview = Boolean(calculation && importCostNeedsReview(assumptions));
+  const calculationNeedsReview = Boolean(
+    calculation && (
+      calculation.calculationStatus !== "CALCULATED" ||
+      calculation.landedCostTotal == null ||
+      calculation.landedCostPerUnit == null ||
+      calculation.grossMarginPercent == null ||
+      importCostNeedsReview(assumptions)
+    ),
+  );
   const decisionSummary = hasFinalDecision && decision && bestOffer
     ? getClientDecisionSummary({
         locale,
@@ -524,7 +532,7 @@ export function SimpleProfitabilityPanel({
               <span>{text.transport}: {money(calculation.shippingCost, currency)}</span>
               <span>{text.customs}: {amountWithRate(calculation.customsDutyAmount, calculation.customsDutyRate, currency)}</span>
               <span>{text.vat}: {amountWithRate(calculation.vatAmount, calculation.vatRate, currency)}</span>
-              {calculation.insuranceCost != null && <span>{extraCostLabel("insurance")}: {money(calculation.insuranceCost, currency)}</span>}
+              {!assumptions && calculation.insuranceCost != null && <span>{extraCostLabel("insurance")}: {money(calculation.insuranceCost, currency)}</span>}
               {calculation.freightForwardingCost != null && <span>{extraCostLabel("freight")}: {money(calculation.freightForwardingCost, currency)}</span>}
               {assumptions && <span>{text.clearance}: {money(assumptions.customsBrokerCost, currency)}</span>}
               <span>{text.inspection}: {money(calculation.inspectionCost, currency)}</span>
@@ -575,7 +583,13 @@ export function SimpleProfitabilityPanel({
                   : text.unknown
                 : `${offer.deliveryTimeDays} ${text.days}`;
               const offerCostNeedsReview = Boolean(
-                latest && importCostNeedsReview(offer.latestCostAssumptions),
+                latest && (
+                  latest.calculationStatus !== "CALCULATED" ||
+                  latest.landedCostTotal == null ||
+                  latest.landedCostPerUnit == null ||
+                  latest.grossMarginPercent == null ||
+                  importCostNeedsReview(offer.latestCostAssumptions)
+                ),
               );
               const supersededCalculation = Boolean(offer.calculationSuperseded && !latest);
 

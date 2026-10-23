@@ -15,19 +15,19 @@ export function getCalculationFormValues(
   calculation?: CostCalculation,
   assumptions?: SerbiaLandedCostAssumptions | null,
 ) {
-  const legacyShippingCost = storedDecimalInput(calculation?.shippingCost, "0.00");
+  const legacyShippingCost = storedDecimalInput(calculation?.shippingCost, "");
   return {
     shippingCost: legacyShippingCost,
-    chinaDomesticTransportCost: assumptions?.chinaDomesticTransportCost ?? "0.00",
+    chinaDomesticTransportCost: assumptions?.chinaDomesticTransportCost ?? "",
     internationalTransportCost: assumptions?.internationalTransportCost ?? legacyShippingCost,
-    insuranceCost: assumptions?.insuranceCost ?? storedDecimalInput(calculation?.insuranceCost, "0.00"),
-    customsBrokerCost: assumptions?.customsBrokerCost ?? "0.00",
-    customsDutyRate: storedDecimalInput(calculation?.customsDutyRate, "0"),
+    insuranceCost: assumptions?.insuranceCost ?? storedDecimalInput(calculation?.insuranceCost, ""),
+    customsBrokerCost: assumptions?.customsBrokerCost ?? "",
+    customsDutyRate: storedDecimalInput(calculation?.customsDutyRate, ""),
     vatRate: storedDecimalInput(calculation?.vatRate, ""),
     vatSource: assumptions?.vatSource ?? "COUNTRY_DEFAULT",
-    storageCost: storedDecimalInput(calculation?.storageCost, "0.00"),
-    inspectionCost: storedDecimalInput(calculation?.inspectionCost, "0.00"),
-    otherCosts: assumptions?.otherCosts ?? storedDecimalInput(calculation?.otherCosts, "0.00"),
+    storageCost: storedDecimalInput(calculation?.storageCost, ""),
+    inspectionCost: storedDecimalInput(calculation?.inspectionCost, ""),
+    otherCosts: assumptions?.otherCosts ?? storedDecimalInput(calculation?.otherCosts, ""),
     targetSellingPrice: storedDecimalInput(calculation?.targetSellingPrice, ""),
     transportConfirmed: assumptions?.transportConfirmed ?? false,
     customsDutyConfirmed: assumptions?.customsDutyConfirmed ?? false,

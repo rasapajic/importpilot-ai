@@ -87,6 +87,17 @@ describe("profitability recovery", () => {
     expect(result.sellingPriceIncreaseAmount).toBe("0.00");
   });
 
+  it("does not recover profitability when the customs broker cost is unknown", () => {
+    const stored = storedProfitabilityRecoveryInput({
+      ...input(),
+      customsBrokerCost: null,
+      insuranceCost: null,
+      freightForwardingCost: null,
+    });
+
+    expect(stored).toBeNull();
+  });
+
   it("does not turn an unknown stored cost into zero", () => {
     const stored = storedProfitabilityRecoveryInput({
       ...input(),

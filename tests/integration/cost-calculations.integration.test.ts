@@ -63,6 +63,80 @@ describeWithDatabase("cost calculation tenant isolation", () => {
   it("persists a calculated scenario for the active tenant", async () => {
     const calculation = await service.createCostCalculation(offerId, organizationId, {
       shippingCost: "100.00",
+      chinaDomesticTransportCost: "0.00",
+      internationalTransportCost: "0.00",
+      insuranceCost: "0.00",
+      customsBrokerCost: "0.00",
+      customsDutyRate: "5",
+      vatRate: "20",
+      storageCost: "30.00",
+      inspectionCost: "20.00",
+      otherCosts: "10.00",
+      targetSellingPrice: "20.00",
+      transportConfirmed: true,
+      customsDutyConfirmed: true,
+      calculationStatus: CalculationStatus.CALCULATED,
+    });
+    expect(calculation.landedCostTotal?.toString()).toBe("1452");
+    expect(calculation.calculationStatus).toBe(CalculationStatus.CALCULATED);
+    expect(Number(calculation.insuranceCost)).toBe(0);
+    expect(calculation.freightForwardingCost).toBeNull();
+    expect(calculation.vatTreatment).toBe("UNSURE");
+  });
+
+  it("does not confirm a calculation when a cost is omitted", async () => {
+    const project = await prisma.importProject.findFirstOrThrow({
+      where: { organizationId, name: "Cost Project" },
+    });
+    const freshOffer = await prisma.supplierOffer.create({
+      data: {
+        organizationId,
+        projectId: project.id,
+        supplierName: "Omitted Cost Supplier",
+        unitPrice: 10,
+        currency: "EUR",
+        incoterm: "FOB",
+      },
+    });
+    const calculation = await service.createCostCalculation(freshOffer.id, organizationId, {
+      shippingCost: "100.00",
+      customsDutyRate: "5",
+      vatRate: "20",
+      storageCost: "30.00",
+      inspectionCost: "20.00",
+      otherCosts: "10.00",
+      targetSellingPrice: "20.00",
+      transportConfirmed: true,
+      customsDutyConfirmed: true,
+      calculationStatus: CalculationStatus.CALCULATED,
+    });
+    expect(calculation.calculationStatus).toBe(CalculationStatus.NEEDS_REVIEW);
+    expect(calculation.landedCostTotal).toBeNull();
+    expect(calculation.insuranceCost).toBeNull();
+    expect(calculation.grossMarginPercent).toBeNull();
+    expect(Number(calculation.shippingCost)).toBe(100);
+  });
+
+  it("keeps history and known insurance, freight, and cost evidence", async () => {
+    const previousCount = await prisma.costCalculation.count({ where: { offerId } });
+    const previous = await prisma.costCalculation.findFirstOrThrow({
+      where: { offerId },
+      orderBy: { createdAt: "desc" },
+    });
+    await prisma.costCalculation.update({
+      where: { id: previous.id },
+      data: {
+        insuranceCost: "12.50",
+        freightForwardingCost: "8.00",
+        costEvidence: { source: "supplier-quote" },
+      },
+    });
+
+    const recalculated = await service.createCostCalculation(offerId, organizationId, {
+      shippingCost: "100.00",
+      chinaDomesticTransportCost: "0.00",
+      internationalTransportCost: "0.00",
+      customsBrokerCost: "0.00",
       customsDutyRate: "5",
       vatRate: "20",
       storageCost: "30.00",
@@ -71,10 +145,37 @@ describeWithDatabase("cost calculation tenant isolation", () => {
       targetSellingPrice: "20.00",
       calculationStatus: CalculationStatus.CALCULATED,
     });
-    expect(calculation.landedCostTotal?.toString()).toBe("1452");
-    expect(calculation.insuranceCost).toBeNull();
-    expect(calculation.freightForwardingCost).toBeNull();
-    expect(calculation.vatTreatment).toBe("UNSURE");
+
+    expect(await prisma.costCalculation.count({ where: { offerId } })).toBe(previousCount + 1);
+    expect(recalculated.id).not.toBe(previous.id);
+    expect(Number(recalculated.insuranceCost)).toBe(12.5);
+    expect(Number(recalculated.freightForwardingCost)).toBe(8);
+    expect(recalculated.costEvidence).toEqual({ source: "supplier-quote" });
+    expect(recalculated.calculationStatus).toBe(CalculationStatus.NEEDS_REVIEW);
+    expect(recalculated.landedCostTotal).toBeNull();
+    const storedPrevious = await prisma.costCalculation.findUniqueOrThrow({ where: { id: previous.id } });
+    expect(Number(storedPrevious.insuranceCost)).toBe(12.5);
+    expect(storedPrevious.costEvidence).toEqual({ source: "supplier-quote" });
+
+    const withExplicitZero = await service.createCostCalculation(offerId, organizationId, {
+      shippingCost: "100.00",
+      chinaDomesticTransportCost: "0.00",
+      internationalTransportCost: "0.00",
+      insuranceCost: "0.00",
+      customsBrokerCost: "0.00",
+      customsDutyRate: "5",
+      vatRate: "20",
+      storageCost: "30.00",
+      inspectionCost: "20.00",
+      otherCosts: "10.00",
+      targetSellingPrice: "20.00",
+      calculationStatus: CalculationStatus.CALCULATED,
+    });
+    expect(Number(withExplicitZero.insuranceCost)).toBe(0);
+    expect(Number(withExplicitZero.freightForwardingCost)).toBe(8);
+    expect(withExplicitZero.costEvidence).toEqual({ source: "supplier-quote" });
+    expect(withExplicitZero.landedCostTotal).not.toBeNull();
+    expect(withExplicitZero.calculationStatus).toBe(CalculationStatus.NEEDS_REVIEW);
   });
 
   it("does not expose an offer across tenants", async () => {

@@ -32,8 +32,10 @@ describe("ImportPilot 1.0 landed-cost Incoterm guard", () => {
   });
 
   it("enforces the guard before calculation persistence", () => {
-    expect(serviceSource).toContain("isSupportedLandedCostIncoterm(offer.incoterm)");
-    expect(serviceSource).toContain("throw new UnsupportedLandedCostIncotermError(offer.incoterm)");
+    expect(serviceSource).toContain("isSupportedLandedCostIncoterm(incoterm)");
+    expect(serviceSource).toContain("throw new UnsupportedLandedCostIncotermError(incoterm)");
+    expect(serviceSource.indexOf("isSupportedLandedCostIncoterm(incoterm)"))
+      .toBeLessThan(serviceSource.indexOf("costCalculation.create"));
   });
 
   it("returns a clear client-facing error instead of a misleading number", () => {

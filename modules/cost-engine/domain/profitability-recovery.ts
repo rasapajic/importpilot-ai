@@ -138,7 +138,7 @@ export function storedProfitabilityRecoveryInput(input: {
   vatRate: DecimalLike | null;
   storageCost: DecimalLike | null;
   inspectionCost: DecimalLike | null;
-  customsBrokerCost: DecimalLike;
+  customsBrokerCost: DecimalLike | null;
   otherCosts: DecimalLike | null;
   insuranceCost: DecimalLike | null;
   freightForwardingCost: DecimalLike | null;
@@ -153,6 +153,7 @@ export function storedProfitabilityRecoveryInput(input: {
     !presentDecimal(input.vatRate) ||
     !presentDecimal(input.storageCost) ||
     !presentDecimal(input.inspectionCost) ||
+    !presentDecimal(input.customsBrokerCost) ||
     !presentDecimal(input.otherCosts) ||
     !presentDecimal(input.targetSellingPrice) ||
     !presentDecimal(input.currentLandedCostPerUnit) ||

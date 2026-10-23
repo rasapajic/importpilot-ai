@@ -12,6 +12,7 @@ const baseInput: LandedCostInput = {
   currency: "EUR",
   incoterm: "FOB",
   shippingCost: "100.00",
+  customsBrokerCost: "0.00",
   customsDutyRate: "5",
   vatRate: "20",
   storageCost: "30.00",
@@ -42,6 +43,12 @@ describe("calculateLandedCost", () => {
     expect(result.vatAmount).toBe("257.60");
     expect(result.landedCostTotal).toBe("1575.60");
     expect(result.landedCostPerUnit).toBe("15.76");
+  });
+
+  it("rejects an omitted customs broker cost instead of using zero", () => {
+    const { customsBrokerCost: omittedBroker, ...withoutBroker } = baseInput;
+    expect(omittedBroker).toBe("0.00");
+    expect(() => calculateLandedCost(withoutBroker)).toThrow("Špediter");
   });
 
   it("supports zero shipping", () => {
