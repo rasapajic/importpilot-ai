@@ -7,6 +7,10 @@ const resultsSource = readFileSync(
   join(process.cwd(), "components/search/simple-supplier-offer-search.tsx"),
   "utf8",
 );
+const confirmationSource = readFileSync(
+  join(process.cwd(), "components/search/supplier-confirmation-panel.tsx"),
+  "utf8",
+);
 const projectSource = readFileSync(
   join(process.cwd(), "app/(dashboard)/projects/[projectId]/page.tsx"),
   "utf8",
@@ -234,6 +238,25 @@ describe("ImportPilot 1.0 simple supplier results", () => {
     expect(resultsSource).toContain('liveRefresh: "Ponovi živu pretragu"');
     expect(resultsSource).toContain('className="cached-result-notice"');
     expect(resultsSource).toContain("onClick={() => void runSearch()}");
+  });
+
+  it("offers a supplier confirmation step beside comparison without sending the inquiry", () => {
+    expect(resultsSource).toContain("<SupplierConfirmationPanel");
+    expect(resultsSource).toContain('className="search-result-actions"');
+    expect(resultsSource).toContain("setConfirmationUrl(confirmationOpen ? null : result.productUrl)");
+    expect(resultsSource).not.toContain("mailto:");
+    expect(confirmationSource).toContain('requestConfirmation: "Zatraži potvrdu"');
+    expect(confirmationSource).toContain('requestConfirmation: "Bestätigung anfragen"');
+    expect(confirmationSource).toContain('requestConfirmation: "Request confirmation"');
+    expect(confirmationSource).toContain("Aplikacija ne šalje ovu poruku.");
+    expect(confirmationSource).toContain("FOUND: \"Pronađen kandidat\"");
+    expect(confirmationSource).toContain("PREPARED: \"Upit pripremljen\"");
+    expect(confirmationSource).toContain("SENT: \"Upit poslat\"");
+    expect(confirmationSource).toContain("RESPONSE_RECEIVED: \"Odgovor primljen\"");
+    expect(confirmationSource).toContain("DOCUMENTED: \"Ponuda dokumentovana\"");
+    expect(confirmationSource).not.toContain("fetch(");
+    expect(resultCss).toContain(".search-result-actions");
+    expect(resultCss).toContain(".supplier-confirmation-panel");
   });
 
   it("links the supplier result header directly to the source offer", () => {
