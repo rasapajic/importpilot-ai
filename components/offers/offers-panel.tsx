@@ -211,7 +211,7 @@ export function OffersPanel({
                 </span>
                 <span>
                   {t("Očekivana marža")}
-                  <strong>{offer.costCalculations[0] ? `${offer.costCalculations[0].grossMarginPercent.toString()}%` : t("Nije izračunata")}</strong>
+                  <strong>{offer.costCalculations[0]?.grossMarginPercent != null ? `${offer.costCalculations[0].grossMarginPercent.toString()}%` : t("Nije izračunata")}</strong>
                 </span>
                 <span>
                   {offer.assessments[0] ? t("Preporuka") : t("Status")}

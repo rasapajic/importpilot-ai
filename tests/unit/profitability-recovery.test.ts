@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   calculateProfitabilityRecovery,
   ProfitabilityRecoveryActions,
+  storedProfitabilityRecoveryInput,
   type ProfitabilityRecoveryInput,
 } from "../../modules/cost-engine/domain/profitability-recovery";
 
@@ -84,5 +85,27 @@ describe("profitability recovery", () => {
     expect(result.action).toBe(ProfitabilityRecoveryActions.TARGET_MET);
     expect(result.supplierReductionAmount).toBe("0.00");
     expect(result.sellingPriceIncreaseAmount).toBe("0.00");
+  });
+
+  it("does not turn an unknown stored cost into zero", () => {
+    const stored = storedProfitabilityRecoveryInput({
+      ...input(),
+      shippingCost: null,
+      insuranceCost: null,
+      freightForwardingCost: null,
+    });
+
+    expect(stored).toBeNull();
+  });
+
+  it("adds a known insurance amount without treating a missing freight cost as zero", () => {
+    const stored = storedProfitabilityRecoveryInput({
+      ...input(),
+      otherCosts: "10.00",
+      insuranceCost: "5.00",
+      freightForwardingCost: null,
+    });
+
+    expect(stored?.otherCosts).toBe("15.00");
   });
 });

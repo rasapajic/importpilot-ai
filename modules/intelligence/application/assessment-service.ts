@@ -54,8 +54,8 @@ export async function assessSupplierOffer(offerId: string, organizationId: strin
     shippingClarityScore: offer.shippingClarityScore,
     projectQuantity: offer.project.quantity,
     projectTargetMargin: offer.project.targetMargin.toNumber(),
-    landedCostPerUnit: latestCost?.landedCostPerUnit.toNumber() ?? null,
-    grossMarginPercent: latestCost?.grossMarginPercent.toNumber() ?? null,
+    landedCostPerUnit: latestCost?.landedCostPerUnit?.toNumber() ?? null,
+    grossMarginPercent: latestCost?.grossMarginPercent?.toNumber() ?? null,
   };
   const result = assessOffer(
     input,
@@ -125,9 +125,9 @@ export async function compareProjectOffers(projectId: string, organizationId: st
         offerId: offer.id,
         supplierName: offer.supplierName,
         currency: offer.currency,
-        landedCostTotal: cost?.landedCostTotal.toNumber() ?? null,
-        landedCostPerUnit: cost?.landedCostPerUnit.toNumber() ?? null,
-        grossMarginPercent: cost?.grossMarginPercent.toNumber() ?? null,
+        landedCostTotal: cost?.landedCostTotal?.toNumber() ?? null,
+        landedCostPerUnit: cost?.landedCostPerUnit?.toNumber() ?? null,
+        grossMarginPercent: cost?.grossMarginPercent?.toNumber() ?? null,
         deliveryTimeDays: offer.deliveryTimeDays,
         supplierRiskScore: assessment?.supplierRiskScore ?? null,
         overallScore: assessment?.overallScore ?? null,

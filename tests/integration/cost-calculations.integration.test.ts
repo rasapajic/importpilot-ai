@@ -71,7 +71,10 @@ describeWithDatabase("cost calculation tenant isolation", () => {
       targetSellingPrice: "20.00",
       calculationStatus: CalculationStatus.CALCULATED,
     });
-    expect(calculation.landedCostTotal.toString()).toBe("1452");
+    expect(calculation.landedCostTotal?.toString()).toBe("1452");
+    expect(calculation.insuranceCost).toBeNull();
+    expect(calculation.freightForwardingCost).toBeNull();
+    expect(calculation.vatTreatment).toBe("UNSURE");
   });
 
   it("does not expose an offer across tenants", async () => {

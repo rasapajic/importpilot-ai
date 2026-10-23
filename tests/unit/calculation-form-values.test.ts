@@ -72,6 +72,37 @@ describe("calculation edit values", () => {
     });
   });
 
+  it("keeps a stored unknown cost empty instead of zero", () => {
+    const calculation = {
+      shippingCost: null,
+      insuranceCost: null,
+      customsDutyRate: null,
+      vatRate: null,
+      storageCost: null,
+      inspectionCost: null,
+      otherCosts: null,
+      targetSellingPrice: null,
+      calculationStatus: CalculationStatus.DRAFT,
+    };
+
+    const values = getCalculationFormValues(calculation as never);
+
+    expect(values).toMatchObject({
+      shippingCost: "",
+      internationalTransportCost: "",
+      insuranceCost: "",
+      customsDutyRate: "",
+      vatRate: "",
+      storageCost: "",
+      inspectionCost: "",
+      otherCosts: "",
+      targetSellingPrice: "",
+    });
+    expect(values.shippingCost).not.toBe("0.00");
+    expect(values.insuranceCost).not.toBe("0.00");
+    expect(values.otherCosts).not.toBe("0.00");
+  });
+
   it("translates the recalculation CTA", () => {
     expect(translateBusinessText("Izmeni vrednosti za kalkulaciju", "en")).toBe("Edit calculation values");
     expect(translateBusinessText("Izmeni vrednosti za kalkulaciju", "de")).toBe("Kalkulationswerte bearbeiten");

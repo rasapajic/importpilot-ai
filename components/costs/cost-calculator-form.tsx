@@ -28,8 +28,9 @@ import {
 } from "@/modules/fx/euro-display";
 import { getStatusLabel } from "@/modules/i18n/translations";
 
-function safeAmount(value: string) {
-  return value.trim() || "0";
+function enteredAmount(value: string) {
+  const trimmed = value.trim();
+  return trimmed || null;
 }
 
 function isFxSnapshotPayload(value: unknown): value is FxSnapshot {
@@ -93,6 +94,7 @@ export function CostCalculatorForm({
   const values = getCalculationFormValues(latestCalculation, latestCostAssumptions);
   const previousVatIsOverride = Boolean(
     latestCalculation &&
+    values.vatRate !== "" &&
     (values.vatSource === "MANUAL_OVERRIDE" ||
       automaticVatRate === null ||
       Number(values.vatRate) !== Number(automaticVatRate)),
@@ -114,29 +116,39 @@ export function CostCalculatorForm({
   );
   const panelRef = useRef<HTMLDivElement>(null);
   const effectiveVatRate = resolveVatRate(targetCountry, overrideVat ? manualVatRate : null) ?? "";
-  const profit = latestCalculation ? getDisplayedProfitSummary(latestCalculation) : null;
+  const profit = latestCalculation?.targetSellingPrice != null && latestCalculation.landedCostPerUnit != null
+    ? getDisplayedProfitSummary({
+        targetSellingPrice: latestCalculation.targetSellingPrice,
+        landedCostPerUnit: latestCalculation.landedCostPerUnit,
+        quantity: latestCalculation.quantity,
+      })
+    : null;
   const goodsCost = useMemo(() => {
     const amount = Number(unitPrice) * quantity;
     return Number.isFinite(amount) ? amount.toFixed(2) : "0.00";
   }, [quantity, unitPrice]);
   const currentTransportTotal = useMemo(() => {
-    if (!isPrimaryCountry) return safeAmount(shippingCost);
+    if (!isPrimaryCountry) return enteredAmount(shippingCost);
+    const china = enteredAmount(chinaDomesticTransportCost);
+    const international = enteredAmount(internationalTransportCost);
+    const insurance = enteredAmount(insuranceCost);
+    if (!china || !international || !insurance) return null;
     try {
-      return sumCostAmounts([
-        safeAmount(chinaDomesticTransportCost),
-        safeAmount(internationalTransportCost),
-        safeAmount(insuranceCost),
-      ]);
+      return sumCostAmounts([china, international, insurance]);
     } catch {
-      return "0.00";
+      return null;
     }
   }, [chinaDomesticTransportCost, insuranceCost, internationalTransportCost, isPrimaryCountry, shippingCost]);
-  const euroDisplays = latestCalculation && profit ? {
+  const euroDisplays = latestCalculation ? {
     supplierPrice: getSafeEuroDisplay(latestCalculation.unitPrice, currency, fxSnapshot),
     goodsCost: getSafeEuroDisplay(goodsCost, currency, fxSnapshot),
-    landedCostPerUnit: getSafeEuroDisplay(latestCalculation.landedCostPerUnit, currency, fxSnapshot),
-    landedCostTotal: getSafeEuroDisplay(latestCalculation.landedCostTotal, currency, fxSnapshot),
-    expectedProfit: getSafeEuroDisplay(profit.totalProfit, currency, fxSnapshot),
+    landedCostPerUnit: latestCalculation.landedCostPerUnit == null
+      ? null
+      : getSafeEuroDisplay(latestCalculation.landedCostPerUnit, currency, fxSnapshot),
+    landedCostTotal: latestCalculation.landedCostTotal == null
+      ? null
+      : getSafeEuroDisplay(latestCalculation.landedCostTotal, currency, fxSnapshot),
+    expectedProfit: profit ? getSafeEuroDisplay(profit.totalProfit, currency, fxSnapshot) : null,
   } : null;
   const previousSellingPriceEur = values.targetSellingPrice
     ? currency === "EUR"
@@ -168,6 +180,23 @@ export function CostCalculatorForm({
     : locale === "en"
       ? "Loading the latest ECB reference rate..."
       : "Učitavam najnoviji ECB referentni kurs...";
+  const freightLabel = locale === "de" ? "Spedition" : locale === "en" ? "Freight forwarding" : "Špedicija";
+  const knownCostLabel = locale === "de" ? "Bekannte Kosten" : locale === "en" ? "Known costs" : "Poznati troškovi";
+
+  function storedAmount(
+    value: { toString(): string } | null,
+    amountCurrency: string,
+    rate?: { toString(): string } | null,
+  ) {
+    const amountText = value == null ? t("Unavailable") : `${value.toString()} ${amountCurrency}`;
+    if (rate == null) return amountText;
+    return `${amountText} (${rate.toString()}%)`;
+  }
+
+  function euroText(display: { original: string | null; eur: string | null; converted: boolean } | null) {
+    if (!display?.original) return t("Unavailable");
+    return display.converted && display.eur ? `${display.original} (≈ ${display.eur})` : display.original;
+  }
 
   useEffect(() => {
     if (currency === "EUR") return;
@@ -313,7 +342,7 @@ export function CostCalculatorForm({
                   <label>{copy.insurance} ({currency})
                     <input min={0} name="insuranceCost" onChange={(event) => setInsuranceCost(event.target.value)} required step="0.01" type="number" value={insuranceCost} />
                   </label>
-                  <p className="vat-helper"><strong>{copy.transportTotal}:</strong> {currentTransportTotal} {currency}</p>
+                  <p className="vat-helper"><strong>{copy.transportTotal}:</strong> {currentTransportTotal ?? t("Unavailable")}{currentTransportTotal ? ` ${currency}` : ""}</p>
                   <label className="checkbox-label cost-form-wide">
                     <input defaultChecked={values.transportConfirmed} name="transportConfirmed" type="checkbox" />
                     {copy.transportConfirmed}
@@ -395,19 +424,32 @@ export function CostCalculatorForm({
               <span>{copy.customsBroker}: {latestCostAssumptions.customsBrokerCost} {currency}</span>
             </>
           ) : (
-            <span>{copy.legacyTransport}: {latestCalculation.shippingCost.toString()} {currency}</span>
+            <span>{copy.legacyTransport}: {storedAmount(latestCalculation.shippingCost, currency)}</span>
           )}
-          <span>{copy.customsDuty}: {latestCalculation.customsDutyAmount.toString()} {currency} ({latestCalculation.customsDutyRate.toString()}%)</span>
-          <span>{copy.vat}: {latestCalculation.vatAmount.toString()} {currency} ({latestCalculation.vatRate.toString()}%)</span>
-          <span>{copy.inspection}: {latestCalculation.inspectionCost.toString()} {currency}</span>
-          <span>{copy.storage}: {latestCalculation.storageCost.toString()} {currency}</span>
-          <span>{copy.other}: {latestCostAssumptions?.otherCosts ?? latestCalculation.otherCosts.toString()} {currency}</span>
-          <span>{t("Ukupna nabavna cena")}: {euroDisplays?.landedCostTotal.original}{euroDisplays?.landedCostTotal.converted ? ` (≈ ${euroDisplays.landedCostTotal.eur})` : ""}</span>
-          <span>{t("Ukupna nabavna cena po jedinici")}: {euroDisplays?.landedCostPerUnit.original}{euroDisplays?.landedCostPerUnit.converted ? ` (≈ ${euroDisplays.landedCostPerUnit.eur})` : ""}</span>
-          <span>{t("Bruto marža")}: {formatDisplayedPercent(latestCalculation.grossMarginPercent)}%</span>
-          <span>{t("Zarada po komadu")} ({currency}): {profit?.profitPerUnit}</span>
-          <span>{t("Ukupna očekivana zarada")}: {euroDisplays?.expectedProfit.original}{euroDisplays?.expectedProfit.converted ? ` (≈ ${euroDisplays.expectedProfit.eur})` : ""}</span>
-          <span>{t("Cena pokrića troškova")}: {latestCalculation.breakEvenPrice.toString()} {currency}</span>
+          {!latestCostAssumptions && latestCalculation.insuranceCost != null && (
+            <span>{copy.insurance}: {storedAmount(latestCalculation.insuranceCost, currency)}</span>
+          )}
+          {latestCalculation.freightForwardingCost != null && (
+            <span>{freightLabel}: {storedAmount(latestCalculation.freightForwardingCost, currency)}</span>
+          )}
+          <span>{copy.customsDuty}: {storedAmount(latestCalculation.customsDutyAmount, currency, latestCalculation.customsDutyRate)}</span>
+          <span>{copy.vat}: {storedAmount(latestCalculation.vatAmount, currency, latestCalculation.vatRate)}</span>
+          <span>{copy.inspection}: {storedAmount(latestCalculation.inspectionCost, currency)}</span>
+          <span>{copy.storage}: {storedAmount(latestCalculation.storageCost, currency)}</span>
+          <span>{copy.other}: {latestCostAssumptions?.otherCosts != null
+            ? `${latestCostAssumptions.otherCosts} ${currency}`
+            : storedAmount(latestCalculation.otherCosts, currency)}</span>
+          {latestCalculation.knownCostTotal != null && (
+            <span>{knownCostLabel}: {storedAmount(latestCalculation.knownCostTotal, currency)}</span>
+          )}
+          <span>{t("Ukupna nabavna cena")}: {euroText(euroDisplays?.landedCostTotal ?? null)}</span>
+          <span>{t("Ukupna nabavna cena po jedinici")}: {euroText(euroDisplays?.landedCostPerUnit ?? null)}</span>
+          <span>{t("Bruto marža")}: {latestCalculation.grossMarginPercent == null
+            ? t("Unavailable")
+            : `${formatDisplayedPercent(latestCalculation.grossMarginPercent)}%`}</span>
+          <span>{t("Zarada po komadu")} ({currency}): {profit?.profitPerUnit ?? t("Unavailable")}</span>
+          <span>{t("Ukupna očekivana zarada")}: {euroText(euroDisplays?.expectedProfit ?? null)}</span>
+          <span>{t("Cena pokrića troškova")}: {storedAmount(latestCalculation.breakEvenPrice, currency)}</span>
           {currency !== "EUR" && fxSnapshot && <FxSourceNote snapshot={fxSnapshot} />}
           {!editing && (
             <button

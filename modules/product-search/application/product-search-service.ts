@@ -116,8 +116,8 @@ function offerCandidateEnrichment(offer: {
     unitPrice: { toNumber(): number };
     currency: string;
     incoterm: string;
-    landedCostPerUnit: { toNumber(): number };
-    grossMarginPercent: { toNumber(): number };
+    landedCostPerUnit: { toNumber(): number } | null;
+    grossMarginPercent: { toNumber(): number } | null;
     calculationStatus: CalculationStatus;
   }>;
 }): TajaCandidateEnrichment {
@@ -133,8 +133,8 @@ function offerCandidateEnrichment(offer: {
     sampleAvailable: offer.sampleAvailable,
     termsClarityScore: offer.termsClarityScore,
     shippingClarityScore: offer.shippingClarityScore,
-    landedCostPerUnit: cost?.landedCostPerUnit.toNumber() ?? null,
-    grossMarginPercent: cost?.grossMarginPercent.toNumber() ?? null,
+    landedCostPerUnit: cost?.landedCostPerUnit?.toNumber() ?? null,
+    grossMarginPercent: cost?.grossMarginPercent?.toNumber() ?? null,
     landedCostStatus: landedCostStatus(cost?.calculationStatus),
     landedCostUnitPrice: cost?.unitPrice.toNumber() ?? null,
     landedCostCurrency: cost?.currency ?? null,

@@ -398,6 +398,32 @@ export function SimpleProfitabilityPanel({
     return () => controller.abort();
   }, [needsFx]);
 
+  function marginText(value: { toString(): string } | null) {
+    if (value == null) return t("Unavailable");
+    return `${formatDisplayedPercent(value)}%`;
+  }
+
+  function amountWithRate(
+    amount: { toString(): string } | null,
+    rate: { toString(): string } | null,
+    currency: string,
+  ) {
+    const amountText = money(amount, currency);
+    if (rate == null) return amountText;
+    return `${amountText} (${rate.toString()}%)`;
+  }
+
+  function extraCostLabel(kind: "insurance" | "freight" | "known" | "cash" | "net") {
+    const labels = {
+      insurance: { sr: "Osiguranje", de: "Versicherung", en: "Insurance" },
+      freight: { sr: "Špedicija", de: "Spedition", en: "Freight forwarding" },
+      known: { sr: "Poznati troškovi", de: "Bekannte Kosten", en: "Known costs" },
+      cash: { sr: "Potreban keš", de: "Benötigtes Bargeld", en: "Required cash" },
+      net: { sr: "Neto nabavka", de: "Nettobeschaffung", en: "Net acquisition" },
+    } as const;
+    return labels[kind][locale];
+  }
+
   function money(value: { toString(): string } | number | null | undefined, currency: string) {
     const numeric = numberValue(value);
     if (numeric === null) return t("Unavailable");
@@ -487,7 +513,7 @@ export function SimpleProfitabilityPanel({
             <div><span>{text.sellingPrice}</span><strong>{money(calculation.targetSellingPrice, currency)}</strong></div>
             <div><span>{text.profitPerUnit}</span><strong>{money(profitPerUnit, currency)}</strong></div>
             <div><span>{text.totalProfit}</span><strong>{money(totalProfit, currency)}</strong></div>
-            <div><span>{text.margin}</span><strong>{formatDisplayedPercent(calculation.grossMarginPercent)}%</strong></div>
+            <div><span>{text.margin}</span><strong>{marginText(calculation.grossMarginPercent)}</strong></div>
             <div><span>{text.risk}</span><strong>{riskLabel(numberValue(assessment?.supplierRiskScore), locale)}</strong></div>
           </div>
 
@@ -496,12 +522,17 @@ export function SimpleProfitabilityPanel({
             <div className="cost-results">
               <span>{text.goodsValue}: {money(goodsValue, currency)}</span>
               <span>{text.transport}: {money(calculation.shippingCost, currency)}</span>
-              <span>{text.customs}: {money(calculation.customsDutyAmount, currency)} ({calculation.customsDutyRate.toString()}%)</span>
-              <span>{text.vat}: {money(calculation.vatAmount, currency)} ({calculation.vatRate.toString()}%)</span>
+              <span>{text.customs}: {amountWithRate(calculation.customsDutyAmount, calculation.customsDutyRate, currency)}</span>
+              <span>{text.vat}: {amountWithRate(calculation.vatAmount, calculation.vatRate, currency)}</span>
+              {calculation.insuranceCost != null && <span>{extraCostLabel("insurance")}: {money(calculation.insuranceCost, currency)}</span>}
+              {calculation.freightForwardingCost != null && <span>{extraCostLabel("freight")}: {money(calculation.freightForwardingCost, currency)}</span>}
               {assumptions && <span>{text.clearance}: {money(assumptions.customsBrokerCost, currency)}</span>}
               <span>{text.inspection}: {money(calculation.inspectionCost, currency)}</span>
               <span>{text.storage}: {money(calculation.storageCost, currency)}</span>
               <span>{text.other}: {money(assumptions?.otherCosts ?? calculation.otherCosts, currency)}</span>
+              {calculation.knownCostTotal != null && <span>{extraCostLabel("known")}: {money(calculation.knownCostTotal, currency)}</span>}
+              {calculation.requiredCashTotal != null && <span>{extraCostLabel("cash")}: {money(calculation.requiredCashTotal, currency)}</span>}
+              {calculation.netAcquisitionCost != null && <span>{extraCostLabel("net")}: {money(calculation.netAcquisitionCost, currency)}</span>}
               <strong>{calculationNeedsReview ? text.estimatedTotalCost : text.totalCost}: {money(calculation.landedCostTotal, currency)}</strong>
               <Link
                 className="secondary-button"
@@ -585,7 +616,7 @@ export function SimpleProfitabilityPanel({
                       {offerCostNeedsReview && <p className="warning-text">{text.costNeedsReview}</p>}
                       <div className="offer-highlights">
                         <span>{offerCostNeedsReview ? text.estimatedCostPerUnit : text.costPerUnit}<strong>{money(latest.landedCostPerUnit, latest.currency)}</strong></span>
-                        <span>{text.margin}<strong>{formatDisplayedPercent(latest.grossMarginPercent)}%</strong></span>
+                        <span>{text.margin}<strong>{marginText(latest.grossMarginPercent)}</strong></span>
                         <span>{text.risk}<strong>{riskLabel(numberValue(offer.assessments[0]?.supplierRiskScore), locale)}</strong></span>
                       </div>
                       <Link
