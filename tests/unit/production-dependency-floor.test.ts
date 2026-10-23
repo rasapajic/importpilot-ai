@@ -11,6 +11,7 @@ type PackageLock = {
 
 const patchedFloors = {
   next: "16.4.2",
+  zod: "4.6.7",
   sharp: "0.35.5",
   "source-map-js": "1.2.2",
 } as const;
@@ -48,6 +49,11 @@ describe("production dependency security floor", () => {
     expect(manifest.devDependencies["eslint-config-next"]).toBe("16.4.2");
     expect(lock.packages["node_modules/next"]?.version).toBe("16.4.2");
     expect(lock.packages["node_modules/eslint-config-next"]?.version).toBe("16.4.2");
+  });
+
+  it("pins Zod on the release that bounds constrained collections", () => {
+    expect(manifest.dependencies.zod).toBe("4.6.7");
+    expect(lock.packages["node_modules/zod"]?.version).toBe("4.6.7");
   });
 
   it("overrides transitive sharp and source-map-js to their patched releases", () => {
