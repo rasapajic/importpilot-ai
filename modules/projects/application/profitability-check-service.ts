@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/database/prisma";
+import { latestCalculationIfCurrent } from "@/modules/cost-engine/domain/current-calculation";
 import { generateProjectDecision } from "@/modules/decisions/application/project-decision-service";
 import { assessSupplierOffer } from "@/modules/intelligence/application/assessment-service";
 
@@ -18,10 +19,12 @@ export async function checkProjectProfitability(
         where: offerId ? { id: offerId } : undefined,
         select: {
           id: true,
+          unitPrice: true,
+          currency: true,
           costCalculations: {
             orderBy: { createdAt: "desc" },
             take: 1,
-            select: { id: true },
+            select: { id: true, unitPrice: true, currency: true },
           },
           assessments: {
             orderBy: { createdAt: "desc" },
@@ -35,9 +38,10 @@ export async function checkProjectProfitability(
 
   if (!project) throw new ProfitabilityProjectNotFoundError();
 
-  const calculatedOffers = project.offers.filter(
-    (offer) => offer.costCalculations.length > 0,
-  );
+  const calculatedOffers = project.offers.flatMap((offer) => {
+    const current = latestCalculationIfCurrent(offer.costCalculations, offer);
+    return current ? [{ ...offer, costCalculations: [current] }] : [];
+  });
   if (calculatedOffers.length === 0) {
     throw new ProfitabilityNoCalculatedOffersError();
   }

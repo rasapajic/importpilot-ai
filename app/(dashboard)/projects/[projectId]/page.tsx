@@ -13,6 +13,7 @@ import {
   isFinalDecisionStatus,
 } from "@/modules/decisions/application/decision-step-summary";
 import { getLatestProjectDecision } from "@/modules/decisions/application/project-decision-service";
+import { decisionRemainsCurrent } from "@/modules/decisions/domain/current-decision";
 import { getCountryDisplayName } from "@/modules/i18n/country-names";
 import { getServerLocale } from "@/modules/i18n/server";
 import { getStatusLabel, translateText } from "@/modules/i18n/translations";
@@ -74,6 +75,7 @@ export default async function ProjectPage({
 
   const projectDisplayName = t(project.name);
   const decision = await getLatestProjectDecision(projectId, auth.membership.organizationId);
+  const currentDecision = decisionRemainsCurrent(decision, project.offers) ? decision : null;
   const resolvedSearchParams = await searchParams;
   const autoStartSupplierSearch = resolvedSearchParams.autoSearch === "1";
   const initialSupplierSearch = autoStartSupplierSearch
@@ -99,8 +101,8 @@ export default async function ProjectPage({
   )
     ? resolvedSearchParams.selectedOffer
     : undefined;
-  const decisionMatchesFocusedOffer = !focusedOfferId || decision?.selectedOfferId === focusedOfferId;
-  const visibleDecisionStatus = decisionMatchesFocusedOffer ? decision?.status ?? null : null;
+  const decisionMatchesFocusedOffer = !focusedOfferId || currentDecision?.selectedOfferId === focusedOfferId;
+  const visibleDecisionStatus = decisionMatchesFocusedOffer ? currentDecision?.status ?? null : null;
 
   const offerCount = project.offers.length;
   const calculatedOffers = project.offers.filter((offer) => offer.costCalculations.length > 0);
@@ -233,7 +235,7 @@ export default async function ProjectPage({
             targetCountry={project.targetCountry}
             projectQuantity={project.quantity}
             offers={project.offers}
-            decision={decision}
+            decision={currentDecision}
             focusedOfferId={focusedOfferId}
             selectedCalculationOfferId={selectedCalculationOfferId}
             profitabilityError={resolvedSearchParams.profitabilityError}

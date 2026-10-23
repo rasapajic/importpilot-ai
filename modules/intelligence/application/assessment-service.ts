@@ -1,6 +1,7 @@
 import { ProjectActivityType } from "@prisma/client";
 
 import { prisma } from "@/lib/database/prisma";
+import { latestCalculationIfCurrent } from "@/modules/cost-engine/domain/current-calculation";
 import { compareOffers } from "@/modules/intelligence/domain/comparison";
 import {
   assessOffer,
@@ -32,7 +33,7 @@ export async function assessSupplierOffer(offerId: string, organizationId: strin
         select: { unitPrice: true },
       })
     : [];
-  const latestCost = offer.costCalculations[0] ?? null;
+  const latestCost = latestCalculationIfCurrent(offer.costCalculations, offer);
   const input: AssessmentOfferInput = {
     offerId: offer.id,
     supplierName: offer.supplierName,
@@ -118,7 +119,7 @@ export async function compareProjectOffers(projectId: string, organizationId: st
 
   return compareOffers(
     offers.map((offer) => {
-      const cost = offer.costCalculations[0] ?? null;
+      const cost = latestCalculationIfCurrent(offer.costCalculations, offer);
       const assessment = offer.assessments[0] ?? null;
       return {
         offerId: offer.id,

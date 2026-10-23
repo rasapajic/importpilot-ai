@@ -126,6 +126,8 @@ describe("supplier confirmation request", () => {
     expect(documented.otherCostsConfirmed).toBe(false);
     expect(documented.additionalConfirmationRequired).toBe(true);
     expect(documented.proposals.find((item) => item.key === "DIOPTERS")?.confirmed).toBe(false);
+    expect(documented.proposals.some((item) => item.key === "VARIANT_MIXING")).toBe(false);
+    expect(documented.variantsConfirmed).toBe(false);
     expect(confirmedCalculationInput(documented)).toMatchObject({
       unitPrice: "1.05",
       currency: "USD",
@@ -137,7 +139,33 @@ describe("supplier confirmation request", () => {
     });
   });
 
-  it("confirms the complete order only after quantity, MOQ, and diopters are explicitly confirmed", () => {
+  it("does not treat a diopter range or a price for another quantity as confirmed mixing", () => {
+    const brief = buildSupplierConfirmationBrief({
+      result: glassesOffer(),
+      productName: "reading glasses",
+      quantity: 1_000,
+      destination: "RS",
+    });
+    const received = saveSupplierReply(markInquirySent(createPreparedConfirmation()), brief, {
+      responseNote: "Range only.",
+      writtenQuote: "Unit price USD 0.70 for 5000 pcs. MOQ 100. +1.00 to +3.50 available. Diopters cannot be mixed.",
+    });
+    expect(received.proposals.some((item) => item.key === "VARIANT_MIXING")).toBe(false);
+    expect(received.proposals.find((item) => item.key === "DIOPTERS")?.confirmed).toBe(false);
+    const documented = confirmSupplierTerm(
+      confirmSupplierTerm(received, brief, "UNIT_PRICE"),
+      brief,
+      "DIOPTERS",
+    );
+    expect(documented.supplierPriceConfirmed).toBe(false);
+    expect(documented.status).toBe(SupplierConfirmationStatuses.RESPONSE_RECEIVED);
+    expect(documented.variantsConfirmed).toBe(false);
+    expect(documented.orderTermsConfirmed).toBe(false);
+    expect(documented.additionalConfirmationRequired).toBe(true);
+    expect(confirmedCalculationInput(documented)).toBeNull();
+  });
+
+  it("confirms the complete order only after quantity, MOQ, and explicit variant mixing", () => {
     const brief = buildSupplierConfirmationBrief({
       result: glassesOffer(),
       productName: "reading glasses",
@@ -146,13 +174,17 @@ describe("supplier confirmation request", () => {
     });
     const received = saveSupplierReply(markInquirySent(createPreparedConfirmation()), brief, {
       responseNote: "Quote attached.",
-      writtenQuote: "Unit price USD 1.05 for 1000 pcs. MOQ 100. FOB Ningbo. +1.00 to +3.50 available.",
+      writtenQuote: "Unit price USD 1.05 for 1000 pcs. MOQ 100. FOB Ningbo. +1.00 to +3.50 available. Mixed diopters are confirmed in one order.",
     });
     const withPrice = confirmSupplierTerm(received, brief, "UNIT_PRICE");
     expect(withPrice.additionalConfirmationRequired).toBe(true);
     expect(withPrice.orderTermsConfirmed).toBe(false);
-    const covered = confirmSupplierTerm(withPrice, brief, "DIOPTERS");
-    expect(covered.supplierPriceConfirmed).toBe(true);
+    const statedRange = confirmSupplierTerm(withPrice, brief, "DIOPTERS");
+    expect(statedRange.supplierPriceConfirmed).toBe(true);
+    expect(statedRange.variantsConfirmed).toBe(false);
+    expect(statedRange.orderTermsConfirmed).toBe(false);
+    expect(statedRange.additionalConfirmationRequired).toBe(true);
+    const covered = confirmSupplierTerm(statedRange, brief, "VARIANT_MIXING");
     expect(covered.variantsConfirmed).toBe(true);
     expect(covered.orderTermsConfirmed).toBe(false);
     expect(covered.additionalConfirmationRequired).toBe(false);

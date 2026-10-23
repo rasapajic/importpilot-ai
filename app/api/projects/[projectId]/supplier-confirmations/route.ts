@@ -22,6 +22,7 @@ const termKeySchema = z.enum([
   "INCOTERM",
   "LEAD_TIME_DAYS",
   "DIOPTERS",
+  "VARIANT_MIXING",
 ]);
 
 const actionSchema = z.discriminatedUnion("action", [

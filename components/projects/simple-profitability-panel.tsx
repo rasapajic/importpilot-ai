@@ -33,6 +33,7 @@ type DecisionView = ProjectDecisionResult & { id: string; createdAt: Date };
 type OfferWithDetails = SupplierOffer & {
   costCalculations: CostCalculation[];
   assessments: OfferAssessment[];
+  calculationSuperseded?: boolean;
   latestCostAssumptions?: LandedCostAssumptions | null;
 };
 
@@ -85,6 +86,7 @@ type SimpleCopy = {
   costNeedsReview: string;
   offerReady: string;
   missingCost: string;
+  calculationSuperseded: string;
   unknown: string;
 };
 
@@ -138,6 +140,7 @@ const copy: Record<Locale, SimpleCopy> = {
     costNeedsReview: "Transport i/ili carinska stopa još nisu potvrđeni. Ovaj trošak je procena i zahteva proveru pre kupovine.",
     offerReady: "Spremno za proveru",
     missingCost: "Unesite prodajnu cenu i proverite uvozne troškove",
+    calculationSuperseded: "Prethodni obračun je sačuvan, ali više nije aktuelan. Potreban je novi obračun.",
     unknown: "nije poznato",
   },
   de: {
@@ -189,6 +192,7 @@ const copy: Record<Locale, SimpleCopy> = {
     costNeedsReview: "Transport und/oder Zollsatz sind noch nicht bestätigt. Diese Kosten sind eine Schätzung und müssen vor dem Kauf geprüft werden.",
     offerReady: "Bereit zur Prüfung",
     missingCost: "Verkaufspreis eingeben und Importkosten prüfen",
+    calculationSuperseded: "Die vorherige Kalkulation bleibt gespeichert, ist aber nicht mehr aktuell. Eine neue Kalkulation ist erforderlich.",
     unknown: "unbekannt",
   },
   en: {
@@ -240,6 +244,7 @@ const copy: Record<Locale, SimpleCopy> = {
     costNeedsReview: "Transport and/or the customs rate are not confirmed yet. This cost is an estimate and must be verified before purchase.",
     offerReady: "Ready to check",
     missingCost: "Enter selling price and review import costs",
+    calculationSuperseded: "The previous calculation is saved, but it is no longer current. A new calculation is required.",
     unknown: "unknown",
   },
 };
@@ -541,6 +546,7 @@ export function SimpleProfitabilityPanel({
               const offerCostNeedsReview = Boolean(
                 latest && importCostNeedsReview(offer.latestCostAssumptions),
               );
+              const supersededCalculation = Boolean(offer.calculationSuperseded && !latest);
 
               return (
                 <article className="offer-card" key={offer.id}>
@@ -568,6 +574,10 @@ export function SimpleProfitabilityPanel({
 
                   {sourceUrl && (
                     <p><a href={sourceUrl} rel="noreferrer" target="_blank">{text.sourceOffer}</a></p>
+                  )}
+
+                  {supersededCalculation && (
+                    <p className="warning-text">{text.calculationSuperseded}</p>
                   )}
 
                   {latest ? (

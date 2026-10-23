@@ -258,6 +258,10 @@ describe("ImportPilot 1.0 simple supplier results", () => {
     expect(confirmationSource).toContain("Dokumentovana cena dobavljača");
     expect(confirmationSource).toContain("Uslovi kompletne narudžbine");
     expect(confirmationSource).toContain("Prenesi potvrđenu cenu u obračun");
+    expect(confirmationSource).toContain("router.push(`/projects/${projectId}?selectedOffer=${next.offerId}#workflow-step-decision`)");
+    expect(confirmationSource).toContain("router.refresh()");
+    expect(confirmationSource).not.toContain("runSearch(");
+    expect(confirmationSource).not.toContain("supplier-search");
     expect(confirmationSource).not.toContain("localStorage");
     expect(confirmationSource).not.toContain("mailto:");
     expect(resultCss).toContain(".search-result-actions");

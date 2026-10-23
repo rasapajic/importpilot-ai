@@ -1,11 +1,13 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import type { Locale } from "@/modules/i18n/translations";
 import type { SupplierConfirmationView } from "@/modules/negotiation/application/supplier-confirmation-service";
 import {
   buildSupplierConfirmationBrief,
+  quotedPriceCoversRequestedQuantity,
   SupplierConfirmationStatuses,
   type ConfirmableSupplierTermKey,
   type SupplierConfirmationStatus,
@@ -55,6 +57,8 @@ type Copy = {
   saveError: string;
   unconfirmedCosts: string;
   additionalConfirmation: string;
+  priceQuantityMismatch: string;
+  diopterRangeIsNotMixing: string;
   evidence: string;
   status: Record<SupplierConfirmationStatus, string>;
   evidenceLabel: Record<string, string>;
@@ -97,6 +101,8 @@ const copy: Record<Locale, Copy> = {
     saveError: "Potvrda nije sačuvana. Pokušajte ponovo.",
     unconfirmedCosts: "Transport, carina, PDV i ostali troškovi ostaju nepotvrđeni i ne ulaze u cenu dobavljača.",
     additionalConfirmation: "Potrebna je dodatna potvrda. Odgovor ne pokriva traženu količinu ili specifikaciju.",
+    priceQuantityMismatch: "Cena ne važi za traženu količinu.",
+    diopterRangeIsNotMixing: "Raspon dioptrija nije potvrda mešanja varijanti.",
     evidence: "Povezano sa pisanom ponudom",
     status: {
       FOUND: "Pronađen kandidat",
@@ -123,6 +129,7 @@ const copy: Record<Locale, Copy> = {
       LEAD_TIME: "Rok.",
       INCOTERM: "Incoterm za ovu narudžbinu.",
       DIOPTERS: "Tačne dioptrije.",
+      VARIANT_MIXING: "Posebna potvrda da se dioptrije mogu mešati u jednoj narudžbini.",
       MOQ_PER_DIOPTER_COLOR_MODEL: "MOQ po dioptriji, boji i modelu.",
       MOQ_PER_VARIANT: "MOQ po varijanti.",
     },
@@ -133,6 +140,7 @@ const copy: Record<Locale, Copy> = {
       INCOTERM: "Incoterm",
       LEAD_TIME_DAYS: "Rok u danima",
       DIOPTERS: "Dioptrije",
+      VARIANT_MIXING: "Mešanje varijanti",
     },
   },
   de: {
@@ -170,6 +178,8 @@ const copy: Record<Locale, Copy> = {
     saveError: "Die Bestätigung wurde nicht gespeichert. Versuchen Sie es erneut.",
     unconfirmedCosts: "Transport, Zoll, MwSt. und sonstige Kosten bleiben unbestätigt und gehören nicht zum Lieferantenpreis.",
     additionalConfirmation: "Eine weitere Bestätigung ist nötig. Die Antwort deckt Menge oder Spezifikation nicht ab.",
+    priceQuantityMismatch: "Der Preis gilt nicht für die gewünschte Menge.",
+    diopterRangeIsNotMixing: "Ein Dioptrienbereich bestätigt nicht, dass die Varianten gemischt werden können.",
     evidence: "Mit dem schriftlichen Angebot verknüpft",
     status: {
       FOUND: "Kandidat gefunden",
@@ -196,6 +206,7 @@ const copy: Record<Locale, Copy> = {
       LEAD_TIME: "Lieferzeit.",
       INCOTERM: "Incoterm für diesen Auftrag.",
       DIOPTERS: "Genaue Dioptrien.",
+      VARIANT_MIXING: "Gesonderte Bestätigung, dass die Dioptrien in einer Bestellung gemischt werden können.",
       MOQ_PER_DIOPTER_COLOR_MODEL: "MOQ je Dioptrie, Farbe und Modell.",
       MOQ_PER_VARIANT: "MOQ je Variante.",
     },
@@ -206,6 +217,7 @@ const copy: Record<Locale, Copy> = {
       INCOTERM: "Incoterm",
       LEAD_TIME_DAYS: "Lieferzeit in Tagen",
       DIOPTERS: "Dioptrien",
+      VARIANT_MIXING: "Mischen der Varianten",
     },
   },
   en: {
@@ -243,6 +255,8 @@ const copy: Record<Locale, Copy> = {
     saveError: "The confirmation was not saved. Try again.",
     unconfirmedCosts: "Transport, customs, VAT, and other costs stay unconfirmed and are not part of the supplier price.",
     additionalConfirmation: "Additional confirmation is required. The response does not cover the requested quantity or specification.",
+    priceQuantityMismatch: "The price does not apply to the requested quantity.",
+    diopterRangeIsNotMixing: "A diopter range does not confirm that the variants can be mixed.",
     evidence: "Linked to the written quotation",
     status: {
       FOUND: "Candidate found",
@@ -269,6 +283,7 @@ const copy: Record<Locale, Copy> = {
       LEAD_TIME: "Lead time.",
       INCOTERM: "Incoterm for this order.",
       DIOPTERS: "Exact diopters.",
+      VARIANT_MIXING: "A separate confirmation that the diopters can be mixed in one order.",
       MOQ_PER_DIOPTER_COLOR_MODEL: "MOQ per diopter, color, and model.",
       MOQ_PER_VARIANT: "MOQ per variant.",
     },
@@ -279,6 +294,7 @@ const copy: Record<Locale, Copy> = {
       INCOTERM: "Incoterm",
       LEAD_TIME_DAYS: "Lead time in days",
       DIOPTERS: "Diopters",
+      VARIANT_MIXING: "Variant mixing",
     },
   },
 };
@@ -315,6 +331,7 @@ export function SupplierConfirmationPanel({
   result: SupplierOfferSearchResult;
   locale: Locale;
 }) {
+  const router = useRouter();
   const text = copy[locale];
   const brief = buildSupplierConfirmationBrief({
     result,
@@ -485,7 +502,9 @@ export function SupplierConfirmationPanel({
             <strong>{text.supplierPrice}: </strong>
             {record.supplierPriceConfirmed
               ? record.proposals.find((item) => item.key === "UNIT_PRICE")?.value
-              : text.notConfirmed}
+              : record.proposals.find((item) => item.key === "UNIT_PRICE")?.confirmed
+                ? text.priceQuantityMismatch
+                : text.notConfirmed}
           </p>
           <p>
             <strong>{text.confirmedQuantity}: </strong>
@@ -505,7 +524,7 @@ export function SupplierConfirmationPanel({
             <strong>{text.confirmedVariants}: </strong>
             {brief.readingGlasses
               ? record.variantsConfirmed
-                ? record.proposals.find((item) => item.key === "DIOPTERS")?.value
+                ? record.proposals.find((item) => item.key === "VARIANT_MIXING")?.value
                 : text.notConfirmed
               : text.variantsNotRequested}
           </p>
@@ -515,12 +534,21 @@ export function SupplierConfirmationPanel({
           </p>
         </div>
       )}
+      {record && record.proposals.some((item) => item.key === "UNIT_PRICE") && !quotedPriceCoversRequestedQuantity(record.writtenQuote, brief.quantity) && (
+        <p className="supplier-terms-warning">{text.priceQuantityMismatch}</p>
+      )}
+      {brief.readingGlasses && record?.proposals.some((item) => item.key === "DIOPTERS") && !record.variantsConfirmed && (
+        <p className="supplier-terms-warning">{text.diopterRangeIsNotMixing}</p>
+      )}
       {record?.supplierPriceConfirmed && (
         <button
           className="secondary-button"
           disabled={pending || transferred}
           onClick={() => void run({ action: "transfer", productUrl: result.productUrl }).then((next) => {
-            if (next) setTransferred(true);
+            if (!next?.offerId) return;
+            setTransferred(true);
+            router.push(`/projects/${projectId}?selectedOffer=${next.offerId}#workflow-step-decision`);
+            router.refresh();
           })}
           type="button"
         >

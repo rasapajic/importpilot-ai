@@ -62,8 +62,8 @@ describe("simple client workflow", () => {
   });
 
   it("keeps a newly focused offer active until that same offer has a final recommendation", () => {
-    expect(pageSource).toContain("const decisionMatchesFocusedOffer = !focusedOfferId || decision?.selectedOfferId === focusedOfferId");
-    expect(pageSource).toContain("const visibleDecisionStatus = decisionMatchesFocusedOffer ? decision?.status ?? null : null");
+    expect(pageSource).toContain("const decisionMatchesFocusedOffer = !focusedOfferId || currentDecision?.selectedOfferId === focusedOfferId");
+    expect(pageSource).toContain("const visibleDecisionStatus = decisionMatchesFocusedOffer ? currentDecision?.status ?? null : null");
     expect(pageSource).toContain("const hasFinalRecommendation = isFinalDecisionStatus(visibleDecisionStatus)");
     expect(pageSource).toContain('hasFinalRecommendation\n      ? "COMPLETED"\n      : "ACTIVE"');
     expect(pageSource).toContain("const decisionStepSummary = getDecisionStepSummary(visibleDecisionStatus, locale)");

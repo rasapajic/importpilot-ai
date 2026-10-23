@@ -27,7 +27,8 @@ export type ConfirmableSupplierTermKey =
   | "MOQ"
   | "INCOTERM"
   | "LEAD_TIME_DAYS"
-  | "DIOPTERS";
+  | "DIOPTERS"
+  | "VARIANT_MIXING";
 
 export type SupplierTermProposal = {
   key: ConfirmableSupplierTermKey;
@@ -154,7 +155,7 @@ export function buildSupplierConfirmationBrief(input: {
   else missing.push("INCOTERM");
   missing.push("LEAD_TIME");
   if (readingGlasses) {
-    missing.push("DIOPTERS", "MOQ_PER_DIOPTER_COLOR_MODEL");
+    missing.push("DIOPTERS", "VARIANT_MIXING", "MOQ_PER_DIOPTER_COLOR_MODEL");
   } else {
     missing.push("MOQ_PER_VARIANT");
   }
@@ -235,7 +236,12 @@ function isSeparateCharge(line: string) {
   return /\b(?:freight|shipping|shipment|transport|transportation|customs|duty|duties|tariff|carina|zoll|fracht|versand)\b/i.test(line);
 }
 
-function unitPriceValue(text: string) {
+const VARIANT_MIXING_PATTERN =
+  /\b(?:mix(?:ed|ing)?|assort(?:ed|ment)?|mešan\w*|miješan\w*|gemischt\w*|misch(?:bar|en|ung)?)\b/i;
+const MIXING_DENIAL_PATTERN =
+  /\b(?:cannot|can't|can not|do not|don't|not|without|no|nicht|keine|keinen|ohne|nije|ne mogu|nemoguće|nemoguce)\b/i;
+
+function unitPriceLine(text: string) {
   const lines = quoteLines(text);
   const preferred = lines.find((line) =>
     /\b(?:unit\s+price|piece\s+price|cena|preis)\b/i.test(line) && !isSeparateCharge(line),
@@ -243,10 +249,37 @@ function unitPriceValue(text: string) {
   const fallback = lines.find((line) =>
     /(?:\busd\b|us\$|\$)/i.test(line) && !isSeparateCharge(line),
   );
-  const source = preferred ?? fallback;
+  return preferred ?? fallback ?? null;
+}
+
+function unitPriceValue(text: string) {
+  const source = unitPriceLine(text);
   if (!source) return null;
   const price = source.match(/(?:usd|us\$|\$)\s*(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)\s*(?:usd|us\$)/i);
   return price?.[1] ?? price?.[2] ?? null;
+}
+
+export function quotedUnitPriceQuantity(text: string) {
+  const source = unitPriceLine(text);
+  if (!source) return null;
+  const quantity = source.match(/(\d[\d,]*)\s*(?:pcs|pieces|komada|kom)\b/i);
+  return quantity?.[1] ? parseNumber(quantity[1]) : null;
+}
+
+export function quotedPriceCoversRequestedQuantity(
+  writtenQuote: string,
+  requestedQuantity: number | null,
+) {
+  if (requestedQuantity === null) return true;
+  const quantity = quotedUnitPriceQuantity(writtenQuote);
+  return quantity !== null && quantity === requestedQuantity;
+}
+
+function variantMixingValue(text: string) {
+  const line = quoteLines(text).find((item) =>
+    VARIANT_MIXING_PATTERN.test(item) && !MIXING_DENIAL_PATTERN.test(item),
+  );
+  return line ? line.slice(0, 180) : null;
 }
 
 export function extractSupplierTermProposals(writtenQuote: string): SupplierTermProposal[] {
@@ -306,6 +339,15 @@ export function extractSupplierTermProposals(writtenQuote: string): SupplierTerm
       evidence: "WRITTEN_QUOTE",
     });
   }
+  const mixing = variantMixingValue(text);
+  if (mixing) {
+    proposals.push({
+      key: "VARIANT_MIXING",
+      value: mixing,
+      confirmed: false,
+      evidence: "WRITTEN_QUOTE",
+    });
+  }
   return proposals;
 }
 
@@ -329,18 +371,25 @@ export function applyConfirmationState(
 ): SupplierConfirmationRecord {
   const statedQuantity = proposal(record, "ORDER_QUANTITY");
   const statedMoq = proposal(record, "MOQ");
-  const statedDiopters = proposal(record, "DIOPTERS");
+  const statedMixing = proposal(record, "VARIANT_MIXING");
   const quantity = statedQuantity ? parseNumber(statedQuantity.value) : null;
   const moq = statedMoq ? parseNumber(statedMoq.value) : null;
+  const priceCoversRequestedQuantity = quotedPriceCoversRequestedQuantity(
+    record.writtenQuote,
+    brief.quantity,
+  );
   const supplierPriceConfirmed = proposal(record, "UNIT_PRICE")?.confirmed === true
-    && record.writtenQuote.trim().length > 0;
+    && record.writtenQuote.trim().length > 0
+    && priceCoversRequestedQuantity;
   const quantityConfirmed = statedQuantity?.confirmed === true
     && quantity !== null
     && (brief.quantity === null || quantity >= brief.quantity);
   const moqConfirmed = statedMoq?.confirmed === true
     && moq !== null
     && (brief.quantity === null || moq <= brief.quantity);
-  const variantsConfirmed = brief.readingGlasses && statedDiopters?.confirmed === true;
+  const variantsConfirmed = brief.readingGlasses
+    && statedMixing?.confirmed === true
+    && priceCoversRequestedQuantity;
   const orderTermsConfirmed = supplierPriceConfirmed
     && quantityConfirmed
     && moqConfirmed
@@ -352,7 +401,8 @@ export function applyConfirmationState(
     moq === null ||
     moq > brief.quantity
   );
-  const diopterGap = brief.readingGlasses && statedDiopters?.confirmed !== true;
+  const priceQuantityGap = proposal(record, "UNIT_PRICE") !== null && !priceCoversRequestedQuantity;
+  const diopterGap = brief.readingGlasses && !variantsConfirmed;
   const status = supplierPriceConfirmed
     ? SupplierConfirmationStatuses.DOCUMENTED
     : record.status;
@@ -366,7 +416,7 @@ export function applyConfirmationState(
     variantsConfirmed,
     orderTermsConfirmed,
     ...unconfirmedCosts,
-    additionalConfirmationRequired: replySaved && (quantityGap || diopterGap),
+    additionalConfirmationRequired: replySaved && (quantityGap || priceQuantityGap || diopterGap),
   };
 }
 
@@ -482,4 +532,14 @@ export function transferredSupplierQuote(metadata: unknown) {
     orderTermsConfirmed: value.orderTermsConfirmed === true,
     ...unconfirmedCosts,
   };
+}
+
+export function calculationSupersededAt(metadata: unknown) {
+  if (!metadata || typeof metadata !== "object") return null;
+  const confirmation = (metadata as {
+    supplierConfirmation?: { calculationSupersededAt?: unknown };
+  }).supplierConfirmation;
+  const value = confirmation?.calculationSupersededAt;
+  if (typeof value !== "string" || Number.isNaN(Date.parse(value))) return null;
+  return value;
 }

@@ -7,9 +7,11 @@ import {
 import { z } from "zod";
 
 import { prisma } from "@/lib/database/prisma";
+import { offerPriceChanged } from "@/modules/cost-engine/domain/current-calculation";
 import {
   applyConfirmationState,
   buildSupplierConfirmationBrief,
+  calculationSupersededAt,
   confirmSupplierTerm,
   confirmedCalculationInput,
   createPreparedConfirmation,
@@ -25,7 +27,15 @@ import { canonicalSupplierProductUrl } from "@/modules/product-search/domain/sup
 import { recordProjectActivity } from "@/modules/timeline/application/timeline-service";
 
 const proposalSchema = z.object({
-  key: z.enum(["UNIT_PRICE", "ORDER_QUANTITY", "MOQ", "INCOTERM", "LEAD_TIME_DAYS", "DIOPTERS"]),
+  key: z.enum([
+    "UNIT_PRICE",
+    "ORDER_QUANTITY",
+    "MOQ",
+    "INCOTERM",
+    "LEAD_TIME_DAYS",
+    "DIOPTERS",
+    "VARIANT_MIXING",
+  ]),
   value: z.string(),
   confirmed: z.boolean(),
   evidence: z.literal("WRITTEN_QUOTE"),
@@ -267,6 +277,18 @@ export async function transferSupplierConfirmationToOffer(
     return typeof storedUrl === "string" && canonicalSupplierProductUrl(storedUrl) === canonicalUrl;
   }) ?? null;
 
+  let calculationSupersededAtValue = calculationSupersededAt(existing?.sourceMetadata);
+  if (existing && offerPriceChanged(existing, confirmed)) {
+    const [calculationCount, decisionCount] = await Promise.all([
+      prisma.costCalculation.count({ where: { offerId: existing.id, organizationId } }),
+      prisma.projectDecision.count({
+        where: { selectedOfferId: existing.id, projectId, organizationId },
+      }),
+    ]);
+    if (calculationCount > 0 || decisionCount > 0) {
+      calculationSupersededAtValue = new Date().toISOString();
+    }
+  }
   const supplierConfirmation = {
     supplierPriceConfirmed: current.record.supplierPriceConfirmed,
     quantityConfirmed: current.record.quantityConfirmed,
@@ -277,6 +299,9 @@ export async function transferSupplierConfirmationToOffer(
     customsConfirmed: false,
     vatConfirmed: false,
     otherCostsConfirmed: false,
+    ...(calculationSupersededAtValue
+      ? { calculationSupersededAt: calculationSupersededAtValue }
+      : {}),
   };
   const baseMetadata = existing?.sourceMetadata && typeof existing.sourceMetadata === "object"
     ? existing.sourceMetadata as Record<string, unknown>

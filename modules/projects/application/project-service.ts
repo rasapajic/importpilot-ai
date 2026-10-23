@@ -8,6 +8,7 @@ import type { z } from "zod";
 import { prisma } from "@/lib/database/prisma";
 import { serializeClientData } from "@/lib/serialization/client-data";
 import { deleteStoredObject } from "@/lib/storage/s3";
+import { latestCalculationIfCurrent } from "@/modules/cost-engine/domain/current-calculation";
 import { getLatestCostAssumptionsByOffer } from "@/modules/cost-engine/domain/serbia-landed-cost";
 import { isFinalDecisionStatus } from "@/modules/decisions/application/decision-step-summary";
 import { DEMO_PROJECT_PREFIX, isDemoProjectName } from "@/modules/projects/domain/project-access";
@@ -145,10 +146,15 @@ export async function getProject(projectId: string, organizationId: string) {
 
   return serializeClientData({
     ...project,
-    offers: project.offers.map((offer) => ({
-      ...offer,
-      latestCostAssumptions: assumptionsByOffer[offer.id] ?? null,
-    })),
+    offers: project.offers.map((offer) => {
+      const currentCalculation = latestCalculationIfCurrent(offer.costCalculations, offer);
+      return {
+        ...offer,
+        costCalculations: currentCalculation ? [currentCalculation] : [],
+        calculationSuperseded: offer.costCalculations.length > 0 && currentCalculation === null,
+        latestCostAssumptions: assumptionsByOffer[offer.id] ?? null,
+      };
+    }),
   });
 }
 
