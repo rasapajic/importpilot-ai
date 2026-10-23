@@ -1,5 +1,9 @@
 import type { SupplierOfferSearchResult } from "@/modules/product-search/domain/search";
 import { presentSupplierOfferPrice } from "@/modules/product-search/domain/supplier-quantity-pricing";
+import {
+  buildSerbianSupplierInquiry,
+  serbianInteger,
+} from "@/modules/negotiation/domain/supplier-message";
 
 export const SupplierConfirmationStatuses = {
   FOUND: "FOUND",
@@ -48,6 +52,8 @@ export type SupplierConfirmationBrief = {
   missing: string[];
   subject: string;
   body: string;
+  serbianSubject: string;
+  serbianBody: string;
   asks: string[];
 };
 
@@ -208,6 +214,24 @@ export function buildSupplierConfirmationBrief(input: {
     "Kind regards,",
   ].join("\n");
 
+  const serbian = buildSerbianSupplierInquiry({
+    supplierName: result.supplierName,
+    productName: input.productName,
+    model,
+    quantity,
+    destination,
+    readingGlasses,
+    diopters: READING_GLASSES_DIOPTERS,
+    listedMoq: result.minimumOrderQuantity,
+    listedIncoterm: result.incoterm,
+    publicTier: price.kind === "PUBLISHED_TIER" && price.quantityUnitPrice !== null && price.quantityCurrency
+      ? money(price.quantityUnitPrice, price.quantityCurrency)
+      : null,
+    advertisedPrice: price.advertisedPrice !== null && price.advertisedCurrency && price.advertisedAppliesFromQuantity !== null
+      ? `Reklamirana cena ${money(price.advertisedPrice, price.advertisedCurrency)} važi od ${serbianInteger(price.advertisedAppliesFromQuantity)} komada, ne za ovu narudžbinu.`
+      : null,
+  });
+
   return {
     supplierName: result.supplierName,
     productName: input.productName,
@@ -219,6 +243,8 @@ export function buildSupplierConfirmationBrief(input: {
     missing,
     subject,
     body,
+    serbianSubject: serbian.subject,
+    serbianBody: serbian.body,
     asks,
   };
 }

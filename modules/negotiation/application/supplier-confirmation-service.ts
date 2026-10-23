@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import {
   OfferExtractionStatus,
   ProjectActivityType,
@@ -6,6 +8,7 @@ import {
 } from "@prisma/client";
 import { z } from "zod";
 
+import { recordAiUsageEvents } from "@/modules/ai-usage/application/ai-usage-service";
 import { prisma } from "@/lib/database/prisma";
 import { offerPriceChanged } from "@/modules/cost-engine/domain/current-calculation";
 import {
@@ -16,15 +19,37 @@ import {
   confirmedCalculationInput,
   createPreparedConfirmation,
   markInquirySent,
+  quotedPriceCoversRequestedQuantity,
   saveSupplierReply,
   type ConfirmableSupplierTermKey,
+  type SupplierConfirmationBrief,
   type SupplierConfirmationRecord,
   type SupplierTermProposal,
 } from "@/modules/negotiation/domain/supplier-confirmation";
+import {
+  replyMentionsSupply,
+  supplierFollowUpQuestions,
+  translationPreservesCommercialFacts,
+  type SupplierMessageLanguage,
+} from "@/modules/negotiation/domain/supplier-message";
+import {
+  createOpenAiSupplierMessageTranslator,
+  SupplierMessageTranslationNotConfiguredError,
+  type SupplierMessageTranslator,
+} from "@/modules/negotiation/infrastructure/openai-supplier-message-translator";
+
+export { SupplierMessageTranslationNotConfiguredError };
+
 import { supplierOfferSearchResultSchema } from "@/modules/product-search/domain/search";
 import { createSupplierOfferSourceMetadata } from "@/modules/product-search/domain/source-provenance";
 import { canonicalSupplierProductUrl } from "@/modules/product-search/domain/supplier-product-url";
 import { recordProjectActivity } from "@/modules/timeline/application/timeline-service";
+
+export class SupplierMessageFactError extends Error {
+  constructor(readonly missing: string[]) {
+    super("Translation omitted commercial facts.");
+  }
+}
 
 const proposalSchema = z.object({
   key: z.enum([
@@ -55,8 +80,28 @@ type ConfirmationRow = {
   body: string;
   responseNote: string;
   writtenQuote: string;
+  sourceMessage: string;
+  targetLanguage: string | null;
+  translatedMessage: string;
+  translationInputHash: string | null;
+  supplierReplyOriginal: string;
+  supplierReplyTranslation: string;
+  replyTranslationHash: string | null;
   sourceResult: Prisma.JsonValue;
   proposals: Prisma.JsonValue;
+};
+
+export type SupplierMessageCommunication = {
+  sourceMessage: string;
+  targetLanguage: SupplierMessageLanguage | null;
+  translatedMessage: string;
+  translationCurrent: boolean;
+  supplierReplyOriginal: string;
+  supplierReplyTranslation: string;
+  replyTranslationCurrent: boolean;
+  followUpQuestions: string[];
+  translationReused: boolean;
+  estimatedCostUsd: string | null;
 };
 
 export type SupplierConfirmationView = {
@@ -66,6 +111,7 @@ export type SupplierConfirmationView = {
   subject: string;
   body: string;
   record: SupplierConfirmationRecord;
+  communication: SupplierMessageCommunication;
 };
 
 function jsonValue(value: unknown) {
@@ -108,15 +154,79 @@ function briefFor(
   });
 }
 
-function present(row: ConfirmationRow, project: { quantity: number; targetCountry: string }): SupplierConfirmationView {
+const messageLanguages = new Set<SupplierMessageLanguage>(["EN", "ZH", "EN_ZH"]);
+
+function isMessageLanguage(value: string | null): value is SupplierMessageLanguage {
+  return value !== null && messageLanguages.has(value as SupplierMessageLanguage);
+}
+
+function translationHash(language: string, text: string) {
+  return createHash("sha256").update(`${language}\n${text.trim()}`).digest("hex");
+}
+
+function proposalValue(record: SupplierConfirmationRecord, key: ConfirmableSupplierTermKey) {
+  return record.proposals.find((item) => item.key === key) ?? null;
+}
+
+function communicationFor(
+  row: ConfirmationRow,
+  brief: SupplierConfirmationBrief,
+  record: SupplierConfirmationRecord,
+  meta: { translationReused?: boolean; estimatedCostUsd?: string | null } = {},
+): SupplierMessageCommunication {
+  const sourceMessage = row.sourceMessage.trim() || brief.serbianBody;
+  const language = isMessageLanguage(row.targetLanguage) ? row.targetLanguage : null;
+  const replyOriginal = row.supplierReplyOriginal.trim() || record.writtenQuote;
+  const moq = proposalValue(record, "MOQ");
+  const moqValue = moq ? Number(moq.value) : null;
+  return {
+    sourceMessage,
+    targetLanguage: language,
+    translatedMessage: row.translatedMessage,
+    translationCurrent: Boolean(
+      language &&
+      row.translatedMessage.trim() &&
+      row.translationInputHash === translationHash(language, sourceMessage),
+    ),
+    supplierReplyOriginal: replyOriginal,
+    supplierReplyTranslation: row.supplierReplyTranslation,
+    replyTranslationCurrent: Boolean(
+      row.supplierReplyTranslation.trim() &&
+      replyOriginal.trim() &&
+      row.replyTranslationHash === translationHash("SR", replyOriginal),
+    ),
+    followUpQuestions: supplierFollowUpQuestions({
+      replySaved: replyOriginal.trim().length > 0,
+      readingGlasses: brief.readingGlasses,
+      priceStated: proposalValue(record, "UNIT_PRICE") !== null,
+      priceCoversQuantity: quotedPriceCoversRequestedQuantity(replyOriginal, brief.quantity),
+      moqStated: moq !== null,
+      moqTooHigh: moqValue !== null && brief.quantity !== null && moqValue > brief.quantity,
+      mixingStated: proposalValue(record, "VARIANT_MIXING") !== null,
+      incotermStated: proposalValue(record, "INCOTERM") !== null,
+      leadTimeStated: proposalValue(record, "LEAD_TIME_DAYS") !== null,
+      mentionsSupply: replyMentionsSupply(replyOriginal),
+    }),
+    translationReused: meta.translationReused === true,
+    estimatedCostUsd: meta.estimatedCostUsd ?? null,
+  };
+}
+
+function present(
+  row: ConfirmationRow,
+  project: { quantity: number; targetCountry: string },
+  meta: { translationReused?: boolean; estimatedCostUsd?: string | null } = {},
+): SupplierConfirmationView {
   const brief = briefFor(row, project);
+  const record = applyConfirmationState(recordFrom(row), brief);
   return {
     id: row.id,
     offerId: row.offerId,
     productUrl: row.productUrl,
     subject: row.subject,
     body: row.body,
-    record: applyConfirmationState(recordFrom(row), brief),
+    record,
+    communication: communicationFor(row, brief, record, meta),
   };
 }
 
@@ -191,6 +301,13 @@ export async function prepareSupplierConfirmation(
       body: brief.body,
       responseNote: "",
       writtenQuote: "",
+      sourceMessage: brief.serbianBody,
+      targetLanguage: null,
+      translatedMessage: "",
+      translationInputHash: null,
+      supplierReplyOriginal: "",
+      supplierReplyTranslation: "",
+      replyTranslationHash: null,
       sourceResult: jsonValue(result),
       proposals: [],
       supplierPriceConfirmed: false,
@@ -240,7 +357,16 @@ export async function saveSupplierConfirmationReply(
   const next = saveSupplierReply(current.record, briefFor(row, project), input);
   if (next === current.record) throw new SupplierConfirmationStateError();
   await saveRecord(row.id, next);
-  return { ...current, record: next };
+  const original = next.writtenQuote.trim();
+  const previousOriginal = row.supplierReplyOriginal.trim() || row.writtenQuote.trim();
+  const saved = await prisma.supplierConfirmation.update({
+    where: { id: row.id },
+    data: {
+      supplierReplyOriginal: original,
+      ...(original !== previousOriginal ? { replyTranslationHash: null } : {}),
+    },
+  });
+  return present(saved, project);
 }
 
 export async function confirmSupplierConfirmationTerm(
@@ -361,4 +487,198 @@ export async function transferSupplierConfirmationToOffer(
   });
 
   return { ...current, offerId: offer.id };
+}
+
+function protectedLiterals(brief: SupplierConfirmationBrief, source: string) {
+  return [brief.supplierName, brief.model ?? ""]
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0 && source.includes(item));
+}
+
+async function translateChecked(input: {
+  text: string;
+  target: SupplierMessageLanguage;
+  direction: "outbound" | "reply";
+  literals: string[];
+  translator: SupplierMessageTranslator;
+  organizationId: string;
+  projectId: string;
+}) {
+  const translated = await input.translator.translate({
+    text: input.text,
+    target: input.target,
+    direction: input.direction,
+  });
+  await recordAiUsageEvents({
+    organizationId: input.organizationId,
+    projectId: input.projectId,
+    events: [translated.usage],
+  });
+  const facts = translationPreservesCommercialFacts(input.text, translated.text, {
+    literals: input.literals,
+    minimumCopies: input.direction === "outbound" && input.target === "EN_ZH" ? 2 : 1,
+  });
+  if (!facts.preserved) throw new SupplierMessageFactError(facts.missing);
+  return translated;
+}
+
+export async function saveSupplierSourceMessage(
+  projectId: string,
+  organizationId: string,
+  input: { productUrl: string; sourceMessage: string },
+) {
+  const { project, row } = await findConfirmation(projectId, organizationId, input.productUrl);
+  const sourceMessage = input.sourceMessage.trim();
+  if (!sourceMessage) throw new SupplierConfirmationStateError();
+  const brief = briefFor(row, project);
+  const currentSource = row.sourceMessage.trim() || brief.serbianBody;
+  const changed = sourceMessage !== currentSource;
+  const saved = await prisma.supplierConfirmation.update({
+    where: { id: row.id },
+    data: {
+      sourceMessage,
+      ...(changed ? { translationInputHash: null } : {}),
+    },
+  });
+  return present(saved, project);
+}
+
+export async function translateSupplierInquiry(
+  projectId: string,
+  organizationId: string,
+  input: { productUrl: string; sourceMessage: string; targetLanguage: SupplierMessageLanguage },
+  translator: SupplierMessageTranslator = createOpenAiSupplierMessageTranslator(),
+) {
+  const { project, row } = await findConfirmation(projectId, organizationId, input.productUrl);
+  const sourceMessage = input.sourceMessage.trim();
+  if (!sourceMessage || !isMessageLanguage(input.targetLanguage)) {
+    throw new SupplierConfirmationStateError();
+  }
+  const brief = briefFor(row, project);
+  const hash = translationHash(input.targetLanguage, sourceMessage);
+  if (
+    row.translationInputHash === hash &&
+    row.translatedMessage.trim() &&
+    row.targetLanguage === input.targetLanguage
+  ) {
+    const saved = sourceMessage === row.sourceMessage
+      ? row
+      : await prisma.supplierConfirmation.update({
+        where: { id: row.id },
+        data: { sourceMessage },
+      });
+    return present(saved, project, { translationReused: true, estimatedCostUsd: null });
+  }
+
+  await prisma.supplierConfirmation.update({
+    where: { id: row.id },
+    data: {
+      sourceMessage,
+      targetLanguage: input.targetLanguage,
+      translationInputHash: null,
+    },
+  });
+  const translated = await translateChecked({
+    text: sourceMessage,
+    target: input.targetLanguage,
+    direction: "outbound",
+    literals: protectedLiterals(brief, sourceMessage),
+    translator,
+    organizationId,
+    projectId,
+  });
+  const saved = await prisma.supplierConfirmation.update({
+    where: { id: row.id },
+    data: {
+      sourceMessage,
+      targetLanguage: input.targetLanguage,
+      translatedMessage: translated.text,
+      translationInputHash: hash,
+    },
+  });
+  return present(saved, project, {
+    translationReused: false,
+    estimatedCostUsd: translated.usage.estimatedTotalCostUsd.toFixed(6),
+  });
+}
+
+export async function saveSupplierTranslatedMessage(
+  projectId: string,
+  organizationId: string,
+  input: { productUrl: string; translatedMessage: string },
+) {
+  const { project, row } = await findConfirmation(projectId, organizationId, input.productUrl);
+  const translatedMessage = input.translatedMessage.trim();
+  if (!translatedMessage || !row.translatedMessage.trim()) throw new SupplierConfirmationStateError();
+  const brief = briefFor(row, project);
+  const source = row.sourceMessage.trim() || brief.serbianBody;
+  const facts = translationPreservesCommercialFacts(
+    source,
+    translatedMessage,
+    {
+      literals: protectedLiterals(brief, source),
+      minimumCopies: row.targetLanguage === "EN_ZH" ? 2 : 1,
+    },
+  );
+  if (!facts.preserved) throw new SupplierMessageFactError(facts.missing);
+  const saved = await prisma.supplierConfirmation.update({
+    where: { id: row.id },
+    data: { translatedMessage },
+  });
+  return present(saved, project);
+}
+
+export async function translateSupplierReply(
+  projectId: string,
+  organizationId: string,
+  input: { productUrl: string; responseNote: string; writtenQuote: string },
+  translator: SupplierMessageTranslator = createOpenAiSupplierMessageTranslator(),
+) {
+  const { project, row } = await findConfirmation(projectId, organizationId, input.productUrl);
+  const current = present(row, project);
+  const received = saveSupplierReply(current.record, briefFor(row, project), input);
+  if (received === current.record) throw new SupplierConfirmationStateError();
+  const original = received.writtenQuote.trim();
+  const brief = briefFor(row, project);
+  const hash = translationHash("SR", original);
+  if (
+    row.replyTranslationHash === hash &&
+    row.supplierReplyTranslation.trim() &&
+    row.writtenQuote.trim() === original
+  ) {
+    const saved = row.responseNote === received.responseNote
+      ? row
+      : await prisma.supplierConfirmation.update({
+        where: { id: row.id },
+        data: { responseNote: received.responseNote },
+      });
+    return present(saved, project, { translationReused: true, estimatedCostUsd: null });
+  }
+
+  await saveRecord(row.id, received);
+  await prisma.supplierConfirmation.update({
+    where: { id: row.id },
+    data: { supplierReplyOriginal: original },
+  });
+  const translated = await translateChecked({
+    text: original,
+    target: "EN",
+    direction: "reply",
+    literals: protectedLiterals(brief, original),
+    translator,
+    organizationId,
+    projectId,
+  });
+  const saved = await prisma.supplierConfirmation.update({
+    where: { id: row.id },
+    data: {
+      supplierReplyOriginal: original,
+      supplierReplyTranslation: translated.text,
+      replyTranslationHash: hash,
+    },
+  });
+  return present(saved, project, {
+    translationReused: false,
+    estimatedCostUsd: translated.usage.estimatedTotalCostUsd.toFixed(6),
+  });
 }

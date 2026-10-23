@@ -631,6 +631,13 @@ model SupplierConfirmation {
   vatConfirmed                   Boolean                    @default(false) @map("vat_confirmed")
   otherCostsConfirmed            Boolean                    @default(false) @map("other_costs_confirmed")
   additionalConfirmationRequired Boolean                    @default(false) @map("additional_confirmation_required")
+  sourceMessage                  String                     @default("") @map("source_message") @db.Text
+  targetLanguage                 String?                    @map("target_language") @db.VarChar(16)
+  translatedMessage              String                     @default("") @map("translated_message") @db.Text
+  translationInputHash           String?                    @map("translation_input_hash") @db.VarChar(64)
+  supplierReplyOriginal          String                     @default("") @map("supplier_reply_original") @db.Text
+  supplierReplyTranslation       String                     @default("") @map("supplier_reply_translation") @db.Text
+  replyTranslationHash           String?                    @map("reply_translation_hash") @db.VarChar(64)
   organization                   Organization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   project                        ImportProject              @relation(fields: [organizationId, projectId], references: [organizationId, id], onDelete: Cascade)
   offer                          SupplierOffer?             @relation(fields: [offerId], references: [id], onDelete: SetNull)

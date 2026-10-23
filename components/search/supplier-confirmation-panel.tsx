@@ -59,6 +59,27 @@ type Copy = {
   additionalConfirmation: string;
   priceQuantityMismatch: string;
   diopterRangeIsNotMixing: string;
+  prepareSection: string;
+  translationSection: string;
+  sendSection: string;
+  replySection: string;
+  confirmationSection: string;
+  sourceMessage: string;
+  editBeforeTranslation: string;
+  targetLanguage: string;
+  languageEn: string;
+  languageZh: string;
+  languageBoth: string;
+  translateMessage: string;
+  translateReply: string;
+  original: string;
+  translation: string;
+  saveCorrection: string;
+  translationNotProof: string;
+  reusedTranslation: string;
+  estimatedCost: string;
+  followUp: string;
+  staleTranslation: string;
   evidence: string;
   status: Record<SupplierConfirmationStatus, string>;
   evidenceLabel: Record<string, string>;
@@ -103,6 +124,27 @@ const copy: Record<Locale, Copy> = {
     additionalConfirmation: "Potrebna je dodatna potvrda. Odgovor ne pokriva traženu količinu ili specifikaciju.",
     priceQuantityMismatch: "Cena ne važi za traženu količinu.",
     diopterRangeIsNotMixing: "Raspon dioptrija nije potvrda mešanja varijanti.",
+    prepareSection: "Priprema poruke",
+    translationSection: "Prevod",
+    sendSection: "Slanje",
+    replySection: "Odgovor",
+    confirmationSection: "Potvrda",
+    sourceMessage: "Upit na srpskom",
+    editBeforeTranslation: "Tekst možete izmeniti pre prevođenja.",
+    targetLanguage: "Jezik dobavljača",
+    languageEn: "Engleski",
+    languageZh: "Kineski (pojednostavljeni)",
+    languageBoth: "Engleski i kineski",
+    translateMessage: "Prevedi poruku",
+    translateReply: "Prevedi odgovor",
+    original: "Original",
+    translation: "Prevod",
+    saveCorrection: "Sačuvaj ispravku",
+    translationNotProof: "Prevod nije dokaz da su uslovi potvrđeni. Potvrdite izdvojene vrednosti iz originalnog odgovora.",
+    reusedTranslation: "Korišćen je sačuvan prevod, bez novog AI poziva.",
+    estimatedCost: "Procenjeni trošak prevoda",
+    followUp: "Predlog dodatnih pitanja",
+    staleTranslation: "Izvorni tekst je izmenjen. Prevod treba ponovo napraviti.",
     evidence: "Povezano sa pisanom ponudom",
     status: {
       FOUND: "Pronađen kandidat",
@@ -180,6 +222,27 @@ const copy: Record<Locale, Copy> = {
     additionalConfirmation: "Eine weitere Bestätigung ist nötig. Die Antwort deckt Menge oder Spezifikation nicht ab.",
     priceQuantityMismatch: "Der Preis gilt nicht für die gewünschte Menge.",
     diopterRangeIsNotMixing: "Ein Dioptrienbereich bestätigt nicht, dass die Varianten gemischt werden können.",
+    prepareSection: "Nachricht vorbereiten",
+    translationSection: "Übersetzung",
+    sendSection: "Senden",
+    replySection: "Antwort",
+    confirmationSection: "Bestätigung",
+    sourceMessage: "Anfrage auf Serbisch",
+    editBeforeTranslation: "Sie können den Text vor der Übersetzung ändern.",
+    targetLanguage: "Sprache des Lieferanten",
+    languageEn: "Englisch",
+    languageZh: "Chinesisch (vereinfacht)",
+    languageBoth: "Englisch und Chinesisch",
+    translateMessage: "Nachricht übersetzen",
+    translateReply: "Antwort übersetzen",
+    original: "Original",
+    translation: "Übersetzung",
+    saveCorrection: "Korrektur speichern",
+    translationNotProof: "Die Übersetzung beweist nicht, dass die Bedingungen bestätigt sind. Bestätigen Sie die erkannten Werte aus der Originalantwort.",
+    reusedTranslation: "Die gespeicherte Übersetzung wurde verwendet, ohne einen neuen KI-Aufruf.",
+    estimatedCost: "Geschätzte Übersetzungskosten",
+    followUp: "Vorgeschlagene weitere Fragen",
+    staleTranslation: "Der Ausgangstext wurde geändert. Die Übersetzung muss neu erstellt werden.",
     evidence: "Mit dem schriftlichen Angebot verknüpft",
     status: {
       FOUND: "Kandidat gefunden",
@@ -257,6 +320,27 @@ const copy: Record<Locale, Copy> = {
     additionalConfirmation: "Additional confirmation is required. The response does not cover the requested quantity or specification.",
     priceQuantityMismatch: "The price does not apply to the requested quantity.",
     diopterRangeIsNotMixing: "A diopter range does not confirm that the variants can be mixed.",
+    prepareSection: "Prepare message",
+    translationSection: "Translation",
+    sendSection: "Sending",
+    replySection: "Response",
+    confirmationSection: "Confirmation",
+    sourceMessage: "Inquiry in Serbian",
+    editBeforeTranslation: "You can edit the text before translation.",
+    targetLanguage: "Supplier language",
+    languageEn: "English",
+    languageZh: "Chinese (Simplified)",
+    languageBoth: "English and Chinese",
+    translateMessage: "Translate message",
+    translateReply: "Translate response",
+    original: "Original",
+    translation: "Translation",
+    saveCorrection: "Save correction",
+    translationNotProof: "The translation does not prove that the terms are confirmed. Confirm the extracted values from the original response.",
+    reusedTranslation: "The saved translation was used, without a new AI call.",
+    estimatedCost: "Estimated translation cost",
+    followUp: "Suggested follow-up questions",
+    staleTranslation: "The source text changed. Translate the message again.",
     evidence: "Linked to the written quotation",
     status: {
       FOUND: "Candidate found",
@@ -303,6 +387,17 @@ export function supplierConfirmationCopy(locale: Locale) {
   return copy[locale];
 }
 
+type MessageLanguage = "EN" | "ZH" | "EN_ZH";
+
+function initiallyOpen(open: boolean) {
+  return (node: HTMLDetailsElement | null) => {
+    if (node && open && node.dataset.ready !== "true") {
+      node.open = true;
+      node.dataset.ready = "true";
+    }
+  };
+}
+
 async function postConfirmation(
   projectId: string,
   body: Record<string, unknown>,
@@ -312,7 +407,10 @@ async function postConfirmation(
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!response.ok) throw new Error("supplier-confirmation-save-failed");
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null) as { error?: string } | null;
+    throw new Error(payload?.error || "supplier-confirmation-save-failed");
+  }
   return await response.json() as SupplierConfirmationView;
 }
 
@@ -340,13 +438,40 @@ export function SupplierConfirmationPanel({
     destination: targetCountry,
   });
   const [view, setView] = useState<SupplierConfirmationView | null>(null);
+  const [sourceMessage, setSourceMessage] = useState(brief.serbianBody);
+  const [targetLanguage, setTargetLanguage] = useState<MessageLanguage>("EN");
+  const [translatedMessage, setTranslatedMessage] = useState("");
   const [responseNote, setResponseNote] = useState("");
   const [writtenQuote, setWrittenQuote] = useState("");
+  const [replyTranslation, setReplyTranslation] = useState("");
   const [copied, setCopied] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const [transferred, setTransferred] = useState(false);
   const record = view?.record ?? null;
+  const savedSource = (view?.communication.sourceMessage ?? brief.serbianBody).trim();
+  const sourceIsCurrent = sourceMessage.trim() === savedSource;
+  const translationIsCurrent = Boolean(
+    translatedMessage.trim() &&
+    sourceIsCurrent &&
+    view?.communication.translationCurrent,
+  );
+  const savedReply = (view?.communication.supplierReplyOriginal ?? "").trim();
+  const replyIsCurrent = writtenQuote.trim() === savedReply && Boolean(view?.communication.replyTranslationCurrent);
+  const finalMessage = translationIsCurrent
+    ? translatedMessage.trim()
+    : `${brief.serbianSubject}\n\n${sourceMessage.trim() || brief.serbianBody}`;
+
+  function applyView(next: SupplierConfirmationView) {
+    setView(next);
+    setSourceMessage(next.communication.sourceMessage);
+    setTargetLanguage(next.communication.targetLanguage ?? "EN");
+    setTranslatedMessage(next.communication.translatedMessage);
+    setResponseNote(next.record.responseNote);
+    setWrittenQuote(next.communication.supplierReplyOriginal || next.record.writtenQuote);
+    setReplyTranslation(next.communication.supplierReplyTranslation);
+    setTransferred(Boolean(next.offerId));
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -355,11 +480,7 @@ export function SupplierConfirmationPanel({
       productName,
       result,
     }).then((next) => {
-      if (cancelled) return;
-      setView(next);
-      setResponseNote(next.record.responseNote);
-      setWrittenQuote(next.record.writtenQuote);
-      setTransferred(Boolean(next.offerId));
+      if (!cancelled) applyView(next);
     }).catch(() => {
       if (!cancelled) setError(text.saveError);
     });
@@ -373,12 +494,11 @@ export function SupplierConfirmationPanel({
     setError("");
     try {
       const next = await postConfirmation(projectId, body);
-      setView(next);
-      setResponseNote(next.record.responseNote);
-      setWrittenQuote(next.record.writtenQuote);
+      applyView(next);
       return next;
-    } catch {
-      setError(text.saveError);
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : "";
+      setError(message && message !== "supplier-confirmation-save-failed" ? message : text.saveError);
       return null;
     } finally {
       setPending(false);
@@ -386,9 +506,8 @@ export function SupplierConfirmationPanel({
   }
 
   async function copyMessage() {
-    const message = view ? `${view.subject}\n\n${view.body}` : `${brief.subject}\n\n${brief.body}`;
     try {
-      await navigator.clipboard.writeText(message);
+      await navigator.clipboard.writeText(finalMessage);
       setCopied(true);
     } catch {
       setCopied(false);
@@ -408,160 +527,284 @@ export function SupplierConfirmationPanel({
           </li>
         ))}
       </ol>
-      <EvidenceList title={text.confirmedBySources} codes={brief.publicEvidence} text={text} />
-      <EvidenceList title={text.missing} codes={brief.missing} text={text} />
-      <div>
-        <strong>{text.askSupplier}</strong>
-        <ul>
-          {brief.asks.map((ask) => <li key={ask}>{ask}</li>)}
-        </ul>
-      </div>
       {!record && <p className="muted-text">{error || text.loading}</p>}
-      <label>
-        {text.message}
-        <textarea readOnly rows={8} value={view ? `${view.subject}\n\n${view.body}` : `${brief.subject}\n\n${brief.body}`} />
-      </label>
-      <p className="muted-text">{text.notSent}</p>
-      <div className="supplier-confirmation-actions">
-        <button className="secondary-button" onClick={() => void copyMessage()} type="button">
-          {copied ? text.copied : text.copy}
-        </button>
-        <a href={result.productUrl} rel="noreferrer" target="_blank">{text.openListing}</a>
+      <details className="supplier-message-section" ref={initiallyOpen(true)}>
+        <summary>{text.prepareSection}</summary>
+        <p className="supplier-message-subject">{brief.serbianSubject}</p>
+        <label>
+          {text.sourceMessage}
+          <textarea
+            disabled={!record || pending}
+            onChange={(event) => setSourceMessage(event.target.value)}
+            rows={10}
+            value={sourceMessage}
+          />
+        </label>
+        <p className="muted-text">{text.editBeforeTranslation}</p>
+        <EvidenceList title={text.confirmedBySources} codes={brief.publicEvidence} text={text} />
+        <EvidenceList title={text.missing} codes={brief.missing} text={text} />
+      </details>
+      <details className="supplier-message-section" ref={initiallyOpen(true)}>
+        <summary>{text.translationSection}</summary>
+        <label>
+          {text.targetLanguage}
+          <select
+            disabled={!record || pending}
+            onChange={(event) => setTargetLanguage(event.target.value as MessageLanguage)}
+            value={targetLanguage}
+          >
+            <option value="EN">{text.languageEn}</option>
+            <option value="ZH">{text.languageZh}</option>
+            <option value="EN_ZH">{text.languageBoth}</option>
+          </select>
+        </label>
         <button
           className="secondary-button"
-          disabled={!record || pending || record.status !== SupplierConfirmationStatuses.PREPARED}
-          onClick={() => void run({ action: "markSent", productUrl: result.productUrl })}
-          type="button"
-        >
-          {!record || record.status === SupplierConfirmationStatuses.PREPARED ? text.markSent : text.sent}
-        </button>
-      </div>
-      <label>
-        {text.response}
-        <textarea
-          disabled={!replyEnabled || pending}
-          onChange={(event) => setResponseNote(event.target.value)}
-          rows={3}
-          value={responseNote}
-        />
-      </label>
-      <label>
-        {text.writtenQuote}
-        <textarea
-          disabled={!replyEnabled || pending}
-          onChange={(event) => setWrittenQuote(event.target.value)}
-          rows={4}
-          value={writtenQuote}
-        />
-      </label>
-      <button
-        className="secondary-button"
-        disabled={!replyEnabled || pending}
-        onClick={() => void run({
-          action: "saveReply",
-          productUrl: result.productUrl,
-          responseNote,
-          writtenQuote,
-        })}
-        type="button"
-      >
-        {text.saveReply}
-      </button>
-      {record && record.proposals.length > 0 && (
-        <div>
-          <strong>{text.extracted}</strong>
-          <ul>
-            {record.proposals.map((proposal) => (
-              <li key={proposal.key}>
-                <span>{text.termLabel[proposal.key]}: {proposal.value}</span>
-                <small>{proposal.confirmed ? text.evidence : text.proposal}</small>
-                {proposal.confirmed ? (
-                  <strong>{text.confirmed}</strong>
-                ) : (
-                  <button
-                    className="secondary-button"
-                    disabled={pending}
-                    onClick={() => void run({
-                      action: "confirmTerm",
-                      productUrl: result.productUrl,
-                      termKey: proposal.key satisfies ConfirmableSupplierTermKey,
-                    })}
-                    type="button"
-                  >
-                    {text.confirmValue}
-                  </button>
-                )}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-      {record && (
-        <div>
-          <p>
-            <strong>{text.supplierPrice}: </strong>
-            {record.supplierPriceConfirmed
-              ? record.proposals.find((item) => item.key === "UNIT_PRICE")?.value
-              : record.proposals.find((item) => item.key === "UNIT_PRICE")?.confirmed
-                ? text.priceQuantityMismatch
-                : text.notConfirmed}
-          </p>
-          <p>
-            <strong>{text.confirmedQuantity}: </strong>
-            {record.quantityConfirmed
-              ? record.proposals.find((item) => item.key === "ORDER_QUANTITY")?.value
-              : text.notConfirmed}
-          </p>
-          <p>
-            <strong>{text.confirmedMoq}: </strong>
-            {record.moqConfirmed
-              ? moqProposal?.value
-              : moqProposal?.confirmed
-                ? text.moqDoesNotFit
-                : text.notConfirmed}
-          </p>
-          <p>
-            <strong>{text.confirmedVariants}: </strong>
-            {brief.readingGlasses
-              ? record.variantsConfirmed
-                ? record.proposals.find((item) => item.key === "VARIANT_MIXING")?.value
-                : text.notConfirmed
-              : text.variantsNotRequested}
-          </p>
-          <p>
-            <strong>{text.completeOrderTerms}: </strong>
-            {record.orderTermsConfirmed ? text.confirmed : text.notConfirmed}
-          </p>
-        </div>
-      )}
-      {record && record.proposals.some((item) => item.key === "UNIT_PRICE") && !quotedPriceCoversRequestedQuantity(record.writtenQuote, brief.quantity) && (
-        <p className="supplier-terms-warning">{text.priceQuantityMismatch}</p>
-      )}
-      {brief.readingGlasses && record?.proposals.some((item) => item.key === "DIOPTERS") && !record.variantsConfirmed && (
-        <p className="supplier-terms-warning">{text.diopterRangeIsNotMixing}</p>
-      )}
-      {record?.supplierPriceConfirmed && (
-        <button
-          className="secondary-button"
-          disabled={pending || transferred}
-          onClick={() => void run({ action: "transfer", productUrl: result.productUrl }).then((next) => {
-            if (!next?.offerId) return;
-            setTransferred(true);
-            router.push(`/projects/${projectId}?selectedOffer=${next.offerId}#workflow-step-decision`);
-            router.refresh();
+          disabled={!record || pending || !sourceMessage.trim()}
+          onClick={() => void run({
+            action: "translateInquiry",
+            productUrl: result.productUrl,
+            sourceMessage,
+            targetLanguage,
           })}
           type="button"
         >
-          {text.transferToCalculation}
+          {text.translateMessage}
         </button>
-      )}
-      {transferred && <p className="muted-text">{text.transferred}</p>}
-      <p className="supplier-terms-warning">{text.unconfirmedCosts}</p>
-      <p className="muted-text">{text.costsRemainOpen}</p>
+        {translatedMessage.trim() && (
+          <div className="supplier-message-compare">
+            <label>
+              {text.original}
+              <textarea readOnly rows={8} value={sourceMessage} />
+            </label>
+            <label>
+              {text.translation}
+              <textarea
+                disabled={pending}
+                onChange={(event) => setTranslatedMessage(event.target.value)}
+                rows={8}
+                value={translatedMessage}
+              />
+            </label>
+          </div>
+        )}
+        {translatedMessage.trim() && (
+          <button
+            className="secondary-button"
+            disabled={pending}
+            onClick={() => void run({
+              action: "saveTranslation",
+              productUrl: result.productUrl,
+              translatedMessage,
+            })}
+            type="button"
+          >
+            {text.saveCorrection}
+          </button>
+        )}
+        {view?.communication.translationReused && sourceIsCurrent && (
+          <p className="muted-text">{text.reusedTranslation}</p>
+        )}
+        {view?.communication.estimatedCostUsd && (
+          <p className="muted-text">{text.estimatedCost}: USD {view.communication.estimatedCostUsd}</p>
+        )}
+        {translatedMessage.trim() && !translationIsCurrent && (
+          <p className="supplier-terms-warning">{text.staleTranslation}</p>
+        )}
+      </details>
+      <details className="supplier-message-section">
+        <summary>{text.sendSection}</summary>
+        <label>
+          {text.message}
+          <textarea readOnly rows={6} value={finalMessage} />
+        </label>
+        <p className="muted-text">{text.notSent}</p>
+        <div className="supplier-confirmation-actions">
+          <button className="secondary-button" onClick={() => void copyMessage()} type="button">
+            {copied ? text.copied : text.copy}
+          </button>
+          <a href={result.productUrl} rel="noreferrer" target="_blank">{text.openListing}</a>
+          <button
+            className="secondary-button"
+            disabled={!record || pending || record.status !== SupplierConfirmationStatuses.PREPARED}
+            onClick={() => void run({ action: "markSent", productUrl: result.productUrl })}
+            type="button"
+          >
+            {!record || record.status === SupplierConfirmationStatuses.PREPARED ? text.markSent : text.sent}
+          </button>
+        </div>
+      </details>
+      <details className="supplier-message-section">
+        <summary>{text.replySection}</summary>
+        <label>
+          {text.response}
+          <textarea
+            disabled={!replyEnabled || pending}
+            onChange={(event) => setResponseNote(event.target.value)}
+            rows={3}
+            value={responseNote}
+          />
+        </label>
+        <label>
+          {text.writtenQuote}
+          <textarea
+            disabled={!replyEnabled || pending}
+            onChange={(event) => setWrittenQuote(event.target.value)}
+            rows={4}
+            value={writtenQuote}
+          />
+        </label>
+        <div className="supplier-confirmation-actions">
+          <button
+            className="secondary-button"
+            disabled={!replyEnabled || pending || !writtenQuote.trim()}
+            onClick={() => void run({
+              action: "translateReply",
+              productUrl: result.productUrl,
+              responseNote,
+              writtenQuote,
+            })}
+            type="button"
+          >
+            {text.translateReply}
+          </button>
+          <button
+            className="secondary-button"
+            disabled={!replyEnabled || pending}
+            onClick={() => void run({
+              action: "saveReply",
+              productUrl: result.productUrl,
+              responseNote,
+              writtenQuote,
+            })}
+            type="button"
+          >
+            {text.saveReply}
+          </button>
+        </div>
+        {replyTranslation.trim() && (
+          <div className="supplier-message-compare">
+            <label>
+              {text.original}
+              <textarea readOnly rows={6} value={writtenQuote} />
+            </label>
+            <label>
+              {text.translation}
+              <textarea readOnly rows={6} value={replyTranslation} />
+            </label>
+          </div>
+        )}
+        {replyTranslation.trim() && !replyIsCurrent && (
+          <p className="supplier-terms-warning">{text.staleTranslation}</p>
+        )}
+        <p className="supplier-terms-warning">{text.translationNotProof}</p>
+        {(view?.communication.followUpQuestions.length ?? 0) > 0 && (
+          <div>
+            <strong>{text.followUp}</strong>
+            <ul>
+              {view?.communication.followUpQuestions.map((question) => <li key={question}>{question}</li>)}
+            </ul>
+          </div>
+        )}
+      </details>
+      <details className="supplier-message-section">
+        <summary>{text.confirmationSection}</summary>
+        {record && record.proposals.length > 0 && (
+          <div>
+            <strong>{text.extracted}</strong>
+            <ul>
+              {record.proposals.map((proposal) => (
+                <li key={proposal.key}>
+                  <span>{text.termLabel[proposal.key]}: {proposal.value}</span>
+                  <small>{proposal.confirmed ? text.evidence : text.proposal}</small>
+                  {proposal.confirmed ? (
+                    <strong>{text.confirmed}</strong>
+                  ) : (
+                    <button
+                      className="secondary-button"
+                      disabled={pending}
+                      onClick={() => void run({
+                        action: "confirmTerm",
+                        productUrl: result.productUrl,
+                        termKey: proposal.key satisfies ConfirmableSupplierTermKey,
+                      })}
+                      type="button"
+                    >
+                      {text.confirmValue}
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {record && (
+          <div>
+            <p>
+              <strong>{text.supplierPrice}: </strong>
+              {record.supplierPriceConfirmed
+                ? record.proposals.find((item) => item.key === "UNIT_PRICE")?.value
+                : record.proposals.find((item) => item.key === "UNIT_PRICE")?.confirmed
+                  ? text.priceQuantityMismatch
+                  : text.notConfirmed}
+            </p>
+            <p>
+              <strong>{text.confirmedQuantity}: </strong>
+              {record.quantityConfirmed
+                ? record.proposals.find((item) => item.key === "ORDER_QUANTITY")?.value
+                : text.notConfirmed}
+            </p>
+            <p>
+              <strong>{text.confirmedMoq}: </strong>
+              {record.moqConfirmed
+                ? moqProposal?.value
+                : moqProposal?.confirmed
+                  ? text.moqDoesNotFit
+                  : text.notConfirmed}
+            </p>
+            <p>
+              <strong>{text.confirmedVariants}: </strong>
+              {brief.readingGlasses
+                ? record.variantsConfirmed
+                  ? record.proposals.find((item) => item.key === "VARIANT_MIXING")?.value
+                  : text.notConfirmed
+                : text.variantsNotRequested}
+            </p>
+            <p>
+              <strong>{text.completeOrderTerms}: </strong>
+              {record.orderTermsConfirmed ? text.confirmed : text.notConfirmed}
+            </p>
+          </div>
+        )}
+        {record && record.proposals.some((item) => item.key === "UNIT_PRICE") && !quotedPriceCoversRequestedQuantity(record.writtenQuote, brief.quantity) && (
+          <p className="supplier-terms-warning">{text.priceQuantityMismatch}</p>
+        )}
+        {brief.readingGlasses && record?.proposals.some((item) => item.key === "DIOPTERS") && !record.variantsConfirmed && (
+          <p className="supplier-terms-warning">{text.diopterRangeIsNotMixing}</p>
+        )}
+        {record?.supplierPriceConfirmed && (
+          <button
+            className="secondary-button"
+            disabled={pending || transferred}
+            onClick={() => void run({ action: "transfer", productUrl: result.productUrl }).then((next) => {
+              if (!next?.offerId) return;
+              setTransferred(true);
+              router.push(`/projects/${projectId}?selectedOffer=${next.offerId}#workflow-step-decision`);
+              router.refresh();
+            })}
+            type="button"
+          >
+            {text.transferToCalculation}
+          </button>
+        )}
+        {transferred && <p className="muted-text">{text.transferred}</p>}
+        <p className="supplier-terms-warning">{text.unconfirmedCosts}</p>
+        <p className="muted-text">{text.costsRemainOpen}</p>
+        {record?.additionalConfirmationRequired && (
+          <p className="supplier-terms-warning">{text.additionalConfirmation}</p>
+        )}
+      </details>
       {error && <p className="supplier-terms-warning">{error}</p>}
-      {record?.additionalConfirmationRequired && (
-        <p className="supplier-terms-warning">{text.additionalConfirmation}</p>
-      )}
     </section>
   );
 }

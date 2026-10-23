@@ -8,10 +8,16 @@ import {
   markSupplierConfirmationSent,
   prepareSupplierConfirmation,
   saveSupplierConfirmationReply,
+  saveSupplierSourceMessage,
+  saveSupplierTranslatedMessage,
   SupplierConfirmationNotFoundError,
   SupplierConfirmationProjectNotFoundError,
   SupplierConfirmationStateError,
+  SupplierMessageFactError,
+  SupplierMessageTranslationNotConfiguredError,
   transferSupplierConfirmationToOffer,
+  translateSupplierInquiry,
+  translateSupplierReply,
 } from "@/modules/negotiation/application/supplier-confirmation-service";
 import { supplierOfferSearchResultSchema } from "@/modules/product-search/domain/search";
 
@@ -50,6 +56,28 @@ const actionSchema = z.discriminatedUnion("action", [
     action: z.literal("transfer"),
     productUrl: z.url().max(2_000),
   }),
+  z.object({
+    action: z.literal("saveSource"),
+    productUrl: z.url().max(2_000),
+    sourceMessage: z.string().max(50_000),
+  }),
+  z.object({
+    action: z.literal("translateInquiry"),
+    productUrl: z.url().max(2_000),
+    sourceMessage: z.string().max(50_000),
+    targetLanguage: z.enum(["EN", "ZH", "EN_ZH"]),
+  }),
+  z.object({
+    action: z.literal("saveTranslation"),
+    productUrl: z.url().max(2_000),
+    translatedMessage: z.string().max(50_000),
+  }),
+  z.object({
+    action: z.literal("translateReply"),
+    productUrl: z.url().max(2_000),
+    responseNote: z.string().max(20_000),
+    writtenQuote: z.string().max(50_000),
+  }),
 ]);
 
 function confirmationError(error: unknown) {
@@ -61,6 +89,17 @@ function confirmationError(error: unknown) {
   }
   if (error instanceof SupplierConfirmationStateError) {
     return NextResponse.json({ error: "Ovaj korak još nije dozvoljen." }, { status: 409 });
+  }
+  if (error instanceof SupplierMessageTranslationNotConfiguredError) {
+    return NextResponse.json({
+      error: "Prevod nije podešen. Potrebna je serverska promenljiva SUPPLIER_MESSAGE_OPENAI_API_KEY.",
+    }, { status: 503 });
+  }
+  if (error instanceof SupplierMessageFactError) {
+    const missing = error.missing.slice(0, 8).join(", ");
+    return NextResponse.json({
+      error: `Prevod nije sačuvan jer ne sadrži sve poslovne podatke (${missing}).`,
+    }, { status: 422 });
   }
   return null;
 }
@@ -122,6 +161,18 @@ export async function POST(
     }
     if (action.action === "confirmTerm") {
       return NextResponse.json(await confirmSupplierConfirmationTerm(projectId, organizationId, action));
+    }
+    if (action.action === "saveSource") {
+      return NextResponse.json(await saveSupplierSourceMessage(projectId, organizationId, action));
+    }
+    if (action.action === "translateInquiry") {
+      return NextResponse.json(await translateSupplierInquiry(projectId, organizationId, action));
+    }
+    if (action.action === "saveTranslation") {
+      return NextResponse.json(await saveSupplierTranslatedMessage(projectId, organizationId, action));
+    }
+    if (action.action === "translateReply") {
+      return NextResponse.json(await translateSupplierReply(projectId, organizationId, action));
     }
     return NextResponse.json(await transferSupplierConfirmationToOffer(
       projectId,
