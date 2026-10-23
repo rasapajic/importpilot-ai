@@ -1,16 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useState } from "react";
 
 import type { Locale } from "@/modules/i18n/translations";
+import type { SupplierConfirmationView } from "@/modules/negotiation/application/supplier-confirmation-service";
 import {
   buildSupplierConfirmationBrief,
-  confirmSupplierTerm,
-  createPreparedConfirmation,
-  markInquirySent,
-  saveSupplierReply,
   SupplierConfirmationStatuses,
-  type SupplierConfirmationRecord,
+  type ConfirmableSupplierTermKey,
   type SupplierConfirmationStatus,
 } from "@/modules/negotiation/domain/supplier-confirmation";
 import type { SupplierOfferSearchResult } from "@/modules/product-search/domain/search";
@@ -43,6 +40,19 @@ type Copy = {
   confirmValue: string;
   confirmed: string;
   supplierPrice: string;
+  confirmedQuantity: string;
+  confirmedMoq: string;
+  confirmedVariants: string;
+  completeOrderTerms: string;
+  notConfirmed: string;
+  proposal: string;
+  moqDoesNotFit: string;
+  variantsNotRequested: string;
+  transferToCalculation: string;
+  transferred: string;
+  costsRemainOpen: string;
+  loading: string;
+  saveError: string;
   unconfirmedCosts: string;
   additionalConfirmation: string;
   evidence: string;
@@ -71,8 +81,21 @@ const copy: Record<Locale, Copy> = {
     extracted: "Izdvojene vrednosti iz pisane ponude",
     confirmValue: "Potvrđujem ovu vrednost",
     confirmed: "Potvrđeno",
-    supplierPrice: "Potvrđena cena dobavljača",
-    unconfirmedCosts: "Transport, carina i ostali troškovi ostaju nepotvrđeni i ne ulaze u cenu dobavljača.",
+    supplierPrice: "Dokumentovana cena dobavljača",
+    confirmedQuantity: "Potvrđena količina",
+    confirmedMoq: "Potvrđen MOQ",
+    confirmedVariants: "Potvrđene varijante",
+    completeOrderTerms: "Uslovi kompletne narudžbine",
+    notConfirmed: "Nije potvrđeno",
+    proposal: "Predlog iz teksta, čeka potvrdu",
+    moqDoesNotFit: "MOQ ne pokriva traženu količinu",
+    variantsNotRequested: "Ovaj upit ne traži mešanje varijanti",
+    transferToCalculation: "Prenesi potvrđenu cenu u obračun",
+    transferred: "Potvrđena cena je preneta u obračun uvoza.",
+    costsRemainOpen: "Transport, carina, PDV i ostali troškovi ostaju odvojeni i nepotvrđeni.",
+    loading: "Učitavanje potvrde...",
+    saveError: "Potvrda nije sačuvana. Pokušajte ponovo.",
+    unconfirmedCosts: "Transport, carina, PDV i ostali troškovi ostaju nepotvrđeni i ne ulaze u cenu dobavljača.",
     additionalConfirmation: "Potrebna je dodatna potvrda. Odgovor ne pokriva traženu količinu ili specifikaciju.",
     evidence: "Povezano sa pisanom ponudom",
     status: {
@@ -131,8 +154,21 @@ const copy: Record<Locale, Copy> = {
     extracted: "Aus dem schriftlichen Angebot erkannte Werte",
     confirmValue: "Diesen Wert bestätigen",
     confirmed: "Bestätigt",
-    supplierPrice: "Bestätigter Lieferantenpreis",
-    unconfirmedCosts: "Transport, Zoll und sonstige Kosten bleiben unbestätigt und gehören nicht zum Lieferantenpreis.",
+    supplierPrice: "Dokumentierter Lieferantenpreis",
+    confirmedQuantity: "Bestätigte Menge",
+    confirmedMoq: "Bestätigtes MOQ",
+    confirmedVariants: "Bestätigte Varianten",
+    completeOrderTerms: "Bedingungen der vollständigen Bestellung",
+    notConfirmed: "Nicht bestätigt",
+    proposal: "Vorschlag aus dem Text, wartet auf Bestätigung",
+    moqDoesNotFit: "Das MOQ deckt die gewünschte Menge nicht ab",
+    variantsNotRequested: "Diese Anfrage verlangt kein Mischen von Varianten",
+    transferToCalculation: "Bestätigten Preis in die Kalkulation übernehmen",
+    transferred: "Der bestätigte Preis wurde in die Importkalkulation übernommen.",
+    costsRemainOpen: "Transport, Zoll, MwSt. und sonstige Kosten bleiben getrennt und unbestätigt.",
+    loading: "Bestätigung wird geladen...",
+    saveError: "Die Bestätigung wurde nicht gespeichert. Versuchen Sie es erneut.",
+    unconfirmedCosts: "Transport, Zoll, MwSt. und sonstige Kosten bleiben unbestätigt und gehören nicht zum Lieferantenpreis.",
     additionalConfirmation: "Eine weitere Bestätigung ist nötig. Die Antwort deckt Menge oder Spezifikation nicht ab.",
     evidence: "Mit dem schriftlichen Angebot verknüpft",
     status: {
@@ -191,8 +227,21 @@ const copy: Record<Locale, Copy> = {
     extracted: "Values extracted from the written quotation",
     confirmValue: "I confirm this value",
     confirmed: "Confirmed",
-    supplierPrice: "Confirmed supplier price",
-    unconfirmedCosts: "Transport, customs, and other costs stay unconfirmed and are not part of the supplier price.",
+    supplierPrice: "Documented supplier price",
+    confirmedQuantity: "Confirmed quantity",
+    confirmedMoq: "Confirmed MOQ",
+    confirmedVariants: "Confirmed variants",
+    completeOrderTerms: "Complete order terms",
+    notConfirmed: "Not confirmed",
+    proposal: "Proposal from the text, waiting for confirmation",
+    moqDoesNotFit: "The MOQ does not cover the requested quantity",
+    variantsNotRequested: "This inquiry does not request variant mixing",
+    transferToCalculation: "Transfer the confirmed price to the calculation",
+    transferred: "The confirmed price was transferred to the import calculation.",
+    costsRemainOpen: "Transport, customs, VAT, and other costs stay separate and unconfirmed.",
+    loading: "Loading confirmation...",
+    saveError: "The confirmation was not saved. Try again.",
+    unconfirmedCosts: "Transport, customs, VAT, and other costs stay unconfirmed and are not part of the supplier price.",
     additionalConfirmation: "Additional confirmation is required. The response does not cover the requested quantity or specification.",
     evidence: "Linked to the written quotation",
     status: {
@@ -234,43 +283,21 @@ const copy: Record<Locale, Copy> = {
   },
 };
 
-function storageKey(projectId: string, productUrl: string) {
-  return `jakov360-supplier-confirmation:${projectId}:${productUrl}`;
-}
-
-function parseRecord(raw: string) {
-  if (!raw) return createPreparedConfirmation();
-  try {
-    const parsed = JSON.parse(raw) as SupplierConfirmationRecord;
-    if (!parsed || typeof parsed !== "object" || typeof parsed.status !== "string") {
-      return createPreparedConfirmation();
-    }
-    return {
-      ...createPreparedConfirmation(),
-      ...parsed,
-      transportConfirmed: false as const,
-      customsConfirmed: false as const,
-      otherCostsConfirmed: false as const,
-    };
-  } catch {
-    return createPreparedConfirmation();
-  }
-}
-
-function subscribeToStoredConfirmation() {
-  return () => {};
-}
-
-function clientHasStorage() {
-  return true;
-}
-
-function serverHasStorage() {
-  return false;
-}
-
 export function supplierConfirmationCopy(locale: Locale) {
   return copy[locale];
+}
+
+async function postConfirmation(
+  projectId: string,
+  body: Record<string, unknown>,
+) {
+  const response = await fetch(`/api/projects/${projectId}/supplier-confirmations`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) throw new Error("supplier-confirmation-save-failed");
+  return await response.json() as SupplierConfirmationView;
 }
 
 export function SupplierConfirmationPanel({
@@ -295,49 +322,65 @@ export function SupplierConfirmationPanel({
     quantity,
     destination: targetCountry,
   });
-  const storageId = `${projectId}\n${result.productUrl}`;
-  const storedRaw = useSyncExternalStore(
-    subscribeToStoredConfirmation,
-    () => window.localStorage.getItem(storageKey(projectId, result.productUrl)) ?? "",
-    () => "",
-  );
-  const hydrated = useSyncExternalStore(
-    subscribeToStoredConfirmation,
-    clientHasStorage,
-    serverHasStorage,
-  );
-  const storedRecord = useMemo(() => parseRecord(storedRaw), [storedRaw]);
-  const [override, setOverride] = useState<{ id: string; record: SupplierConfirmationRecord } | null>(null);
-  const [draft, setDraft] = useState<{ id: string; responseNote: string; writtenQuote: string } | null>(null);
+  const [view, setView] = useState<SupplierConfirmationView | null>(null);
+  const [responseNote, setResponseNote] = useState("");
+  const [writtenQuote, setWrittenQuote] = useState("");
   const [copied, setCopied] = useState(false);
-  const record = override?.id === storageId ? override.record : storedRecord;
-  const responseNote = draft?.id === storageId ? draft.responseNote : record.responseNote;
-  const writtenQuote = draft?.id === storageId ? draft.writtenQuote : record.writtenQuote;
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+  const [transferred, setTransferred] = useState(false);
+  const record = view?.record ?? null;
 
   useEffect(() => {
-    if (!hydrated) return;
-    window.localStorage.setItem(
-      storageKey(projectId, result.productUrl),
-      JSON.stringify(record),
-    );
-  }, [hydrated, projectId, record, result.productUrl]);
+    let cancelled = false;
+    void postConfirmation(projectId, {
+      action: "prepare",
+      productName,
+      result,
+    }).then((next) => {
+      if (cancelled) return;
+      setView(next);
+      setResponseNote(next.record.responseNote);
+      setWrittenQuote(next.record.writtenQuote);
+      setTransferred(Boolean(next.offerId));
+    }).catch(() => {
+      if (!cancelled) setError(text.saveError);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [productName, projectId, result, text.saveError]);
 
-  function update(next: SupplierConfirmationRecord) {
-    setOverride({ id: storageId, record: next });
-    setDraft({ id: storageId, responseNote: next.responseNote, writtenQuote: next.writtenQuote });
+  async function run(body: Record<string, unknown>) {
+    setPending(true);
+    setError("");
+    try {
+      const next = await postConfirmation(projectId, body);
+      setView(next);
+      setResponseNote(next.record.responseNote);
+      setWrittenQuote(next.record.writtenQuote);
+      return next;
+    } catch {
+      setError(text.saveError);
+      return null;
+    } finally {
+      setPending(false);
+    }
   }
 
   async function copyMessage() {
+    const message = view ? `${view.subject}\n\n${view.body}` : `${brief.subject}\n\n${brief.body}`;
     try {
-      await navigator.clipboard.writeText(`${brief.subject}\n\n${brief.body}`);
+      await navigator.clipboard.writeText(message);
       setCopied(true);
     } catch {
       setCopied(false);
     }
   }
 
-  const current = statuses.indexOf(record.status);
-  const replyEnabled = current >= statuses.indexOf(SupplierConfirmationStatuses.SENT);
+  const current = record ? statuses.indexOf(record.status) : statuses.indexOf(SupplierConfirmationStatuses.FOUND);
+  const replyEnabled = record !== null && current >= statuses.indexOf(SupplierConfirmationStatuses.SENT);
+  const moqProposal = record?.proposals.find((item) => item.key === "MOQ") ?? null;
 
   return (
     <section className="supplier-confirmation-panel" aria-label={text.requestConfirmation}>
@@ -356,9 +399,10 @@ export function SupplierConfirmationPanel({
           {brief.asks.map((ask) => <li key={ask}>{ask}</li>)}
         </ul>
       </div>
+      {!record && <p className="muted-text">{error || text.loading}</p>}
       <label>
         {text.message}
-        <textarea readOnly rows={8} value={`${brief.subject}\n\n${brief.body}`} />
+        <textarea readOnly rows={8} value={view ? `${view.subject}\n\n${view.body}` : `${brief.subject}\n\n${brief.body}`} />
       </label>
       <p className="muted-text">{text.notSent}</p>
       <div className="supplier-confirmation-actions">
@@ -368,22 +412,18 @@ export function SupplierConfirmationPanel({
         <a href={result.productUrl} rel="noreferrer" target="_blank">{text.openListing}</a>
         <button
           className="secondary-button"
-          disabled={record.status !== SupplierConfirmationStatuses.PREPARED}
-          onClick={() => update(markInquirySent(record))}
+          disabled={!record || pending || record.status !== SupplierConfirmationStatuses.PREPARED}
+          onClick={() => void run({ action: "markSent", productUrl: result.productUrl })}
           type="button"
         >
-          {record.status === SupplierConfirmationStatuses.PREPARED ? text.markSent : text.sent}
+          {!record || record.status === SupplierConfirmationStatuses.PREPARED ? text.markSent : text.sent}
         </button>
       </div>
       <label>
         {text.response}
         <textarea
-          disabled={!replyEnabled}
-          onChange={(event) => setDraft({
-            id: storageId,
-            responseNote: event.target.value,
-            writtenQuote,
-          })}
+          disabled={!replyEnabled || pending}
+          onChange={(event) => setResponseNote(event.target.value)}
           rows={3}
           value={responseNote}
         />
@@ -391,38 +431,44 @@ export function SupplierConfirmationPanel({
       <label>
         {text.writtenQuote}
         <textarea
-          disabled={!replyEnabled}
-          onChange={(event) => setDraft({
-            id: storageId,
-            responseNote,
-            writtenQuote: event.target.value,
-          })}
+          disabled={!replyEnabled || pending}
+          onChange={(event) => setWrittenQuote(event.target.value)}
           rows={4}
           value={writtenQuote}
         />
       </label>
       <button
         className="secondary-button"
-        disabled={!replyEnabled}
-        onClick={() => update(saveSupplierReply(record, brief, { responseNote, writtenQuote }))}
+        disabled={!replyEnabled || pending}
+        onClick={() => void run({
+          action: "saveReply",
+          productUrl: result.productUrl,
+          responseNote,
+          writtenQuote,
+        })}
         type="button"
       >
         {text.saveReply}
       </button>
-      {record.proposals.length > 0 && (
+      {record && record.proposals.length > 0 && (
         <div>
           <strong>{text.extracted}</strong>
           <ul>
             {record.proposals.map((proposal) => (
               <li key={proposal.key}>
                 <span>{text.termLabel[proposal.key]}: {proposal.value}</span>
-                <small>{text.evidence}</small>
+                <small>{proposal.confirmed ? text.evidence : text.proposal}</small>
                 {proposal.confirmed ? (
                   <strong>{text.confirmed}</strong>
                 ) : (
                   <button
                     className="secondary-button"
-                    onClick={() => update(confirmSupplierTerm(record, brief, proposal.key))}
+                    disabled={pending}
+                    onClick={() => void run({
+                      action: "confirmTerm",
+                      productUrl: result.productUrl,
+                      termKey: proposal.key satisfies ConfirmableSupplierTermKey,
+                    })}
                     type="button"
                   >
                     {text.confirmValue}
@@ -433,14 +479,59 @@ export function SupplierConfirmationPanel({
           </ul>
         </div>
       )}
-      <p>
-        <strong>{text.supplierPrice}: </strong>
-        {record.supplierPriceConfirmed
-          ? record.proposals.find((item) => item.key === "UNIT_PRICE")?.value
-          : text.missing}
-      </p>
+      {record && (
+        <div>
+          <p>
+            <strong>{text.supplierPrice}: </strong>
+            {record.supplierPriceConfirmed
+              ? record.proposals.find((item) => item.key === "UNIT_PRICE")?.value
+              : text.notConfirmed}
+          </p>
+          <p>
+            <strong>{text.confirmedQuantity}: </strong>
+            {record.quantityConfirmed
+              ? record.proposals.find((item) => item.key === "ORDER_QUANTITY")?.value
+              : text.notConfirmed}
+          </p>
+          <p>
+            <strong>{text.confirmedMoq}: </strong>
+            {record.moqConfirmed
+              ? moqProposal?.value
+              : moqProposal?.confirmed
+                ? text.moqDoesNotFit
+                : text.notConfirmed}
+          </p>
+          <p>
+            <strong>{text.confirmedVariants}: </strong>
+            {brief.readingGlasses
+              ? record.variantsConfirmed
+                ? record.proposals.find((item) => item.key === "DIOPTERS")?.value
+                : text.notConfirmed
+              : text.variantsNotRequested}
+          </p>
+          <p>
+            <strong>{text.completeOrderTerms}: </strong>
+            {record.orderTermsConfirmed ? text.confirmed : text.notConfirmed}
+          </p>
+        </div>
+      )}
+      {record?.supplierPriceConfirmed && (
+        <button
+          className="secondary-button"
+          disabled={pending || transferred}
+          onClick={() => void run({ action: "transfer", productUrl: result.productUrl }).then((next) => {
+            if (next) setTransferred(true);
+          })}
+          type="button"
+        >
+          {text.transferToCalculation}
+        </button>
+      )}
+      {transferred && <p className="muted-text">{text.transferred}</p>}
       <p className="supplier-terms-warning">{text.unconfirmedCosts}</p>
-      {record.additionalConfirmationRequired && (
+      <p className="muted-text">{text.costsRemainOpen}</p>
+      {error && <p className="supplier-terms-warning">{error}</p>}
+      {record?.additionalConfirmationRequired && (
         <p className="supplier-terms-warning">{text.additionalConfirmation}</p>
       )}
     </section>

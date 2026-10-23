@@ -25,6 +25,7 @@ import { getCountryDisplayName } from "@/modules/i18n/country-names";
 import type { Locale } from "@/modules/i18n/translations";
 import type { SupplierOfferSearchResult } from "@/modules/product-search/domain/search";
 import { estimateTajaPreliminaryLandedCost } from "@/modules/product-search/domain/taja-preliminary-cost-estimate";
+import { transferredSupplierQuote } from "@/modules/negotiation/domain/supplier-confirmation";
 import { extractSupplierLogisticsData } from "@/modules/transport/domain/transport-estimator";
 
 type DecisionView = ProjectDecisionResult & { id: string; createdAt: Date };
@@ -46,6 +47,7 @@ type SimpleCopy = {
   selectedSupplier: string;
   sellingPrice: string;
   supplierPrice: string;
+  confirmedQuoteNote: string;
   supplierCountry: string;
   moq: string;
   incoterm: string;
@@ -98,6 +100,7 @@ const copy: Record<Locale, SimpleCopy> = {
     selectedSupplier: "Dobavljač",
     sellingPrice: "Prodajna cena",
     supplierPrice: "Cena dobavljača",
+    confirmedQuoteNote: "Dokumentovana cena iz pisane ponude. Transport, carina, PDV i ostali troškovi nisu potvrđeni.",
     supplierCountry: "Zemlja dobavljača",
     moq: "Minimalna količina (MOQ)",
     incoterm: "Uslov isporuke (Incoterm)",
@@ -148,6 +151,7 @@ const copy: Record<Locale, SimpleCopy> = {
     selectedSupplier: "Lieferant",
     sellingPrice: "Verkaufspreis",
     supplierPrice: "Lieferantenpreis",
+    confirmedQuoteNote: "Dokumentierter Preis aus dem schriftlichen Angebot. Transport, Zoll, MwSt. und sonstige Kosten sind nicht bestätigt.",
     supplierCountry: "Lieferantenland",
     moq: "MOQ",
     incoterm: "Incoterm",
@@ -198,6 +202,7 @@ const copy: Record<Locale, SimpleCopy> = {
     selectedSupplier: "Supplier",
     sellingPrice: "Selling price",
     supplierPrice: "Supplier price",
+    confirmedQuoteNote: "Documented price from the written quotation. Transport, customs, VAT, and other costs are not confirmed.",
     supplierCountry: "Supplier country",
     moq: "MOQ",
     incoterm: "Incoterm",
@@ -548,7 +553,13 @@ export function SimpleProfitabilityPanel({
                   </header>
 
                   <div className="offer-highlights">
-                    <span>{text.supplierPrice}<strong>{offer.unitPrice && offer.currency ? money(offer.unitPrice, offer.currency) : text.unknown}</strong></span>
+                    <span>
+                      {text.supplierPrice}
+                      <strong>{offer.unitPrice && offer.currency ? money(offer.unitPrice, offer.currency) : text.unknown}</strong>
+                      {transferredSupplierQuote(offer.sourceMetadata) && (
+                        <small className="supplier-fx-note">{text.confirmedQuoteNote}</small>
+                      )}
+                    </span>
                     <span>{text.moq}<strong>{offer.moq ?? text.unknown}</strong></span>
                     <span>{text.incoterm}<strong>{displayedIncoterm}</strong></span>
                     <span>{text.delivery}<strong>{displayedDelivery}</strong></span>

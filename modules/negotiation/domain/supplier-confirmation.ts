@@ -56,10 +56,28 @@ export type SupplierConfirmationRecord = {
   writtenQuote: string;
   proposals: SupplierTermProposal[];
   supplierPriceConfirmed: boolean;
+  quantityConfirmed: boolean;
+  moqConfirmed: boolean;
+  variantsConfirmed: boolean;
+  orderTermsConfirmed: boolean;
   transportConfirmed: false;
   customsConfirmed: false;
+  vatConfirmed: false;
   otherCostsConfirmed: false;
   additionalConfirmationRequired: boolean;
+};
+
+export type ConfirmedCalculationInput = {
+  unitPrice: string;
+  currency: string;
+  quantity: number | null;
+  moq: number | null;
+  incoterm: string | null;
+  deliveryTimeDays: number | null;
+  transportConfirmed: false;
+  customsConfirmed: false;
+  vatConfirmed: false;
+  otherCostsConfirmed: false;
 };
 
 const DESTINATION_NAMES: Record<string, string> = {
@@ -298,21 +316,69 @@ function proposal(
   return record.proposals.find((item) => item.key === key) ?? null;
 }
 
-export function additionalConfirmationRequired(
-  record: Pick<SupplierConfirmationRecord, "proposals">,
+const unconfirmedCosts = {
+  transportConfirmed: false as const,
+  customsConfirmed: false as const,
+  vatConfirmed: false as const,
+  otherCostsConfirmed: false as const,
+};
+
+export function applyConfirmationState(
+  record: SupplierConfirmationRecord,
   brief: Pick<SupplierConfirmationBrief, "quantity" | "readingGlasses">,
-) {
+): SupplierConfirmationRecord {
   const statedQuantity = proposal(record, "ORDER_QUANTITY");
   const statedMoq = proposal(record, "MOQ");
+  const statedDiopters = proposal(record, "DIOPTERS");
   const quantity = statedQuantity ? parseNumber(statedQuantity.value) : null;
   const moq = statedMoq ? parseNumber(statedMoq.value) : null;
+  const supplierPriceConfirmed = proposal(record, "UNIT_PRICE")?.confirmed === true
+    && record.writtenQuote.trim().length > 0;
+  const quantityConfirmed = statedQuantity?.confirmed === true
+    && quantity !== null
+    && (brief.quantity === null || quantity >= brief.quantity);
+  const moqConfirmed = statedMoq?.confirmed === true
+    && moq !== null
+    && (brief.quantity === null || moq <= brief.quantity);
+  const variantsConfirmed = brief.readingGlasses && statedDiopters?.confirmed === true;
+  const orderTermsConfirmed = supplierPriceConfirmed
+    && quantityConfirmed
+    && moqConfirmed
+    && (!brief.readingGlasses || variantsConfirmed);
+  const replySaved = record.writtenQuote.trim().length > 0 || record.responseNote.trim().length > 0;
   const quantityGap = brief.quantity !== null && (
     quantity === null ||
     quantity < brief.quantity ||
-    (moq !== null && moq > brief.quantity)
+    moq === null ||
+    moq > brief.quantity
   );
-  const diopterGap = brief.readingGlasses && proposal(record, "DIOPTERS")?.confirmed !== true;
-  return quantityGap || diopterGap;
+  const diopterGap = brief.readingGlasses && statedDiopters?.confirmed !== true;
+  const status = supplierPriceConfirmed
+    ? SupplierConfirmationStatuses.DOCUMENTED
+    : record.status;
+
+  return {
+    ...record,
+    status,
+    supplierPriceConfirmed,
+    quantityConfirmed,
+    moqConfirmed,
+    variantsConfirmed,
+    orderTermsConfirmed,
+    ...unconfirmedCosts,
+    additionalConfirmationRequired: replySaved && (quantityGap || diopterGap),
+  };
+}
+
+export function additionalConfirmationRequired(
+  record: Pick<SupplierConfirmationRecord, "proposals" | "responseNote" | "writtenQuote">,
+  brief: Pick<SupplierConfirmationBrief, "quantity" | "readingGlasses">,
+) {
+  return applyConfirmationState({
+    ...createPreparedConfirmation(),
+    ...record,
+    proposals: record.proposals,
+  }, brief).additionalConfirmationRequired;
 }
 
 export function createPreparedConfirmation(): SupplierConfirmationRecord {
@@ -322,10 +388,42 @@ export function createPreparedConfirmation(): SupplierConfirmationRecord {
     writtenQuote: "",
     proposals: [],
     supplierPriceConfirmed: false,
-    transportConfirmed: false,
-    customsConfirmed: false,
-    otherCostsConfirmed: false,
+    quantityConfirmed: false,
+    moqConfirmed: false,
+    variantsConfirmed: false,
+    orderTermsConfirmed: false,
+    ...unconfirmedCosts,
     additionalConfirmationRequired: false,
+  };
+}
+
+export function confirmedCalculationInput(
+  record: SupplierConfirmationRecord,
+): ConfirmedCalculationInput | null {
+  const price = proposal(record, "UNIT_PRICE");
+  const match = price?.confirmed === true
+    ? price.value.match(/^(\d+(?:\.\d+)?) ([A-Z]{3})$/)
+    : null;
+  if (!record.supplierPriceConfirmed || !match) return null;
+  const quantity = proposal(record, "ORDER_QUANTITY");
+  const moq = proposal(record, "MOQ");
+  const incoterm = proposal(record, "INCOTERM");
+  const leadTime = proposal(record, "LEAD_TIME_DAYS");
+  const quantityValue = quantity?.confirmed === true && record.quantityConfirmed
+    ? parseNumber(quantity.value)
+    : null;
+  const moqValue = moq?.confirmed === true && record.moqConfirmed
+    ? parseNumber(moq.value)
+    : null;
+  const leadTimeValue = leadTime?.confirmed === true ? parseNumber(leadTime.value) : null;
+  return {
+    unitPrice: match[1],
+    currency: match[2],
+    quantity: quantityValue,
+    moq: moqValue,
+    incoterm: incoterm?.confirmed === true ? incoterm.value : null,
+    deliveryTimeDays: leadTimeValue !== null && Number.isInteger(leadTimeValue) ? leadTimeValue : null,
+    ...unconfirmedCosts,
   };
 }
 
@@ -349,22 +447,13 @@ export function saveSupplierReply(
   ) {
     return record;
   }
-  const proposals = extractSupplierTermProposals(writtenQuote);
-  const next = {
+  return applyConfirmationState({
     ...record,
     status: SupplierConfirmationStatuses.RESPONSE_RECEIVED,
     responseNote,
     writtenQuote,
-    proposals,
-    supplierPriceConfirmed: false,
-    transportConfirmed: false as const,
-    customsConfirmed: false as const,
-    otherCostsConfirmed: false as const,
-  };
-  return {
-    ...next,
-    additionalConfirmationRequired: additionalConfirmationRequired(next, brief),
-  };
+    proposals: extractSupplierTermProposals(writtenQuote),
+  }, brief);
 }
 
 export function confirmSupplierTerm(
@@ -373,25 +462,24 @@ export function confirmSupplierTerm(
   key: ConfirmableSupplierTermKey,
 ): SupplierConfirmationRecord {
   if (!record.proposals.some((item) => item.key === key)) return record;
-  const proposals = record.proposals.map((item) =>
-    item.key === key ? { ...item, confirmed: true } : item,
-  );
-  const supplierPriceConfirmed = proposals.some((item) =>
-    item.key === "UNIT_PRICE" && item.confirmed,
-  );
-  const next = {
+  if (!record.writtenQuote.trim()) return record;
+  return applyConfirmationState({
     ...record,
-    proposals,
-    supplierPriceConfirmed,
-    transportConfirmed: false as const,
-    customsConfirmed: false as const,
-    otherCostsConfirmed: false as const,
-    status: supplierPriceConfirmed && record.writtenQuote
-      ? SupplierConfirmationStatuses.DOCUMENTED
-      : record.status,
-  };
+    proposals: record.proposals.map((item) =>
+      item.key === key ? { ...item, confirmed: true } : item,
+    ),
+  }, brief);
+}
+
+export function transferredSupplierQuote(metadata: unknown) {
+  if (!metadata || typeof metadata !== "object") return null;
+  const confirmation = (metadata as { supplierConfirmation?: unknown }).supplierConfirmation;
+  if (!confirmation || typeof confirmation !== "object") return null;
+  const value = confirmation as { supplierPriceConfirmed?: unknown; orderTermsConfirmed?: unknown };
+  if (value.supplierPriceConfirmed !== true) return null;
   return {
-    ...next,
-    additionalConfirmationRequired: additionalConfirmationRequired(next, brief),
+    supplierPriceConfirmed: true,
+    orderTermsConfirmed: value.orderTermsConfirmed === true,
+    ...unconfirmedCosts,
   };
 }

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildSupplierConfirmationBrief,
   confirmSupplierTerm,
+  confirmedCalculationInput,
   createPreparedConfirmation,
   markInquirySent,
   saveSupplierReply,
@@ -109,20 +110,34 @@ describe("supplier confirmation request", () => {
     expect(received.proposals.some((item) => item.value.includes("400"))).toBe(false);
     expect(received.transportConfirmed).toBe(false);
     expect(received.customsConfirmed).toBe(false);
+    expect(received.vatConfirmed).toBe(false);
     expect(received.otherCostsConfirmed).toBe(false);
+    expect(received.orderTermsConfirmed).toBe(false);
     expect(received.additionalConfirmationRequired).toBe(true);
 
     const documented = confirmSupplierTerm(received, brief, "UNIT_PRICE");
     expect(documented.status).toBe(SupplierConfirmationStatuses.DOCUMENTED);
     expect(documented.supplierPriceConfirmed).toBe(true);
+    expect(documented.orderTermsConfirmed).toBe(false);
+    expect(documented.moqConfirmed).toBe(false);
     expect(documented.transportConfirmed).toBe(false);
     expect(documented.customsConfirmed).toBe(false);
+    expect(documented.vatConfirmed).toBe(false);
     expect(documented.otherCostsConfirmed).toBe(false);
     expect(documented.additionalConfirmationRequired).toBe(true);
     expect(documented.proposals.find((item) => item.key === "DIOPTERS")?.confirmed).toBe(false);
+    expect(confirmedCalculationInput(documented)).toMatchObject({
+      unitPrice: "1.05",
+      currency: "USD",
+      moq: null,
+      transportConfirmed: false,
+      customsConfirmed: false,
+      vatConfirmed: false,
+      otherCostsConfirmed: false,
+    });
   });
 
-  it("clears the extra confirmation flag only after quantity and diopters are explicitly confirmed", () => {
+  it("confirms the complete order only after quantity, MOQ, and diopters are explicitly confirmed", () => {
     const brief = buildSupplierConfirmationBrief({
       result: glassesOffer(),
       productName: "reading glasses",
@@ -135,10 +150,20 @@ describe("supplier confirmation request", () => {
     });
     const withPrice = confirmSupplierTerm(received, brief, "UNIT_PRICE");
     expect(withPrice.additionalConfirmationRequired).toBe(true);
+    expect(withPrice.orderTermsConfirmed).toBe(false);
     const covered = confirmSupplierTerm(withPrice, brief, "DIOPTERS");
     expect(covered.supplierPriceConfirmed).toBe(true);
+    expect(covered.variantsConfirmed).toBe(true);
+    expect(covered.orderTermsConfirmed).toBe(false);
     expect(covered.additionalConfirmationRequired).toBe(false);
-    expect(covered.transportConfirmed).toBe(false);
+    const withQuantity = confirmSupplierTerm(covered, brief, "ORDER_QUANTITY");
+    const complete = confirmSupplierTerm(withQuantity, brief, "MOQ");
+    expect(complete.quantityConfirmed).toBe(true);
+    expect(complete.moqConfirmed).toBe(true);
+    expect(complete.orderTermsConfirmed).toBe(true);
+    expect(complete.transportConfirmed).toBe(false);
+    expect(complete.vatConfirmed).toBe(false);
+    expect(confirmedCalculationInput(complete)?.moq).toBe(100);
   });
 
   it("does not turn a freight amount into the supplier unit price", () => {

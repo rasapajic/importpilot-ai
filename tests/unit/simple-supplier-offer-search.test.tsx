@@ -254,7 +254,12 @@ describe("ImportPilot 1.0 simple supplier results", () => {
     expect(confirmationSource).toContain("SENT: \"Upit poslat\"");
     expect(confirmationSource).toContain("RESPONSE_RECEIVED: \"Odgovor primljen\"");
     expect(confirmationSource).toContain("DOCUMENTED: \"Ponuda dokumentovana\"");
-    expect(confirmationSource).not.toContain("fetch(");
+    expect(confirmationSource).toContain("/supplier-confirmations");
+    expect(confirmationSource).toContain("Dokumentovana cena dobavljača");
+    expect(confirmationSource).toContain("Uslovi kompletne narudžbine");
+    expect(confirmationSource).toContain("Prenesi potvrđenu cenu u obračun");
+    expect(confirmationSource).not.toContain("localStorage");
+    expect(confirmationSource).not.toContain("mailto:");
     expect(resultCss).toContain(".search-result-actions");
     expect(resultCss).toContain(".supplier-confirmation-panel");
   });
