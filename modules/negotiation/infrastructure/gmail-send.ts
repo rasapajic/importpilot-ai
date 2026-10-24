@@ -29,7 +29,25 @@ function validEmail(value: string) {
 
 function encodeHeader(value: string) {
   if (/^[\x20-\x7E]+$/.test(value)) return value;
-  return `=?UTF-8?B?${Buffer.from(value).toString("base64")}?=`;
+  // RFC 2047: each encoded-word must remain short enough for a 78-char
+  // folded header line. Split only between complete UTF-8 code points.
+  const words: string[] = [];
+  let chunk: Buffer[] = [];
+  let length = 0;
+  function flush() {
+    if (length === 0) return;
+    words.push(`=?UTF-8?B?${Buffer.concat(chunk).toString("base64")}?=`);
+    chunk = [];
+    length = 0;
+  }
+  for (const point of value) {
+    const bytes = Buffer.from(point, "utf8");
+    if (length + bytes.length > 42) flush();
+    chunk.push(bytes);
+    length += bytes.length;
+  }
+  flush();
+  return words.join("\r\n ");
 }
 
 export function createGmailMessageId() {
