@@ -103,6 +103,7 @@ export function SupplierMailSendControl({
           projectId,
           productUrl,
           approvalToken: preview.approvalToken,
+          approved: true,
         }),
       });
       const result = await response.json().catch(() => null) as {
