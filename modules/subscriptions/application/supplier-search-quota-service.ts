@@ -1,10 +1,8 @@
 import { Prisma, type SubscriptionPlan } from "@prisma/client";
 
 import { prisma } from "@/lib/database/prisma";
-import {
-  getJakov360PlanPolicy,
-  type Jakov360PlanCode,
-} from "@/modules/subscriptions/domain/jakov360-paid-plans";
+import type { Jakov360PlanCode } from "@/modules/subscriptions/domain/jakov360-paid-plans";
+import { effectiveMonthlySupplierSearchLimit } from "@/modules/subscriptions/domain/supplier-search-test-override";
 
 export type SupplierSearchQuotaStatus = {
   plan: Jakov360PlanCode;
@@ -70,12 +68,16 @@ async function organizationPlan(organizationId: string) {
 }
 
 function statusFrom(input: {
+  organizationId: string;
   plan: Jakov360PlanCode;
   used: number;
   periodStart: Date;
   periodEnd: Date;
 }): SupplierSearchQuotaStatus {
-  const limit = getJakov360PlanPolicy(input.plan).monthlySupplierSearchLimit;
+  const limit = effectiveMonthlySupplierSearchLimit({
+    plan: input.plan,
+    organizationId: input.organizationId,
+  });
   return {
     plan: input.plan,
     used: input.used,
@@ -99,6 +101,7 @@ export async function getMonthlySupplierSearchQuotaStatus(
     select: { used: true },
   });
   return statusFrom({
+    organizationId,
     plan,
     used: usage?.used ?? 0,
     periodStart,
@@ -121,7 +124,10 @@ export async function reserveMonthlySupplierSearchQuota(input: {
   if (!project) throw new SupplierSearchQuotaProjectNotFoundError();
 
   const plan = await organizationPlan(input.organizationId);
-  const limit = getJakov360PlanPolicy(plan).monthlySupplierSearchLimit;
+  const limit = effectiveMonthlySupplierSearchLimit({
+    plan,
+    organizationId: input.organizationId,
+  });
   const { periodStart, periodEnd } = supplierSearchQuotaPeriod(input.now);
 
   const rows = await prisma.$queryRaw<UsageRow[]>(Prisma.sql`
@@ -151,6 +157,7 @@ export async function reserveMonthlySupplierSearchQuota(input: {
   if (reserved) {
     return {
       ...statusFrom({
+        organizationId: input.organizationId,
         plan,
         used: reserved.used,
         periodStart,
@@ -198,6 +205,7 @@ export async function reserveMonthlySupplierSearchQuota(input: {
   });
 
   const monthlyStatus = statusFrom({
+    organizationId: input.organizationId,
     plan,
     used: current?.used ?? limit,
     periodStart,
