@@ -27,7 +27,10 @@ describe("public legal and Google data disclosure contract", () => {
   it("discloses the exact Google scopes and limited sign-in purpose", () => {
     expect(privacy).toContain("openid email profile");
     expect(privacy).toContain("not stored in the ImportPilot database");
-    expect(privacy).toContain("does not request access");
+    expect(privacy).toContain("Gmail sending");
+    expect(privacy).toContain("gmail.send");
+    expect(privacy).toContain("never inbox-reading access");
+    expect(privacy).toContain("explicitly authorize");
     expect(privacy).toContain("privacy@jakov360.com");
   });
 

@@ -17,6 +17,7 @@ import {
   inquiryTranslationFields,
   usableInquiryTranslation,
 } from "@/modules/negotiation/domain/supplier-message";
+import { SupplierMailSendControl } from "@/components/search/supplier-mail-send-control";
 import type { SupplierOfferSearchResult } from "@/modules/product-search/domain/search";
 
 const statuses: SupplierConfirmationStatus[] = [
@@ -529,6 +530,20 @@ export function SupplierConfirmationPanel({
     }
   }
 
+  async function reloadAfterGmailSend() {
+    const response = await fetch(
+      `/api/projects/${projectId}/supplier-confirmations?productUrl=${encodeURIComponent(result.productUrl)}`,
+      { cache: "no-store" },
+    );
+    if (!response.ok) {
+      setError("Gmail je potvrdio slanje, ali prikaz statusa nije osvežen.");
+      return;
+    }
+    const next = await response.json() as SupplierConfirmationView;
+    applyView(next);
+    router.refresh();
+  }
+
   async function copyMessage() {
     try {
       await navigator.clipboard.writeText(finalMessage);
@@ -682,6 +697,15 @@ export function SupplierConfirmationPanel({
             {!record || record.status === SupplierConfirmationStatuses.PREPARED ? text.markSent : text.sent}
           </button>
         </div>
+        {record?.status === SupplierConfirmationStatuses.PREPARED && view && (
+          <SupplierMailSendControl
+            projectId={projectId}
+            productUrl={result.productUrl}
+            draftCurrent={translationIsCurrent &&
+              translatedMessage.trim() === view.communication.translatedMessage.trim()}
+            onSent={reloadAfterGmailSend}
+          />
+        )}
       </details>
       <details className="supplier-message-section">
         <summary>{text.replySection}</summary>

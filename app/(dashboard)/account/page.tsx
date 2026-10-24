@@ -1,5 +1,9 @@
 import Link from "next/link";
 
+import { GmailMailboxManager } from "@/components/account/gmail-mailbox-manager";
+import { listConnectedGmailMailboxes } from "@/modules/negotiation/application/connected-supplier-mail-service";
+import { gmailAcceptanceEnabled } from "@/modules/negotiation/infrastructure/gmail-acceptance-config";
+
 import { requireSession } from "@/modules/auth/infrastructure/session";
 import { getServerLocale } from "@/modules/i18n/server";
 import type { Locale } from "@/modules/i18n/translations";
@@ -50,6 +54,14 @@ export default async function AccountPage() {
   const { user, membership } = await requireSession();
   const locale = await getServerLocale();
   const text = copy[locale];
+  const gmailEnabled = membership.role === "OWNER" &&
+    gmailAcceptanceEnabled(membership.organizationId);
+  const gmailConnections = gmailEnabled
+    ? await listConnectedGmailMailboxes({
+      organizationId: membership.organizationId,
+      userId: user.id,
+    })
+    : [];
 
   return (
     <main className={styles.shell}>
@@ -77,6 +89,8 @@ export default async function AccountPage() {
             <dd>{membership.role}</dd>
           </div>
         </dl>
+
+        {gmailEnabled && <GmailMailboxManager connections={gmailConnections} />}
 
         <Link className="primary-link" href="/dashboard">{text.back}</Link>
       </section>
