@@ -17,6 +17,7 @@ const schema = z.object({
   projectId: z.uuid(),
   productUrl: z.url().max(2000),
   approvalToken: z.string().min(40).max(8192),
+  approved: z.literal(true),
 });
 
 export async function POST(request: NextRequest) {
