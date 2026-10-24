@@ -12,7 +12,7 @@ export default function PrivacyPage() {
       <article className="legal-card">
         <p className="eyebrow">JAKOV360 · ImportPilot AI</p>
         <h1>Privacy Policy</h1>
-        <p className="legal-updated">Last updated: September 18, 2026</p>
+        <p className="legal-updated">Last updated: October 24, 2026</p>
 
         <p>
           JAKOV360 operates ImportPilot at <Link href="/">jakov360.com</Link>. This policy explains what
@@ -54,10 +54,19 @@ export default function PrivacyPage() {
 
         <h2>3. Google user data</h2>
         <p>
-          Google user data is used only for sign-in and account linking. ImportPilot does not request access
-          to Gmail, Google Drive, Google Calendar, contacts, or other Google content. Google profile data is
-          not used for advertising, is not sold, and is not shared except with service providers strictly
-          necessary to operate and secure ImportPilot.
+          Google sign-in uses only <code>openid email profile</code>, independently of mailbox access.
+          An approved staging test user may separately opt into <strong>Gmail sending</strong> via
+          an explicit Google consent screen. For this optional feature JAKOV360 requests only
+          <code> gmail.send</code> plus verified identity, never inbox-reading access.
+          Gmail connection is limited to the configured test organization and test recipient.
+          JAKOV360 securely encrypts the Gmail refresh token on its server and stores the
+          connected address and send evidence (recipient, subject, message identifiers and status)
+          so the user can verify communication and avoid duplicate sending.
+          Each outgoing message requires the user to review and explicitly authorize its
+          exact contents; no automated supplier contact is permitted in this test.
+          Disconnecting removes usable local credentials and attempts provider revocation.
+          Gmail content and profile data are not used for advertising or sold.
+          The broader automated reply-reading feature is not enabled in this phase.
         </p>
 
         <h2>4. Service providers and external sources</h2>
@@ -77,9 +86,11 @@ export default function PrivacyPage() {
 
         <h2>6. Retention and deletion</h2>
         <p>
-          Account and project data is retained while needed to provide the service, meet security and recovery
-          needs, or comply with applicable obligations. Operational backups and logs may remain for a limited
-          recovery or security period. You can request access, correction, or deletion by emailing
+          Account, project and mail-send evidence are retained only while needed to operate the service,
+          preserve business records, meet security and recovery needs, or comply with applicable obligations.
+          Disconnecting a Gmail mailbox immediately removes usable local refresh-token credentials and
+          triggers an attempt to revoke the provider grant. Operational backups and logs may remain for a
+          limited recovery or security period. You can request access, correction, or deletion by emailing
           <a href="mailto:privacy@jakov360.com"> privacy@jakov360.com</a>.
         </p>
 
