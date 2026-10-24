@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -43,6 +46,16 @@ describe("calculateLandedCost", () => {
     expect(result.vatAmount).toBe("257.60");
     expect(result.landedCostTotal).toBe("1575.60");
     expect(result.landedCostPerUnit).toBe("15.76");
+  });
+
+  it("does not default an omitted customs broker cost to zero for any country", () => {
+    const source = readFileSync(
+      join(process.cwd(), "modules/cost-engine/application/cost-service.ts"),
+      "utf8",
+    );
+    expect(source).not.toContain('?? "0.00"');
+    expect(source).toContain("explicitShipping !== undefined && explicitBroker !== undefined");
+    expect(source).toContain('throw new Error("Špediter i carinjenje nije unet.")');
   });
 
   it("rejects an omitted customs broker cost instead of using zero", () => {

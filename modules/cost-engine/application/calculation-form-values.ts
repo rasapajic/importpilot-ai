@@ -1,6 +1,9 @@
 import type { CostCalculation } from "@prisma/client";
 
-import type { SerbiaLandedCostAssumptions } from "@/modules/cost-engine/domain/serbia-landed-cost";
+import type {
+  EnteredCostSplit,
+  SerbiaLandedCostAssumptions,
+} from "@/modules/cost-engine/domain/serbia-landed-cost";
 
 function storedDecimalInput(
   value: { toString(): string } | null | undefined,
@@ -14,6 +17,7 @@ function storedDecimalInput(
 export function getCalculationFormValues(
   calculation?: CostCalculation,
   assumptions?: SerbiaLandedCostAssumptions | null,
+  enteredCosts?: EnteredCostSplit | null,
 ) {
   const legacyShippingCost = storedDecimalInput(calculation?.shippingCost, "");
   return {
@@ -21,13 +25,15 @@ export function getCalculationFormValues(
     chinaDomesticTransportCost: assumptions?.chinaDomesticTransportCost ?? "",
     internationalTransportCost: assumptions?.internationalTransportCost ?? legacyShippingCost,
     insuranceCost: assumptions?.insuranceCost ?? storedDecimalInput(calculation?.insuranceCost, ""),
-    customsBrokerCost: assumptions?.customsBrokerCost ?? "",
+    customsBrokerCost: assumptions?.customsBrokerCost ?? enteredCosts?.customsBrokerCost ?? "",
     customsDutyRate: storedDecimalInput(calculation?.customsDutyRate, ""),
     vatRate: storedDecimalInput(calculation?.vatRate, ""),
     vatSource: assumptions?.vatSource ?? "COUNTRY_DEFAULT",
     storageCost: storedDecimalInput(calculation?.storageCost, ""),
     inspectionCost: storedDecimalInput(calculation?.inspectionCost, ""),
-    otherCosts: assumptions?.otherCosts ?? storedDecimalInput(calculation?.otherCosts, ""),
+    otherCosts: assumptions?.otherCosts
+      ?? enteredCosts?.otherCosts
+      ?? storedDecimalInput(calculation?.otherCosts, ""),
     targetSellingPrice: storedDecimalInput(calculation?.targetSellingPrice, ""),
     transportConfirmed: assumptions?.transportConfirmed ?? false,
     customsDutyConfirmed: assumptions?.customsDutyConfirmed ?? false,

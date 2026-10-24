@@ -10,7 +10,7 @@ import {
   storedProfitabilityRecoveryInput,
   type ProfitabilityRecoveryAction,
 } from "@/modules/cost-engine/domain/profitability-recovery";
-import type { LandedCostAssumptions } from "@/modules/cost-engine/domain/serbia-landed-cost";
+import type { EnteredCostSplit, LandedCostAssumptions } from "@/modules/cost-engine/domain/serbia-landed-cost";
 import type { ProjectDecisionResult } from "@/modules/decisions/domain/project-decision";
 import { getEuroDisplay } from "@/modules/fx/euro-display";
 import type { Locale } from "@/modules/i18n/translations";
@@ -24,6 +24,7 @@ type DecisionView = ProjectDecisionResult & { id: string; createdAt: Date | stri
 type RecoveryOffer = SupplierOffer & {
   costCalculations: CostCalculation[];
   latestCostAssumptions?: LandedCostAssumptions | null;
+  latestEnteredCostSplit?: EnteredCostSplit | null;
 };
 
 type RecoveryCopy = {
@@ -172,6 +173,7 @@ export function ProfitabilityRecoveryPanel({
   }
 
   const assumptions = offer.latestCostAssumptions ?? null;
+  const enteredCosts = assumptions ? null : offer.latestEnteredCostSplit ?? null;
   const recoveryInput = storedProfitabilityRecoveryInput({
     targetCountry,
     quantity: calculation.quantity,
@@ -183,8 +185,8 @@ export function ProfitabilityRecoveryPanel({
     vatRate: calculation.vatRate,
     storageCost: calculation.storageCost,
     inspectionCost: calculation.inspectionCost,
-    customsBrokerCost: assumptions?.customsBrokerCost ?? null,
-    otherCosts: assumptions?.otherCosts ?? calculation.otherCosts,
+    customsBrokerCost: assumptions?.customsBrokerCost ?? enteredCosts?.customsBrokerCost ?? null,
+    otherCosts: assumptions?.otherCosts ?? enteredCosts?.otherCosts ?? calculation.otherCosts,
     insuranceCost: assumptions ? null : calculation.insuranceCost,
     freightForwardingCost: calculation.freightForwardingCost,
     targetSellingPrice: calculation.targetSellingPrice,

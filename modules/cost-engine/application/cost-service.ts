@@ -64,7 +64,9 @@ export async function createCostCalculation(
     && explicitInternational !== undefined
     && explicitInsurance !== undefined
     && explicitBroker !== undefined;
-  const confirmedInputsReady = profile ? breakdownKnown : explicitShipping !== undefined;
+  const confirmedInputsReady = profile
+    ? breakdownKnown
+    : explicitShipping !== undefined && explicitBroker !== undefined;
   const preservedInsurance = explicitInsurance !== undefined
     ? explicitInsurance
     : previous?.insuranceCost ?? null;
@@ -153,7 +155,8 @@ export async function createCostCalculation(
     ? totalImportTransportCost(assumptions)
     : explicitShipping;
   if (shippingCost === undefined) throw new Error("Transport nije unet.");
-  const customsBrokerCost = assumptions?.customsBrokerCost ?? explicitBroker ?? "0.00";
+  const customsBrokerCost = assumptions?.customsBrokerCost ?? explicitBroker;
+  if (customsBrokerCost === undefined) throw new Error("Špediter i carinjenje nije unet.");
   const otherCosts = assumptions?.otherCosts ?? normalizedRequest.otherCosts;
 
   const result = calculateLandedCost({
@@ -226,7 +229,12 @@ export async function createCostCalculation(
             defaultVatRate: profile.defaultVatRate,
           },
           costAssumptions: assumptions,
-        } : {}),
+        } : {
+          enteredCostSplit: {
+            customsBrokerCost: calculatedBrokerCost,
+            otherCosts: calculatedOtherCosts,
+          },
+        }),
       },
     });
     return calculation;

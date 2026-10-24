@@ -13,7 +13,7 @@ import { useI18n } from "@/components/i18n/i18n-provider";
 import { CommercialTermsForm } from "@/components/offers/commercial-terms-form";
 import { ProfitabilityCheckControl } from "@/components/projects/profitability-check-control";
 import { formatDisplayedPercent } from "@/modules/cost-engine/application/calculation-summary";
-import type { LandedCostAssumptions } from "@/modules/cost-engine/domain/serbia-landed-cost";
+import type { EnteredCostSplit, LandedCostAssumptions } from "@/modules/cost-engine/domain/serbia-landed-cost";
 import { getClientDecisionSummary } from "@/modules/decisions/application/client-decision-summary";
 import {
   getDecisionStepTitle,
@@ -35,6 +35,7 @@ type OfferWithDetails = SupplierOffer & {
   assessments: OfferAssessment[];
   calculationSuperseded?: boolean;
   latestCostAssumptions?: LandedCostAssumptions | null;
+  latestEnteredCostSplit?: EnteredCostSplit | null;
 };
 
 type SimpleCopy = {
@@ -373,6 +374,7 @@ export function SimpleProfitabilityPanel({
   const calculation = bestOffer?.costCalculations[0] ?? null;
   const assessment = bestOffer?.assessments[0] ?? null;
   const assumptions = bestOffer?.latestCostAssumptions ?? null;
+  const enteredCosts = assumptions ? null : bestOffer?.latestEnteredCostSplit ?? null;
   const editingOffer = selectedCalculationOfferId
     ? offers.find((offer) => offer.id === selectedCalculationOfferId) ?? null
     : null;
@@ -447,6 +449,7 @@ export function SimpleProfitabilityPanel({
           sourceMetadata={editingOffer.sourceMetadata}
           latestCalculation={editingOffer.costCalculations[0]}
           latestCostAssumptions={editingOffer.latestCostAssumptions}
+          latestEnteredCostSplit={editingOffer.latestEnteredCostSplit}
           editInitially
           showResults={false}
         />
@@ -534,10 +537,15 @@ export function SimpleProfitabilityPanel({
               <span>{text.vat}: {amountWithRate(calculation.vatAmount, calculation.vatRate, currency)}</span>
               {!assumptions && calculation.insuranceCost != null && <span>{extraCostLabel("insurance")}: {money(calculation.insuranceCost, currency)}</span>}
               {calculation.freightForwardingCost != null && <span>{extraCostLabel("freight")}: {money(calculation.freightForwardingCost, currency)}</span>}
-              {assumptions && <span>{text.clearance}: {money(assumptions.customsBrokerCost, currency)}</span>}
+              {(assumptions || enteredCosts) && (
+                <span>{text.clearance}: {money((assumptions ?? enteredCosts)?.customsBrokerCost, currency)}</span>
+              )}
               <span>{text.inspection}: {money(calculation.inspectionCost, currency)}</span>
               <span>{text.storage}: {money(calculation.storageCost, currency)}</span>
-              <span>{text.other}: {money(assumptions?.otherCosts ?? calculation.otherCosts, currency)}</span>
+              <span>{text.other}: {money(
+                assumptions?.otherCosts ?? enteredCosts?.otherCosts ?? calculation.otherCosts,
+                currency,
+              )}</span>
               {calculation.knownCostTotal != null && <span>{extraCostLabel("known")}: {money(calculation.knownCostTotal, currency)}</span>}
               {calculation.requiredCashTotal != null && <span>{extraCostLabel("cash")}: {money(calculation.requiredCashTotal, currency)}</span>}
               {calculation.netAcquisitionCost != null && <span>{extraCostLabel("net")}: {money(calculation.netAcquisitionCost, currency)}</span>}
@@ -553,7 +561,17 @@ export function SimpleProfitabilityPanel({
         </>
       ) : (
         <>
-          {canCheckProfitability && <p>{text.readyForCheck}</p>}
+          {canCheckProfitability && offersForInput.some((offer) => {
+            const latest = offer.costCalculations[0];
+            return Boolean(
+              latest &&
+              latest.calculationStatus === "CALCULATED" &&
+              latest.landedCostTotal != null &&
+              latest.landedCostPerUnit != null &&
+              latest.grossMarginPercent != null &&
+              !importCostNeedsReview(offer.latestCostAssumptions),
+            );
+          }) && <p>{text.readyForCheck}</p>}
           <div className="offer-list">
             {offersForInput.map((offer) => {
               const latest = offer.costCalculations[0];
@@ -600,7 +618,7 @@ export function SimpleProfitabilityPanel({
                       <p className="eyebrow">{text.offerDetail}</p>
                       <strong>{offer.supplierName}</strong>
                     </div>
-                    {latest && <span>{text.offerReady}</span>}
+                    {latest && !offerCostNeedsReview && <span>{text.offerReady}</span>}
                   </header>
 
                   <div className="offer-highlights">
@@ -693,6 +711,7 @@ export function SimpleProfitabilityPanel({
                         quantity={projectQuantity}
                         sourceMetadata={offer.sourceMetadata}
                         latestCostAssumptions={offer.latestCostAssumptions}
+                        latestEnteredCostSplit={offer.latestEnteredCostSplit}
                         showResults={false}
                       />
                     </>

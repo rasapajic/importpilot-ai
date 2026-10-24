@@ -73,6 +73,31 @@ describe("calculation edit values", () => {
     });
   });
 
+  it("restores a known broker without folding it back into other costs", () => {
+    const calculation = {
+      shippingCost: new Prisma.Decimal("100"),
+      customsDutyRate: new Prisma.Decimal("5"),
+      vatRate: new Prisma.Decimal("20"),
+      storageCost: new Prisma.Decimal("30"),
+      inspectionCost: new Prisma.Decimal("20"),
+      otherCosts: new Prisma.Decimal("50"),
+      targetSellingPrice: new Prisma.Decimal("25"),
+      calculationStatus: CalculationStatus.CALCULATED,
+    };
+
+    expect(getCalculationFormValues(calculation as never, null, {
+      customsBrokerCost: "40.00",
+      otherCosts: "10.00",
+    })).toMatchObject({
+      customsBrokerCost: "40.00",
+      otherCosts: "10.00",
+    });
+    expect(getCalculationFormValues(calculation as never, null, {
+      customsBrokerCost: "0.00",
+      otherCosts: "10.00",
+    }).customsBrokerCost).toBe("0.00");
+  });
+
   it("keeps a new form empty instead of filling unknown costs with zero", () => {
     const values = getCalculationFormValues();
 

@@ -16,6 +16,7 @@ import {
 import { getImportCountryProfile } from "@/modules/cost-engine/domain/import-country-profiles";
 import {
   sumCostAmounts,
+  type EnteredCostSplit,
   type LandedCostAssumptions,
 } from "@/modules/cost-engine/domain/serbia-landed-cost";
 import { getAutomaticVatRate, resolveVatRate } from "@/modules/cost-engine/domain/vat-rates";
@@ -70,6 +71,7 @@ export function CostCalculatorForm({
   sourceMetadata,
   latestCalculation,
   latestCostAssumptions,
+  latestEnteredCostSplit = null,
   editInitially = false,
   showResults = true,
 }: {
@@ -82,6 +84,7 @@ export function CostCalculatorForm({
   sourceMetadata?: unknown;
   latestCalculation?: CostCalculation;
   latestCostAssumptions?: LandedCostAssumptions | null;
+  latestEnteredCostSplit?: EnteredCostSplit | null;
   editInitially?: boolean;
   showResults?: boolean;
 }) {
@@ -91,7 +94,11 @@ export function CostCalculatorForm({
   const isPrimaryCountry = profile !== null;
   const automaticVatRate = profile?.defaultVatRate ?? getAutomaticVatRate(targetCountry);
   const copy = getLandedCostCopy(locale, targetCountry, automaticVatRate);
-  const values = getCalculationFormValues(latestCalculation, latestCostAssumptions);
+  const values = getCalculationFormValues(
+    latestCalculation,
+    latestCostAssumptions,
+    latestEnteredCostSplit,
+  );
   const previousVatIsOverride = Boolean(
     latestCalculation &&
     values.vatRate !== "" &&
@@ -374,11 +381,9 @@ export function CostCalculatorForm({
                       ? copy.assumptionText
                       : t("PDV je automatski podešen prema ciljnoj državi.")}
               </p>
-              {isPrimaryCountry && (
-                <label>{copy.customsBroker} ({currency})
-                  <input defaultValue={values.customsBrokerCost} min={0} name="customsBrokerCost" required step="0.01" type="number" />
-                </label>
-              )}
+              <label>{copy.customsBroker} ({currency})
+                <input defaultValue={values.customsBrokerCost} min={0} name="customsBrokerCost" required step="0.01" type="number" />
+              </label>
 
               <details
                 className="advanced-costs cost-form-wide"
@@ -424,7 +429,12 @@ export function CostCalculatorForm({
               <span>{copy.customsBroker}: {latestCostAssumptions.customsBrokerCost} {currency}</span>
             </>
           ) : (
-            <span>{copy.legacyTransport}: {storedAmount(latestCalculation.shippingCost, currency)}</span>
+            <>
+              <span>{copy.legacyTransport}: {storedAmount(latestCalculation.shippingCost, currency)}</span>
+              {latestEnteredCostSplit && (
+                <span>{copy.customsBroker}: {latestEnteredCostSplit.customsBrokerCost} {currency}</span>
+              )}
+            </>
           )}
           {!latestCostAssumptions && latestCalculation.insuranceCost != null && (
             <span>{copy.insurance}: {storedAmount(latestCalculation.insuranceCost, currency)}</span>
@@ -438,7 +448,9 @@ export function CostCalculatorForm({
           <span>{copy.storage}: {storedAmount(latestCalculation.storageCost, currency)}</span>
           <span>{copy.other}: {latestCostAssumptions?.otherCosts != null
             ? `${latestCostAssumptions.otherCosts} ${currency}`
-            : storedAmount(latestCalculation.otherCosts, currency)}</span>
+            : latestEnteredCostSplit
+              ? `${latestEnteredCostSplit.otherCosts} ${currency}`
+              : storedAmount(latestCalculation.otherCosts, currency)}</span>
           {latestCalculation.knownCostTotal != null && (
             <span>{knownCostLabel}: {storedAmount(latestCalculation.knownCostTotal, currency)}</span>
           )}

@@ -31,5 +31,10 @@ describe("ImportPilot 1.0 profitability display confidence", () => {
     expect(source).toContain('estimatedTotalCost: "Procenjena ukupna nabavna cena"');
     expect(source).toContain("costNeedsReview");
     expect(source).toContain("zahteva proveru pre kupovine");
+    expect(source).toContain('calculation.calculationStatus !== "CALCULATED"');
+    expect(source).toContain("calculation.grossMarginPercent == null");
+    expect(source).toContain("calculation.landedCostTotal == null");
+    expect(source).toContain("{latest && !offerCostNeedsReview && <span>{text.offerReady}</span>}");
+    expect(source).toContain('totalCost: "Potvrđena ukupna nabavna cena"');
   });
 });
