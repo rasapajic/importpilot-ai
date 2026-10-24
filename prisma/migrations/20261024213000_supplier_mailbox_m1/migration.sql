@@ -15,7 +15,7 @@ CREATE TABLE "mailbox_connections" (
   "disconnected_at" TIMESTAMP(3),
   CONSTRAINT "mailbox_connections_pkey" PRIMARY KEY ("id")
 );
-CREATE UNIQUE INDEX "mailbox_connections_organization_id_provider_email_addre_key"
+CREATE UNIQUE INDEX "mailbox_connections_organization_id_provider_email_address_key"
   ON "mailbox_connections"("organization_id","provider","email_address");
 CREATE UNIQUE INDEX "mailbox_connections_organization_id_id_key"
   ON "mailbox_connections"("organization_id","id");
@@ -45,7 +45,7 @@ CREATE TABLE "supplier_mail_outbounds" (
 );
 CREATE UNIQUE INDEX "supplier_mail_outbounds_organization_id_confirmation_id_key"
   ON "supplier_mail_outbounds"("organization_id","confirmation_id");
-CREATE UNIQUE INDEX "supplier_mail_outbounds_mailbox_connection_id_provider_message_key"
+CREATE UNIQUE INDEX "supplier_mail_outbounds_mailbox_connection_id_provider_mess_key"
   ON "supplier_mail_outbounds"("mailbox_connection_id","provider_message_id");
 CREATE INDEX "supplier_mail_outbounds_organization_id_status_created_at_idx"
   ON "supplier_mail_outbounds"("organization_id","status","created_at");
@@ -54,6 +54,6 @@ ALTER TABLE "supplier_mail_outbounds" ADD CONSTRAINT "supplier_mail_outbounds_or
 ALTER TABLE "supplier_mail_outbounds" ADD CONSTRAINT "supplier_mail_outbounds_organization_id_confirmation_id_fkey"
   FOREIGN KEY ("organization_id","confirmation_id")
   REFERENCES "supplier_confirmations"("organization_id","id") ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE "supplier_mail_outbounds" ADD CONSTRAINT "supplier_mail_outbounds_organization_id_mailbox_connection_id_fkey"
+ALTER TABLE "supplier_mail_outbounds" ADD CONSTRAINT "supplier_mail_outbounds_organization_id_mailbox_connection_fkey"
   FOREIGN KEY ("organization_id","mailbox_connection_id")
   REFERENCES "mailbox_connections"("organization_id","id") ON DELETE RESTRICT ON UPDATE CASCADE;
