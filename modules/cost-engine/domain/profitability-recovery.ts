@@ -116,6 +116,77 @@ function maximumSupplierPrice(
   return best / 10_000;
 }
 
+function presentDecimal(value: DecimalLike | null): value is DecimalLike {
+  return value !== null;
+}
+
+function appendKnownAmount(base: DecimalLike, extra: DecimalLike | null) {
+  if (extra === null) return base;
+  const total = Number(base.toString()) + Number(extra.toString());
+  if (!Number.isFinite(total)) return null;
+  return total.toFixed(2);
+}
+
+export function storedProfitabilityRecoveryInput(input: {
+  targetCountry: string;
+  quantity: number;
+  currentSupplierUnitPrice: DecimalLike;
+  currency: string;
+  incoterm: string;
+  shippingCost: DecimalLike | null;
+  customsDutyRate: DecimalLike | null;
+  vatRate: DecimalLike | null;
+  storageCost: DecimalLike | null;
+  inspectionCost: DecimalLike | null;
+  customsBrokerCost: DecimalLike | null;
+  otherCosts: DecimalLike | null;
+  insuranceCost: DecimalLike | null;
+  freightForwardingCost: DecimalLike | null;
+  targetSellingPrice: DecimalLike | null;
+  currentLandedCostPerUnit: DecimalLike | null;
+  currentGrossMarginPercent: DecimalLike | null;
+  targetMarginPercent: DecimalLike;
+}): ProfitabilityRecoveryInput | null {
+  if (
+    !presentDecimal(input.shippingCost) ||
+    !presentDecimal(input.customsDutyRate) ||
+    !presentDecimal(input.vatRate) ||
+    !presentDecimal(input.storageCost) ||
+    !presentDecimal(input.inspectionCost) ||
+    !presentDecimal(input.customsBrokerCost) ||
+    !presentDecimal(input.otherCosts) ||
+    !presentDecimal(input.targetSellingPrice) ||
+    !presentDecimal(input.currentLandedCostPerUnit) ||
+    !presentDecimal(input.currentGrossMarginPercent)
+  ) {
+    return null;
+  }
+
+  const withInsurance = appendKnownAmount(input.otherCosts, input.insuranceCost);
+  if (withInsurance === null) return null;
+  const otherCosts = appendKnownAmount(withInsurance, input.freightForwardingCost);
+  if (otherCosts === null) return null;
+
+  return {
+    targetCountry: input.targetCountry,
+    quantity: input.quantity,
+    currentSupplierUnitPrice: input.currentSupplierUnitPrice,
+    currency: input.currency,
+    incoterm: input.incoterm,
+    shippingCost: input.shippingCost,
+    customsDutyRate: input.customsDutyRate,
+    vatRate: input.vatRate,
+    storageCost: input.storageCost,
+    inspectionCost: input.inspectionCost,
+    customsBrokerCost: input.customsBrokerCost,
+    otherCosts,
+    targetSellingPrice: input.targetSellingPrice,
+    currentLandedCostPerUnit: input.currentLandedCostPerUnit,
+    currentGrossMarginPercent: input.currentGrossMarginPercent,
+    targetMarginPercent: input.targetMarginPercent,
+  };
+}
+
 export function calculateProfitabilityRecovery(
   input: ProfitabilityRecoveryInput,
 ): ProfitabilityRecoveryResult {

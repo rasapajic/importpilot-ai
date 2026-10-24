@@ -4,6 +4,8 @@ import { getImportCountryProfile } from "../../modules/cost-engine/domain/import
 import {
   createLandedCostAssumptions,
   getLatestCostAssumptionsByOffer,
+  getLatestEnteredCostSplitByOffer,
+  readEnteredCostSplit,
   readLandedCostAssumptions,
   requiresImportCostReview,
   sumCostAmounts,
@@ -118,6 +120,33 @@ describe("primary-market landed cost assumptions", () => {
       vatSource: "COUNTRY_PROFILE_DEFAULT",
       internationalTransportCost: "100.00",
     });
+  });
+
+  it("uses only the latest broker split and keeps an explicit zero", () => {
+    const activities = [
+      { type: "LANDED_COST_CALCULATED", metadata: { offerId: "offer-fr" } },
+      {
+        type: "LANDED_COST_CALCULATED",
+        metadata: {
+          offerId: "offer-fr",
+          enteredCostSplit: { customsBrokerCost: "40.00", otherCosts: "10.00" },
+        },
+      },
+      {
+        type: "LANDED_COST_CALCULATED",
+        metadata: {
+          offerId: "offer-zero",
+          enteredCostSplit: { customsBrokerCost: "0.00", otherCosts: "0.00" },
+        },
+      },
+    ];
+
+    expect(getLatestEnteredCostSplitByOffer(activities)).toEqual({
+      "offer-zero": { customsBrokerCost: "0.00", otherCosts: "0.00" },
+    });
+    expect(readEnteredCostSplit({
+      enteredCostSplit: { customsBrokerCost: "-1", otherCosts: "10.00" },
+    })).toBeNull();
   });
 
   it("rejects malformed activity metadata instead of guessing", () => {

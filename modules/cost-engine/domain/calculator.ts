@@ -69,7 +69,10 @@ export function calculateLandedCost(input: LandedCostInput): LandedCostResult {
   const shipping = parseDecimal(input.shippingCost, 2, "Transport");
   const storage = parseDecimal(input.storageCost, 2, "Skladištenje");
   const inspection = parseDecimal(input.inspectionCost, 2, "Inspekcija");
-  const customsBroker = parseDecimal(input.customsBrokerCost ?? "0.00", 2, "Špediter i carinjenje");
+  if (input.customsBrokerCost === undefined) {
+    throw new Error("Špediter i carinjenje nije unet.");
+  }
+  const customsBroker = parseDecimal(input.customsBrokerCost, 2, "Špediter i carinjenje");
   const other = parseDecimal(input.otherCosts, 2, "Ostali troškovi");
   const sellingPrice = parseDecimal(input.targetSellingPrice, 2, "Ciljna prodajna cena");
   const customsRate = parseDecimal(input.customsDutyRate, 4, "Carinska stopa");

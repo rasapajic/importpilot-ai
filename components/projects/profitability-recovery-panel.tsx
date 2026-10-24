@@ -7,9 +7,10 @@ import { useI18n } from "@/components/i18n/i18n-provider";
 import {
   calculateProfitabilityRecovery,
   ProfitabilityRecoveryActions,
+  storedProfitabilityRecoveryInput,
   type ProfitabilityRecoveryAction,
 } from "@/modules/cost-engine/domain/profitability-recovery";
-import type { LandedCostAssumptions } from "@/modules/cost-engine/domain/serbia-landed-cost";
+import type { EnteredCostSplit, LandedCostAssumptions } from "@/modules/cost-engine/domain/serbia-landed-cost";
 import type { ProjectDecisionResult } from "@/modules/decisions/domain/project-decision";
 import { getEuroDisplay } from "@/modules/fx/euro-display";
 import type { Locale } from "@/modules/i18n/translations";
@@ -23,6 +24,7 @@ type DecisionView = ProjectDecisionResult & { id: string; createdAt: Date | stri
 type RecoveryOffer = SupplierOffer & {
   costCalculations: CostCalculation[];
   latestCostAssumptions?: LandedCostAssumptions | null;
+  latestEnteredCostSplit?: EnteredCostSplit | null;
 };
 
 type RecoveryCopy = {
@@ -37,6 +39,7 @@ type RecoveryCopy = {
   recommendation: string;
   assumptions: string;
   unavailable: string;
+  missingCosts: string;
   actions: Record<ProfitabilityRecoveryAction, string>;
   actionButtons: Record<ProfitabilityRecoveryAction, string>;
 };
@@ -54,6 +57,7 @@ const copy: Record<Locale, RecoveryCopy> = {
     recommendation: "Najrealniji sledeći potez",
     assumptions: "Ovaj proračun koristi trenutno unete pretpostavke za transport, carinu, PDV i ostale troškove. Potvrdite ih pre kupovine.",
     unavailable: "Nije moguće dostići cilj samo promenom cene dobavljača.",
+    missingCosts: "Obračun ima nepoznate troškove. ImportPilot ih ne pretvara u nulu i ne računa put do ciljne marže dok troškovi nisu uneti.",
     actions: {
       TARGET_MET: "Ciljna marža je već dostignuta.",
       NEGOTIATE_SUPPLIER: "Tražite nižu cenu dobavljača.",
@@ -79,6 +83,7 @@ const copy: Record<Locale, RecoveryCopy> = {
     recommendation: "Realistischster nächster Schritt",
     assumptions: "Diese Berechnung verwendet die aktuell erfassten Annahmen für Transport, Zoll, Mehrwertsteuer und sonstige Kosten. Vor dem Kauf bestätigen.",
     unavailable: "Das Ziel kann nicht allein durch eine Änderung des Lieferantenpreises erreicht werden.",
+    missingCosts: "Die Kalkulation enthält unbekannte Kosten. ImportPilot setzt sie nicht auf null und berechnet den Weg zur Zielmarge erst, wenn die Kosten erfasst sind.",
     actions: {
       TARGET_MET: "Die Zielmarge ist bereits erreicht.",
       NEGOTIATE_SUPPLIER: "Einen niedrigeren Lieferantenpreis verhandeln.",
@@ -104,6 +109,7 @@ const copy: Record<Locale, RecoveryCopy> = {
     recommendation: "Most realistic next step",
     assumptions: "This calculation uses the current transport, customs, VAT and other cost assumptions. Confirm them before purchasing.",
     unavailable: "The target cannot be reached by changing the supplier price alone.",
+    missingCosts: "This calculation has unknown costs. ImportPilot does not turn them into zero and does not calculate a path to the target margin until the costs are entered.",
     actions: {
       TARGET_MET: "The target margin is already reached.",
       NEGOTIATE_SUPPLIER: "Negotiate a lower supplier price.",
@@ -167,7 +173,8 @@ export function ProfitabilityRecoveryPanel({
   }
 
   const assumptions = offer.latestCostAssumptions ?? null;
-  const recovery = calculateProfitabilityRecovery({
+  const enteredCosts = assumptions ? null : offer.latestEnteredCostSplit ?? null;
+  const recoveryInput = storedProfitabilityRecoveryInput({
     targetCountry,
     quantity: calculation.quantity,
     currentSupplierUnitPrice: offer.unitPrice,
@@ -178,13 +185,25 @@ export function ProfitabilityRecoveryPanel({
     vatRate: calculation.vatRate,
     storageCost: calculation.storageCost,
     inspectionCost: calculation.inspectionCost,
-    customsBrokerCost: assumptions?.customsBrokerCost ?? "0.00",
-    otherCosts: assumptions?.otherCosts ?? calculation.otherCosts,
+    customsBrokerCost: assumptions?.customsBrokerCost ?? enteredCosts?.customsBrokerCost ?? null,
+    otherCosts: assumptions?.otherCosts ?? enteredCosts?.otherCosts ?? calculation.otherCosts,
+    insuranceCost: assumptions ? null : calculation.insuranceCost,
+    freightForwardingCost: calculation.freightForwardingCost,
     targetSellingPrice: calculation.targetSellingPrice,
     currentLandedCostPerUnit: calculation.landedCostPerUnit,
     currentGrossMarginPercent: calculation.grossMarginPercent,
     targetMarginPercent: projectTargetMargin,
   });
+  if (!recoveryInput) {
+    return (
+      <section className="dashboard-card profitability-recovery-card">
+        <p className="eyebrow">{text.eyebrow}</p>
+        <h3>{text.title}</h3>
+        <p>{text.missingCosts}</p>
+      </section>
+    );
+  }
+  const recovery = calculateProfitabilityRecovery(recoveryInput);
 
   const supplierReduction = recovery.supplierReductionAmount === null
     ? text.unavailable

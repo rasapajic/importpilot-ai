@@ -10,7 +10,10 @@ import { CostCalculatorForm } from "@/components/costs/cost-calculator-form";
 import { AssessmentPanel } from "@/components/intelligence/assessment-panel";
 import { useI18n } from "@/components/i18n/i18n-provider";
 import { ResponsiveOfferDetails } from "@/components/offers/responsive-offer-details";
-import type { SerbiaLandedCostAssumptions } from "@/modules/cost-engine/domain/serbia-landed-cost";
+import type {
+  EnteredCostSplit,
+  SerbiaLandedCostAssumptions,
+} from "@/modules/cost-engine/domain/serbia-landed-cost";
 import { getStatusLabel } from "@/modules/i18n/translations";
 import { recommendationBadgeStatus } from "@/modules/intelligence/application/recommendation-display";
 import { getEuroDisplay } from "@/modules/fx/euro-display";
@@ -24,6 +27,7 @@ type OfferWithDetails = SupplierOffer & {
   costCalculations: CostCalculation[];
   assessments: OfferAssessment[];
   latestCostAssumptions?: SerbiaLandedCostAssumptions | null;
+  latestEnteredCostSplit?: EnteredCostSplit | null;
 };
 
 const emptyComparisonCopy = {
@@ -211,7 +215,7 @@ export function OffersPanel({
                 </span>
                 <span>
                   {t("Očekivana marža")}
-                  <strong>{offer.costCalculations[0] ? `${offer.costCalculations[0].grossMarginPercent.toString()}%` : t("Nije izračunata")}</strong>
+                  <strong>{offer.costCalculations[0]?.grossMarginPercent != null ? `${offer.costCalculations[0].grossMarginPercent.toString()}%` : t("Nije izračunata")}</strong>
                 </span>
                 <span>
                   {offer.assessments[0] ? t("Preporuka") : t("Status")}
@@ -258,6 +262,7 @@ export function OffersPanel({
                       sourceMetadata={offer.sourceMetadata}
                       latestCalculation={offer.costCalculations[0]}
                       latestCostAssumptions={offer.latestCostAssumptions}
+                      latestEnteredCostSplit={offer.latestEnteredCostSplit}
                       editInitially={selectedCalculationOfferId === offer.id}
                     />
                   ) : (

@@ -13,10 +13,10 @@ const optionalMoneyString = z.preprocess(
 export const costCalculationRequestSchema = z
   .object({
     shippingCost: optionalMoneyString,
-    chinaDomesticTransportCost: moneyString.default("0.00"),
-    internationalTransportCost: moneyString.default("0.00"),
-    insuranceCost: moneyString.default("0.00"),
-    customsBrokerCost: moneyString.default("0.00"),
+    chinaDomesticTransportCost: optionalMoneyString,
+    internationalTransportCost: optionalMoneyString,
+    insuranceCost: optionalMoneyString,
+    customsBrokerCost: optionalMoneyString,
     customsDutyRate: decimalString,
     vatRate: decimalString,
     vatSource: vatAssumptionSourceSchema.default("COUNTRY_DEFAULT"),

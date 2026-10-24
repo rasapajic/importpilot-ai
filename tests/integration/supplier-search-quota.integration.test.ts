@@ -181,4 +181,39 @@ describeWithDatabase("monthly supplier search quota", () => {
       quota.reserveMonthlySupplierSearchQuota({ organizationId, projectId, now }),
     ).rejects.toMatchObject({ name: "SupplierSearchQuotaExceededError" });
   });
+
+  it("enforces the acceptance-staging allowance atomically for the designated Free test org", async () => {
+    const names = [
+      "RENDER_SERVICE_ID",
+      "JAKOV360_ACCEPTANCE_TEST_ORG_ID",
+      "JAKOV360_ACCEPTANCE_TEST_MONTHLY_LIMIT",
+    ] as const;
+    const previous = names.map((name) => process.env[name]);
+
+    process.env.RENDER_SERVICE_ID = "srv-datu3v093c1s73c17m60";
+    process.env.JAKOV360_ACCEPTANCE_TEST_ORG_ID = organizationId;
+    process.env.JAKOV360_ACCEPTANCE_TEST_MONTHLY_LIMIT = "100";
+
+    try {
+      const now = new Date("2027-01-10T12:00:00.000Z");
+      const initial = await quota.getMonthlySupplierSearchQuotaStatus(organizationId, now);
+      expect(initial).toMatchObject({ plan: "FREE", used: 0, limit: 100, remaining: 100 });
+
+      const reservations = await Promise.all(
+        Array.from({ length: 4 }, () =>
+          quota.reserveMonthlySupplierSearchQuota({ organizationId, projectId, now }),
+        ),
+      );
+      expect(reservations).toHaveLength(4);
+      expect(reservations.every((item) => item.limit === 100 && item.source === "MONTHLY")).toBe(true);
+
+      const after = await quota.getMonthlySupplierSearchQuotaStatus(organizationId, now);
+      expect(after).toMatchObject({ plan: "FREE", used: 4, limit: 100, remaining: 96 });
+    } finally {
+      names.forEach((name, index) => {
+        if (previous[index] === undefined) delete process.env[name];
+        else process.env[name] = previous[index];
+      });
+    }
+  });
 });

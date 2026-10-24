@@ -8,7 +8,11 @@ import type { z } from "zod";
 import { prisma } from "@/lib/database/prisma";
 import { serializeClientData } from "@/lib/serialization/client-data";
 import { deleteStoredObject } from "@/lib/storage/s3";
-import { getLatestCostAssumptionsByOffer } from "@/modules/cost-engine/domain/serbia-landed-cost";
+import { latestCalculationIfCurrent } from "@/modules/cost-engine/domain/current-calculation";
+import {
+  getLatestCostAssumptionsByOffer,
+  getLatestEnteredCostSplitByOffer,
+} from "@/modules/cost-engine/domain/serbia-landed-cost";
 import { isFinalDecisionStatus } from "@/modules/decisions/application/decision-step-summary";
 import { DEMO_PROJECT_PREFIX, isDemoProjectName } from "@/modules/projects/domain/project-access";
 import { canDeleteEmptySearch } from "@/modules/projects/domain/empty-search-deletion";
@@ -142,13 +146,20 @@ export async function getProject(projectId: string, organizationId: string) {
     take: 100,
   });
   const assumptionsByOffer = getLatestCostAssumptionsByOffer(costActivities);
+  const enteredCostsByOffer = getLatestEnteredCostSplitByOffer(costActivities);
 
   return serializeClientData({
     ...project,
-    offers: project.offers.map((offer) => ({
-      ...offer,
-      latestCostAssumptions: assumptionsByOffer[offer.id] ?? null,
-    })),
+    offers: project.offers.map((offer) => {
+      const currentCalculation = latestCalculationIfCurrent(offer.costCalculations, offer);
+      return {
+        ...offer,
+        costCalculations: currentCalculation ? [currentCalculation] : [],
+        calculationSuperseded: offer.costCalculations.length > 0 && currentCalculation === null,
+        latestCostAssumptions: assumptionsByOffer[offer.id] ?? null,
+        latestEnteredCostSplit: enteredCostsByOffer[offer.id] ?? null,
+      };
+    }),
   });
 }
 

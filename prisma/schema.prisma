@@ -150,6 +150,14 @@ enum NegotiationMessageStatus {
   SENT
 }
 
+enum SupplierConfirmationStatus {
+  FOUND
+  PREPARED
+  SENT
+  RESPONSE_RECEIVED
+  DOCUMENTED
+}
+
 enum NegotiationRequestType {
   LOWER_MOQ
   BETTER_PRICE
@@ -213,6 +221,7 @@ model Organization {
   billingSubscriptions BillingSubscription[]
   billingPurchases BillingPurchase[]
   projectEntitlements ProjectEntitlement[]
+  supplierConfirmations SupplierConfirmation[]
   createdAt DateTime             @default(now()) @map("created_at")
   updatedAt DateTime             @updatedAt @map("updated_at")
 
@@ -424,10 +433,12 @@ model ImportProject {
   aiUsageEvents AiUsageEvent[]
   billingPurchases BillingPurchase[]
   projectEntitlements ProjectEntitlement[]
+  supplierConfirmations SupplierConfirmation[]
   completionStatus ProjectCompletionStatus @default(ACTIVE) @map("completion_status")
   createdAt      DateTime       @default(now()) @map("created_at")
   updatedAt      DateTime       @updatedAt @map("updated_at")
 
+  @@unique([organizationId, id], map: "import_projects_organization_id_id_key")
   @@index([organizationId, createdAt, id])
   @@index([organizationId, status, createdAt])
   @@index([organizationId, completionStatus, createdAt], map: "import_projects_organization_id_completion_status_created_at_id")
@@ -587,12 +598,56 @@ model SupplierOffer {
   assessments         OfferAssessment[]
   selectedInDecisions ProjectDecision[] @relation("SelectedOffer")
   negotiationMessages NegotiationMessage[]
+  supplierConfirmations SupplierConfirmation[]
   createdAt           DateTime              @default(now()) @map("created_at")
   updatedAt           DateTime              @updatedAt @map("updated_at")
 
   @@index([organizationId, projectId])
   @@index([projectId, extractionStatus])
   @@map("supplier_offers")
+}
+
+model SupplierConfirmation {
+  id                             String                     @id @default(uuid()) @db.Uuid
+  organizationId                 String                     @map("organization_id") @db.Uuid
+  projectId                      String                     @map("project_id") @db.Uuid
+  offerId                        String?                    @map("offer_id") @db.Uuid
+  productUrl                     String                     @map("product_url") @db.Text
+  productName                    String                     @map("product_name") @db.VarChar(300)
+  status                         SupplierConfirmationStatus
+  subject                        String                     @db.VarChar(500)
+  body                           String                     @db.Text
+  responseNote                   String                     @default("") @map("response_note") @db.Text
+  writtenQuote                   String                     @default("") @map("written_quote") @db.Text
+  sourceResult                   Json                       @map("source_result")
+  proposals                      Json
+  supplierPriceConfirmed         Boolean                    @default(false) @map("supplier_price_confirmed")
+  quantityConfirmed              Boolean                    @default(false) @map("quantity_confirmed")
+  moqConfirmed                   Boolean                    @default(false) @map("moq_confirmed")
+  variantsConfirmed              Boolean                    @default(false) @map("variants_confirmed")
+  orderTermsConfirmed            Boolean                    @default(false) @map("order_terms_confirmed")
+  transportConfirmed             Boolean                    @default(false) @map("transport_confirmed")
+  customsConfirmed               Boolean                    @default(false) @map("customs_confirmed")
+  vatConfirmed                   Boolean                    @default(false) @map("vat_confirmed")
+  otherCostsConfirmed            Boolean                    @default(false) @map("other_costs_confirmed")
+  additionalConfirmationRequired Boolean                    @default(false) @map("additional_confirmation_required")
+  sourceMessage                  String                     @default("") @map("source_message") @db.Text
+  targetLanguage                 String?                    @map("target_language") @db.VarChar(16)
+  translatedMessage              String                     @default("") @map("translated_message") @db.Text
+  translationInputHash           String?                    @map("translation_input_hash") @db.VarChar(64)
+  supplierReplyOriginal          String                     @default("") @map("supplier_reply_original") @db.Text
+  supplierReplyTranslation       String                     @default("") @map("supplier_reply_translation") @db.Text
+  replyTranslationHash           String?                    @map("reply_translation_hash") @db.VarChar(64)
+  organization                   Organization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project                        ImportProject              @relation(fields: [organizationId, projectId], references: [organizationId, id], onDelete: Cascade)
+  offer                          SupplierOffer?             @relation(fields: [offerId], references: [id], onDelete: SetNull)
+  createdAt                      DateTime                   @default(now()) @map("created_at")
+  updatedAt                      DateTime                   @updatedAt @map("updated_at")
+
+  @@unique([organizationId, projectId, productUrl])
+  @@index([organizationId, projectId])
+  @@index([offerId])
+  @@map("supplier_confirmations")
 }
 
 enum SupplierOfferSource {
@@ -611,19 +666,26 @@ model CostCalculation {
   unitPrice           Decimal           @map("unit_price") @db.Decimal(18, 4)
   currency            String            @db.Char(3)
   incoterm            String            @db.VarChar(20)
-  shippingCost        Decimal           @map("shipping_cost") @db.Decimal(18, 2)
-  customsDutyRate     Decimal           @map("customs_duty_rate") @db.Decimal(7, 4)
-  customsDutyAmount   Decimal           @map("customs_duty_amount") @db.Decimal(18, 2)
-  vatRate             Decimal           @map("vat_rate") @db.Decimal(7, 4)
-  vatAmount           Decimal           @map("vat_amount") @db.Decimal(18, 2)
-  storageCost         Decimal           @map("storage_cost") @db.Decimal(18, 2)
-  inspectionCost      Decimal           @map("inspection_cost") @db.Decimal(18, 2)
-  otherCosts          Decimal           @map("other_costs") @db.Decimal(18, 2)
-  landedCostTotal     Decimal           @map("landed_cost_total") @db.Decimal(18, 2)
-  landedCostPerUnit   Decimal           @map("landed_cost_per_unit") @db.Decimal(18, 2)
-  targetSellingPrice  Decimal           @map("target_selling_price") @db.Decimal(18, 2)
-  grossMarginPercent  Decimal           @map("gross_margin_percent") @db.Decimal(8, 4)
-  breakEvenPrice      Decimal           @map("break_even_price") @db.Decimal(18, 2)
+  shippingCost        Decimal?          @map("shipping_cost") @db.Decimal(18, 2)
+  insuranceCost       Decimal?          @map("insurance_cost") @db.Decimal(18, 2)
+  customsDutyRate     Decimal?          @map("customs_duty_rate") @db.Decimal(7, 4)
+  customsDutyAmount   Decimal?          @map("customs_duty_amount") @db.Decimal(18, 2)
+  vatRate             Decimal?          @map("vat_rate") @db.Decimal(7, 4)
+  vatAmount           Decimal?          @map("vat_amount") @db.Decimal(18, 2)
+  freightForwardingCost Decimal?        @map("freight_forwarding_cost") @db.Decimal(18, 2)
+  storageCost         Decimal?          @map("storage_cost") @db.Decimal(18, 2)
+  inspectionCost      Decimal?          @map("inspection_cost") @db.Decimal(18, 2)
+  otherCosts          Decimal?          @map("other_costs") @db.Decimal(18, 2)
+  knownCostTotal      Decimal?          @map("known_cost_total") @db.Decimal(18, 2)
+  landedCostTotal     Decimal?          @map("landed_cost_total") @db.Decimal(18, 2)
+  landedCostPerUnit   Decimal?          @map("landed_cost_per_unit") @db.Decimal(18, 2)
+  targetSellingPrice  Decimal?          @map("target_selling_price") @db.Decimal(18, 2)
+  grossMarginPercent  Decimal?          @map("gross_margin_percent") @db.Decimal(8, 4)
+  breakEvenPrice      Decimal?          @map("break_even_price") @db.Decimal(18, 2)
+  requiredCashTotal   Decimal?          @map("required_cash_total") @db.Decimal(18, 2)
+  netAcquisitionCost  Decimal?          @map("net_acquisition_cost") @db.Decimal(18, 2)
+  vatTreatment        String            @default("UNSURE") @map("vat_treatment") @db.VarChar(32)
+  costEvidence        Json?             @map("cost_evidence")
   calculationStatus   CalculationStatus @default(DRAFT) @map("calculation_status")
   organization        Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   project             ImportProject     @relation(fields: [projectId], references: [id], onDelete: Cascade)

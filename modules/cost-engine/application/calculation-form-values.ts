@@ -1,25 +1,40 @@
 import type { CostCalculation } from "@prisma/client";
 
-import type { SerbiaLandedCostAssumptions } from "@/modules/cost-engine/domain/serbia-landed-cost";
+import type {
+  EnteredCostSplit,
+  SerbiaLandedCostAssumptions,
+} from "@/modules/cost-engine/domain/serbia-landed-cost";
+
+function storedDecimalInput(
+  value: { toString(): string } | null | undefined,
+  whenMissing: string,
+) {
+  if (value === null) return "";
+  if (value === undefined) return whenMissing;
+  return value.toString();
+}
 
 export function getCalculationFormValues(
   calculation?: CostCalculation,
   assumptions?: SerbiaLandedCostAssumptions | null,
+  enteredCosts?: EnteredCostSplit | null,
 ) {
-  const legacyShippingCost = calculation?.shippingCost.toString() ?? "0.00";
+  const legacyShippingCost = storedDecimalInput(calculation?.shippingCost, "");
   return {
     shippingCost: legacyShippingCost,
-    chinaDomesticTransportCost: assumptions?.chinaDomesticTransportCost ?? "0.00",
+    chinaDomesticTransportCost: assumptions?.chinaDomesticTransportCost ?? "",
     internationalTransportCost: assumptions?.internationalTransportCost ?? legacyShippingCost,
-    insuranceCost: assumptions?.insuranceCost ?? "0.00",
-    customsBrokerCost: assumptions?.customsBrokerCost ?? "0.00",
-    customsDutyRate: calculation?.customsDutyRate.toString() ?? "0",
-    vatRate: calculation?.vatRate.toString() ?? "",
+    insuranceCost: assumptions?.insuranceCost ?? storedDecimalInput(calculation?.insuranceCost, ""),
+    customsBrokerCost: assumptions?.customsBrokerCost ?? enteredCosts?.customsBrokerCost ?? "",
+    customsDutyRate: storedDecimalInput(calculation?.customsDutyRate, ""),
+    vatRate: storedDecimalInput(calculation?.vatRate, ""),
     vatSource: assumptions?.vatSource ?? "COUNTRY_DEFAULT",
-    storageCost: calculation?.storageCost.toString() ?? "0.00",
-    inspectionCost: calculation?.inspectionCost.toString() ?? "0.00",
-    otherCosts: assumptions?.otherCosts ?? calculation?.otherCosts.toString() ?? "0.00",
-    targetSellingPrice: calculation?.targetSellingPrice.toString() ?? "",
+    storageCost: storedDecimalInput(calculation?.storageCost, ""),
+    inspectionCost: storedDecimalInput(calculation?.inspectionCost, ""),
+    otherCosts: assumptions?.otherCosts
+      ?? enteredCosts?.otherCosts
+      ?? storedDecimalInput(calculation?.otherCosts, ""),
+    targetSellingPrice: storedDecimalInput(calculation?.targetSellingPrice, ""),
     transportConfirmed: assumptions?.transportConfirmed ?? false,
     customsDutyConfirmed: assumptions?.customsDutyConfirmed ?? false,
     needsReview: calculation?.calculationStatus === "NEEDS_REVIEW",

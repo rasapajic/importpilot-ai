@@ -135,6 +135,38 @@ export function readSerbiaLandedCostAssumptions(metadata: unknown) {
 
 export const readLandedCostAssumptions = readSerbiaLandedCostAssumptions;
 
+const enteredCostSplitSchema = z.object({
+  customsBrokerCost: decimalAmountSchema,
+  otherCosts: decimalAmountSchema,
+});
+
+export type EnteredCostSplit = z.infer<typeof enteredCostSplitSchema>;
+
+export function readEnteredCostSplit(metadata: unknown): EnteredCostSplit | null {
+  if (!metadata || typeof metadata !== "object") return null;
+  const record = metadata as Record<string, unknown>;
+  const parsed = enteredCostSplitSchema.safeParse(record.enteredCostSplit);
+  return parsed.success ? parsed.data : null;
+}
+
+export function getLatestEnteredCostSplitByOffer(
+  activities: Array<{ type: string; metadata: unknown }>,
+) {
+  const seenOffers = new Set<string>();
+  const splitsByOffer: Record<string, EnteredCostSplit> = {};
+  for (const activity of activities) {
+    if (activity.type !== "LANDED_COST_CALCULATED") continue;
+    if (!activity.metadata || typeof activity.metadata !== "object") continue;
+    const metadata = activity.metadata as Record<string, unknown>;
+    const offerId = typeof metadata.offerId === "string" ? metadata.offerId : null;
+    if (!offerId || seenOffers.has(offerId)) continue;
+    seenOffers.add(offerId);
+    const split = readEnteredCostSplit(metadata);
+    if (split) splitsByOffer[offerId] = split;
+  }
+  return splitsByOffer;
+}
+
 export function getLatestCostAssumptionsByOffer(
   activities: Array<{ type: string; metadata: unknown }>,
 ) {

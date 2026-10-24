@@ -6,6 +6,7 @@ import {
 } from "@prisma/client";
 
 import { prisma } from "@/lib/database/prisma";
+import { latestCalculationIfCurrent } from "@/modules/cost-engine/domain/current-calculation";
 import {
   createProjectDecision,
   type ProjectDecisionOffer,
@@ -49,7 +50,7 @@ export async function generateProjectDecision(
   if (!project) throw new DecisionProjectNotFoundError();
 
   const offers: ProjectDecisionOffer[] = project.offers.map((offer) => {
-    const cost = offer.costCalculations[0] ?? null;
+    const cost = latestCalculationIfCurrent(offer.costCalculations, offer);
     const assessment = offer.assessments[0] ?? null;
     return {
       offerId: offer.id,
@@ -61,9 +62,9 @@ export async function generateProjectDecision(
       moqStatus: getMoqStatus({ projectQuantity: project.quantity, moq: offer.moq }),
       sampleAvailable: offer.sampleAvailable,
       shippingClarityScore: offer.shippingClarityScore,
-      landedCostTotal: cost?.landedCostTotal.toNumber() ?? null,
-      landedCostPerUnit: cost?.landedCostPerUnit.toNumber() ?? null,
-      grossMarginPercent: cost?.grossMarginPercent.toNumber() ?? null,
+      landedCostTotal: cost?.landedCostTotal?.toNumber() ?? null,
+      landedCostPerUnit: cost?.landedCostPerUnit?.toNumber() ?? null,
+      grossMarginPercent: cost?.grossMarginPercent?.toNumber() ?? null,
       calculationNeedsReview:
         cost === null || cost.calculationStatus === CalculationStatus.NEEDS_REVIEW,
       assessment: assessment

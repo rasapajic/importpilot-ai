@@ -124,6 +124,7 @@ async function createDemoProject(demo: DemoProject, userId: string) {
       currency: input.currency,
       incoterm: input.incoterm,
       shippingCost: input.shippingCost,
+      customsBrokerCost: "0.00",
       customsDutyRate: "4.0000",
       vatRate: "19.0000",
       storageCost: "250.00",

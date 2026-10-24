@@ -13,7 +13,7 @@ import { useI18n } from "@/components/i18n/i18n-provider";
 import { CommercialTermsForm } from "@/components/offers/commercial-terms-form";
 import { ProfitabilityCheckControl } from "@/components/projects/profitability-check-control";
 import { formatDisplayedPercent } from "@/modules/cost-engine/application/calculation-summary";
-import type { LandedCostAssumptions } from "@/modules/cost-engine/domain/serbia-landed-cost";
+import type { EnteredCostSplit, LandedCostAssumptions } from "@/modules/cost-engine/domain/serbia-landed-cost";
 import { getClientDecisionSummary } from "@/modules/decisions/application/client-decision-summary";
 import {
   getDecisionStepTitle,
@@ -25,6 +25,7 @@ import { getCountryDisplayName } from "@/modules/i18n/country-names";
 import type { Locale } from "@/modules/i18n/translations";
 import type { SupplierOfferSearchResult } from "@/modules/product-search/domain/search";
 import { estimateTajaPreliminaryLandedCost } from "@/modules/product-search/domain/taja-preliminary-cost-estimate";
+import { transferredSupplierQuote } from "@/modules/negotiation/domain/supplier-confirmation";
 import { extractSupplierLogisticsData } from "@/modules/transport/domain/transport-estimator";
 
 type DecisionView = ProjectDecisionResult & { id: string; createdAt: Date };
@@ -32,7 +33,9 @@ type DecisionView = ProjectDecisionResult & { id: string; createdAt: Date };
 type OfferWithDetails = SupplierOffer & {
   costCalculations: CostCalculation[];
   assessments: OfferAssessment[];
+  calculationSuperseded?: boolean;
   latestCostAssumptions?: LandedCostAssumptions | null;
+  latestEnteredCostSplit?: EnteredCostSplit | null;
 };
 
 type SimpleCopy = {
@@ -46,6 +49,7 @@ type SimpleCopy = {
   selectedSupplier: string;
   sellingPrice: string;
   supplierPrice: string;
+  confirmedQuoteNote: string;
   supplierCountry: string;
   moq: string;
   incoterm: string;
@@ -83,6 +87,7 @@ type SimpleCopy = {
   costNeedsReview: string;
   offerReady: string;
   missingCost: string;
+  calculationSuperseded: string;
   unknown: string;
 };
 
@@ -98,6 +103,7 @@ const copy: Record<Locale, SimpleCopy> = {
     selectedSupplier: "Dobavljač",
     sellingPrice: "Prodajna cena",
     supplierPrice: "Cena dobavljača",
+    confirmedQuoteNote: "Dokumentovana cena iz pisane ponude. Transport, carina, PDV i ostali troškovi nisu potvrđeni.",
     supplierCountry: "Zemlja dobavljača",
     moq: "Minimalna količina (MOQ)",
     incoterm: "Uslov isporuke (Incoterm)",
@@ -135,6 +141,7 @@ const copy: Record<Locale, SimpleCopy> = {
     costNeedsReview: "Transport i/ili carinska stopa još nisu potvrđeni. Ovaj trošak je procena i zahteva proveru pre kupovine.",
     offerReady: "Spremno za proveru",
     missingCost: "Unesite prodajnu cenu i proverite uvozne troškove",
+    calculationSuperseded: "Prethodni obračun je sačuvan, ali više nije aktuelan. Potreban je novi obračun.",
     unknown: "nije poznato",
   },
   de: {
@@ -148,6 +155,7 @@ const copy: Record<Locale, SimpleCopy> = {
     selectedSupplier: "Lieferant",
     sellingPrice: "Verkaufspreis",
     supplierPrice: "Lieferantenpreis",
+    confirmedQuoteNote: "Dokumentierter Preis aus dem schriftlichen Angebot. Transport, Zoll, MwSt. und sonstige Kosten sind nicht bestätigt.",
     supplierCountry: "Lieferantenland",
     moq: "MOQ",
     incoterm: "Incoterm",
@@ -185,6 +193,7 @@ const copy: Record<Locale, SimpleCopy> = {
     costNeedsReview: "Transport und/oder Zollsatz sind noch nicht bestätigt. Diese Kosten sind eine Schätzung und müssen vor dem Kauf geprüft werden.",
     offerReady: "Bereit zur Prüfung",
     missingCost: "Verkaufspreis eingeben und Importkosten prüfen",
+    calculationSuperseded: "Die vorherige Kalkulation bleibt gespeichert, ist aber nicht mehr aktuell. Eine neue Kalkulation ist erforderlich.",
     unknown: "unbekannt",
   },
   en: {
@@ -198,6 +207,7 @@ const copy: Record<Locale, SimpleCopy> = {
     selectedSupplier: "Supplier",
     sellingPrice: "Selling price",
     supplierPrice: "Supplier price",
+    confirmedQuoteNote: "Documented price from the written quotation. Transport, customs, VAT, and other costs are not confirmed.",
     supplierCountry: "Supplier country",
     moq: "MOQ",
     incoterm: "Incoterm",
@@ -235,6 +245,7 @@ const copy: Record<Locale, SimpleCopy> = {
     costNeedsReview: "Transport and/or the customs rate are not confirmed yet. This cost is an estimate and must be verified before purchase.",
     offerReady: "Ready to check",
     missingCost: "Enter selling price and review import costs",
+    calculationSuperseded: "The previous calculation is saved, but it is no longer current. A new calculation is required.",
     unknown: "unknown",
   },
 };
@@ -363,6 +374,7 @@ export function SimpleProfitabilityPanel({
   const calculation = bestOffer?.costCalculations[0] ?? null;
   const assessment = bestOffer?.assessments[0] ?? null;
   const assumptions = bestOffer?.latestCostAssumptions ?? null;
+  const enteredCosts = assumptions ? null : bestOffer?.latestEnteredCostSplit ?? null;
   const editingOffer = selectedCalculationOfferId
     ? offers.find((offer) => offer.id === selectedCalculationOfferId) ?? null
     : null;
@@ -388,6 +400,32 @@ export function SimpleProfitabilityPanel({
     return () => controller.abort();
   }, [needsFx]);
 
+  function marginText(value: { toString(): string } | null) {
+    if (value == null) return t("Unavailable");
+    return `${formatDisplayedPercent(value)}%`;
+  }
+
+  function amountWithRate(
+    amount: { toString(): string } | null,
+    rate: { toString(): string } | null,
+    currency: string,
+  ) {
+    const amountText = money(amount, currency);
+    if (rate == null) return amountText;
+    return `${amountText} (${rate.toString()}%)`;
+  }
+
+  function extraCostLabel(kind: "insurance" | "freight" | "known" | "cash" | "net") {
+    const labels = {
+      insurance: { sr: "Osiguranje", de: "Versicherung", en: "Insurance" },
+      freight: { sr: "Špedicija", de: "Spedition", en: "Freight forwarding" },
+      known: { sr: "Poznati troškovi", de: "Bekannte Kosten", en: "Known costs" },
+      cash: { sr: "Potreban keš", de: "Benötigtes Bargeld", en: "Required cash" },
+      net: { sr: "Neto nabavka", de: "Nettobeschaffung", en: "Net acquisition" },
+    } as const;
+    return labels[kind][locale];
+  }
+
   function money(value: { toString(): string } | number | null | undefined, currency: string) {
     const numeric = numberValue(value);
     if (numeric === null) return t("Unavailable");
@@ -411,6 +449,7 @@ export function SimpleProfitabilityPanel({
           sourceMetadata={editingOffer.sourceMetadata}
           latestCalculation={editingOffer.costCalculations[0]}
           latestCostAssumptions={editingOffer.latestCostAssumptions}
+          latestEnteredCostSplit={editingOffer.latestEnteredCostSplit}
           editInitially
           showResults={false}
         />
@@ -426,7 +465,15 @@ export function SimpleProfitabilityPanel({
   const goodsValue = calculation
     ? numberValue(calculation.unitPrice)! * calculation.quantity
     : null;
-  const calculationNeedsReview = Boolean(calculation && importCostNeedsReview(assumptions));
+  const calculationNeedsReview = Boolean(
+    calculation && (
+      calculation.calculationStatus !== "CALCULATED" ||
+      calculation.landedCostTotal == null ||
+      calculation.landedCostPerUnit == null ||
+      calculation.grossMarginPercent == null ||
+      importCostNeedsReview(assumptions)
+    ),
+  );
   const decisionSummary = hasFinalDecision && decision && bestOffer
     ? getClientDecisionSummary({
         locale,
@@ -477,7 +524,7 @@ export function SimpleProfitabilityPanel({
             <div><span>{text.sellingPrice}</span><strong>{money(calculation.targetSellingPrice, currency)}</strong></div>
             <div><span>{text.profitPerUnit}</span><strong>{money(profitPerUnit, currency)}</strong></div>
             <div><span>{text.totalProfit}</span><strong>{money(totalProfit, currency)}</strong></div>
-            <div><span>{text.margin}</span><strong>{formatDisplayedPercent(calculation.grossMarginPercent)}%</strong></div>
+            <div><span>{text.margin}</span><strong>{marginText(calculation.grossMarginPercent)}</strong></div>
             <div><span>{text.risk}</span><strong>{riskLabel(numberValue(assessment?.supplierRiskScore), locale)}</strong></div>
           </div>
 
@@ -486,12 +533,22 @@ export function SimpleProfitabilityPanel({
             <div className="cost-results">
               <span>{text.goodsValue}: {money(goodsValue, currency)}</span>
               <span>{text.transport}: {money(calculation.shippingCost, currency)}</span>
-              <span>{text.customs}: {money(calculation.customsDutyAmount, currency)} ({calculation.customsDutyRate.toString()}%)</span>
-              <span>{text.vat}: {money(calculation.vatAmount, currency)} ({calculation.vatRate.toString()}%)</span>
-              {assumptions && <span>{text.clearance}: {money(assumptions.customsBrokerCost, currency)}</span>}
+              <span>{text.customs}: {amountWithRate(calculation.customsDutyAmount, calculation.customsDutyRate, currency)}</span>
+              <span>{text.vat}: {amountWithRate(calculation.vatAmount, calculation.vatRate, currency)}</span>
+              {!assumptions && calculation.insuranceCost != null && <span>{extraCostLabel("insurance")}: {money(calculation.insuranceCost, currency)}</span>}
+              {calculation.freightForwardingCost != null && <span>{extraCostLabel("freight")}: {money(calculation.freightForwardingCost, currency)}</span>}
+              {(assumptions || enteredCosts) && (
+                <span>{text.clearance}: {money((assumptions ?? enteredCosts)?.customsBrokerCost, currency)}</span>
+              )}
               <span>{text.inspection}: {money(calculation.inspectionCost, currency)}</span>
               <span>{text.storage}: {money(calculation.storageCost, currency)}</span>
-              <span>{text.other}: {money(assumptions?.otherCosts ?? calculation.otherCosts, currency)}</span>
+              <span>{text.other}: {money(
+                assumptions?.otherCosts ?? enteredCosts?.otherCosts ?? calculation.otherCosts,
+                currency,
+              )}</span>
+              {calculation.knownCostTotal != null && <span>{extraCostLabel("known")}: {money(calculation.knownCostTotal, currency)}</span>}
+              {calculation.requiredCashTotal != null && <span>{extraCostLabel("cash")}: {money(calculation.requiredCashTotal, currency)}</span>}
+              {calculation.netAcquisitionCost != null && <span>{extraCostLabel("net")}: {money(calculation.netAcquisitionCost, currency)}</span>}
               <strong>{calculationNeedsReview ? text.estimatedTotalCost : text.totalCost}: {money(calculation.landedCostTotal, currency)}</strong>
               <Link
                 className="secondary-button"
@@ -504,7 +561,17 @@ export function SimpleProfitabilityPanel({
         </>
       ) : (
         <>
-          {canCheckProfitability && <p>{text.readyForCheck}</p>}
+          {canCheckProfitability && offersForInput.some((offer) => {
+            const latest = offer.costCalculations[0];
+            return Boolean(
+              latest &&
+              latest.calculationStatus === "CALCULATED" &&
+              latest.landedCostTotal != null &&
+              latest.landedCostPerUnit != null &&
+              latest.grossMarginPercent != null &&
+              !importCostNeedsReview(offer.latestCostAssumptions),
+            );
+          }) && <p>{text.readyForCheck}</p>}
           <div className="offer-list">
             {offersForInput.map((offer) => {
               const latest = offer.costCalculations[0];
@@ -534,8 +601,15 @@ export function SimpleProfitabilityPanel({
                   : text.unknown
                 : `${offer.deliveryTimeDays} ${text.days}`;
               const offerCostNeedsReview = Boolean(
-                latest && importCostNeedsReview(offer.latestCostAssumptions),
+                latest && (
+                  latest.calculationStatus !== "CALCULATED" ||
+                  latest.landedCostTotal == null ||
+                  latest.landedCostPerUnit == null ||
+                  latest.grossMarginPercent == null ||
+                  importCostNeedsReview(offer.latestCostAssumptions)
+                ),
               );
+              const supersededCalculation = Boolean(offer.calculationSuperseded && !latest);
 
               return (
                 <article className="offer-card" key={offer.id}>
@@ -544,11 +618,17 @@ export function SimpleProfitabilityPanel({
                       <p className="eyebrow">{text.offerDetail}</p>
                       <strong>{offer.supplierName}</strong>
                     </div>
-                    {latest && <span>{text.offerReady}</span>}
+                    {latest && !offerCostNeedsReview && <span>{text.offerReady}</span>}
                   </header>
 
                   <div className="offer-highlights">
-                    <span>{text.supplierPrice}<strong>{offer.unitPrice && offer.currency ? money(offer.unitPrice, offer.currency) : text.unknown}</strong></span>
+                    <span>
+                      {text.supplierPrice}
+                      <strong>{offer.unitPrice && offer.currency ? money(offer.unitPrice, offer.currency) : text.unknown}</strong>
+                      {transferredSupplierQuote(offer.sourceMetadata) && (
+                        <small className="supplier-fx-note">{text.confirmedQuoteNote}</small>
+                      )}
+                    </span>
                     <span>{text.moq}<strong>{offer.moq ?? text.unknown}</strong></span>
                     <span>{text.incoterm}<strong>{displayedIncoterm}</strong></span>
                     <span>{text.delivery}<strong>{displayedDelivery}</strong></span>
@@ -559,12 +639,16 @@ export function SimpleProfitabilityPanel({
                     <p><a href={sourceUrl} rel="noreferrer" target="_blank">{text.sourceOffer}</a></p>
                   )}
 
+                  {supersededCalculation && (
+                    <p className="warning-text">{text.calculationSuperseded}</p>
+                  )}
+
                   {latest ? (
                     <>
                       {offerCostNeedsReview && <p className="warning-text">{text.costNeedsReview}</p>}
                       <div className="offer-highlights">
                         <span>{offerCostNeedsReview ? text.estimatedCostPerUnit : text.costPerUnit}<strong>{money(latest.landedCostPerUnit, latest.currency)}</strong></span>
-                        <span>{text.margin}<strong>{formatDisplayedPercent(latest.grossMarginPercent)}%</strong></span>
+                        <span>{text.margin}<strong>{marginText(latest.grossMarginPercent)}</strong></span>
                         <span>{text.risk}<strong>{riskLabel(numberValue(offer.assessments[0]?.supplierRiskScore), locale)}</strong></span>
                       </div>
                       <Link
@@ -627,6 +711,7 @@ export function SimpleProfitabilityPanel({
                         quantity={projectQuantity}
                         sourceMetadata={offer.sourceMetadata}
                         latestCostAssumptions={offer.latestCostAssumptions}
+                        latestEnteredCostSplit={offer.latestEnteredCostSplit}
                         showResults={false}
                       />
                     </>

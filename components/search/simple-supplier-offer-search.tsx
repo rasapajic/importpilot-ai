@@ -9,6 +9,10 @@ import {
   SearchResultImage,
 } from "@/components/search/search-result-image";
 import {
+  SupplierConfirmationPanel,
+  supplierConfirmationCopy,
+} from "@/components/search/supplier-confirmation-panel";
+import {
   quantityPriceSnapshots,
   supplierPriceTierSnapshots,
   supplierOfferForQuantity,
@@ -668,6 +672,8 @@ export function SimpleSupplierOfferSearch({
   const [error, setError] = useState("");
   const [limitReached, setLimitReached] = useState(false);
   const [selectingUrl, setSelectingUrl] = useState<string | null>(null);
+  const [confirmationUrl, setConfirmationUrl] = useState<string | null>(null);
+  const [openedConfirmationUrls, setOpenedConfirmationUrls] = useState<string[]>([]);
   const [selectedUrls, setSelectedUrls] = useState<string[]>([]);
   const [selectedOfferIds, setSelectedOfferIds] = useState<string[]>([]);
   const [advancing, setAdvancing] = useState(false);
@@ -980,6 +986,9 @@ export function SimpleSupplierOfferSearch({
               : null;
             const selecting = selectingUrl === result.productUrl;
             const selected = selectedUrls.includes(result.productUrl);
+            const confirmationOpen = confirmationUrl === result.productUrl;
+            const confirmationMounted = openedConfirmationUrls.includes(result.productUrl);
+            const confirmationText = supplierConfirmationCopy(locale);
             const reasons = selectionReasons(result, analysis, quantity, text);
             const showAdvertisedPrice = pricePresentation.advertisedPrice !== null &&
               pricePresentation.advertisedCurrency !== null &&
@@ -1195,15 +1204,41 @@ export function SimpleSupplierOfferSearch({
                     )}
                     <p><a href={result.productUrl} rel="noreferrer" target="_blank">{text.source}</a></p>
                   </details>
+                  {confirmationMounted && (
+                    <div hidden={!confirmationOpen}>
+                      <SupplierConfirmationPanel
+                        locale={locale}
+                        productName={productName}
+                        projectId={projectId}
+                        quantity={quantity}
+                        result={result}
+                        targetCountry={targetCountry}
+                      />
+                    </div>
+                  )}
                 </div>
-                <button
-                  className="secondary-button"
-                  disabled={selecting || selected}
-                  onClick={() => void selectOffer(effectiveResult)}
-                  type="button"
-                >
-                  {selected ? text.selected : selecting ? text.selecting : text.select}
-                </button>
+                <div className="search-result-actions">
+                  <button
+                    className="secondary-button search-result-compare"
+                    disabled={selecting || selected}
+                    onClick={() => void selectOffer(effectiveResult)}
+                    type="button"
+                  >
+                    {selected ? text.selected : selecting ? text.selecting : text.select}
+                  </button>
+                  <button
+                    className="secondary-button"
+                    onClick={() => {
+                      setOpenedConfirmationUrls((current) =>
+                        current.includes(result.productUrl) ? current : [...current, result.productUrl],
+                      );
+                      setConfirmationUrl(confirmationOpen ? null : result.productUrl);
+                    }}
+                    type="button"
+                  >
+                    {confirmationOpen ? confirmationText.hideConfirmation : confirmationText.requestConfirmation}
+                  </button>
+                </div>
               </article>
             );
           })}
