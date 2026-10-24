@@ -9,6 +9,8 @@ import {
 } from "@/modules/negotiation/infrastructure/gmail-acceptance-config";
 import {
   exchangeGmailConnectCode,
+  revokeGmailToken,
+  type GmailAuthorization,
   GMAIL_CONNECT_COOKIE,
   GMAIL_CONNECT_COOKIE_PATH,
   verifyGmailConnectAttempt,
@@ -47,6 +49,7 @@ export async function GET(request: NextRequest) {
     return finish("invalid-state");
   }
 
+  let grant: GmailAuthorization | null = null;
   try {
     const attempt = decryptMailboxJson<GmailConnectAttempt>(
       sealed,
@@ -58,7 +61,7 @@ export async function GET(request: NextRequest) {
     });
     if (!valid) return finish("invalid-state");
 
-    const grant = await exchangeGmailConnectCode(
+    grant = await exchangeGmailConnectCode(
       code,
       attempt.verifier,
       gmailOAuthConfig(),
@@ -72,6 +75,11 @@ export async function GET(request: NextRequest) {
     });
     return finish("connected");
   } catch {
+    // If the provider granted access but local storage failed, do not leave
+    // an unattended Gmail authorization behind.
+    if (grant) {
+      await revokeGmailToken(grant.refreshToken).catch(() => false);
+    }
     // Never echo provider errors, OAuth codes, tokens or untrusted identity.
     return finish("failed");
   }
