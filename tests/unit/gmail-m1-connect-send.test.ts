@@ -176,6 +176,26 @@ describe("Gmail MIME send", () => {
     });
     const mime = Buffer.from(raw, "base64url").toString("utf8");
     expect(mime).toContain("Content-Transfer-Encoding: base64");
+    const unicodeSubject = "Ponuda — 测试 / ".repeat(14);
+    const longRaw = buildGmailRawMessage({
+      from: "buyer@example.test",
+      to: "second@example.test",
+      subject: unicodeSubject,
+      body: "Test",
+      rfcMessageId: createGmailMessageId(),
+    });
+    const longMime = Buffer.from(longRaw, "base64url").toString("utf8");
+    const headerLines = longMime.split("\\r\\n").filter(
+      (line) => line.startsWith("Subject: ") || line.startsWith(" =?UTF-8?B?"),
+    );
+    expect(headerLines.length).toBeGreaterThan(1);
+    expect(headerLines.every((line) => line.length <= 78)).toBe(true);
+    const decoded = Array.from(
+      longMime.matchAll(/=\\?UTF-8\\?B\\?([A-Za-z0-9+/=]+)\\?=/g),
+      (match) => Buffer.from(match[1], "base64"),
+    );
+    expect(Buffer.concat(decoded).toString("utf8")).toBe(unicodeSubject);
+
     expect(mime).toContain("Subject: =?UTF-8?B?");
     const bodyEncoded = mime.split("\r\n\r\n")[1].replace(/\s/g, "");
     expect(Buffer.from(bodyEncoded, "base64").toString("utf8")).toContain("Zlin 2025");
