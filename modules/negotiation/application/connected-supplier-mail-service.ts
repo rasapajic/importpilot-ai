@@ -169,8 +169,9 @@ export async function previewSupplierMail(
  */
 export async function sendApprovedSupplierMail(
   context: AuthContext,
-  input: { projectId: string; productUrl: string; approvalToken: string },
+  input: { projectId: string; productUrl: string; approvalToken: string; approved: boolean },
 ) {
+  if (input.approved !== true) throw new SupplierMailRequestDeniedError();
   let proof: PreviewProof;
   try {
     proof = decryptMailboxJson<PreviewProof>(input.approvalToken, GMAIL_PROOF_AAD);
