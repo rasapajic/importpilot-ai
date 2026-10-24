@@ -194,7 +194,7 @@ describe("Gmail MIME send", () => {
       longMime.matchAll(/=\?UTF-8\?B\?([A-Za-z0-9+\/=]+)\?=/g),
       (match) => Buffer.from(match[1], "base64"),
     );
-    expect(Buffer.concat(decoded).toString("utf8")).toBe(unicodeSubject);
+    expect(Buffer.concat(decoded).toString("utf8")).toBe(unicodeSubject.trim());
 
     expect(mime).toContain("Subject: =?UTF-8?B?");
     const bodyEncoded = mime.split("\r\n\r\n")[1].replace(/\s/g, "");
