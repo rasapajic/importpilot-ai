@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { effectiveMonthlySupplierSearchLimit } from "../../modules/subscriptions/domain/supplier-search-test-override";
 
-const organizationId = "b0f722bc-aa34-4942-97fa-1859cb847155";
+const organizationId = "11111111-1111-4111-8111-111111111111";
 const environment = {
   RENDER_SERVICE_ID: "srv-datu3v093c1s73c17m60",
   JAKOV360_ACCEPTANCE_TEST_ORG_ID: organizationId,
