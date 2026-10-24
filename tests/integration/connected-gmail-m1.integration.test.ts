@@ -166,7 +166,10 @@ describeWithDb("Gmail M1 tenant and one-send persistence", () => {
       data: { translatedMessage: `${translation} Now changed.` },
     });
     await expect(service.sendApprovedSupplierMail({ userId, organizationId }, {
-      projectId, productUrl, approvalToken: first.approvalToken,
+      projectId, productUrl, approvalToken: first.approvalToken, approved: true,
+    })).rejects.toBeInstanceOf(service.SupplierMailRequestDeniedError);
+    await expect(service.sendApprovedSupplierMail({ userId, organizationId }, {
+      projectId, productUrl, approvalToken: first.approvalToken, approved: false,
     })).rejects.toBeInstanceOf(service.SupplierMailRequestDeniedError);
     expect(await prisma.supplierMailOutbound.count({
       where: { organizationId, confirmationId },
@@ -181,7 +184,7 @@ describeWithDb("Gmail M1 tenant and one-send persistence", () => {
       projectId, connectionId, productUrl, recipient: allowedRecipient,
     });
     const sent = await service.sendApprovedSupplierMail({ userId, organizationId }, {
-      projectId, productUrl, approvalToken: preview.approvalToken,
+      projectId, productUrl, approvalToken: preview.approvalToken, approved: true,
     });
     expect(sent.status).toBe("SENT");
     const receipt = await prisma.supplierMailOutbound.findFirstOrThrow({
@@ -196,7 +199,7 @@ describeWithDb("Gmail M1 tenant and one-send persistence", () => {
     })).toMatchObject({ status: "SENT" });
     expect(sentCalls).toHaveLength(1);
     await expect(service.sendApprovedSupplierMail({ userId, organizationId }, {
-      projectId, productUrl, approvalToken: preview.approvalToken,
+      projectId, productUrl, approvalToken: preview.approvalToken, approved: true,
     })).rejects.toThrow();
     expect(sentCalls).toHaveLength(1);
   });
@@ -214,7 +217,7 @@ describeWithDb("Gmail M1 tenant and one-send persistence", () => {
       return new Response(JSON.stringify({ error: "temporary_failure" }), { status: 502 });
     });
     await expect(service.sendApprovedSupplierMail({ userId, organizationId }, {
-      projectId, productUrl: otherUrl, approvalToken: preview.approvalToken,
+      projectId, productUrl: otherUrl, approvalToken: preview.approvalToken, approved: true,
     })).rejects.toBeInstanceOf(service.SupplierMailDeliveryUncertainError);
     expect(await prisma.supplierMailOutbound.findFirstOrThrow({
       where: { organizationId, confirmationId: created.id },
@@ -223,7 +226,7 @@ describeWithDb("Gmail M1 tenant and one-send persistence", () => {
       where: { id: created.id },
     })).toMatchObject({ status: "PREPARED" });
     await expect(service.sendApprovedSupplierMail({ userId, organizationId }, {
-      projectId, productUrl: otherUrl, approvalToken: preview.approvalToken,
+      projectId, productUrl: otherUrl, approvalToken: preview.approvalToken, approved: true,
     })).rejects.toThrow();
   });
 
