@@ -4,6 +4,7 @@ import {
   buildSupplierMessageTranslationInstructions,
   createOpenAiSupplierMessageTranslator,
   SupplierMessageTranslationNotConfiguredError,
+  SupplierMessageTranslationTimeoutError,
 } from "../../modules/negotiation/infrastructure/openai-supplier-message-translator";
 
 const pricingEnv = [
@@ -122,5 +123,22 @@ describe("OpenAI supplier message translator", () => {
       target: "ZH",
       direction: "reply",
     })).rejects.not.toThrow(/sk-/);
+  });
+
+  it("turns an aborted request into a timeout without spending a usage record", async () => {
+    hideProviderKeys();
+    const translator = createOpenAiSupplierMessageTranslator({
+      apiKey: "sk-test-translation",
+      timeoutMs: 30_000,
+      fetcher: async (_input, init) => {
+        expect(init?.signal).toBeInstanceOf(AbortSignal);
+        throw new DOMException("The operation timed out.", "TimeoutError");
+      },
+    });
+    await expect(translator.translate({
+      text: "Količina: 1.000 komada.",
+      target: "EN_ZH",
+      direction: "outbound",
+    })).rejects.toBeInstanceOf(SupplierMessageTranslationTimeoutError);
   });
 });

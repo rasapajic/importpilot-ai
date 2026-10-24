@@ -14,7 +14,9 @@ import {
   SupplierConfirmationProjectNotFoundError,
   SupplierConfirmationStateError,
   SupplierMessageFactError,
+  SupplierMessageTranslationFailedError,
   SupplierMessageTranslationNotConfiguredError,
+  SupplierMessageTranslationTimeoutError,
   transferSupplierConfirmationToOffer,
   translateSupplierInquiry,
   translateSupplierReply,
@@ -94,6 +96,16 @@ function confirmationError(error: unknown) {
     return NextResponse.json({
       error: "Prevod nije podešen. Potrebna je serverska promenljiva SUPPLIER_MESSAGE_OPENAI_API_KEY.",
     }, { status: 503 });
+  }
+  if (error instanceof SupplierMessageTranslationTimeoutError) {
+    return NextResponse.json({
+      error: "Prevod nije završen jer je isteklo vreme. Pokušajte ponovo.",
+    }, { status: 504 });
+  }
+  if (error instanceof SupplierMessageTranslationFailedError) {
+    return NextResponse.json({
+      error: "Prevod nije uspeo. Pokušajte ponovo.",
+    }, { status: 502 });
   }
   if (error instanceof SupplierMessageFactError) {
     const missing = error.missing.slice(0, 8).join(", ");

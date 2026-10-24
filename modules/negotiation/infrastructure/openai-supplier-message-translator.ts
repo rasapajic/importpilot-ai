@@ -7,6 +7,14 @@ import type { SupplierMessageLanguage } from "@/modules/negotiation/domain/suppl
 
 export class SupplierMessageTranslationNotConfiguredError extends Error {}
 
+export class SupplierMessageTranslationTimeoutError extends Error {
+  constructor() {
+    super("Supplier message translation timed out.");
+  }
+}
+
+export class SupplierMessageTranslationFailedError extends Error {}
+
 export type SupplierMessageTranslation = {
   text: string;
   usage: AiUsageEvent;
@@ -96,6 +104,24 @@ export function redactSupplierMessageSecret(value: string) {
     .replace(/Bearer\s+\S+/gi, "Bearer [REDACTED]");
 }
 
+function isTimeoutFailure(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const name = "name" in error ? String(error.name) : "";
+  return name === "TimeoutError" || name === "AbortError";
+}
+
+function translationFailure(error: unknown) {
+  if (
+    error instanceof SupplierMessageTranslationTimeoutError
+    || error instanceof SupplierMessageTranslationFailedError
+  ) {
+    return error;
+  }
+  if (isTimeoutFailure(error)) return new SupplierMessageTranslationTimeoutError();
+  const message = error instanceof Error ? error.message : "Translation request failed.";
+  return new SupplierMessageTranslationFailedError(redactSupplierMessageSecret(message));
+}
+
 function outputText(payload: OpenAiPayload) {
   if (typeof payload.output_text === "string" && payload.output_text.trim()) {
     return payload.output_text.trim();
@@ -147,17 +173,16 @@ export function createOpenAiSupplierMessageTranslator(options: {
           }),
         });
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Translation request failed.";
-        throw new Error(redactSupplierMessageSecret(message));
+        throw translationFailure(error);
       }
       const payload = await response.json().catch(() => null) as OpenAiPayload | null;
       if (!response.ok || !payload) {
-        throw new Error(redactSupplierMessageSecret(
+        throw new SupplierMessageTranslationFailedError(redactSupplierMessageSecret(
           payload?.error?.message || `Translation request failed with status ${response.status}.`,
         ));
       }
       const text = outputText(payload).replace(/^```(?:\w+)?\s*|\s*```$/g, "").trim();
-      if (!text || !payload.id) throw new Error("Translation response was empty.");
+      if (!text || !payload.id) throw new SupplierMessageTranslationFailedError("Translation response was empty.");
       return {
         text,
         usage: supplierMessageUsageEvent({

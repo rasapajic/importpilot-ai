@@ -2,7 +2,10 @@ import { OrganizationRole } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { supplierMessageUsageEvent } from "../../modules/negotiation/domain/supplier-message-cost";
-import type { SupplierMessageTranslator } from "../../modules/negotiation/infrastructure/openai-supplier-message-translator";
+import {
+  SupplierMessageTranslationTimeoutError,
+  type SupplierMessageTranslator,
+} from "../../modules/negotiation/infrastructure/openai-supplier-message-translator";
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 const describeWithDatabase = testDatabaseUrl ? describe : describe.skip;
@@ -249,5 +252,124 @@ describeWithDatabase("supplier message translation stays in the project and skip
     expect(await prisma.aiUsageEvent.count({
       where: { organizationId, projectId, operation: "supplier_reply_translation" },
     })).toBe(1);
+  });
+
+  it("keeps a timed-out combined translation unsaved, then retries both languages", async () => {
+    const current = await service.getSupplierConfirmation(projectId, organizationId, productUrl);
+    const source = `${current.communication.sourceMessage}\nModel: Zlin 2025 Retro Round, X5000, ISO 9001.`;
+    const usageCount = () => prisma.aiUsageEvent.count({
+      where: { organizationId, projectId, operation: "supplier_message_translation" },
+    });
+    const before = await usageCount();
+
+    function clientFor(mode: "ok" | "timeout" | "drop-zh") {
+      const targets: string[] = [];
+      const client: SupplierMessageTranslator & { targets: string[] } = {
+        targets,
+        async translate(input) {
+          targets.push(input.target);
+          if (mode === "timeout" && input.target === "ZH") throw new SupplierMessageTranslationTimeoutError();
+          const text = mode === "drop-zh" && input.target === "ZH"
+            ? "nema podataka"
+            : `Prevod: ${renderTargetText(input.text, input.target === "ZH" ? "ZH" : "EN")}`;
+          return {
+            text,
+            usage: supplierMessageUsageEvent({
+              operation: "supplier_message_translation",
+              model: "gpt-5-mini",
+              responseId: `resp-${crypto.randomUUID()}`,
+              inputTokens: 100,
+              cachedInputTokens: 20,
+              outputTokens: 40,
+              totalTokens: 140,
+              durationMs: 15,
+            }),
+          };
+        },
+      };
+      return client;
+    }
+
+    const english = clientFor("ok");
+    const translated = await service.translateSupplierInquiry(projectId, organizationId, {
+      productUrl,
+      sourceMessage: source,
+      targetLanguage: "EN",
+    }, english);
+    expect(english.targets).toEqual(["EN"]);
+    expect(translated.communication.translationCurrent).toBe(true);
+    expect(translated.communication.targetLanguage).toBe("EN");
+    expect(translated.communication.translatedMessage).toContain("Zlin 2025 Retro Round");
+    expect(translated.communication.translatedMessage).toContain("1,000 pieces");
+    expect(translated.communication.translatedMessage).not.toContain("2,025");
+    expect(await usageCount()).toBe(before + 1);
+
+    const timedOut = clientFor("timeout");
+    await expect(service.translateSupplierInquiry(projectId, organizationId, {
+      productUrl,
+      sourceMessage: source,
+      targetLanguage: "EN_ZH",
+    }, timedOut)).rejects.toBeInstanceOf(SupplierMessageTranslationTimeoutError);
+    expect(timedOut.targets).toEqual(expect.arrayContaining(["EN", "ZH"]));
+    expect(timedOut.targets).not.toContain("EN_ZH");
+    const afterTimeout = await service.getSupplierConfirmation(projectId, organizationId, productUrl);
+    expect(afterTimeout.communication.translatedMessage).toBe(translated.communication.translatedMessage);
+    expect(afterTimeout.communication.translatedMessage).not.toContain("\n---\n");
+    expect(afterTimeout.communication.targetLanguage).toBe("EN");
+    expect(afterTimeout.communication.translationCurrent).toBe(true);
+    expect(await usageCount()).toBe(before + 2);
+
+    const incomplete = clientFor("drop-zh");
+    await expect(service.translateSupplierInquiry(projectId, organizationId, {
+      productUrl,
+      sourceMessage: source,
+      targetLanguage: "EN_ZH",
+    }, incomplete)).rejects.toBeInstanceOf(service.SupplierMessageFactError);
+    const afterIncomplete = await service.getSupplierConfirmation(projectId, organizationId, productUrl);
+    expect(afterIncomplete.communication.translatedMessage).toBe(translated.communication.translatedMessage);
+    expect(afterIncomplete.communication.targetLanguage).toBe("EN");
+    expect(afterIncomplete.communication.translationCurrent).toBe(true);
+    expect(await usageCount()).toBe(before + 4);
+
+    const bilingual = clientFor("ok");
+    const combined = await service.translateSupplierInquiry(projectId, organizationId, {
+      productUrl,
+      sourceMessage: source,
+      targetLanguage: "EN_ZH",
+    }, bilingual);
+    expect(bilingual.targets).toEqual(expect.arrayContaining(["EN", "ZH"]));
+    expect(bilingual.targets).toHaveLength(2);
+    expect(combined.communication.translationCurrent).toBe(true);
+    expect(combined.communication.targetLanguage).toBe("EN_ZH");
+    expect(combined.communication.translationReused).toBe(false);
+    expect(combined.communication.estimatedCostUsd).toBe("0.000201");
+    const [englishPart, chinesePart] = combined.communication.translatedMessage.split("\n---\n");
+    expect(englishPart).toContain("Zlin 2025 Retro Round");
+    expect(englishPart).toContain("X5000");
+    expect(englishPart).toContain("ISO 9001");
+    expect(englishPart).toContain("1,000 pieces");
+    expect(englishPart).not.toContain("2,025");
+    expect(chinesePart).toContain("Zlin 2025 Retro Round");
+    expect(chinesePart).toContain("X5000");
+    expect(chinesePart).toContain("ISO 9001");
+    expect(chinesePart).toContain("件");
+    const storedCosts = await prisma.aiUsageEvent.findMany({
+      where: { organizationId, projectId, operation: "supplier_message_translation" },
+      orderBy: { createdAt: "desc" },
+      take: 2,
+    });
+    expect(storedCosts).toHaveLength(2);
+    expect(storedCosts.map((event) => event.inputTokens)).toEqual([100, 100]);
+    expect(storedCosts.reduce((sum, event) => sum + Number(event.estimatedTotalCostUsd), 0)).toBeCloseTo(0.000201, 6);
+
+    const reused = await service.translateSupplierInquiry(projectId, organizationId, {
+      productUrl,
+      sourceMessage: source,
+      targetLanguage: "EN_ZH",
+    }, bilingual);
+    expect(bilingual.targets).toHaveLength(2);
+    expect(reused.communication.translationReused).toBe(true);
+    expect(reused.communication.translatedMessage).toBe(combined.communication.translatedMessage);
+    expect(await usageCount()).toBe(before + 6);
   });
 });

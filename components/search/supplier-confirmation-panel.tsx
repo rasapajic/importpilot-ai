@@ -12,6 +12,11 @@ import {
   type ConfirmableSupplierTermKey,
   type SupplierConfirmationStatus,
 } from "@/modules/negotiation/domain/supplier-confirmation";
+import {
+  inquiryMessageForSending,
+  inquiryTranslationFields,
+  usableInquiryTranslation,
+} from "@/modules/negotiation/domain/supplier-message";
 import type { SupplierOfferSearchResult } from "@/modules/product-search/domain/search";
 
 const statuses: SupplierConfirmationStatus[] = [
@@ -79,8 +84,11 @@ type Copy = {
   reusedTranslation: string;
   estimatedCost: string;
   followUp: string;
-  staleTranslation: string;
-  evidence: string;
+    staleTranslation: string;
+    translationHidden: string;
+    incompleteTranslation: string;
+    sendingUsesSource: string;
+    evidence: string;
   status: Record<SupplierConfirmationStatus, string>;
   evidenceLabel: Record<string, string>;
   termLabel: Record<string, string>;
@@ -145,6 +153,9 @@ const copy: Record<Locale, Copy> = {
     estimatedCost: "Procenjeni trošak prevoda",
     followUp: "Predlog dodatnih pitanja",
     staleTranslation: "Izvorni tekst je izmenjen. Prevod treba ponovo napraviti.",
+    translationHidden: "Prethodni prevod je sakriven jer ne odgovara izabranom jeziku. Novi AI poziv počinje tek kada izaberete Prevedi poruku.",
+    incompleteTranslation: "Kombinovani prevod nije kompletan, pa nije prikazan i ne može da se pošalje.",
+    sendingUsesSource: "Kopiranje koristi srpski tekst. Prethodni prevod nije uključen.",
     evidence: "Povezano sa pisanom ponudom",
     status: {
       FOUND: "Pronađen kandidat",
@@ -243,6 +254,9 @@ const copy: Record<Locale, Copy> = {
     estimatedCost: "Geschätzte Übersetzungskosten",
     followUp: "Vorgeschlagene weitere Fragen",
     staleTranslation: "Der Ausgangstext wurde geändert. Die Übersetzung muss neu erstellt werden.",
+    translationHidden: "Die vorherige Übersetzung ist ausgeblendet, weil sie nicht zur gewählten Sprache passt. Ein neuer KI-Aufruf startet erst mit „Nachricht übersetzen“.",
+    incompleteTranslation: "Die kombinierte Übersetzung ist unvollständig und wird weder angezeigt noch gesendet.",
+    sendingUsesSource: "Kopieren verwendet den serbischen Text. Die vorherige Übersetzung ist nicht enthalten.",
     evidence: "Mit dem schriftlichen Angebot verknüpft",
     status: {
       FOUND: "Kandidat gefunden",
@@ -341,6 +355,9 @@ const copy: Record<Locale, Copy> = {
     estimatedCost: "Estimated translation cost",
     followUp: "Suggested follow-up questions",
     staleTranslation: "The source text changed. Translate the message again.",
+    translationHidden: "The previous translation is hidden because it does not match the selected language. A new AI call starts only when you choose Translate message.",
+    incompleteTranslation: "The combined translation is incomplete, so it is hidden and will not be sent.",
+    sendingUsesSource: "Copying uses the Serbian text. The previous translation is not included.",
     evidence: "Linked to the written quotation",
     status: {
       FOUND: "Candidate found",
@@ -451,16 +468,23 @@ export function SupplierConfirmationPanel({
   const record = view?.record ?? null;
   const savedSource = (view?.communication.sourceMessage ?? brief.serbianBody).trim();
   const sourceIsCurrent = sourceMessage.trim() === savedSource;
-  const translationIsCurrent = Boolean(
-    translatedMessage.trim() &&
-    sourceIsCurrent &&
-    view?.communication.translationCurrent,
-  );
+  const savedLanguage = view?.communication.targetLanguage ?? null;
+  const translationInput = {
+    selectedLanguage: targetLanguage,
+    savedLanguage,
+    translatedMessage,
+    sourceIsCurrent,
+    translationCurrent: Boolean(view?.communication.translationCurrent),
+  };
+  const translationFields = inquiryTranslationFields(translationInput);
+  const usableTranslation = usableInquiryTranslation(translationInput);
+  const translationIsCurrent = usableTranslation !== null;
   const savedReply = (view?.communication.supplierReplyOriginal ?? "").trim();
   const replyIsCurrent = writtenQuote.trim() === savedReply && Boolean(view?.communication.replyTranslationCurrent);
-  const finalMessage = translationIsCurrent
-    ? translatedMessage.trim()
-    : `${brief.serbianSubject}\n\n${sourceMessage.trim() || brief.serbianBody}`;
+  const finalMessage = inquiryMessageForSending({
+    ...translationInput,
+    serbianFallback: `${brief.serbianSubject}\n\n${sourceMessage.trim() || brief.serbianBody}`,
+  });
 
   function applyView(next: SupplierConfirmationView) {
     setView(next);
@@ -571,24 +595,40 @@ export function SupplierConfirmationPanel({
         >
           {text.translateMessage}
         </button>
-        {translatedMessage.trim() && (
-          <div className="supplier-message-compare">
+        {translationFields.kind === "single" && (
+          <label>
+            {translationFields.language === "ZH" ? text.languageZh : text.languageEn}
+            <textarea
+              disabled={pending}
+              onChange={(event) => setTranslatedMessage(event.target.value)}
+              rows={8}
+              value={translationFields.text}
+            />
+          </label>
+        )}
+        {translationFields.kind === "bilingual" && (
+          <div className="supplier-translation-fields">
             <label>
-              {text.original}
-              <textarea readOnly rows={8} value={sourceMessage} />
-            </label>
-            <label>
-              {text.translation}
+              {text.languageEn}
               <textarea
                 disabled={pending}
-                onChange={(event) => setTranslatedMessage(event.target.value)}
+                onChange={(event) => setTranslatedMessage(`${event.target.value}\n---\n${translationFields.chinese}`)}
                 rows={8}
-                value={translatedMessage}
+                value={translationFields.english}
+              />
+            </label>
+            <label>
+              {text.languageZh}
+              <textarea
+                disabled={pending}
+                onChange={(event) => setTranslatedMessage(`${translationFields.english}\n---\n${event.target.value}`)}
+                rows={8}
+                value={translationFields.chinese}
               />
             </label>
           </div>
         )}
-        {translatedMessage.trim() && (
+        {translationFields.kind !== "hidden" && (
           <button
             className="secondary-button"
             disabled={pending}
@@ -602,13 +642,19 @@ export function SupplierConfirmationPanel({
             {text.saveCorrection}
           </button>
         )}
-        {view?.communication.translationReused && sourceIsCurrent && (
+        {translationFields.kind !== "hidden" && view?.communication.translationReused && sourceIsCurrent && (
           <p className="muted-text">{text.reusedTranslation}</p>
         )}
-        {view?.communication.estimatedCostUsd && (
+        {translationFields.kind !== "hidden" && view?.communication.estimatedCostUsd && (
           <p className="muted-text">{text.estimatedCost}: USD {view.communication.estimatedCostUsd}</p>
         )}
-        {translatedMessage.trim() && !translationIsCurrent && (
+        {savedLanguage && savedLanguage !== targetLanguage && translatedMessage.trim() && (
+          <p className="supplier-terms-warning">{text.translationHidden}</p>
+        )}
+        {savedLanguage === "EN_ZH" && targetLanguage === "EN_ZH" && translatedMessage.trim() && translationFields.kind === "hidden" && (
+          <p className="supplier-terms-warning">{text.incompleteTranslation}</p>
+        )}
+        {translationFields.kind !== "hidden" && !translationIsCurrent && (
           <p className="supplier-terms-warning">{text.staleTranslation}</p>
         )}
       </details>
@@ -618,6 +664,9 @@ export function SupplierConfirmationPanel({
           {text.message}
           <textarea readOnly rows={6} value={finalMessage} />
         </label>
+        {translatedMessage.trim() && !translationIsCurrent && (
+          <p className="supplier-terms-warning">{text.sendingUsesSource}</p>
+        )}
         <p className="muted-text">{text.notSent}</p>
         <div className="supplier-confirmation-actions">
           <button className="secondary-button" onClick={() => void copyMessage()} type="button">

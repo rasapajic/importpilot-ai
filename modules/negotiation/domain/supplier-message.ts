@@ -254,6 +254,62 @@ export function outboundTranslationRendersTargetLanguage(
   return { complete: problems.length === 0, problems: unique(problems) };
 }
 
+export function bilingualSupplierTranslationParts(text: string) {
+  const marker = text.indexOf("\n---\n");
+  if (marker < 0) return null;
+  return {
+    english: text.slice(0, marker),
+    chinese: text.slice(marker + "\n---\n".length),
+  };
+}
+
+export function usableInquiryTranslation(input: {
+  selectedLanguage: SupplierMessageLanguage;
+  savedLanguage: SupplierMessageLanguage | null;
+  translatedMessage: string;
+  sourceIsCurrent: boolean;
+  translationCurrent: boolean;
+}) {
+  if (!input.sourceIsCurrent || !input.translationCurrent) return null;
+  if (!input.savedLanguage || input.selectedLanguage !== input.savedLanguage) return null;
+  const text = input.translatedMessage.trim();
+  if (!text) return null;
+  if (input.selectedLanguage === "EN_ZH") {
+    const parts = bilingualSupplierTranslationParts(text);
+    if (!parts?.english.trim() || !parts.chinese.trim()) return null;
+  }
+  return text;
+}
+
+export function inquiryMessageForSending(input: {
+  selectedLanguage: SupplierMessageLanguage;
+  savedLanguage: SupplierMessageLanguage | null;
+  translatedMessage: string;
+  sourceIsCurrent: boolean;
+  translationCurrent: boolean;
+  serbianFallback: string;
+}) {
+  return usableInquiryTranslation(input) ?? input.serbianFallback;
+}
+
+export function inquiryTranslationFields(input: {
+  selectedLanguage: SupplierMessageLanguage;
+  savedLanguage: SupplierMessageLanguage | null;
+  translatedMessage: string;
+}) {
+  if (!input.savedLanguage || input.selectedLanguage !== input.savedLanguage) {
+    return { kind: "hidden" } as const;
+  }
+  const text = input.translatedMessage.trim();
+  if (!text) return { kind: "hidden" } as const;
+  if (input.selectedLanguage === "EN_ZH") {
+    const parts = bilingualSupplierTranslationParts(input.translatedMessage);
+    if (!parts?.english.trim() || !parts.chinese.trim()) return { kind: "hidden" } as const;
+    return { kind: "bilingual", english: parts.english, chinese: parts.chinese } as const;
+  }
+  return { kind: "single", language: input.selectedLanguage, text: input.translatedMessage } as const;
+}
+
 function countOccurrences(text: string, token: string) {
   if (!token) return 0;
   let count = 0;

@@ -369,7 +369,8 @@
   width: 100%;
 }
 
-.supplier-message-compare {
+.supplier-message-compare,
+.supplier-translation-fields {
   display: grid;
   gap: 0.75rem;
 }
