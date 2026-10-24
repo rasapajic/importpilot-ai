@@ -38,10 +38,32 @@ type OpenAiPayload = {
 };
 
 const TARGET_INSTRUCTION: Record<SupplierMessageLanguage, string> = {
-  EN: "Write the full message in professional business English.",
-  ZH: "Write the full message in professional Simplified Chinese.",
-  EN_ZH: "Write the full message in professional business English, then a line containing only ---, then the same full message in professional Simplified Chinese. Repeat every number, currency, diopter, MOQ, model, Incoterm, and supplier name in both parts.",
+  EN: "Write the full message in professional business English. Example of a quantity line: Quantity: 1,000 pieces.",
+  ZH: "Write the full message in professional Simplified Chinese. Example of a quantity line: 数量：1,000件.",
+  EN_ZH: "Write the full message in professional business English, then a line containing only ---, then the same full message in professional Simplified Chinese. Repeat every price, diopter, MOQ, model, Incoterm, and known company name in both parts. Translate units in each part, for example Quantity: 1,000 pieces. and 数量：1,000件.",
 };
+
+export function buildSupplierMessageTranslationInstructions(input: {
+  target: SupplierMessageLanguage;
+  direction: "outbound" | "reply";
+}) {
+  const shared = [
+    "Translate this business message for an import quotation.",
+    "Preserve the numeric value of every quantity, price, diopter, MOQ, and commercial term.",
+    "Keep diopters, currencies, MOQ, model codes, and Incoterms unchanged, including their original spelling and decimal points.",
+    "Translate units of measure into the target language. Serbian kom, komad, and komada become English piece or pieces, and Simplified Chinese 件.",
+    "In English, write integers of 1,000 or more with a comma thousands separator, for example 1,000 pieces. Keep decimal prices and diopters with a dot, for example 1.1 USD and +1.50.",
+    "In Simplified Chinese, use Arabic numerals and the unit 件, for example 1,000件.",
+    "Do not add prices, quantities, dates, supplier names, or terms that are not in the source.",
+    "Do not omit any commercial fact.",
+    "Never address the recipient by an internet domain or website host. If the source uses a domain as a name, or no real company name is known, use a neutral professional salutation: English 'Dear Supplier,', Simplified Chinese '您好：', Serbian 'Poštovani,'. Do not invent a company or contact name.",
+    "Return only the translation.",
+  ];
+  const direction = input.direction === "reply"
+    ? "The source is a supplier reply in English or Chinese. Translate the full reply into Serbian. Translate units into Serbian, for example pieces or pcs into komada, and write thousands with a Serbian dot separator, for example 1.000 komada."
+    : `The source is the buyer's Serbian request. ${TARGET_INSTRUCTION[input.target]}`;
+  return [...shared.slice(0, 9), direction, shared[9]].join(" ");
+}
 
 function envNumber(name: string, fallback: number) {
   const value = Number(process.env[name]);
@@ -105,16 +127,7 @@ export function createOpenAiSupplierMessageTranslator(options: {
       const operation = input.direction === "reply"
         ? "supplier_reply_translation"
         : "supplier_message_translation";
-      const instructions = [
-        "Translate this business message for an import quotation.",
-        "Preserve every number, currency, diopter, MOQ, model, Incoterm, supplier name, and unit exactly.",
-        "Do not add prices, quantities, dates, or terms that are not in the source.",
-        "Do not omit any commercial fact.",
-        input.direction === "reply"
-          ? "The source is a supplier reply in English or Chinese. Translate the full reply into Serbian for the buyer."
-          : `The source is the buyer's Serbian request. ${TARGET_INSTRUCTION[input.target]}`,
-        "Return only the translation.",
-      ].join(" ");
+      const instructions = buildSupplierMessageTranslationInstructions(input);
       let response: Response;
       try {
         response = await fetcher("https://api.openai.com/v1/responses", {

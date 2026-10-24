@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  buildSupplierMessageTranslationInstructions,
   createOpenAiSupplierMessageTranslator,
   SupplierMessageTranslationNotConfiguredError,
 } from "../../modules/negotiation/infrastructure/openai-supplier-message-translator";
@@ -82,6 +83,18 @@ describe("OpenAI supplier message translator", () => {
       estimated: true,
     });
     expect(result.usage.estimatedTotalCostUsd).toBeCloseTo(0.000116, 8);
+    const instructions = buildSupplierMessageTranslationInstructions({
+      target: "EN",
+      direction: "outbound",
+    });
+    expect(requestBody).toContain(instructions);
+    expect(instructions).toContain("1,000 pieces");
+    expect(instructions).toContain("1,000件");
+    expect(instructions).toContain("Dear Supplier,");
+    expect(instructions).toContain("+1.50");
+    expect(instructions).toContain("1.1 USD");
+    expect(instructions).not.toContain("unit exactly");
+    expect(instructions).toContain("Do not invent a company or contact name.");
   });
 
   it("ignores the search-provider key and redacts secrets from failures", async () => {

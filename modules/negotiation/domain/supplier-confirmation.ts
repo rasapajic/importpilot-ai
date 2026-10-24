@@ -2,6 +2,7 @@ import type { SupplierOfferSearchResult } from "@/modules/product-search/domain/
 import { presentSupplierOfferPrice } from "@/modules/product-search/domain/supplier-quantity-pricing";
 import {
   buildSerbianSupplierInquiry,
+  englishSupplierGreeting,
   serbianInteger,
 } from "@/modules/negotiation/domain/supplier-message";
 
@@ -200,7 +201,7 @@ export function buildSupplierConfirmationBrief(input: {
 
   const subject = `RFQ — please confirm this order — ${input.productName}`;
   const body = [
-    `Dear ${result.supplierName} team,`,
+    `${englishSupplierGreeting(result.supplierName)}`,
     "",
     "We are comparing suppliers and request a written quotation. This message is a request for confirmation, not an order.",
     "",

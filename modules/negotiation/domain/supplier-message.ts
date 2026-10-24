@@ -22,6 +22,28 @@ export function serbianInteger(value: number) {
   return value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 }
 
+export function groupedEnglishInteger(value: string) {
+  return value.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
+export function isInternetDomainName(value: string) {
+  const host = value.trim().replace(/^https?:\/\//i, "").replace(/[/?#].*$/, "");
+  if (!host || /\s/.test(host)) return false;
+  return /^(?:[a-z0-9-]+\.)+[a-z]{2,}$/i.test(host);
+}
+
+export function serbianSupplierGreeting(supplierName: string) {
+  const name = supplierName.trim();
+  if (!name || isInternetDomainName(name)) return "Poštovani,";
+  return `Poštovani tim ${name},`;
+}
+
+export function englishSupplierGreeting(supplierName: string) {
+  const name = supplierName.trim();
+  if (!name || isInternetDomainName(name)) return "Dear Supplier,";
+  return `Dear ${name} team,`;
+}
+
 export function buildSerbianSupplierInquiry(input: {
   supplierName: string;
   productName: string;
@@ -74,7 +96,7 @@ export function buildSerbianSupplierInquiry(input: {
   return {
     subject: `Upit — molimo potvrdu narudžbine — ${input.productName}`,
     body: [
-      `Poštovani tim ${input.supplierName},`,
+      `${serbianSupplierGreeting(input.supplierName)}`,
       "",
       "Upoređujemo dobavljače i tražimo pisanu ponudu. Ovo je zahtev za potvrdu, a ne narudžbina.",
       "",
@@ -134,6 +156,57 @@ export function translationPreservesCommercialFacts(
       .filter((item) => item.length > 0 && countOccurrences(translation, item) < copies),
   ];
   return { preserved: missing.length === 0, missing: unique(missing) };
+}
+
+const SERBIAN_PIECE_UNIT = /\bkom(?:ad|ada)?\b/i;
+const DOMAIN_IN_TEXT = /(?:[a-z0-9-]+\.)+[a-z]{2,}/i;
+
+function largeIntegers(text: string) {
+  return commercialFacts(text).numbers.filter((item) => /^\d{4,}$/.test(item));
+}
+
+function salutationUsesDomain(text: string) {
+  return text.split("\n").slice(0, 4).some((line) => {
+    const trimmed = line.trim();
+    if (!/^(?:dear|hello|hi|poštovani|您好|尊敬)/i.test(trimmed)) return false;
+    return DOMAIN_IN_TEXT.test(trimmed);
+  });
+}
+
+export function outboundTranslationRendersTargetLanguage(
+  source: string,
+  translation: string,
+  target: SupplierMessageLanguage,
+) {
+  const problems: string[] = [];
+  const sections = target === "EN_ZH" ? translation.split(/\n---\n/) : [translation];
+  if (target === "EN_ZH" && (sections.length < 2 || sections.some((section) => !section.trim()))) {
+    problems.push("EN_ZH");
+  }
+  const english = target === "ZH" ? "" : sections[0] ?? "";
+  const chinese = target === "ZH" ? translation : target === "EN_ZH" ? sections.slice(1).join("\n---\n") : "";
+  const sourceHasPieceUnit = SERBIAN_PIECE_UNIT.test(source);
+  const thousands = largeIntegers(source);
+
+  if (sourceHasPieceUnit && target !== "ZH") {
+    if (!/\bpieces?\b/i.test(english)) problems.push("pieces");
+    if (SERBIAN_PIECE_UNIT.test(english)) problems.push("komada");
+    for (const value of thousands) {
+      const grouped = groupedEnglishInteger(value);
+      if (!english.includes(grouped)) problems.push(grouped);
+    }
+  }
+  if (sourceHasPieceUnit && target !== "EN") {
+    if (!chinese.includes("件")) problems.push("件");
+    if (SERBIAN_PIECE_UNIT.test(chinese)) problems.push("komada");
+    for (const value of thousands) {
+      if (!chinese.includes(groupedEnglishInteger(value)) && !chinese.includes(value)) {
+        problems.push(`${value}件`);
+      }
+    }
+  }
+  if (salutationUsesDomain(translation)) problems.push("domain-salutation");
+  return { complete: problems.length === 0, problems: unique(problems) };
 }
 
 function countOccurrences(text: string, token: string) {

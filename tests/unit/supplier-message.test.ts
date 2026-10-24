@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { buildSupplierConfirmationBrief } from "../../modules/negotiation/domain/supplier-confirmation";
 import {
+  outboundTranslationRendersTargetLanguage,
   supplierFollowUpQuestions,
   translationPreservesCommercialFacts,
 } from "../../modules/negotiation/domain/supplier-message";
@@ -59,6 +60,28 @@ describe("Serbian supplier inquiry", () => {
     expect(brief.serbianBody).not.toContain("Model:");
     expect(brief.body).toContain("Dear Wenzhou Zlin Eyewear Co., Ltd. team,");
   });
+
+  it("does not address a supplier by an internet domain or invent a company name", () => {
+    const brief = buildSupplierConfirmationBrief({
+      result: {
+        ...zlinOffer(),
+        supplierName: "zlineyewear.en.made-in-china.com",
+      },
+      productName: "naočare za čitanje",
+      quantity: 1_000,
+      destination: "RS",
+    });
+
+    expect(brief.serbianBody.startsWith("Poštovani,")).toBe(true);
+    expect(brief.body.startsWith("Dear Supplier,")).toBe(true);
+    expect(brief.serbianBody).not.toContain("zlineyewear.en.made-in-china.com");
+    expect(brief.body).not.toContain("zlineyewear.en.made-in-china.com");
+    expect(brief.serbianBody).not.toContain("Zlin");
+    expect(brief.body).not.toContain("Zlin");
+    expect(brief.serbianBody).toContain("Količina: 1.000 komada.");
+    expect(brief.body).toContain("Quantity: 1,000 pieces.");
+    expect(brief.body).toContain("Unit price for 1,000 pieces");
+  });
 });
 
 describe("commercial fact preservation", () => {
@@ -96,6 +119,46 @@ describe("commercial fact preservation", () => {
       literals: ["Wenzhou Zlin Eyewear Co., Ltd."],
       minimumCopies: 2,
     }).preserved).toBe(true);
+  });
+
+  it("requires translated units and target number formatting in English and Simplified Chinese", () => {
+    const commercial = "Cena 1.1 USD. MOQ 12. FOB. Dioptrije +1.00, +1.50, +2.00, +2.50, +3.00, +3.50.";
+    for (const quantity of ["1.000", "1000", "1,000"]) {
+      const serbian = `Količina: ${quantity} komada. Jediničnu cenu za ${quantity} komada. ${commercial}`;
+      const copied = `Quantity: ${quantity} komada. Unit price for ${quantity} komada. Price 1.1 USD. MOQ 12. FOB. Diopters +1.00, +1.50, +2.00, +2.50, +3.00, +3.50.`;
+      const english = [
+        "Dear Supplier,",
+        "Quantity: 1,000 pieces.",
+        "Unit price for 1,000 pieces.",
+        "Price 1.1 USD. MOQ 12. FOB.",
+        "Diopters +1.00, +1.50, +2.00, +2.50, +3.00, +3.50.",
+      ].join("\n");
+      const chinese = [
+        "您好：",
+        "数量：1,000件。",
+        "1,000件的单价。",
+        "价格 1.1 USD。MOQ 12。FOB。",
+        "度数 +1.00、+1.50、+2.00、+2.50、+3.00、+3.50。",
+      ].join("\n");
+
+      expect(outboundTranslationRendersTargetLanguage(serbian, copied, "EN").complete).toBe(false);
+      expect(outboundTranslationRendersTargetLanguage(serbian, english, "EN")).toMatchObject({ complete: true });
+      expect(outboundTranslationRendersTargetLanguage(serbian, chinese, "ZH")).toMatchObject({ complete: true });
+      expect(outboundTranslationRendersTargetLanguage(serbian, `${english}\n---\n${chinese}`, "EN_ZH").complete).toBe(true);
+      expect(translationPreservesCommercialFacts(serbian, english).preserved).toBe(true);
+      expect(translationPreservesCommercialFacts(serbian, chinese).preserved).toBe(true);
+      expect(translationPreservesCommercialFacts(serbian, english.replace("1.1 USD", "1.2 USD")).missing).toContain("1.1");
+      expect(translationPreservesCommercialFacts(serbian, english.replace("+3.50", "+3.00")).missing).toContain("+3.50");
+    }
+
+    const domainSource = "Poštovani tim zlineyewear.en.made-in-china.com,\nKoličina: 1.000 komada. Cena 1.1 USD.";
+    const domainGreeting = "Dear team zlineyewear.en.made-in-china.com,\nQuantity: 1,000 pieces. Price 1.1 USD.";
+    expect(outboundTranslationRendersTargetLanguage(domainSource, domainGreeting, "EN").problems).toContain("domain-salutation");
+    expect(outboundTranslationRendersTargetLanguage(
+      domainSource,
+      "Dear Supplier,\nQuantity: 1,000 pieces. Price 1.1 USD.",
+      "EN",
+    ).complete).toBe(true);
   });
 });
 
