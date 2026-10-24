@@ -7,11 +7,7 @@ import {
 const ACCEPTANCE_RENDER_SERVICE_ID = "srv-datu3v093c1s73c17m60";
 const MAX_ACCEPTANCE_MONTHLY_LIMIT = 500;
 
-type QuotaEnvironment = {
-  RENDER_SERVICE_ID?: string;
-  JAKOV360_ACCEPTANCE_TEST_ORG_ID?: string;
-  JAKOV360_ACCEPTANCE_TEST_MONTHLY_LIMIT?: string;
-};
+type QuotaEnvironment = Record<string, string | undefined>;
 
 export function effectiveMonthlySupplierSearchLimit(
   input: { plan: Jakov360PlanCode; organizationId: string },
