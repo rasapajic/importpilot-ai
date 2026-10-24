@@ -7,6 +7,21 @@ import type { SupplierMessageTranslator } from "../../modules/negotiation/infras
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 const describeWithDatabase = testDatabaseUrl ? describe : describe.skip;
 
+function renderTargetText(text: string, target: "EN" | "ZH") {
+  const withGroupedThousands = text.replace(/\b(\d{1,3}(?:\.\d{3})+)\b/g, (value) => value.replaceAll(".", ","));
+  if (target === "ZH") {
+    return withGroupedThousands
+      .replaceAll("Količina:", "数量：")
+      .replaceAll("komada", "件")
+      .replaceAll("komad", "件");
+  }
+  return withGroupedThousands
+    .replaceAll("Količina:", "Quantity:")
+    .replaceAll("Jediničnu cenu za", "Unit price for")
+    .replaceAll("komada", "pieces")
+    .replaceAll("komad", "piece");
+}
+
 function translator(mode: "preserve" | "drop"): SupplierMessageTranslator & { calls: number } {
   const client = {
     calls: 0,
@@ -14,9 +29,11 @@ function translator(mode: "preserve" | "drop"): SupplierMessageTranslator & { ca
       client.calls += 1;
       const text = mode === "drop"
         ? "nema podataka"
-        : input.target === "EN_ZH"
-          ? `${input.text}\n---\n${input.text}`
-          : `Prevod: ${input.text}`;
+        : input.direction === "reply"
+          ? `Prevod: ${input.text}`
+          : input.target === "EN_ZH"
+            ? `${renderTargetText(input.text, "EN")}\n---\n${renderTargetText(input.text, "ZH")}`
+            : `Prevod: ${renderTargetText(input.text, input.target)}`;
       return {
         text,
         usage: supplierMessageUsageEvent({
@@ -157,6 +174,27 @@ describeWithDatabase("supplier message translation stays in the project and skip
       where: { organizationId, projectId, operation: "supplier_message_translation" },
     })).toBe(1);
 
+    const editedSource = `${prepared.communication.sourceMessage}\nMolimo potvrdite pakovanje.`;
+    const stale = await service.saveSupplierSourceMessage(projectId, organizationId, {
+      productUrl,
+      sourceMessage: editedSource,
+    });
+    expect(stale.communication.translationCurrent).toBe(false);
+    expect(stale.communication.translatedMessage).toBe(correctedText);
+
+    const refreshed = await service.translateSupplierInquiry(projectId, organizationId, {
+      productUrl,
+      sourceMessage: editedSource,
+      targetLanguage: "EN",
+    }, client);
+    expect(client.calls).toBe(2);
+    expect(refreshed.communication.translationReused).toBe(false);
+    expect(refreshed.communication.translationCurrent).toBe(true);
+    expect(refreshed.communication.translatedMessage).not.toBe(correctedText);
+    expect(refreshed.communication.translatedMessage).toContain("Quantity: 1,000 pieces.");
+    expect(refreshed.communication.translatedMessage).toContain("Unit price for 1,000 pieces");
+    expect(refreshed.communication.translatedMessage).not.toContain("komada");
+
     const failing = translator("drop");
     await expect(service.translateSupplierInquiry(projectId, organizationId, {
       productUrl,
@@ -165,11 +203,11 @@ describeWithDatabase("supplier message translation stays in the project and skip
     }, failing)).rejects.toBeInstanceOf(service.SupplierMessageFactError);
     expect(failing.calls).toBe(1);
     const afterFailure = await service.getSupplierConfirmation(projectId, organizationId, productUrl);
-    expect(afterFailure.communication.translatedMessage).toBe(correctedText);
+    expect(afterFailure.communication.translatedMessage).toBe(refreshed.communication.translatedMessage);
     expect(afterFailure.communication.translationCurrent).toBe(false);
     expect(await prisma.aiUsageEvent.count({
       where: { organizationId, projectId, operation: "supplier_message_translation" },
-    })).toBe(2);
+    })).toBe(3);
 
     await service.markSupplierConfirmationSent(projectId, organizationId, productUrl);
     const replyClient = translator("preserve");

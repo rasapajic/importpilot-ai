@@ -27,6 +27,8 @@ import {
   type SupplierTermProposal,
 } from "@/modules/negotiation/domain/supplier-confirmation";
 import {
+  isInternetDomainName,
+  outboundTranslationRendersTargetLanguage,
   replyMentionsSupply,
   supplierFollowUpQuestions,
   translationPreservesCommercialFacts,
@@ -492,7 +494,7 @@ export async function transferSupplierConfirmationToOffer(
 function protectedLiterals(brief: SupplierConfirmationBrief, source: string) {
   return [brief.supplierName, brief.model ?? ""]
     .map((item) => item.trim())
-    .filter((item) => item.length > 0 && source.includes(item));
+    .filter((item) => item.length > 0 && source.includes(item) && !isInternetDomainName(item));
 }
 
 async function translateChecked(input: {
@@ -519,6 +521,14 @@ async function translateChecked(input: {
     minimumCopies: input.direction === "outbound" && input.target === "EN_ZH" ? 2 : 1,
   });
   if (!facts.preserved) throw new SupplierMessageFactError(facts.missing);
+  if (input.direction === "outbound") {
+    const rendered = outboundTranslationRendersTargetLanguage(
+      input.text,
+      translated.text,
+      input.target,
+    );
+    if (!rendered.complete) throw new SupplierMessageFactError(rendered.problems);
+  }
   return translated;
 }
 
@@ -621,6 +631,14 @@ export async function saveSupplierTranslatedMessage(
     },
   );
   if (!facts.preserved) throw new SupplierMessageFactError(facts.missing);
+  if (isMessageLanguage(row.targetLanguage)) {
+    const rendered = outboundTranslationRendersTargetLanguage(
+      source,
+      translatedMessage,
+      row.targetLanguage,
+    );
+    if (!rendered.complete) throw new SupplierMessageFactError(rendered.problems);
+  }
   const saved = await prisma.supplierConfirmation.update({
     where: { id: row.id },
     data: { translatedMessage },
