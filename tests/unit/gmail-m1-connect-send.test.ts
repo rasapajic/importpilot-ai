@@ -185,13 +185,13 @@ describe("Gmail MIME send", () => {
       rfcMessageId: createGmailMessageId(),
     });
     const longMime = Buffer.from(longRaw, "base64url").toString("utf8");
-    const headerLines = longMime.split("\\r\\n").filter(
+    const headerLines = longMime.split("\r\n").filter(
       (line) => line.startsWith("Subject: ") || line.startsWith(" =?UTF-8?B?"),
     );
     expect(headerLines.length).toBeGreaterThan(1);
     expect(headerLines.every((line) => line.length <= 78)).toBe(true);
     const decoded = Array.from(
-      longMime.matchAll(/=\\?UTF-8\\?B\\?([A-Za-z0-9+/=]+)\\?=/g),
+      longMime.matchAll(/=\?UTF-8\?B\?([A-Za-z0-9+\/=]+)\?=/g),
       (match) => Buffer.from(match[1], "base64"),
     );
     expect(Buffer.concat(decoded).toString("utf8")).toBe(unicodeSubject);
