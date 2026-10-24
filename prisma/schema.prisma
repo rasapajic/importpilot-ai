@@ -190,6 +190,7 @@ model User {
   memberships  OrganizationMember[]
   sessions     Session[]
   oauthAccounts OAuthAccount[]
+  mailboxConnections MailboxConnection[]
   auditEvents  AuditEvent[]
   createdProjects ImportProject[] @relation("ProjectCreator")
   createdAt    DateTime             @default(now()) @map("created_at")
@@ -222,6 +223,8 @@ model Organization {
   billingPurchases BillingPurchase[]
   projectEntitlements ProjectEntitlement[]
   supplierConfirmations SupplierConfirmation[]
+  mailboxConnections MailboxConnection[]
+  supplierMailOutbounds SupplierMailOutbound[]
   createdAt DateTime             @default(now()) @map("created_at")
   updatedAt DateTime             @updatedAt @map("updated_at")
 
@@ -644,6 +647,9 @@ model SupplierConfirmation {
   createdAt                      DateTime                   @default(now()) @map("created_at")
   updatedAt                      DateTime                   @updatedAt @map("updated_at")
 
+  mailOutbounds SupplierMailOutbound[]
+
+  @@unique([organizationId, id])
   @@unique([organizationId, projectId, productUrl])
   @@index([organizationId, projectId])
   @@index([offerId])
@@ -811,4 +817,49 @@ model AiUsageEvent {
   @@index([organizationId, projectId, createdAt], map: "ai_usage_events_organization_id_project_id_created_at_idx")
   @@index([organizationId, operation, modelName], map: "ai_usage_events_organization_id_operation_model_idx")
   @@map("ai_usage_events")
+}
+
+model MailboxConnection {
+  id                    String    @id @default(uuid()) @db.Uuid
+  organizationId        String    @map("organization_id") @db.Uuid
+  userId                String    @map("user_id") @db.Uuid
+  provider              String    @db.VarChar(20)
+  emailAddress          String    @map("email_address") @db.VarChar(320)
+  encryptedRefreshToken String?   @map("encrypted_refresh_token") @db.Text
+  tokenKeyVersion       String?   @map("token_key_version") @db.VarChar(40)
+  connectedAt           DateTime  @default(now()) @map("connected_at")
+  disconnectedAt        DateTime? @map("disconnected_at")
+  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user                  User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  outboundMessages      SupplierMailOutbound[]
+
+  @@unique([organizationId, provider, emailAddress])
+  @@unique([organizationId, id])
+  @@index([organizationId, userId, disconnectedAt])
+  @@map("mailbox_connections")
+}
+
+model SupplierMailOutbound {
+  id                  String    @id @default(uuid()) @db.Uuid
+  organizationId      String    @map("organization_id") @db.Uuid
+  confirmationId      String    @map("confirmation_id") @db.Uuid
+  mailboxConnectionId String    @map("mailbox_connection_id") @db.Uuid
+  fromAddress         String    @map("from_address") @db.VarChar(320)
+  recipientAddress    String    @map("recipient_address") @db.VarChar(320)
+  subject             String    @db.VarChar(500)
+  contentHash         String    @map("content_hash") @db.Char(64)
+  rfcMessageId        String    @map("rfc_message_id") @db.VarChar(255)
+  providerMessageId   String?   @map("provider_message_id") @db.VarChar(255)
+  providerThreadId    String?   @map("provider_thread_id") @db.VarChar(255)
+  status              String    @db.VarChar(16)
+  createdAt           DateTime  @default(now()) @map("created_at")
+  sentAt              DateTime? @map("sent_at")
+  organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  confirmation        SupplierConfirmation @relation(fields: [organizationId, confirmationId], references: [organizationId, id], onDelete: Cascade)
+  mailbox             MailboxConnection @relation(fields: [organizationId, mailboxConnectionId], references: [organizationId, id], onDelete: Restrict)
+
+  @@unique([organizationId, confirmationId])
+  @@unique([mailboxConnectionId, providerMessageId])
+  @@index([organizationId, status, createdAt])
+  @@map("supplier_mail_outbounds")
 }
