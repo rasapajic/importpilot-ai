@@ -160,9 +160,47 @@ export function translationPreservesCommercialFacts(
 
 const SERBIAN_PIECE_UNIT = /\bkom(?:ad|ada)?\b/i;
 const DOMAIN_IN_TEXT = /(?:[a-z0-9-]+\.)+[a-z]{2,}/i;
+const QUANTITY_LABEL_BEFORE = /količin\w*\s*:\s*$/i;
+const PIECE_UNIT_AFTER = /^\s+kom(?:ad|ada)?\b/i;
 
-function largeIntegers(text: string) {
-  return commercialFacts(text).numbers.filter((item) => /^\d{4,}$/.test(item));
+function isQuantitySpan(text: string, index: number, raw: string) {
+  return QUANTITY_LABEL_BEFORE.test(text.slice(0, index))
+    || PIECE_UNIT_AFTER.test(text.slice(index + raw.length));
+}
+
+function quantityIntegers(text: string) {
+  const values: string[] = [];
+  for (const match of text.matchAll(/\d{1,3}(?:[.,]\d{3})+|\d+/g)) {
+    const raw = match[0];
+    const index = match.index ?? 0;
+    if (!isQuantitySpan(text, index, raw)) continue;
+    const normalized = normalizedNumber(raw);
+    if (normalized && /^\d{4,}$/.test(normalized)) values.push(normalized);
+  }
+  return unique(values);
+}
+
+function modelCluster(text: string, index: number, length: number) {
+  let start = index;
+  let end = index + length;
+  const left = text.slice(0, start).match(/((?:[A-Z][A-Za-z0-9-]*\s+)+)$/);
+  if (left?.[1]) start -= left[1].length;
+  const right = text.slice(end).match(/^((?:\s+[A-Z][A-Za-z0-9-]*)+)/);
+  if (right?.[1]) end += right[1].length;
+  return text.slice(start, end).replace(/\s+/g, " ").trim();
+}
+
+function preservedMarkings(text: string) {
+  const markings = [
+    ...text.matchAll(/\b[A-Za-z]+[A-Za-z0-9-]*\d[A-Za-z0-9-]*\b/g),
+  ].map((match) => match[0]);
+  markings.push(...[...text.matchAll(/\bISO\s+\d+\b/gi)].map((match) => match[0]));
+  for (const match of text.matchAll(/\b(?:19|20)\d{2}\b/g)) {
+    const index = match.index ?? 0;
+    if (isQuantitySpan(text, index, match[0])) continue;
+    markings.push(modelCluster(text, index, match[0].length));
+  }
+  return unique(markings);
 }
 
 function salutationUsesDomain(text: string) {
@@ -186,12 +224,14 @@ export function outboundTranslationRendersTargetLanguage(
   const english = target === "ZH" ? "" : sections[0] ?? "";
   const chinese = target === "ZH" ? translation : target === "EN_ZH" ? sections.slice(1).join("\n---\n") : "";
   const sourceHasPieceUnit = SERBIAN_PIECE_UNIT.test(source);
-  const thousands = largeIntegers(source);
+  const quantities = quantityIntegers(source);
+  const markings = preservedMarkings(source);
+  const renderedSections = [english, chinese].filter((section) => section.length > 0);
 
   if (sourceHasPieceUnit && target !== "ZH") {
     if (!/\bpieces?\b/i.test(english)) problems.push("pieces");
     if (SERBIAN_PIECE_UNIT.test(english)) problems.push("komada");
-    for (const value of thousands) {
+    for (const value of quantities) {
       const grouped = groupedEnglishInteger(value);
       if (!english.includes(grouped)) problems.push(grouped);
     }
@@ -199,10 +239,15 @@ export function outboundTranslationRendersTargetLanguage(
   if (sourceHasPieceUnit && target !== "EN") {
     if (!chinese.includes("件")) problems.push("件");
     if (SERBIAN_PIECE_UNIT.test(chinese)) problems.push("komada");
-    for (const value of thousands) {
+    for (const value of quantities) {
       if (!chinese.includes(groupedEnglishInteger(value)) && !chinese.includes(value)) {
         problems.push(`${value}件`);
       }
+    }
+  }
+  for (const section of renderedSections) {
+    for (const marking of markings) {
+      if (!section.includes(marking)) problems.push(marking);
     }
   }
   if (salutationUsesDomain(translation)) problems.push("domain-salutation");

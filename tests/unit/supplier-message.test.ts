@@ -160,6 +160,44 @@ describe("commercial fact preservation", () => {
       "EN",
     ).complete).toBe(true);
   });
+
+  it("keeps model years and codes while formatting a real quantity of 1,000", () => {
+    const source = "Zlin 2025 Retro Round, X5000, ISO 9001, Količina: 1.000 komada. Cena 1.1 USD. Dioptrija +1.50.";
+    const english = "Zlin 2025 Retro Round, X5000, ISO 9001, Quantity: 1,000 pieces. Price 1.1 USD. Diopter +1.50.";
+    const chinese = "Zlin 2025 Retro Round, X5000, ISO 9001, 数量：1,000件。价格 1.1 USD。度数 +1.50。";
+    const combined = `${english}\n---\n${chinese}`;
+    const regroupedYear = "Zlin 2,025 Retro Round, X5000, ISO 9001, Quantity: 1,000 pieces. Price 1.1 USD. Diopter +1.50.";
+    const regroupedModel = "Zlin 2025 Retro Round, X5,000, ISO 9001, Quantity: 1,000 pieces. Price 1.1 USD. Diopter +1.50.";
+    const regroupedStandard = "Zlin 2025 Retro Round, X5000, ISO 9,001, Quantity: 1,000 pieces. Price 1.1 USD. Diopter +1.50.";
+    const copiedUnits = "Zlin 2025 Retro Round, X5000, ISO 9001, Količina: 1.000 komada. Cena 1.1 USD. Dioptrija +1.50.";
+
+    expect(outboundTranslationRendersTargetLanguage(source, english, "EN")).toMatchObject({
+      complete: true,
+      problems: [],
+    });
+    expect(outboundTranslationRendersTargetLanguage(source, english, "EN").problems).not.toContain("2,025");
+    expect(outboundTranslationRendersTargetLanguage(source, chinese, "ZH")).toMatchObject({ complete: true });
+    expect(outboundTranslationRendersTargetLanguage(source, "Zlin 2025 Retro Round, X5000, ISO 9001, 数量：1000件。价格 1.1 USD。度数 +1.50。", "ZH").complete).toBe(true);
+    expect(outboundTranslationRendersTargetLanguage(source, combined, "EN_ZH")).toMatchObject({ complete: true });
+
+    expect(outboundTranslationRendersTargetLanguage(source, regroupedYear, "EN").problems).toEqual(["Zlin 2025 Retro Round"]);
+    expect(outboundTranslationRendersTargetLanguage(source, regroupedYear, "EN").problems).not.toContain("2,025");
+    expect(outboundTranslationRendersTargetLanguage(source, regroupedModel, "EN").problems).toContain("X5000");
+    expect(outboundTranslationRendersTargetLanguage(source, regroupedStandard, "EN").problems).toContain("ISO 9001");
+    expect(outboundTranslationRendersTargetLanguage(source, copiedUnits, "EN").complete).toBe(false);
+    expect(outboundTranslationRendersTargetLanguage(source, `${regroupedYear}\n---\n${chinese}`, "EN_ZH").complete).toBe(false);
+
+    expect(translationPreservesCommercialFacts(source, english).preserved).toBe(true);
+    expect(translationPreservesCommercialFacts(source, chinese).preserved).toBe(true);
+    expect(translationPreservesCommercialFacts(source, combined, { minimumCopies: 2 }).preserved).toBe(true);
+    expect(translationPreservesCommercialFacts(source, english.replace("1.1 USD", "1.2 USD")).missing).toContain("1.1");
+    expect(translationPreservesCommercialFacts(source, english.replace("+1.50", "")).missing).toContain("+1.50");
+
+    const quantityYear = "Količina: 2025 komada.";
+    expect(outboundTranslationRendersTargetLanguage(quantityYear, "Quantity: 2,025 pieces.", "EN")).toMatchObject({ complete: true });
+    expect(outboundTranslationRendersTargetLanguage(quantityYear, "Quantity: 2025 pieces.", "EN").problems).toContain("2,025");
+    expect(outboundTranslationRendersTargetLanguage(quantityYear, "数量：2,025件。", "ZH").complete).toBe(true);
+  });
 });
 
 describe("supplier follow-up questions", () => {
