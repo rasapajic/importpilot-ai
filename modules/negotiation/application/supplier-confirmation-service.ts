@@ -36,11 +36,17 @@ import {
 } from "@/modules/negotiation/domain/supplier-message";
 import {
   createOpenAiSupplierMessageTranslator,
+  SupplierMessageTranslationFailedError,
   SupplierMessageTranslationNotConfiguredError,
+  SupplierMessageTranslationTimeoutError,
   type SupplierMessageTranslator,
 } from "@/modules/negotiation/infrastructure/openai-supplier-message-translator";
 
-export { SupplierMessageTranslationNotConfiguredError };
+export {
+  SupplierMessageTranslationFailedError,
+  SupplierMessageTranslationNotConfiguredError,
+  SupplierMessageTranslationTimeoutError,
+};
 
 import { supplierOfferSearchResultSchema } from "@/modules/product-search/domain/search";
 import { createSupplierOfferSourceMetadata } from "@/modules/product-search/domain/source-provenance";
@@ -506,30 +512,45 @@ async function translateChecked(input: {
   organizationId: string;
   projectId: string;
 }) {
-  const translated = await input.translator.translate({
+  const targets = input.direction === "outbound" && input.target === "EN_ZH"
+    ? (["EN", "ZH"] as const)
+    : ([input.target] as const);
+  const settled = await Promise.allSettled(targets.map((target) => input.translator.translate({
     text: input.text,
-    target: input.target,
+    target,
     direction: input.direction,
-  });
-  await recordAiUsageEvents({
-    organizationId: input.organizationId,
-    projectId: input.projectId,
-    events: [translated.usage],
-  });
-  const facts = translationPreservesCommercialFacts(input.text, translated.text, {
+  })));
+  const fulfilled = settled.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
+  if (fulfilled.length > 0) {
+    await recordAiUsageEvents({
+      organizationId: input.organizationId,
+      projectId: input.projectId,
+      events: fulfilled.map((item) => item.usage),
+    });
+  }
+  const failure = settled.find((result): result is PromiseRejectedResult => result.status === "rejected");
+  if (failure) {
+    const timeout = settled.find((result) =>
+      result.status === "rejected" && result.reason instanceof SupplierMessageTranslationTimeoutError,
+    );
+    throw timeout && timeout.status === "rejected" ? timeout.reason : failure.reason;
+  }
+  const text = fulfilled.map((item) => item.text.trim()).join("\n---\n");
+  const facts = translationPreservesCommercialFacts(input.text, text, {
     literals: input.literals,
     minimumCopies: input.direction === "outbound" && input.target === "EN_ZH" ? 2 : 1,
   });
   if (!facts.preserved) throw new SupplierMessageFactError(facts.missing);
   if (input.direction === "outbound") {
-    const rendered = outboundTranslationRendersTargetLanguage(
-      input.text,
-      translated.text,
-      input.target,
-    );
+    const rendered = outboundTranslationRendersTargetLanguage(input.text, text, input.target);
     if (!rendered.complete) throw new SupplierMessageFactError(rendered.problems);
   }
-  return translated;
+  return {
+    text,
+    estimatedCostUsd: fulfilled
+      .reduce((sum, item) => sum + item.usage.estimatedTotalCostUsd, 0)
+      .toFixed(6),
+  };
 }
 
 export async function saveSupplierSourceMessage(
@@ -580,14 +601,17 @@ export async function translateSupplierInquiry(
     return present(saved, project, { translationReused: true, estimatedCostUsd: null });
   }
 
-  await prisma.supplierConfirmation.update({
-    where: { id: row.id },
-    data: {
-      sourceMessage,
-      targetLanguage: input.targetLanguage,
-      translationInputHash: null,
-    },
-  });
+  const currentSource = row.sourceMessage.trim() || brief.serbianBody;
+  const sourceChanged = sourceMessage !== currentSource;
+  if (sourceChanged || sourceMessage !== row.sourceMessage) {
+    await prisma.supplierConfirmation.update({
+      where: { id: row.id },
+      data: {
+        sourceMessage,
+        ...(sourceChanged ? { translationInputHash: null } : {}),
+      },
+    });
+  }
   const translated = await translateChecked({
     text: sourceMessage,
     target: input.targetLanguage,
@@ -608,7 +632,7 @@ export async function translateSupplierInquiry(
   });
   return present(saved, project, {
     translationReused: false,
-    estimatedCostUsd: translated.usage.estimatedTotalCostUsd.toFixed(6),
+    estimatedCostUsd: translated.estimatedCostUsd,
   });
 }
 
@@ -697,6 +721,6 @@ export async function translateSupplierReply(
   });
   return present(saved, project, {
     translationReused: false,
-    estimatedCostUsd: translated.usage.estimatedTotalCostUsd.toFixed(6),
+    estimatedCostUsd: translated.estimatedCostUsd,
   });
 }
