@@ -12,7 +12,8 @@ export async function GET() {
   }
   try {
     gmailConnectionConfig();
-    const connections = await listGmailMailboxConnections(auth.membership.organizationId);
+    const connections = (await listGmailMailboxConnections(auth.membership.organizationId))
+      .filter((mailbox) => mailbox.connectedByUserId === auth.user.id);
     return NextResponse.json({ connections }, {
       headers: { "Cache-Control": "no-store" },
     });
