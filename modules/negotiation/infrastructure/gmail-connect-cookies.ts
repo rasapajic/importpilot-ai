@@ -42,8 +42,11 @@ export function clearGmailConnectCookies(response: NextResponse) {
 }
 
 function constantTimeEquals(a: string | undefined, b: string | null): boolean {
-  if (!a || !b || a.length !== b.length || a.length > 4096) return false;
-  return timingSafeEqual(Buffer.from(a), Buffer.from(b));
+  if (!a || !b || a.length > 4096 || b.length > 4096) return false;
+  const left = Buffer.from(a, "utf8");
+  const right = Buffer.from(b, "utf8");
+  if (left.length !== right.length) return false;
+  return timingSafeEqual(left, right);
 }
 
 /** OAuth callback must belong to the same authenticated user + organization. */
