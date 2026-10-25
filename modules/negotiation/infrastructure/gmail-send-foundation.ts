@@ -47,7 +47,7 @@ export function gmailConnectAuthorizationUrl(
   url.searchParams.set("client_id", config.clientId);
   url.searchParams.set("redirect_uri", redirect.toString());
   url.searchParams.set("response_type", "code");
-  url.searchParams.set("scope", GMAIL_SEND_SCOPE);
+  url.searchParams.set("scope", `openid email ${GMAIL_SEND_SCOPE}`);
   url.searchParams.set("state", attempt.state);
   url.searchParams.set("code_challenge", attempt.challenge);
   url.searchParams.set("code_challenge_method", "S256");
