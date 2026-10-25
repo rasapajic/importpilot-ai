@@ -35,7 +35,7 @@ describe("reviewed supplier mail approval", () => {
   it("limits actual staging Gmail mail to explicitly configured test recipients", () => {
     const env = {
       JAKOV360_GMAIL_TEST_RECIPIENTS: "other@example.test, test-recipient@example.test",
-    } as NodeJS.ProcessEnv;
+    } as unknown as NodeJS.ProcessEnv;
     expect(isStagingSupplierMailRecipient("TEST-RECIPIENT@EXAMPLE.TEST", env)).toBe(true);
     expect(isStagingSupplierMailRecipient("supplier@example.cn", env)).toBe(false);
     expect(isStagingSupplierMailRecipient("a@example.test\nBcc: other@example.cn", env)).toBe(false);
