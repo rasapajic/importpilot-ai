@@ -703,6 +703,7 @@ export function SupplierConfirmationPanel({
           projectId={projectId}
           productUrl={result.productUrl}
           locale={locale}
+          draftRevision={`${sourceMessage}\n${translatedMessage}\n${targetLanguage}\n${record?.status ?? ""}`}
           readyToSend={Boolean(
             record?.status === SupplierConfirmationStatuses.PREPARED &&
             mailTranslationIsCurrent &&
