@@ -49,13 +49,13 @@ ALTER TABLE "supplier_mail_deliveries"
   ON DELETE CASCADE ON UPDATE CASCADE;
 
 ALTER TABLE "supplier_mail_deliveries"
-  ADD CONSTRAINT "supplier_mail_deliveries_confirmation_fkey"
+  ADD CONSTRAINT "supplier_mail_deliveries_organization_id_confirmation_id_fkey"
   FOREIGN KEY ("organization_id", "confirmation_id")
   REFERENCES "supplier_confirmations"("organization_id", "id")
   ON DELETE CASCADE ON UPDATE CASCADE;
 
 ALTER TABLE "supplier_mail_deliveries"
-  ADD CONSTRAINT "supplier_mail_deliveries_mailbox_connection_fkey"
+  ADD CONSTRAINT "supplier_mail_deliveries_organization_id_mailbox_connectio_fkey"
   FOREIGN KEY ("organization_id", "mailbox_connection_id")
   REFERENCES "mailbox_connections"("organization_id", "id")
   ON DELETE RESTRICT ON UPDATE CASCADE;
