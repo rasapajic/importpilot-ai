@@ -15,7 +15,7 @@ const staging = {
   JAKOV360_GMAIL_CLIENT_SECRET: "synthetic-secret",
   JAKOV360_GMAIL_REDIRECT_URI: "https://jakov360-acceptance-staging.onrender.com/api/mail/google/callback",
   APP_ORIGIN: "https://jakov360-acceptance-staging.onrender.com",
-} as NodeJS.ProcessEnv;
+} as unknown as NodeJS.ProcessEnv;
 
 describe("Gmail connection gated configuration", () => {
   it("only enables the explicit staging service (or local development)", () => {
@@ -77,17 +77,19 @@ describe("Gmail connect code exchange", () => {
     expect((requests[1].init?.headers as Record<string, string>).authorization).toBe("Bearer synthetic-access-token");
   });
 
-  it.each([
+  for (const [token, label] of [
     [{ token_type: "Bearer", access_token: "access", scope: `openid email ${GMAIL_SEND_SCOPE}` }, "missing refresh"],
     [{ token_type: "Bearer", access_token: "access", refresh_token: "refresh", scope: "openid email" }, "no send permission"],
     [{ token_type: "Bearer", access_token: "access", refresh_token: "refresh", scope: GMAIL_SEND_SCOPE }, "no email identity scope"],
     [{ token_type: "Bearer", access_token: "", refresh_token: "refresh", scope: `openid email ${GMAIL_SEND_SCOPE}` }, "missing access"],
-  ])("rejects invalid provider tokens: %s (%s)", async (token) => {
-    const fakeFetch = (async () => new Response(JSON.stringify(token), { status: 200 })) as typeof fetch;
-    await expect(exchangeGmailConnectCode(input, fakeFetch)).rejects.toBeInstanceOf(
-      GmailConnectAuthorizationError,
-    );
-  });
+  ] as const) {
+    it(`rejects invalid provider tokens: ${label}`, async () => {
+      const fakeFetch = (async () => new Response(JSON.stringify(token), { status: 200 })) as typeof fetch;
+      await expect(exchangeGmailConnectCode(input, fakeFetch)).rejects.toBeInstanceOf(
+        GmailConnectAuthorizationError,
+      );
+    });
+  }
 
   it("rejects unverified email and avoids persisting its provider token", async () => {
     let calls = 0;
