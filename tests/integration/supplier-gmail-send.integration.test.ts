@@ -13,6 +13,7 @@ describeWithDatabase("Gmail supplier sending is one-shot, audited and tenant saf
   let confirmationService: typeof import("@/modules/negotiation/application/supplier-confirmation-service");
   let cryptoModule: typeof import("@/modules/negotiation/infrastructure/gmail-credential-crypto");
   let ownerId = "";
+  let otherAdminId = "";
   let organizationId = "";
   let foreignOrgId = "";
   let projectId = "";
@@ -105,6 +106,13 @@ describeWithDatabase("Gmail supplier sending is one-shot, audited and tenant saf
       },
     });
     organizationId = primary.id;
+    const admin = await prisma.user.create({
+      data: { email: `gmail-second-admin-${randomUUID()}@example.test`, name: "Other Admin" },
+    });
+    otherAdminId = admin.id;
+    await prisma.organizationMember.create({
+      data: { organizationId, userId: otherAdminId, role: OrganizationRole.ADMIN },
+    });
     const foreign = await prisma.organization.create({ data: { name: "M1c Foreign Org" } });
     foreignOrgId = foreign.id;
     const project = await prisma.importProject.create({
@@ -141,6 +149,7 @@ describeWithDatabase("Gmail supplier sending is one-shot, audited and tenant saf
       if (organizationId) await prisma.organization.delete({ where: { id: organizationId } });
       if (foreignOrgId) await prisma.organization.delete({ where: { id: foreignOrgId } });
       if (ownerId) await prisma.user.delete({ where: { id: ownerId } });
+      if (otherAdminId) await prisma.user.delete({ where: { id: otherAdminId } });
       await prisma.$disconnect();
     }
     Object.entries(originalEnv).forEach(([key, value]) => {
@@ -165,6 +174,9 @@ describeWithDatabase("Gmail supplier sending is one-shot, audited and tenant saf
     })).rejects.toBeInstanceOf(mail.SupplierGmailSendBlockedError);
     await expect(mail.getSupplierGmailSendPreview({
       ...request("preview"), userId: randomUUID(),
+    })).rejects.toBeInstanceOf(mail.SupplierGmailSendBlockedError);
+    await expect(mail.getSupplierGmailSendPreview({
+      ...request("preview"), userId: otherAdminId,
     })).rejects.toBeInstanceOf(mail.SupplierGmailSendBlockedError);
     await expect(mail.getSupplierGmailSendPreview(
       request("preview", "real-supplier@example.cn"),
