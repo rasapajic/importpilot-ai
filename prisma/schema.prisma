@@ -190,6 +190,7 @@ model User {
   memberships  OrganizationMember[]
   sessions     Session[]
   oauthAccounts OAuthAccount[]
+  linkedMailboxes MailboxConnection[] @relation("MailboxConnector")
   auditEvents  AuditEvent[]
   createdProjects ImportProject[] @relation("ProjectCreator")
   createdAt    DateTime             @default(now()) @map("created_at")
@@ -222,6 +223,7 @@ model Organization {
   billingPurchases BillingPurchase[]
   projectEntitlements ProjectEntitlement[]
   supplierConfirmations SupplierConfirmation[]
+  mailboxConnections MailboxConnection[]
   createdAt DateTime             @default(now()) @map("created_at")
   updatedAt DateTime             @updatedAt @map("updated_at")
 
@@ -811,4 +813,26 @@ model AiUsageEvent {
   @@index([organizationId, projectId, createdAt], map: "ai_usage_events_organization_id_project_id_created_at_idx")
   @@index([organizationId, operation, modelName], map: "ai_usage_events_organization_id_operation_model_idx")
   @@map("ai_usage_events")
+}
+
+model MailboxConnection {
+  id                    String       @id @default(uuid()) @db.Uuid
+  organizationId        String       @map("organization_id") @db.Uuid
+  connectedByUserId     String       @map("connected_by_user_id") @db.Uuid
+  provider              String       @db.VarChar(20)
+  providerAccountId     String       @map("provider_account_id") @db.VarChar(255)
+  mailboxEmail          String       @map("mailbox_email") @db.VarChar(320)
+  encryptedRefreshToken String       @map("encrypted_refresh_token") @db.Text
+  tokenKeyVersion       Int          @default(1) @map("token_key_version")
+  grantedScopes         String       @map("granted_scopes") @db.Text
+  connectedAt           DateTime     @default(now()) @map("connected_at")
+  disconnectedAt        DateTime?    @map("disconnected_at")
+  updatedAt             DateTime     @updatedAt @map("updated_at")
+  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  connectedBy           User         @relation("MailboxConnector", fields: [connectedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, provider, providerAccountId], map: "mailbox_connections_org_provider_account_key")
+  @@index([organizationId, provider, disconnectedAt], map: "mailbox_connections_org_provider_active_idx")
+  @@index([connectedByUserId], map: "mailbox_connections_connected_by_idx")
+  @@map("mailbox_connections")
 }
