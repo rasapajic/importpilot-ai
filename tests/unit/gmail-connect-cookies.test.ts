@@ -18,6 +18,7 @@ describe("Gmail connect callback identity binding", () => {
 
   it.each([
     { state: "z".repeat(43) },
+    { state: "é".repeat(43) }, // same code-point count, different UTF-8 byte length
     { state: null },
     { cookieState: undefined },
     { cookieVerifier: "" },
