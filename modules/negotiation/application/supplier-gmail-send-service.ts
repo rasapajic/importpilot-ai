@@ -196,6 +196,7 @@ async function lookupRequest(request: PreviewRequest) {
       where: {
         id: request.mailboxConnectionId,
         organizationId: request.organizationId,
+        connectedByUserId: request.userId,
         provider: "GMAIL",
       },
     }),
@@ -290,7 +291,12 @@ export async function sendSupplierGmailInquiry(
           },
         }),
         tx.mailboxConnection.findFirst({
-          where: { id: request.mailboxConnectionId, organizationId: request.organizationId, provider: "GMAIL" },
+          where: {
+            id: request.mailboxConnectionId,
+            organizationId: request.organizationId,
+            connectedByUserId: request.userId,
+            provider: "GMAIL",
+          },
         }),
         tx.organizationMember.findUnique({
           where: { organizationId_userId: { organizationId: request.organizationId, userId: request.userId } },
