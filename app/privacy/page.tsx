@@ -33,8 +33,13 @@ export default function PrivacyPage() {
           <li>
             <strong>Optional connected Gmail:</strong> mailbox address, verified Google
             account identifier, Gmail send permission and a server-encrypted refresh token.
-            This is separate from Google Sign-In, is disabled by default, and cannot send
-            without an explicit approval of the recipient and final message.
+            When you approve sending a supplier message, JAKOV360 keeps an audit record
+            of the sender, recipient, subject, approved body hash, Google message/thread
+            identifiers and timestamps. These records support duplicate-send prevention
+            and linkage with the supplier project. Gmail accepting a send request does
+            not guarantee delivery to the recipient. This is separate from Google
+            Sign-In, is disabled by default, and cannot send without an explicit
+            approval of the recipient and final message.
           </li>
           <li>
             <strong>Sourcing and business data:</strong> product searches, quantities, destinations, supplier

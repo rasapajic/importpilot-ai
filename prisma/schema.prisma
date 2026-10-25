@@ -224,6 +224,7 @@ model Organization {
   projectEntitlements ProjectEntitlement[]
   supplierConfirmations SupplierConfirmation[]
   mailboxConnections MailboxConnection[]
+  supplierMailDeliveries SupplierMailDelivery[]
   createdAt DateTime             @default(now()) @map("created_at")
   updatedAt DateTime             @updatedAt @map("updated_at")
 
@@ -643,10 +644,12 @@ model SupplierConfirmation {
   organization                   Organization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   project                        ImportProject              @relation(fields: [organizationId, projectId], references: [organizationId, id], onDelete: Cascade)
   offer                          SupplierOffer?             @relation(fields: [offerId], references: [id], onDelete: SetNull)
+  outboundMail                  SupplierMailDelivery?
   createdAt                      DateTime                   @default(now()) @map("created_at")
   updatedAt                      DateTime                   @updatedAt @map("updated_at")
 
   @@unique([organizationId, projectId, productUrl])
+  @@unique([organizationId, id], map: "supplier_confirmations_org_id_key")
   @@index([organizationId, projectId])
   @@index([offerId])
   @@map("supplier_confirmations")
@@ -830,9 +833,46 @@ model MailboxConnection {
   updatedAt             DateTime     @updatedAt @map("updated_at")
   organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   connectedBy           User         @relation("MailboxConnector", fields: [connectedByUserId], references: [id], onDelete: Restrict)
+  outboundDeliveries    SupplierMailDelivery[]
 
   @@unique([organizationId, provider, providerAccountId], map: "mailbox_connections_org_provider_account_key")
+  @@unique([organizationId, id], map: "mailbox_connections_org_id_key")
   @@index([organizationId, provider, disconnectedAt], map: "mailbox_connections_org_provider_active_idx")
   @@index([connectedByUserId], map: "mailbox_connections_connected_by_idx")
   @@map("mailbox_connections")
+}
+
+enum SupplierMailDeliveryStatus {
+  PENDING
+  SENT
+  UNCERTAIN
+}
+
+model SupplierMailDelivery {
+  id                  String                     @id @default(uuid()) @db.Uuid
+  organizationId      String                     @map("organization_id") @db.Uuid
+  confirmationId      String                     @map("confirmation_id") @db.Uuid
+  mailboxConnectionId String                     @map("mailbox_connection_id") @db.Uuid
+  sentByUserId        String                     @map("sent_by_user_id") @db.Uuid
+  provider            String                     @default("GMAIL") @db.VarChar(20)
+  status              SupplierMailDeliveryStatus @default(PENDING)
+  senderEmail         String                     @map("sender_email") @db.VarChar(320)
+  recipientEmail      String                     @map("recipient_email") @db.VarChar(320)
+  subject             String                     @db.VarChar(500)
+  bodyHash            String                     @map("body_hash") @db.Char(64)
+  approvedHash        String                     @map("approved_hash") @db.Char(64)
+  rfcMessageId        String                     @unique @map("rfc_message_id") @db.VarChar(255)
+  providerMessageId   String?                    @map("provider_message_id") @db.VarChar(255)
+  providerThreadId    String?                    @map("provider_thread_id") @db.VarChar(255)
+  sentAt              DateTime?                  @map("sent_at")
+  createdAt           DateTime                   @default(now()) @map("created_at")
+  updatedAt           DateTime                   @updatedAt @map("updated_at")
+  organization        Organization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  confirmation        SupplierConfirmation       @relation(fields: [organizationId, confirmationId], references: [organizationId, id], onDelete: Cascade)
+  mailboxConnection   MailboxConnection          @relation(fields: [organizationId, mailboxConnectionId], references: [organizationId, id], onDelete: Restrict)
+
+  @@unique([organizationId, confirmationId], map: "supplier_mail_deliveries_org_confirmation_key")
+  @@index([organizationId, status, createdAt], map: "supplier_mail_deliveries_org_status_created_idx")
+  @@index([mailboxConnectionId, createdAt], map: "supplier_mail_deliveries_mailbox_created_idx")
+  @@map("supplier_mail_deliveries")
 }

@@ -348,6 +348,18 @@ export async function markSupplierConfirmationSent(
   productUrl: string,
 ) {
   const { project, row } = await findConfirmation(projectId, organizationId, productUrl);
+  // A Gmail attempt must never be overwritten with a manual "sent" flag.
+  // PENDING/UNCERTAIN delivery requires explicit provider reconciliation.
+  const existingMail = await prisma.supplierMailDelivery.findUnique({
+    where: {
+      organizationId_confirmationId: {
+        organizationId,
+        confirmationId: row.id,
+      },
+    },
+    select: { id: true },
+  });
+  if (existingMail) throw new SupplierConfirmationStateError();
   const current = present(row, project);
   const next = markInquirySent(current.record);
   if (next.status === current.record.status) return current;
