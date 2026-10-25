@@ -390,3 +390,50 @@
     margin: 0.75rem 0;
   }
 }
+
+.supplier-connected-mail {
+  border-top: 1px solid #d9e5de;
+  margin-top: 1rem;
+  padding-top: 1rem;
+}
+
+.supplier-connected-mail h4 {
+  font-size: 1rem;
+  margin: 0 0 0.6rem;
+}
+
+.supplier-connected-mail label:not(.supplier-mail-approval) {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0.6rem 0;
+}
+
+.supplier-connected-mail select,
+.supplier-connected-mail input[type="email"] {
+  background: #fff;
+  border: 1px solid #94aa9d;
+  border-radius: 0.4rem;
+  color: #132820;
+  max-width: 100%;
+  min-height: 2.6rem;
+  padding: 0.55rem;
+  width: 100%;
+}
+
+.supplier-mail-review {
+  border: 1px solid #d9e5de;
+  border-radius: 0.65rem;
+  margin-top: 0.75rem;
+  padding: 0.9rem;
+}
+
+.supplier-mail-review textarea {
+  width: 100%;
+}
+
+.supplier-mail-approval {
+  align-items: flex-start;
+  display: flex;
+  gap: 0.5rem;
+  margin: 0.85rem 0;
+}
