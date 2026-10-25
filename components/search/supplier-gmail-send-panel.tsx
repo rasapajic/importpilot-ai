@@ -82,12 +82,14 @@ export function SupplierGmailSendPanel({
   productUrl,
   locale,
   readyToSend,
+  draftRevision,
   onSent,
 }: {
   projectId: string;
   productUrl: string;
   locale: Locale;
   readyToSend: boolean;
+  draftRevision: string;
   onSent: () => void;
 }) {
   const labels = wording[locale];
@@ -96,10 +98,13 @@ export function SupplierGmailSendPanel({
   const [mailboxId, setMailboxId] = useState("");
   const [recipient, setRecipient] = useState("");
   const [preview, setPreview] = useState<MailPreview | null>(null);
+  const [reviewKey, setReviewKey] = useState("");
   const [approved, setApproved] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [sent, setSent] = useState(false);
+  const currentReviewKey = JSON.stringify([projectId, productUrl, mailboxId, recipient.trim().toLowerCase(), draftRevision, readyToSend]);
+  const visiblePreview = readyToSend && reviewKey === currentReviewKey ? preview : null;
 
   useEffect(() => {
     let cancelled = false;
@@ -114,12 +119,6 @@ export function SupplierGmailSendPanel({
     }).catch(() => undefined);
     return () => { cancelled = true; };
   }, []);
-
-  useEffect(() => {
-    setPreview(null);
-    setApproved(false);
-    setError("");
-  }, [mailboxId, recipient, readyToSend, productUrl]);
 
   async function review() {
     if (!mailboxId || !readyToSend) return;
@@ -139,6 +138,7 @@ export function SupplierGmailSendPanel({
       );
       const payload = await res.json() as MailPreview & { error?: string };
       if (!res.ok) throw new Error(payload.error || labels.error);
+      setReviewKey(currentReviewKey);
       setPreview(payload);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : labels.error);
@@ -149,9 +149,9 @@ export function SupplierGmailSendPanel({
 
   async function send() {
     if (
-      !preview ||
-      preview.status !== "READY" ||
-      !preview.approvalHash ||
+      !visiblePreview ||
+      visiblePreview.status !== "READY" ||
+      !visiblePreview.approvalHash ||
       !approved ||
       !readyToSend
     ) return;
@@ -165,7 +165,7 @@ export function SupplierGmailSendPanel({
           productUrl,
           mailboxConnectionId: mailboxId,
           recipient: recipient.trim(),
-          approvedHash: preview.approvalHash,
+          approvedHash: visiblePreview.approvalHash,
           explicitApproval: true,
         }),
       });
@@ -184,7 +184,7 @@ export function SupplierGmailSendPanel({
       setSent(true);
       setApproved(false);
       setPreview({
-        ...preview,
+        ...visiblePreview,
         status: "SENT",
         body: null,
         approvalHash: null,
@@ -243,12 +243,12 @@ export function SupplierGmailSendPanel({
               {labels.inspect}
             </button>
           )}
-          {preview?.status === "READY" && preview.body !== null && (
+          {visiblePreview?.status === "READY" && visiblePreview.body !== null && (
             <div className="supplier-mail-review">
-              <p><strong>{labels.from}:</strong> {preview.from}</p>
-              <p><strong>{labels.recipient}:</strong> {preview.to}</p>
-              <p><strong>Subject:</strong> {preview.subject}</p>
-              <textarea readOnly rows={9} value={preview.body} />
+              <p><strong>{labels.from}:</strong> {visiblePreview.from}</p>
+              <p><strong>{labels.recipient}:</strong> {visiblePreview.to}</p>
+              <p><strong>Subject:</strong> {visiblePreview.subject}</p>
+              <textarea readOnly rows={9} value={visiblePreview.body} />
               <label className="supplier-mail-approval">
                 <input
                   type="checkbox"
@@ -268,15 +268,15 @@ export function SupplierGmailSendPanel({
               </button>
             </div>
           )}
-          {(preview?.status === "PENDING" || preview?.status === "UNCERTAIN") && (
+          {(visiblePreview?.status === "PENDING" || visiblePreview?.status === "UNCERTAIN") && (
             <p className="supplier-terms-warning">
-              {preview.status === "PENDING" ? labels.pending : labels.uncertain}
+              {visiblePreview.status === "PENDING" ? labels.pending : labels.uncertain}
             </p>
           )}
-          {(sent || preview?.status === "SENT") && (
+          {(sent || visiblePreview?.status === "SENT") && (
             <p role="status">
               {labels.sent}
-              {preview?.providerMessageId && <code>{preview.providerMessageId}</code>}
+              {visiblePreview?.providerMessageId && <code>{visiblePreview.providerMessageId}</code>}
             </p>
           )}
           {error && <p className="supplier-terms-warning" role="alert">{error}</p>}
