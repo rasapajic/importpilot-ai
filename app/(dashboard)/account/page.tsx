@@ -90,7 +90,9 @@ export default async function AccountPage({
       configured = false;
     }
   }
-  const connections = enabled
+  // Previously connected accounts must remain disconnectable even if the
+  // new-connection feature flag is switched off later.
+  const connections = canManage
     ? await listGmailMailboxConnections(membership.organizationId)
     : [];
   const message = (await searchParams).gmail;
