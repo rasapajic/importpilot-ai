@@ -57,6 +57,40 @@ does not grant Gmail access. Never silently reuse or widen sign-in permission.
 - Do not change the existing `markSent` API before implementing a controlled
   compatibility path for manual, explicitly labeled external sends.
 
+
+### M1c: one-shot supplier Gmail send (Draft PR #166 — review only)
+
+- No live sending until M0/M1a/M1b have passed review and been integrated,
+  migration rehearsal has succeeded, and dedicated acceptance staging OAuth
+  configuration is explicitly enabled. Never auto-enable Gmail on production.
+- Before any send, a user enters a **test allowlisted recipient**, selects a
+  connected Gmail mailbox, and reviews the **exact server-sourced translation,
+  sender, recipient and subject**. Each affirmative send is bound to a
+  SHA-256 approval fingerprint of that content and its tenant/confirmation.
+- A transaction creates one `supplier_mail_deliveries` row with a unique
+  (organization, confirmation) key *before* calling Gmail. Gmail API
+  `users.messages.send` receives one base64url RFC MIME message. No
+  automatic retry is attempted, including network timeout, HTTP 5xx or an
+  incomplete provider response.
+- `SENT` requires a Gmail message ID and thread ID returned by Google and
+  persisted in the audit record. The confirmation status is then advanced.
+  If confirmation fails, the delivery record remains `PENDING` or becomes
+  `UNCERTAIN` and blocks future send attempts for manual reconciliation.
+- The previously available manual "marked as sent" button remains available
+  for genuinely external messages, but refuses to overwrite a Gmail attempt.
+- A future reconciliation feature must check Gmail's actual Sent mailbox using
+  additional justified permission; **do not implement blind automated retry**.
+- UI uses an explicit additional approval checkbox and reviews text read-only.
+  Merely connecting a mailbox does **not** send anything.
+- A comprehensive test must verify cross-organization isolation, exact content
+  approval, stale translation rejection, RFC header safety, correct provider
+  IDs, send error paths, duplicate clicks, concurrency and pending/uncertain
+  handling. Tests must use synthetic Google responses; no real mail in CI.
+
+**Warning:** A failed Gmail HTTP response or lost response does not always prove
+that an email was not delivered. The system will block retry until a human
+reconciles the attempt.
+
 ### M2: receive replies automatically (future PR)
 
 - Request `gmail.readonly` for reading reply bodies. This is a **restricted**
