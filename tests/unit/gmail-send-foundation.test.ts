@@ -7,7 +7,7 @@ import {
 } from "../../modules/negotiation/infrastructure/gmail-send-foundation";
 
 describe("Gmail M1 isolated user consent", () => {
-  it("requests gmail.send alone, using PKCE and offline consent", () => {
+  it("requests verified email identity plus send-only Gmail scope, using PKCE and offline consent", () => {
     const attempt = newGmailConnectAttempt();
     expect(attempt.verifier).toHaveLength(64);
     expect(attempt.state.length).toBeGreaterThan(30);
@@ -15,7 +15,7 @@ describe("Gmail M1 isolated user consent", () => {
       clientId: "test-client-id",
       redirectUri: "https://staging.example.test/api/mail/google/callback",
     }, attempt);
-    expect(url.searchParams.get("scope")).toBe(GMAIL_SEND_SCOPE);
+    expect(url.searchParams.get("scope")).toBe(`openid email ${GMAIL_SEND_SCOPE}`);
     expect(url.searchParams.get("access_type")).toBe("offline");
     expect(url.searchParams.get("code_challenge_method")).toBe("S256");
     expect(url.searchParams.get("code_challenge")).toBe(attempt.challenge);
