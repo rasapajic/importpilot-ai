@@ -31,6 +31,17 @@ export default function PrivacyPage() {
             not stored in the ImportPilot database.
           </li>
           <li>
+            <strong>Optional connected Gmail:</strong> mailbox address, verified Google
+            account identifier, Gmail send permission and a server-encrypted refresh token.
+            When you approve sending a supplier message, JAKOV360 keeps an audit record
+            of the sender, recipient, subject, approved body hash, Google message/thread
+            identifiers and timestamps. These records support duplicate-send prevention
+            and linkage with the supplier project. Gmail accepting a send request does
+            not guarantee delivery to the recipient. This is separate from Google
+            Sign-In, is disabled by default, and cannot send without an explicit
+            approval of the recipient and final message.
+          </li>
+          <li>
             <strong>Sourcing and business data:</strong> product searches, quantities, destinations, supplier
             links and evidence, selected offers, commercial terms you confirm, landed-cost inputs and
             calculations, and decision history.
@@ -54,10 +65,17 @@ export default function PrivacyPage() {
 
         <h2>3. Google user data</h2>
         <p>
-          Google user data is used only for sign-in and account linking. ImportPilot does not request access
-          to Gmail, Google Drive, Google Calendar, contacts, or other Google content. Google profile data is
-          not used for advertising, is not sold, and is not shared except with service providers strictly
-          necessary to operate and secure ImportPilot.
+          Google sign-in requests only identity information and does not grant Gmail access.
+          When the separate optional Gmail connection is enabled, an organization owner or
+          administrator can explicitly authorize JAKOV360 to send reviewed supplier messages
+          from a chosen mailbox. This separate authorization requests Google identity and
+          Gmail send-only permission, not permission to read the inbox. The connected mailbox
+          address and its encrypted OAuth refresh credential are stored for this connection.
+          A user may disconnect the mailbox, which deletes usable local credentials and
+          attempts provider revocation. Connection metadata can be kept for audit and
+          support. Automatic reading of supplier replies would require separate permission,
+          additional disclosure and applicable Google verification before activation.
+          Google profile and mailbox data are not used for advertising or sold to advertisers.
         </p>
 
         <h2>4. Service providers and external sources</h2>

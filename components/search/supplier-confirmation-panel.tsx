@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { SupplierGmailSendPanel } from "@/components/search/supplier-gmail-send-panel";
 import { useEffect, useState } from "react";
 
 import type { Locale } from "@/modules/i18n/translations";
@@ -479,6 +480,9 @@ export function SupplierConfirmationPanel({
   const translationFields = inquiryTranslationFields(translationInput);
   const usableTranslation = usableInquiryTranslation(translationInput);
   const translationIsCurrent = usableTranslation !== null;
+  const mailTranslationIsCurrent =
+    translationIsCurrent &&
+    translatedMessage === (view?.communication.translatedMessage ?? "");
   const savedReply = (view?.communication.supplierReplyOriginal ?? "").trim();
   const replyIsCurrent = writtenQuote.trim() === savedReply && Boolean(view?.communication.replyTranslationCurrent);
   const finalMessage = inquiryMessageForSending({
@@ -526,6 +530,19 @@ export function SupplierConfirmationPanel({
       return null;
     } finally {
       setPending(false);
+    }
+  }
+
+  async function reloadAfterGmailSend() {
+    try {
+      const response = await fetch(
+        `/api/projects/${projectId}/supplier-confirmations?productUrl=${encodeURIComponent(result.productUrl)}`,
+        { cache: "no-store" },
+      );
+      if (!response.ok) throw new Error("Could not refresh supplier confirmation.");
+      applyView(await response.json() as SupplierConfirmationView);
+    } catch {
+      router.refresh();
     }
   }
 
@@ -682,6 +699,18 @@ export function SupplierConfirmationPanel({
             {!record || record.status === SupplierConfirmationStatuses.PREPARED ? text.markSent : text.sent}
           </button>
         </div>
+        <SupplierGmailSendPanel
+          projectId={projectId}
+          productUrl={result.productUrl}
+          locale={locale}
+          draftRevision={`${sourceMessage}\n${translatedMessage}\n${targetLanguage}\n${record?.status ?? ""}`}
+          readyToSend={Boolean(
+            record?.status === SupplierConfirmationStatuses.PREPARED &&
+            mailTranslationIsCurrent &&
+            !pending
+          )}
+          onSent={() => void reloadAfterGmailSend()}
+        />
       </details>
       <details className="supplier-message-section">
         <summary>{text.replySection}</summary>
