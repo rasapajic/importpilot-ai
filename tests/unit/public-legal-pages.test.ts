@@ -32,6 +32,9 @@ describe("public legal and Google data disclosure contract", () => {
     expect(privacy).toContain("not permission to read the inbox");
     expect(privacy).toContain("server-encrypted refresh token");
     expect(privacy).toContain("privacy@jakov360.com");
+    expect(privacy).toContain("Last updated: October 28, 2026");
+    expect(privacy).toContain("not currently enabled");
+    expect(privacy).toContain("read-only permission");
   });
 
   it("publishes service terms that link back to privacy", () => {

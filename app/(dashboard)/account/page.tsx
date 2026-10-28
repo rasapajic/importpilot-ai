@@ -3,6 +3,7 @@ import Link from "next/link";
 import { requireSession } from "@/modules/auth/infrastructure/session";
 import { listGmailMailboxConnections } from "@/modules/negotiation/application/gmail-mailbox-connection-service";
 import {
+  assertGmailAcceptanceEnrollment,
   gmailConnectionConfig,
   gmailConnectionEnabled,
 } from "@/modules/negotiation/infrastructure/gmail-connect-oauth";
@@ -84,6 +85,10 @@ export default async function AccountPage({
   let configured = false;
   if (enabled) {
     try {
+      assertGmailAcceptanceEnrollment({
+        organizationId: membership.organizationId,
+        userId: user.id,
+      });
       gmailConnectionConfig();
       configured = true;
     } catch {
@@ -91,7 +96,7 @@ export default async function AccountPage({
     }
   }
   // Previously connected accounts must remain disconnectable even if the
-  // new-connection feature flag is switched off later.
+  // new-connection feature flag or acceptance allowlist later excludes this user.
   const connections = canManage
     ? await listGmailMailboxConnections(membership.organizationId)
     : [];

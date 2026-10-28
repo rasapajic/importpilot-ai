@@ -72,10 +72,23 @@ does not grant Gmail access. Never silently reuse or widen sign-in permission.
   `users.messages.send` receives one base64url RFC MIME message. No
   automatic retry is attempted, including network timeout, HTTP 5xx or an
   incomplete provider response.
-- `SENT` requires a Gmail message ID and thread ID returned by Google and
-  persisted in the audit record. The confirmation status is then advanced.
-  If confirmation fails, the delivery record remains `PENDING` or becomes
-  `UNCERTAIN` and blocks future send attempts for manual reconciliation.
+- `SENT` requires a Gmail message ID and thread ID returned by Google, exactly
+  one confirmation row moving from `PREPARED` to `SENT`, and exactly one
+  `PENDING` delivery row updated in that same transaction. A zero-row
+  confirmation update never leaves the outbox `SENT`. Provider IDs are stored
+  on the blocked `UNCERTAIN` row when the database accepts the write. If the
+  database is unavailable after Gmail accepts, the provider is not called
+  again; the server logs `gmail_send_reconciliation_required` with the RFC
+  Message-ID and provider IDs, and no message body or OAuth token. The
+  existing `PENDING` claim still blocks another send.
+- Staging enrollment is fail-closed to one acceptance organization UUID and
+  a comma-separated list of designated user UUIDs
+  (`JAKOV360_GMAIL_ACCEPTANCE_ORGANIZATION_ID`,
+  `JAKOV360_GMAIL_ACCEPTANCE_USER_IDS`). Empty or invalid values deny OAuth
+  start, callback, mailbox listing for send, preview and POST send. Disconnect
+  of an existing tenant mailbox stays available to that tenant's owner/admin.
+  Local development does not skip this list. See the runbook below. Do not
+  enable the feature from this documentation.
 - The previously available manual "marked as sent" button remains available
   for genuinely external messages, but refuses to overwrite a Gmail attempt.
 - A future reconciliation feature must check Gmail's actual Sent mailbox using
@@ -90,6 +103,40 @@ does not grant Gmail access. Never silently reuse or widen sign-in permission.
 **Warning:** A failed Gmail HTTP response or lost response does not always prove
 that an email was not delivered. The system will block retry until a human
 reconciles the attempt.
+
+### Manual reconciliation of PENDING or UNCERTAIN Gmail sends (M1)
+
+Use this when a send returns an uncertain outcome or a `supplier_mail_deliveries`
+row stays `PENDING` or `UNCERTAIN`. Do not click send again. The unique
+organization and confirmation key blocks another Gmail API call. Do not request
+`gmail.readonly` for this check; M1 does not read the inbox.
+
+1. In the acceptance database, read `rfc_message_id`, `sender_email`,
+   `recipient_email`, `status`, `provider_message_id` and `provider_thread_id`
+   for that delivery row. The RFC Message-ID looks like
+   `<{claim-id}.jakov360@jakov360.com>`.
+2. Open the sending Gmail account's Sent mailbox (the `sender_email` on the
+   row) and search `rfc822msgid:` plus the id without angle brackets.
+3. If Sent contains that message, record Gmail's message id and thread id on
+   the blocked row when they are not already stored. Leave status `UNCERTAIN`
+   until a reviewer confirms the Sent copy matches the approved recipient and
+   subject. Only then may a separately reviewed maintenance action mark the
+   delivery and a still-`PREPARED` confirmation as `SENT`. Do not send a second
+   copy.
+4. If the confirmation was already moved by a manual mark, keep the Gmail row
+   blocked and attach the provider IDs. Do not treat the manual mark as proof
+   that Gmail accepted a message, and do not send again.
+5. If Sent has no matching message and the provider ids are empty, leave the
+   row blocked. A new business message requires a separate reviewed action;
+   the application will not retry.
+6. If the database write failed after Gmail accepted, use the server log event
+   `gmail_send_reconciliation_required`. It contains `claimId`, `rfcMessageId`,
+   `providerMessageId`, `providerThreadId` and `persisted`. It does not contain
+   the message body or an OAuth token. Match `rfcMessageId` to Sent, then store
+   the ids on the still-`PENDING` row before any status decision.
+
+No Render change, production migration, or live mailbox access is authorized by
+this runbook.
 
 ### M2: receive replies automatically (future PR)
 

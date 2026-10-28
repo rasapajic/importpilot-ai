@@ -10,7 +10,10 @@ import {
 } from "@/modules/negotiation/domain/supplier-mail-approval";
 import { usableInquiryTranslation } from "@/modules/negotiation/domain/supplier-message";
 import { decryptGmailRefreshToken } from "@/modules/negotiation/infrastructure/gmail-credential-crypto";
-import { gmailConnectionConfig } from "@/modules/negotiation/infrastructure/gmail-connect-oauth";
+import {
+  assertGmailAcceptanceEnrollment,
+  gmailConnectionConfig,
+} from "@/modules/negotiation/infrastructure/gmail-connect-oauth";
 import { encodeGmailTextMessage, GMAIL_SEND_SCOPE } from "@/modules/negotiation/infrastructure/gmail-send-foundation";
 import {
   googleGmailSendProvider,
@@ -29,6 +32,145 @@ export class SupplierGmailSendUncertainError extends Error {
   constructor() {
     super("Gmail delivery is unconfirmed. Do not resend until reconciled.");
     this.name = "SupplierGmailSendUncertainError";
+  }
+}
+
+export type GmailReconciliationEvidence = {
+  service: "importpilot-app";
+  event: "gmail_send_reconciliation_required";
+  claimId: string;
+  organizationId: string;
+  confirmationId: string;
+  rfcMessageId: string;
+  providerMessageId: string;
+  providerThreadId: string;
+  persisted: boolean;
+};
+
+/** Safe operator evidence. No message body, recipient, or OAuth credential. */
+export function gmailAcceptanceReconciliationEvidence(input: {
+  claimId: string;
+  organizationId: string;
+  confirmationId: string;
+  rfcMessageId: string;
+  providerMessageId: string;
+  providerThreadId: string;
+  persisted: boolean;
+}): GmailReconciliationEvidence {
+  return {
+    service: "importpilot-app",
+    event: "gmail_send_reconciliation_required",
+    claimId: input.claimId,
+    organizationId: input.organizationId,
+    confirmationId: input.confirmationId,
+    rfcMessageId: input.rfcMessageId,
+    providerMessageId: input.providerMessageId,
+    providerThreadId: input.providerThreadId,
+    persisted: input.persisted,
+  };
+}
+
+type GmailAcceptanceTx = {
+  updatePreparedConfirmation: (target: {
+    confirmationId: string;
+    organizationId: string;
+  }) => Promise<number>;
+  updatePendingDelivery: (target: {
+    claimId: string;
+    organizationId: string;
+    providerMessageId: string;
+    providerThreadId: string;
+    status: "SENT" | "UNCERTAIN";
+  }) => Promise<number>;
+};
+
+/**
+ * Mark the outbox SENT only when this transaction moves the confirmation
+ * from PREPARED to SENT. A zero-row confirmation update stores provider IDs
+ * on an UNCERTAIN row and must not be reported as SENT.
+ */
+export async function reconcileAcceptedGmailDelivery(
+  db: { transaction: <T>(fn: (tx: GmailAcceptanceTx) => Promise<T>) => Promise<T> },
+  input: {
+    claimId: string;
+    organizationId: string;
+    confirmationId: string;
+    providerMessageId: string;
+    providerThreadId: string;
+  },
+): Promise<"SENT" | "UNCERTAIN"> {
+  return db.transaction(async (tx) => {
+    const confirmationCount = await tx.updatePreparedConfirmation({
+      confirmationId: input.confirmationId,
+      organizationId: input.organizationId,
+    });
+    if (confirmationCount !== 1) {
+      const blocked = await tx.updatePendingDelivery({
+        claimId: input.claimId,
+        organizationId: input.organizationId,
+        providerMessageId: input.providerMessageId,
+        providerThreadId: input.providerThreadId,
+        status: "UNCERTAIN",
+      });
+      if (blocked !== 1) throw new Error("Gmail acceptance evidence was not stored.");
+      return "UNCERTAIN";
+    }
+    const sent = await tx.updatePendingDelivery({
+      claimId: input.claimId,
+      organizationId: input.organizationId,
+      providerMessageId: input.providerMessageId,
+      providerThreadId: input.providerThreadId,
+      status: "SENT",
+    });
+    if (sent !== 1) throw new Error("Gmail delivery was not marked sent.");
+    return "SENT";
+  });
+}
+
+export async function recordAcceptedGmailReceipt(
+  input: {
+    claimId: string;
+    organizationId: string;
+    confirmationId: string;
+    rfcMessageId: string;
+    providerMessageId: string;
+    providerThreadId: string;
+  },
+  io: {
+    reconcile: () => Promise<"SENT" | "UNCERTAIN">;
+    blockPending: () => Promise<void>;
+    log?: (evidence: GmailReconciliationEvidence) => void;
+  },
+): Promise<{ status: "SENT"; providerMessageId: string; providerThreadId: string }> {
+  const emit = io.log ?? ((evidence: GmailReconciliationEvidence) => {
+    console.error(JSON.stringify(evidence));
+  });
+  const evidence = (persisted: boolean) => gmailAcceptanceReconciliationEvidence({
+    ...input,
+    persisted,
+  });
+  try {
+    const outcome = await io.reconcile();
+    if (outcome !== "SENT") {
+      emit(evidence(true));
+      throw new SupplierGmailSendUncertainError();
+    }
+    return {
+      status: "SENT",
+      providerMessageId: input.providerMessageId,
+      providerThreadId: input.providerThreadId,
+    };
+  } catch (error) {
+    if (error instanceof SupplierGmailSendUncertainError) throw error;
+    let persisted = false;
+    try {
+      await io.blockPending();
+      persisted = true;
+    } catch {
+      persisted = false;
+    }
+    emit(evidence(persisted));
+    throw new SupplierGmailSendUncertainError();
   }
 }
 
@@ -216,9 +358,81 @@ async function lookupRequest(request: PreviewRequest) {
   return { confirmation, mailbox, prior };
 }
 
+function requireGmailSendAccess(request: { organizationId: string; userId: string }) {
+  assertGmailAcceptanceEnrollment({
+    organizationId: request.organizationId,
+    userId: request.userId,
+  });
+  return gmailConnectionConfig();
+}
+
+async function reconcileWithPrisma(input: {
+  claimId: string;
+  organizationId: string;
+  confirmationId: string;
+  providerMessageId: string;
+  providerThreadId: string;
+}) {
+  return reconcileAcceptedGmailDelivery({
+    transaction: (fn) => prisma.$transaction(async (tx) => {
+      const sentAt = new Date();
+      return fn({
+        updatePreparedConfirmation: async (target) => {
+          const updated = await tx.supplierConfirmation.updateMany({
+            where: {
+              id: target.confirmationId,
+              organizationId: target.organizationId,
+              status: "PREPARED",
+            },
+            data: { status: "SENT" },
+          });
+          return updated.count;
+        },
+        updatePendingDelivery: async (target) => {
+          const updated = await tx.supplierMailDelivery.updateMany({
+            where: {
+              id: target.claimId,
+              organizationId: target.organizationId,
+              status: "PENDING",
+            },
+            data: {
+              status: target.status,
+              providerMessageId: target.providerMessageId,
+              providerThreadId: target.providerThreadId,
+              ...(target.status === "SENT" ? { sentAt } : {}),
+            },
+          });
+          return updated.count;
+        },
+      });
+    }),
+  }, input);
+}
+
+async function blockPendingWithReceipt(input: {
+  claimId: string;
+  organizationId: string;
+  providerMessageId: string;
+  providerThreadId: string;
+}) {
+  const updated = await prisma.supplierMailDelivery.updateMany({
+    where: {
+      id: input.claimId,
+      organizationId: input.organizationId,
+      status: "PENDING",
+    },
+    data: {
+      status: "UNCERTAIN",
+      providerMessageId: input.providerMessageId,
+      providerThreadId: input.providerThreadId,
+    },
+  });
+  if (updated.count !== 1) throw new Error("Gmail acceptance evidence was not stored.");
+}
+
 /** Fully server-generated preview. Never trust a browser-supplied body. */
 export async function getSupplierGmailSendPreview(request: PreviewRequest) {
-  gmailConnectionConfig();
+  requireGmailSendAccess(request);
   const { confirmation, mailbox, prior } = await lookupRequest(request);
   if (prior) {
     return {
@@ -268,7 +482,7 @@ export async function sendSupplierGmailInquiry(
   request: PreviewRequest & { approvedHash: string; explicitApproval: boolean },
   provider: GoogleGmailSendProvider = googleGmailSendProvider(),
 ) {
-  const config = gmailConnectionConfig();
+  const config = requireGmailSendAccess(request);
   if (!request.explicitApproval || !/^[a-f0-9]{64}$/i.test(request.approvedHash)) {
     throw new SupplierGmailSendBlockedError("APPROVAL_REQUIRED");
   }
@@ -358,6 +572,7 @@ export async function sendSupplierGmailInquiry(
     body: draft.body,
     rfcMessageId,
   });
+  let accepted: { providerMessageId: string; providerThreadId: string } | null = null;
   try {
     const refreshToken = decryptGmailRefreshToken(
       draft.encryptedToken,
@@ -378,35 +593,37 @@ export async function sendSupplierGmailInquiry(
     ) {
       throw new SupplierGmailSendUncertainError();
     }
-    await prisma.$transaction(async (tx) => {
-      const updated = await tx.supplierMailDelivery.updateMany({
-        where: { id: claimId, organizationId: request.organizationId, status: "PENDING" },
-        data: {
-          status: "SENT",
-          providerMessageId: receipt.providerMessageId,
-          providerThreadId: receipt.providerThreadId,
-          sentAt: new Date(),
-        },
-      });
-      if (updated.count !== 1) throw new SupplierGmailSendUncertainError();
-      // A manual mark-as-sent from another tab may already have moved status.
-      // We preserve Gmail evidence and never overwrite a later reply status.
-      await tx.supplierConfirmation.updateMany({
-        where: {
-          id: draft.confirmationId,
-          organizationId: request.organizationId,
-          status: "PREPARED",
-        },
-        data: { status: "SENT" },
-      });
-    });
-    return {
-      status: "SENT" as const,
+    const acceptedReceipt = {
       providerMessageId: receipt.providerMessageId,
       providerThreadId: receipt.providerThreadId,
     };
-  } catch {
-    // No automatic retry: Gmail may already have accepted the email.
+    accepted = acceptedReceipt;
+    return await recordAcceptedGmailReceipt({
+      claimId,
+      organizationId: request.organizationId,
+      confirmationId: draft.confirmationId,
+      rfcMessageId,
+      providerMessageId: acceptedReceipt.providerMessageId,
+      providerThreadId: acceptedReceipt.providerThreadId,
+    }, {
+      reconcile: () => reconcileWithPrisma({
+        claimId,
+        organizationId: request.organizationId,
+        confirmationId: draft.confirmationId,
+        providerMessageId: acceptedReceipt.providerMessageId,
+        providerThreadId: acceptedReceipt.providerThreadId,
+      }),
+      blockPending: () => blockPendingWithReceipt({
+        claimId,
+        organizationId: request.organizationId,
+        providerMessageId: acceptedReceipt.providerMessageId,
+        providerThreadId: acceptedReceipt.providerThreadId,
+      }),
+    });
+  } catch (error) {
+    // Provider acceptance is never retried. A handled receipt already kept
+    // provider IDs on UNCERTAIN, or logged them when the database was down.
+    if (accepted && error instanceof SupplierGmailSendUncertainError) throw error;
     await prisma.supplierMailDelivery.updateMany({
       where: { id: claimId, organizationId: request.organizationId, status: "PENDING" },
       data: { status: "UNCERTAIN" },

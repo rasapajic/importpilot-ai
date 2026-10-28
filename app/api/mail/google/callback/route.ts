@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getCurrentSession } from "@/modules/auth/infrastructure/session";
 import { connectGmailMailbox } from "@/modules/negotiation/application/gmail-mailbox-connection-service";
+import { decideGmailConnectCallback } from "@/modules/negotiation/infrastructure/gmail-acceptance-gate";
 import {
   clearGmailConnectCookies,
   gmailConnectCookieValue,
-  validGmailConnectCallback,
 } from "@/modules/negotiation/infrastructure/gmail-connect-cookies";
 import {
   exchangeGmailConnectCode,
@@ -30,20 +30,18 @@ export async function GET(request: NextRequest) {
   const auth = await getCurrentSession();
   const error = request.nextUrl.searchParams.get("error");
   if (error) return resultRedirect(request, "cancelled");
-  if (!auth || !["OWNER", "ADMIN"].includes(auth.membership.role)) {
-    return resultRedirect(request, "unauthorized");
-  }
 
-  const valid = validGmailConnectCallback({
+  const decision = decideGmailConnectCallback({
+    role: auth?.membership.role ?? null,
+    authenticatedUserId: auth?.user.id ?? null,
+    authenticatedOrganizationId: auth?.membership.organizationId ?? null,
     cookieState: gmailConnectCookieValue(request, "state"),
     state: request.nextUrl.searchParams.get("state"),
     cookieVerifier: gmailConnectCookieValue(request, "verifier"),
     cookieUserId: gmailConnectCookieValue(request, "user"),
     cookieOrganizationId: gmailConnectCookieValue(request, "org"),
-    authenticatedUserId: auth.user.id,
-    authenticatedOrganizationId: auth.membership.organizationId,
   });
-  if (!valid) return resultRedirect(request, "invalid-state");
+  if (decision.action === "redirect") return resultRedirect(request, decision.reason);
 
   const verifier = gmailConnectCookieValue(request, "verifier");
   const code = request.nextUrl.searchParams.get("code");
@@ -56,8 +54,8 @@ export async function GET(request: NextRequest) {
       config: gmailConnectionConfig(),
     });
     await connectGmailMailbox({
-      organizationId: auth.membership.organizationId,
-      connectedByUserId: auth.user.id,
+      organizationId: decision.organizationId,
+      connectedByUserId: decision.userId,
       mailbox,
     });
     return resultRedirect(request, "connected");

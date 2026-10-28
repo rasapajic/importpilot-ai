@@ -12,7 +12,7 @@ export default function PrivacyPage() {
       <article className="legal-card">
         <p className="eyebrow">JAKOV360 · ImportPilot AI</p>
         <h1>Privacy Policy</h1>
-        <p className="legal-updated">Last updated: September 18, 2026</p>
+        <p className="legal-updated">Last updated: October 28, 2026</p>
 
         <p>
           JAKOV360 operates ImportPilot at <Link href="/">jakov360.com</Link>. This policy explains what
@@ -38,8 +38,8 @@ export default function PrivacyPage() {
             identifiers and timestamps. These records support duplicate-send prevention
             and linkage with the supplier project. Gmail accepting a send request does
             not guarantee delivery to the recipient. This is separate from Google
-            Sign-In, is disabled by default, and cannot send without an explicit
-            approval of the recipient and final message.
+            Sign-In, is disabled by default, is not currently enabled, and cannot send
+            without an explicit approval of the recipient and final message.
           </li>
           <li>
             <strong>Sourcing and business data:</strong> product searches, quantities, destinations, supplier
@@ -65,17 +65,18 @@ export default function PrivacyPage() {
 
         <h2>3. Google user data</h2>
         <p>
-          Google sign-in requests only identity information and does not grant Gmail access.
-          When the separate optional Gmail connection is enabled, an organization owner or
-          administrator can explicitly authorize JAKOV360 to send reviewed supplier messages
-          from a chosen mailbox. This separate authorization requests Google identity and
-          Gmail send-only permission, not permission to read the inbox. The connected mailbox
-          address and its encrypted OAuth refresh credential are stored for this connection.
-          A user may disconnect the mailbox, which deletes usable local credentials and
-          attempts provider revocation. Connection metadata can be kept for audit and
-          support. Automatic reading of supplier replies would require separate permission,
-          additional disclosure and applicable Google verification before activation.
-          Google profile and mailbox data are not used for advertising or sold to advertisers.
+          Google Sign-In requests only identity information and does not grant Gmail access.
+          A separate optional Gmail connection would request Gmail send-only permission,
+          not permission to read the inbox. That optional connection is not currently enabled.
+          If it is later enabled, an organization owner or administrator can explicitly
+          authorize JAKOV360 to send reviewed supplier messages from a chosen mailbox.
+          The connected mailbox address and its encrypted OAuth refresh credential are stored
+          for this connection. A user may disconnect the mailbox, which deletes usable local
+          credentials and attempts provider revocation. Connection metadata can be kept for
+          audit and support. Future automatic reading of supplier replies would require a
+          separate read-only permission, additional disclosure and applicable Google
+          verification before activation. Google profile and mailbox data are not used for
+          advertising or sold to advertisers.
         </p>
 
         <h2>4. Service providers and external sources</h2>

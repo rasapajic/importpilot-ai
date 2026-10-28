@@ -21,12 +21,75 @@ export class GmailConnectAuthorizationError extends Error {
   }
 }
 
+/** Authenticated, but not the designated acceptance organization or user. */
+export class GmailAcceptanceDeniedError extends Error {
+  constructor() {
+    super("Gmail is limited to the designated acceptance organization and users.");
+    this.name = "GmailAcceptanceDeniedError";
+  }
+}
+
+/** Upper bound for the server-only designated user list. Longer lists deny. */
+export const GMAIL_ACCEPTANCE_USER_LIMIT = 32;
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const NIL_UUID = "00000000-0000-0000-0000-000000000000";
+
+function canonicalUuid(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const trimmed = value.trim().toLowerCase();
+  if (!UUID_PATTERN.test(trimmed) || trimmed === NIL_UUID) return null;
+  return trimmed;
+}
+
 export function gmailConnectionEnabled(
   env: NodeJS.ProcessEnv = process.env,
 ): boolean {
   if (env.JAKOV360_GMAIL_STAGING_ENABLED !== "true") return false;
   if (env.RENDER_SERVICE_ID === STAGING_RENDER_SERVICE_ID) return true;
   return !env.RENDER_SERVICE_ID && env.NODE_ENV === "development";
+}
+
+/**
+ * Fail closed. Empty, malformed, nil, or oversized values deny every actor.
+ * Local development still requires this list; it does not bypass staging checks.
+ */
+export function gmailAcceptanceAllowlist(
+  env: NodeJS.ProcessEnv = process.env,
+): { organizationId: string; userIds: ReadonlySet<string> } | null {
+  const organizationId = canonicalUuid(env.JAKOV360_GMAIL_ACCEPTANCE_ORGANIZATION_ID);
+  if (!organizationId) return null;
+  const tokens = (env.JAKOV360_GMAIL_ACCEPTANCE_USER_IDS ?? "")
+    .split(",")
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+  if (tokens.length === 0 || tokens.length > GMAIL_ACCEPTANCE_USER_LIMIT) return null;
+  const userIds = new Set<string>();
+  for (const token of tokens) {
+    const userId = canonicalUuid(token);
+    if (!userId) return null;
+    userIds.add(userId);
+  }
+  return { organizationId, userIds };
+}
+
+export function assertGmailAcceptanceEnrollment(
+  actor: { organizationId: string; userId: string },
+  env: NodeJS.ProcessEnv = process.env,
+): void {
+  if (!gmailConnectionEnabled(env)) throw new GmailConnectNotConfiguredError();
+  const allowlist = gmailAcceptanceAllowlist(env);
+  if (!allowlist) throw new GmailConnectNotConfiguredError();
+  const organizationId = canonicalUuid(actor.organizationId);
+  const userId = canonicalUuid(actor.userId);
+  if (
+    !organizationId ||
+    !userId ||
+    organizationId !== allowlist.organizationId ||
+    !allowlist.userIds.has(userId)
+  ) {
+    throw new GmailAcceptanceDeniedError();
+  }
 }
 
 export function gmailConnectionConfig(

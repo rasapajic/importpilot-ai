@@ -7,6 +7,10 @@ import {
   revokeGoogleGmailToken,
 } from "@/modules/negotiation/application/gmail-mailbox-connection-service";
 
+/**
+ * Tenant owner/admin disconnect stays available when the acceptance allowlist
+ * would refuse a new enrollment or a send. Do not add that allowlist here.
+ */
 export async function POST(request: NextRequest) {
   const auth = await getCurrentSession();
   if (!auth) return NextResponse.json({ error: "Prijava je potrebna." }, { status: 401 });
