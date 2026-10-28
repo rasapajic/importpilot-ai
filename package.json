@@ -29,10 +29,10 @@
     "@aws-sdk/s3-request-presigner": "3.1067.0",
     "@prisma/client": "6.19.3",
     "argon2": "0.44.0",
-    "next": "16.3.5",
+    "next": "16.4.1",
     "react": "19.2.7",
     "react-dom": "19.2.7",
-    "zod": "4.4.3"
+    "zod": "4.6.6"
   },
   "devDependencies": {
     "@types/node": "24.10.1",
@@ -46,6 +46,8 @@
     "vitest": "3.2.6"
   },
   "overrides": {
-    "deepmerge-ts": "8.0.2"
+    "deepmerge-ts": "8.0.2",
+    "sharp": "0.35.5",
+    "source-map-js": "1.2.2"
   }
 }
