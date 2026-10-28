@@ -192,6 +192,10 @@ model User {
   oauthAccounts OAuthAccount[]
   auditEvents  AuditEvent[]
   createdProjects ImportProject[] @relation("ProjectCreator")
+  supplierInboxThreads SupplierInboxThread[] @relation("SupplierInboxThreadCreator")
+  supplierOutboundMessages SupplierOutboundMessage[] @relation("SupplierOutboundAuthor")
+  supplierQuoteReviews SupplierQuoteExtraction[] @relation("SupplierQuoteReviewer")
+  supplierInboxEvents SupplierInboxEvent[] @relation("SupplierInboxEventActor")
   createdAt    DateTime             @default(now()) @map("created_at")
   updatedAt    DateTime             @updatedAt @map("updated_at")
 
@@ -222,6 +226,15 @@ model Organization {
   billingPurchases BillingPurchase[]
   projectEntitlements ProjectEntitlement[]
   supplierConfirmations SupplierConfirmation[]
+  supplierInboxThreads SupplierInboxThread[]
+  supplierInboxReplyTokens SupplierInboxReplyToken[]
+  supplierOutboundMessages SupplierOutboundMessage[]
+  supplierInboundMessages SupplierInboundMessage[]
+  supplierInboundAttachments SupplierInboundAttachment[]
+  supplierMessageTranslations SupplierMessageTranslation[]
+  supplierQuoteExtractions SupplierQuoteExtraction[]
+  supplierInboxEvents SupplierInboxEvent[]
+  supplierIngestionAttempts SupplierIngestionAttempt[]
   createdAt DateTime             @default(now()) @map("created_at")
   updatedAt DateTime             @updatedAt @map("updated_at")
 
@@ -434,6 +447,7 @@ model ImportProject {
   billingPurchases BillingPurchase[]
   projectEntitlements ProjectEntitlement[]
   supplierConfirmations SupplierConfirmation[]
+  supplierInboxThreads SupplierInboxThread[]
   completionStatus ProjectCompletionStatus @default(ACTIVE) @map("completion_status")
   createdAt      DateTime       @default(now()) @map("created_at")
   updatedAt      DateTime       @updatedAt @map("updated_at")
@@ -599,6 +613,7 @@ model SupplierOffer {
   selectedInDecisions ProjectDecision[] @relation("SelectedOffer")
   negotiationMessages NegotiationMessage[]
   supplierConfirmations SupplierConfirmation[]
+  supplierInboxThreads SupplierInboxThread[]
   createdAt           DateTime              @default(now()) @map("created_at")
   updatedAt           DateTime              @updatedAt @map("updated_at")
 
@@ -638,6 +653,7 @@ model SupplierConfirmation {
   supplierReplyOriginal          String                     @default("") @map("supplier_reply_original") @db.Text
   supplierReplyTranslation       String                     @default("") @map("supplier_reply_translation") @db.Text
   replyTranslationHash           String?                    @map("reply_translation_hash") @db.VarChar(64)
+  inboxThreads                   SupplierInboxThread[]
   organization                   Organization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   project                        ImportProject              @relation(fields: [organizationId, projectId], references: [organizationId, id], onDelete: Cascade)
   offer                          SupplierOffer?             @relation(fields: [offerId], references: [id], onDelete: SetNull)
@@ -811,4 +827,294 @@ model AiUsageEvent {
   @@index([organizationId, projectId, createdAt], map: "ai_usage_events_organization_id_project_id_created_at_idx")
   @@index([organizationId, operation, modelName], map: "ai_usage_events_organization_id_operation_model_idx")
   @@map("ai_usage_events")
+}
+
+enum SupplierInboxThreadStatus {
+  DRAFT
+  APPROVED
+  SENT
+  RECEIVED
+  PARSED
+  NEEDS_CLARIFICATION
+  QUOTE_CONFIRMED
+  IN_COMPARISON
+}
+
+enum SupplierOutboundKind {
+  RFQ
+  FOLLOW_UP
+}
+
+enum SupplierOutboundStatus {
+  DRAFT
+  APPROVED
+  SENT
+  UNCERTAIN
+}
+
+enum SupplierInboundSource {
+  SYNTHETIC
+  WEBHOOK
+  FORWARD
+  MANUAL_IMPORT
+}
+
+enum SupplierSenderTrust {
+  ALIGNED
+  UNVERIFIED
+}
+
+enum SupplierAttachmentScanStatus {
+  PENDING
+  CLEAN
+  REJECTED
+}
+
+enum SupplierQuoteReviewStatus {
+  UNREVIEWED
+  ACCEPTED
+  REJECTED
+}
+
+enum SupplierQuoteFieldFlag {
+  NONE
+  MISSING
+  CONTRADICTION
+  SPEC_MISMATCH
+  LOW_CONFIDENCE
+}
+
+enum SupplierReplyTokenStatus {
+  ACTIVE
+  REVOKED
+}
+
+enum SupplierInboxEventType {
+  THREAD_OPENED
+  RFQ_APPROVED
+  RFQ_SENT
+  REPLY_RECEIVED
+  PARSED
+  NEEDS_CLARIFICATION
+  QUARANTINED
+  TOKEN_REJECTED
+  FIELD_REVIEWED
+  SENDER_ACKNOWLEDGED
+  QUOTE_CONFIRMED
+  FOLLOW_UP_DRAFTED
+  FOLLOW_UP_APPROVED
+  FOLLOW_UP_APPROVAL_REJECTED
+  FOLLOW_UP_SEND_BLOCKED
+  INGESTION_DELAYED
+}
+
+/// Synthetic supplier inbox. Draft schema only: do not apply on staging or production.
+model SupplierInboxThread {
+  id                             String                    @id @default(uuid()) @db.Uuid
+  organizationId                 String                    @map("organization_id") @db.Uuid
+  projectId                      String                    @map("project_id") @db.Uuid
+  offerId                        String?                   @map("offer_id") @db.Uuid
+  confirmationId                 String?                   @map("confirmation_id") @db.Uuid
+  supplierName                   String                    @map("supplier_name") @db.VarChar(200)
+  status                         SupplierInboxThreadStatus @default(DRAFT)
+  replyTokenHash                 String                    @unique @map("reply_token_hash") @db.Char(64)
+  expectedSupplierEmail          String?                   @map("expected_supplier_email") @db.VarChar(320)
+  orderedQuantity                Int                       @map("ordered_quantity")
+  requirement                    Json
+  ingestionDelayed               Boolean                   @default(false) @map("ingestion_delayed")
+  unverifiedSenderAcknowledged   Boolean                   @default(false) @map("unverified_sender_acknowledged")
+  createdByUserId                String                    @map("created_by_user_id") @db.Uuid
+  organization                   Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project                        ImportProject             @relation(fields: [organizationId, projectId], references: [organizationId, id], onDelete: Cascade)
+  offer                          SupplierOffer?            @relation(fields: [offerId], references: [id], onDelete: SetNull)
+  confirmation                   SupplierConfirmation?     @relation(fields: [confirmationId], references: [id], onDelete: SetNull)
+  createdBy                      User                      @relation("SupplierInboxThreadCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  replyTokens                    SupplierInboxReplyToken[]
+  outboundMessages               SupplierOutboundMessage[]
+  inboundMessages                SupplierInboundMessage[]
+  quoteExtractions               SupplierQuoteExtraction[]
+  events                         SupplierInboxEvent[]
+  ingestionAttempts              SupplierIngestionAttempt[]
+  createdAt                      DateTime                  @default(now()) @map("created_at")
+  updatedAt                      DateTime                  @updatedAt @map("updated_at")
+
+  @@index([organizationId, projectId], map: "supplier_inbox_threads_organization_id_project_id_idx")
+  @@index([offerId], map: "supplier_inbox_threads_offer_id_idx")
+  @@index([confirmationId], map: "supplier_inbox_threads_confirmation_id_idx")
+  @@map("supplier_inbox_threads")
+}
+
+model SupplierInboxReplyToken {
+  id             String                   @id @default(uuid()) @db.Uuid
+  organizationId String                   @map("organization_id") @db.Uuid
+  threadId       String                   @map("thread_id") @db.Uuid
+  tokenHash      String                   @unique @map("token_hash") @db.Char(64)
+  status         SupplierReplyTokenStatus @default(ACTIVE)
+  revokedAt      DateTime?                @map("revoked_at")
+  organization   Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  thread         SupplierInboxThread      @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  createdAt      DateTime                 @default(now()) @map("created_at")
+
+  @@index([threadId, status], map: "supplier_inbox_reply_tokens_thread_id_status_idx")
+  @@map("supplier_inbox_reply_tokens")
+}
+
+model SupplierOutboundMessage {
+  id               String                  @id @default(uuid()) @db.Uuid
+  organizationId   String                  @map("organization_id") @db.Uuid
+  threadId         String                  @map("thread_id") @db.Uuid
+  authorUserId     String                  @map("author_user_id") @db.Uuid
+  kind             SupplierOutboundKind
+  status           SupplierOutboundStatus  @default(DRAFT)
+  fromAddress      String                  @map("from_address") @db.VarChar(320)
+  toAddress        String                  @map("to_address") @db.VarChar(320)
+  replyTokenHash   String                  @map("reply_token_hash") @db.Char(64)
+  subject          String                  @db.VarChar(500)
+  body             String                  @db.Text
+  contentHash      String                  @map("content_hash") @db.Char(64)
+  approvalHash     String?                 @map("approval_hash") @db.Char(64)
+  provider         String?                 @db.VarChar(40)
+  providerMessageId String?                @map("provider_message_id") @db.VarChar(200)
+  approvedAt       DateTime?               @map("approved_at")
+  sentAt           DateTime?               @map("sent_at")
+  organization     Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  thread           SupplierInboxThread     @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  author           User                    @relation("SupplierOutboundAuthor", fields: [authorUserId], references: [id], onDelete: Restrict)
+  createdAt        DateTime                @default(now()) @map("created_at")
+  updatedAt        DateTime                @updatedAt @map("updated_at")
+
+  @@unique([provider, providerMessageId], map: "supplier_outbound_messages_provider_message_id_key")
+  @@index([organizationId, threadId], map: "supplier_outbound_messages_organization_id_thread_id_idx")
+  @@map("supplier_outbound_messages")
+}
+
+model SupplierInboundMessage {
+  id                    String                     @id @default(uuid()) @db.Uuid
+  organizationId        String?                    @map("organization_id") @db.Uuid
+  threadId              String?                    @map("thread_id") @db.Uuid
+  provider              String                     @db.VarChar(40)
+  providerMessageId     String                     @map("provider_message_id") @db.VarChar(200)
+  receivedAt            DateTime                   @map("received_at")
+  fromAddress           String                     @map("from_address") @db.VarChar(320)
+  subject               String                     @default("") @db.VarChar(500)
+  rawSha256             String                     @map("raw_sha256") @db.Char(64)
+  rawObjectKey          String                     @map("raw_object_key") @db.VarChar(300)
+  rawMessage            String                     @map("raw_message") @db.Text
+  originalText          String                     @map("original_text") @db.Text
+  sanitizedText         String                     @map("sanitized_text") @db.Text
+  senderTrust           SupplierSenderTrust?       @map("sender_trust")
+  authenticationResults Json?                      @map("authentication_results")
+  source                SupplierInboundSource
+  inReplyTo             String?                    @map("in_reply_to") @db.VarChar(998)
+  referencesHeader      String?                    @map("references_header") @db.Text
+  quarantineReason      String?                    @map("quarantine_reason") @db.VarChar(40)
+  retentionExpiresAt    DateTime?                  @map("retention_expires_at")
+  parseCompletedAt      DateTime?                  @map("parse_completed_at")
+  organization          Organization?              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  thread                SupplierInboxThread?       @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  attachments           SupplierInboundAttachment[]
+  translations          SupplierMessageTranslation[]
+  quoteExtractions      SupplierQuoteExtraction[]
+  createdAt             DateTime                   @default(now()) @map("created_at")
+
+  @@unique([provider, providerMessageId], map: "supplier_inbound_messages_provider_message_id_key")
+  @@index([organizationId, threadId], map: "supplier_inbound_messages_organization_id_thread_id_idx")
+  @@index([retentionExpiresAt], map: "supplier_inbound_messages_retention_expires_at_idx")
+  @@map("supplier_inbound_messages")
+}
+
+model SupplierInboundAttachment {
+  id             String                       @id @default(uuid()) @db.Uuid
+  messageId      String                       @map("message_id") @db.Uuid
+  organizationId String?                      @map("organization_id") @db.Uuid
+  filename       String                       @db.VarChar(255)
+  declaredMime   String                       @map("declared_mime") @db.VarChar(127)
+  detectedMime   String                       @map("detected_mime") @db.VarChar(127)
+  sizeBytes      Int                          @map("size_bytes")
+  sha256         String                       @db.Char(64)
+  storageKey     String                       @map("storage_key") @db.VarChar(300)
+  scanStatus     SupplierAttachmentScanStatus @map("scan_status")
+  rejectionReason String?                     @map("rejection_reason") @db.VarChar(80)
+  content        Bytes?
+  organization   Organization?                @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  message        SupplierInboundMessage       @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  citations      SupplierQuoteExtraction[]    @relation("QuoteCitationAttachment")
+  createdAt      DateTime                     @default(now()) @map("created_at")
+
+  @@index([messageId], map: "supplier_inbound_attachments_message_id_idx")
+  @@index([organizationId], map: "supplier_inbound_attachments_organization_id_idx")
+  @@map("supplier_inbound_attachments")
+}
+
+model SupplierMessageTranslation {
+  id             String                 @id @default(uuid()) @db.Uuid
+  messageId      String                 @map("message_id") @db.Uuid
+  organizationId String                 @map("organization_id") @db.Uuid
+  locale         String                 @db.VarChar(16)
+  translatedText String                 @map("translated_text") @db.Text
+  modelId        String                 @map("model_id") @db.VarChar(80)
+  organization   Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  message        SupplierInboundMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  createdAt      DateTime               @default(now()) @map("created_at")
+
+  @@unique([messageId, locale], map: "supplier_message_translations_message_id_locale_key")
+  @@index([organizationId], map: "supplier_message_translations_organization_id_idx")
+  @@map("supplier_message_translations")
+}
+
+model SupplierQuoteExtraction {
+  id                     String                    @id @default(uuid()) @db.Uuid
+  threadId               String                    @map("thread_id") @db.Uuid
+  messageId              String                    @map("message_id") @db.Uuid
+  organizationId         String                    @map("organization_id") @db.Uuid
+  fieldKey               String                    @map("field_key") @db.VarChar(80)
+  valueJson              Json                      @map("value_json")
+  confidence             Decimal                   @db.Decimal(4, 3)
+  citationSnippet        String                    @map("citation_snippet") @db.Text
+  citationAttachmentId   String?                   @map("citation_attachment_id") @db.Uuid
+  citationPage           Int?                      @map("citation_page")
+  flag                   SupplierQuoteFieldFlag    @default(NONE)
+  reviewStatus           SupplierQuoteReviewStatus @default(UNREVIEWED) @map("review_status")
+  reviewedByUserId       String?                   @map("reviewed_by_user_id") @db.Uuid
+  reviewedAt             DateTime?                 @map("reviewed_at")
+  organization           Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  thread                 SupplierInboxThread       @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  message                SupplierInboundMessage    @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  citationAttachment     SupplierInboundAttachment? @relation("QuoteCitationAttachment", fields: [citationAttachmentId], references: [id], onDelete: SetNull)
+  reviewedBy             User?                     @relation("SupplierQuoteReviewer", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  createdAt              DateTime                  @default(now()) @map("created_at")
+
+  @@unique([messageId, fieldKey], map: "supplier_quote_extractions_message_id_field_key_key")
+  @@index([organizationId, threadId], map: "supplier_quote_extractions_organization_id_thread_id_idx")
+  @@map("supplier_quote_extractions")
+}
+
+model SupplierInboxEvent {
+  id             String                 @id @default(uuid()) @db.Uuid
+  organizationId String?                @map("organization_id") @db.Uuid
+  threadId       String?                @map("thread_id") @db.Uuid
+  actorUserId    String?                @map("actor_user_id") @db.Uuid
+  type           SupplierInboxEventType
+  metadata       Json?
+  organization   Organization?          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  thread         SupplierInboxThread?   @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  actor          User?                  @relation("SupplierInboxEventActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  createdAt      DateTime               @default(now()) @map("created_at")
+
+  @@index([organizationId, threadId, createdAt], map: "supplier_inbox_events_org_thread_created_idx")
+  @@map("supplier_inbox_events")
+}
+
+model SupplierIngestionAttempt {
+  id                String               @id @default(uuid()) @db.Uuid
+  organizationId    String?              @map("organization_id") @db.Uuid
+  threadId          String?              @map("thread_id") @db.Uuid
+  provider          String               @db.VarChar(40)
+  providerMessageId String               @map("provider_message_id") @db.VarChar(200)
+  organization      Organization?        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  thread            SupplierInboxThread? @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  createdAt         DateTime             @default(now()) @map("created_at")
+
+  @@index([provider, providerMessageId], map: "supplier_ingestion_attempts_provider_message_id_idx")
+  @@map("supplier_ingestion_attempts")
 }
