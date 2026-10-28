@@ -38,8 +38,9 @@ export default function PrivacyPage() {
             identifiers and timestamps. These records support duplicate-send prevention
             and linkage with the supplier project. Gmail accepting a send request does
             not guarantee delivery to the recipient. This is separate from Google
-            Sign-In, is disabled by default, is not currently enabled, and cannot send
-            without an explicit approval of the recipient and final message.
+            Sign-In, is disabled by default and in public production, and may be
+            enabled only for designated acceptance-test accounts; sending always
+            requires explicit approval of the recipient and final message.
           </li>
           <li>
             <strong>Sourcing and business data:</strong> product searches, quantities, destinations, supplier
@@ -68,8 +69,9 @@ export default function PrivacyPage() {
           Google Sign-In does not request access to Gmail, Google Drive, Google Calendar,
           contacts, or other Google content; it requests only identity information.
           A separate optional Gmail connection would request Gmail send-only permission,
-          not permission to read the inbox. That optional connection is not currently enabled.
-          If it is later enabled, an organization owner or administrator can explicitly
+          not permission to read the inbox. It is currently disabled in public production. Separate acceptance testing
+          may be enabled for designated test accounts only. When enabled, an
+          organization owner or administrator can explicitly
           authorize JAKOV360 to send reviewed supplier messages from a chosen mailbox.
           The connected mailbox address and its encrypted OAuth refresh credential are stored
           for this connection. A user may disconnect the mailbox, which deletes usable local
