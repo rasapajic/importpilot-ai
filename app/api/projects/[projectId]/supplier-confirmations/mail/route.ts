@@ -9,7 +9,10 @@ import {
   SupplierGmailSendBlockedError,
   SupplierGmailSendUncertainError,
 } from "@/modules/negotiation/application/supplier-gmail-send-service";
-import { GmailConnectNotConfiguredError } from "@/modules/negotiation/infrastructure/gmail-connect-oauth";
+import {
+  GmailAcceptanceDeniedError,
+  GmailConnectNotConfiguredError,
+} from "@/modules/negotiation/infrastructure/gmail-connect-oauth";
 
 const commonSchema = z.object({
   productUrl: z.url().max(2000),
@@ -23,6 +26,9 @@ const postSchema = commonSchema.extend({
 });
 
 function errorResponse(error: unknown) {
+  if (error instanceof GmailAcceptanceDeniedError) {
+    return NextResponse.json({ error: "Nemate dozvolu." }, { status: 403 });
+  }
   if (error instanceof GmailConnectNotConfiguredError) {
     return NextResponse.json({ error: "Gmail nije omogućen na ovom okruženju." }, { status: 503 });
   }

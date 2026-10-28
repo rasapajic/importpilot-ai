@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { OrganizationRole } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { GmailAcceptanceDeniedError } from "../../modules/negotiation/infrastructure/gmail-connect-oauth";
 import type { GoogleGmailSendProvider } from "../../modules/negotiation/infrastructure/google-gmail-send-provider";
 
 const database = process.env.TEST_DATABASE_URL;
@@ -14,6 +15,7 @@ describeWithDatabase("Gmail supplier sending is one-shot, audited and tenant saf
   let cryptoModule: typeof import("@/modules/negotiation/infrastructure/gmail-credential-crypto");
   let ownerId = "";
   let otherAdminId = "";
+  let unlistedAdminId = "";
   let organizationId = "";
   let foreignOrgId = "";
   let projectId = "";
@@ -27,6 +29,8 @@ describeWithDatabase("Gmail supplier sending is one-shot, audited and tenant saf
     "JAKOV360_GMAIL_REDIRECT_URI",
     "JAKOV360_GMAIL_TOKEN_KEY_V1_B64",
     "JAKOV360_GMAIL_TEST_RECIPIENTS",
+    "JAKOV360_GMAIL_ACCEPTANCE_ORGANIZATION_ID",
+    "JAKOV360_GMAIL_ACCEPTANCE_USER_IDS",
     "APP_ORIGIN",
   ].map((key) => [key, process.env[key]]));
 
@@ -113,6 +117,15 @@ describeWithDatabase("Gmail supplier sending is one-shot, audited and tenant saf
     await prisma.organizationMember.create({
       data: { organizationId, userId: otherAdminId, role: OrganizationRole.ADMIN },
     });
+    const unlisted = await prisma.user.create({
+      data: { email: `gmail-unlisted-admin-${randomUUID()}@example.test`, name: "Unlisted Admin" },
+    });
+    unlistedAdminId = unlisted.id;
+    await prisma.organizationMember.create({
+      data: { organizationId, userId: unlistedAdminId, role: OrganizationRole.ADMIN },
+    });
+    process.env.JAKOV360_GMAIL_ACCEPTANCE_ORGANIZATION_ID = organizationId;
+    process.env.JAKOV360_GMAIL_ACCEPTANCE_USER_IDS = `${ownerId},${otherAdminId}`;
     const foreign = await prisma.organization.create({ data: { name: "M1c Foreign Org" } });
     foreignOrgId = foreign.id;
     const project = await prisma.importProject.create({
@@ -150,6 +163,7 @@ describeWithDatabase("Gmail supplier sending is one-shot, audited and tenant saf
       if (foreignOrgId) await prisma.organization.delete({ where: { id: foreignOrgId } });
       if (ownerId) await prisma.user.delete({ where: { id: ownerId } });
       if (otherAdminId) await prisma.user.delete({ where: { id: otherAdminId } });
+      if (unlistedAdminId) await prisma.user.delete({ where: { id: unlistedAdminId } });
       await prisma.$disconnect();
     }
     Object.entries(originalEnv).forEach(([key, value]) => {
@@ -171,10 +185,13 @@ describeWithDatabase("Gmail supplier sending is one-shot, audited and tenant saf
 
     await expect(mail.getSupplierGmailSendPreview({
       ...request("preview"), organizationId: foreignOrgId,
-    })).rejects.toBeInstanceOf(mail.SupplierGmailSendBlockedError);
+    })).rejects.toBeInstanceOf(GmailAcceptanceDeniedError);
     await expect(mail.getSupplierGmailSendPreview({
       ...request("preview"), userId: randomUUID(),
-    })).rejects.toBeInstanceOf(mail.SupplierGmailSendBlockedError);
+    })).rejects.toBeInstanceOf(GmailAcceptanceDeniedError);
+    await expect(mail.getSupplierGmailSendPreview({
+      ...request("preview"), userId: unlistedAdminId,
+    })).rejects.toBeInstanceOf(GmailAcceptanceDeniedError);
     await expect(mail.getSupplierGmailSendPreview({
       ...request("preview"), userId: otherAdminId,
     })).rejects.toBeInstanceOf(mail.SupplierGmailSendBlockedError);
@@ -305,5 +322,113 @@ describeWithDatabase("Gmail supplier sending is one-shot, audited and tenant saf
     expect(attempts.filter((item) => item.status === "fulfilled")).toHaveLength(1);
     expect(calls).toBe(1);
     expect(await prisma.supplierMailDelivery.count({ where: { confirmationId: conf.id } })).toBe(1);
+    expect((await prisma.supplierMailDelivery.findFirstOrThrow({
+      where: { confirmationId: conf.id },
+    })).status).toBe("SENT");
+  });
+
+  it("refuses an unlisted admin before any Gmail call or delivery claim", async () => {
+    const conf = await prepare("unlisted-admin");
+    let calls = 0;
+    await expect(mail.sendSupplierGmailInquiry({
+      ...request("unlisted-admin"),
+      userId: unlistedAdminId,
+      approvedHash: "ab".repeat(32),
+      explicitApproval: true,
+    }, {
+      async send() {
+        calls += 1;
+        return { providerMessageId: "should-not-send", providerThreadId: "should-not-thread" };
+      },
+    })).rejects.toBeInstanceOf(GmailAcceptanceDeniedError);
+    expect(calls).toBe(0);
+    expect(await prisma.supplierMailDelivery.count({ where: { confirmationId: conf.id } })).toBe(0);
+  });
+
+  it("keeps provider ids and blocks resend when the post-accept transaction fails", async () => {
+    const conf = await prepare("db-failure");
+    const wanted = request("db-failure");
+    const preview = await mail.getSupplierGmailSendPreview(wanted);
+    if (!preview.approvalHash) throw new Error("Missing review hash");
+    let calls = 0;
+    const provider: GoogleGmailSendProvider = {
+      async send() {
+        calls += 1;
+        return {
+          providerMessageId: "gmail-after-db-failure",
+          providerThreadId: "thread-after-db-failure",
+        };
+      },
+    };
+    const original = prisma.$transaction.bind(prisma);
+    let transactions = 0;
+    prisma.$transaction = (async (...args: Parameters<typeof prisma.$transaction>) => {
+      transactions += 1;
+      if (transactions > 1) throw new Error("injected post-accept database failure");
+      return original(...args);
+    }) as typeof prisma.$transaction;
+    try {
+      await expect(mail.sendSupplierGmailInquiry({
+        ...wanted,
+        approvedHash: preview.approvalHash,
+        explicitApproval: true,
+      }, provider)).rejects.toBeInstanceOf(mail.SupplierGmailSendUncertainError);
+    } finally {
+      prisma.$transaction = original;
+    }
+    expect(calls).toBe(1);
+    const attempt = await prisma.supplierMailDelivery.findFirstOrThrow({
+      where: { confirmationId: conf.id },
+    });
+    expect(attempt.status).toBe("UNCERTAIN");
+    expect(attempt.providerMessageId).toBe("gmail-after-db-failure");
+    expect(attempt.providerThreadId).toBe("thread-after-db-failure");
+    expect((await prisma.supplierConfirmation.findUniqueOrThrow({
+      where: { id: conf.id },
+    })).status).toBe("PREPARED");
+    await expect(mail.sendSupplierGmailInquiry({
+      ...wanted,
+      approvedHash: preview.approvalHash,
+      explicitApproval: true,
+    }, provider)).rejects.toBeInstanceOf(mail.SupplierGmailSendBlockedError);
+    expect(calls).toBe(1);
+  });
+
+  it("does not mark the outbox SENT when confirmation is no longer PREPARED", async () => {
+    const conf = await prepare("manual-race");
+    const wanted = request("manual-race");
+    const preview = await mail.getSupplierGmailSendPreview(wanted);
+    if (!preview.approvalHash) throw new Error("Missing review hash");
+    let calls = 0;
+    const provider: GoogleGmailSendProvider = {
+      async send() {
+        calls += 1;
+        await prisma.supplierConfirmation.update({
+          where: { id: conf.id },
+          data: { status: "RESPONSE_RECEIVED" },
+        });
+        return { providerMessageId: "gmail-manual-race", providerThreadId: "thread-manual-race" };
+      },
+    };
+    await expect(mail.sendSupplierGmailInquiry({
+      ...wanted,
+      approvedHash: preview.approvalHash,
+      explicitApproval: true,
+    }, provider)).rejects.toBeInstanceOf(mail.SupplierGmailSendUncertainError);
+    const attempt = await prisma.supplierMailDelivery.findFirstOrThrow({
+      where: { confirmationId: conf.id },
+    });
+    expect(attempt.status).toBe("UNCERTAIN");
+    expect(attempt.providerMessageId).toBe("gmail-manual-race");
+    expect(attempt.providerThreadId).toBe("thread-manual-race");
+    expect((await prisma.supplierConfirmation.findUniqueOrThrow({
+      where: { id: conf.id },
+    })).status).toBe("RESPONSE_RECEIVED");
+    await expect(mail.sendSupplierGmailInquiry({
+      ...wanted,
+      approvedHash: preview.approvalHash,
+      explicitApproval: true,
+    }, provider)).rejects.toBeInstanceOf(mail.SupplierGmailSendBlockedError);
+    expect(calls).toBe(1);
   });
 });

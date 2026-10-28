@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getCurrentSession } from "@/modules/auth/infrastructure/session";
 import { isSameOrigin } from "@/modules/auth/infrastructure/request-context";
+import { assessGmailConnectStart } from "@/modules/negotiation/infrastructure/gmail-acceptance-gate";
 import { gmailConnectAuthorizationUrl, newGmailConnectAttempt } from "@/modules/negotiation/infrastructure/gmail-send-foundation";
 import { gmailConnectionConfig } from "@/modules/negotiation/infrastructure/gmail-connect-oauth";
 import { bindGmailConnectCookies } from "@/modules/negotiation/infrastructure/gmail-connect-cookies";
@@ -9,12 +10,17 @@ import { bindGmailConnectCookies } from "@/modules/negotiation/infrastructure/gm
 /** Explicit POST from Account settings. Never reuses the sign-in OAuth flow. */
 export async function POST(request: NextRequest) {
   const auth = await getCurrentSession();
-  if (!auth) return NextResponse.json({ error: "Prijava je potrebna." }, { status: 401 });
-  if (!["OWNER", "ADMIN"].includes(auth.membership.role)) {
-    return NextResponse.json({ error: "Nemate dozvolu." }, { status: 403 });
+  const admission = assessGmailConnectStart({
+    userId: auth?.user.id ?? null,
+    organizationId: auth?.membership.organizationId ?? null,
+    role: auth?.membership.role ?? null,
+    sameOrigin: isSameOrigin(request),
+  });
+  if (!admission.ok) {
+    return NextResponse.json({ error: admission.error }, { status: admission.status });
   }
-  if (!isSameOrigin(request)) {
-    return NextResponse.json({ error: "Zahtev nije dozvoljen." }, { status: 403 });
+  if (!auth) {
+    return NextResponse.json({ error: "Prijava je potrebna." }, { status: 401 });
   }
 
   try {

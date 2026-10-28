@@ -2,13 +2,20 @@ import { NextResponse } from "next/server";
 
 import { getCurrentSession } from "@/modules/auth/infrastructure/session";
 import { listGmailMailboxConnections } from "@/modules/negotiation/application/gmail-mailbox-connection-service";
+import { assessGmailConnectionListing } from "@/modules/negotiation/infrastructure/gmail-acceptance-gate";
 import { gmailConnectionConfig } from "@/modules/negotiation/infrastructure/gmail-connect-oauth";
 
 export async function GET() {
   const auth = await getCurrentSession();
-  if (!auth) return NextResponse.json({ error: "Prijava je potrebna." }, { status: 401 });
-  if (!["OWNER", "ADMIN"].includes(auth.membership.role)) {
-    return NextResponse.json({ error: "Nemate dozvolu." }, { status: 403 });
+  const admission = assessGmailConnectionListing({
+    userId: auth?.user.id ?? null,
+    organizationId: auth?.membership.organizationId ?? null,
+    role: auth?.membership.role ?? null,
+  });
+  if (!admission.ok || !auth) {
+    const status = admission.ok ? 401 : admission.status;
+    const error = admission.ok ? "Prijava je potrebna." : admission.error;
+    return NextResponse.json({ error }, { status });
   }
   try {
     gmailConnectionConfig();
