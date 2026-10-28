@@ -9,6 +9,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { CostCalculatorForm } from "@/components/costs/cost-calculator-form";
+import { PreliminaryOfferComparison } from "@/components/projects/preliminary-offer-comparison";
 import { useI18n } from "@/components/i18n/i18n-provider";
 import { CommercialTermsForm } from "@/components/offers/commercial-terms-form";
 import { ProfitabilityCheckControl } from "@/components/projects/profitability-check-control";
@@ -267,6 +268,20 @@ function metadataText(metadata: unknown, key: string) {
   if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
   const value = (metadata as Record<string, unknown>)[key];
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function metadataNumber(metadata: unknown, key: string) {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  const value = (metadata as Record<string, unknown>)[key];
+  const parsed = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function comparisonProductQuery(metadata: unknown, projectName: string) {
+  const direct = metadataText(metadata, "originalQuery");
+  if (direct) return direct;
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return projectName;
+  return metadataText((metadata as Record<string, unknown>).provenance, "originalQuery") ?? projectName;
 }
 
 function preliminarySearchResult(
@@ -572,6 +587,32 @@ export function SimpleProfitabilityPanel({
               !importCostNeedsReview(offer.latestCostAssumptions),
             );
           }) && <p>{text.readyForCheck}</p>}
+          {offersForInput.length >= 2 && (
+            <PreliminaryOfferComparison
+              locale={locale}
+              offers={offersForInput.map((offer) => {
+                const metadata = offer.sourceMetadata;
+                const advertisedPrice = metadataNumber(metadata, "advertisedPrice");
+                const advertisedPriceHigh = metadataNumber(metadata, "advertisedPriceHigh");
+                return {
+                  id: offer.id,
+                  supplierName: offer.supplierName,
+                  title: metadataText(metadata, "title"),
+                  productUrl: sourceOfferUrl(metadata),
+                  supplierCountry: offer.supplierCountry,
+                  listedMoq: offer.moq,
+                  incoterm: offer.incoterm,
+                  unitPrice: numberValue(offer.unitPrice),
+                  currency: offer.currency,
+                  advertisedPrice,
+                  advertisedCurrency: metadataText(metadata, "advertisedCurrency"),
+                  advertisedPriceHigh,
+                  writtenQuoteConfirmed: Boolean(transferredSupplierQuote(metadata)),
+                  productQuery: comparisonProductQuery(metadata, projectName),
+                };
+              })}
+            />
+          )}
           <div className="offer-list">
             {offersForInput.map((offer) => {
               const latest = offer.costCalculations[0];

@@ -190,6 +190,7 @@ describe("quantity-aware supplier pricing", () => {
       quantityCurrency: null,
       advertisedPrice: 0.35,
       advertisedCurrency: "USD",
+      advertisedPriceHigh: null,
       advertisedAppliesFromQuantity: null,
       supplierOrderQuote: false,
     });

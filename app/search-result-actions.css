@@ -231,6 +231,45 @@
   box-shadow: 0 0 0 2px rgb(22 130 93 / 10%);
 }
 
+.preliminary-comparison {
+  margin: 0 0 1.25rem;
+}
+
+.preliminary-comparison-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+}
+
+.preliminary-comparison article {
+  border: 1px solid #dce7e1;
+  border-radius: 0.75rem;
+  min-width: 0;
+  padding: 0.9rem 1rem;
+}
+
+.preliminary-comparison h4,
+.preliminary-comparison p {
+  margin-top: 0;
+}
+
+.preliminary-comparison dl {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0;
+}
+
+.preliminary-comparison dt {
+  color: #60766c;
+  font-size: 0.82rem;
+}
+
+.preliminary-comparison dd {
+  font-weight: 700;
+  margin: 0.15rem 0 0;
+  overflow-wrap: anywhere;
+}
+
 .best-choice-badge {
   background: #16825d;
   border-radius: 999px;
@@ -241,6 +280,11 @@
   margin: 0 0.5rem 0.55rem 0;
   padding: 0.3rem 0.65rem;
   text-transform: uppercase;
+}
+
+.best-choice-badge-pending {
+  background: #f4efe4;
+  color: #6d4e16;
 }
 
 .supplier-selection-summary strong {

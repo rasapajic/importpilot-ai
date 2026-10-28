@@ -26,6 +26,7 @@ describe("Alibaba supplier search source", () => {
       supplierCountry: "CN",
       price: 25.5,
       currency: "USD",
+      advertisedPriceHigh: 29,
       minimumOrderQuantity: 100,
       incoterm: "FOB",
       productUrl: "https://www.alibaba.com/product-detail/ptz-camera-1.html",

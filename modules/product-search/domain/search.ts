@@ -97,6 +97,16 @@ export const supplierOfferSearchResultSchema = z
       (value) => (value === "" || value === undefined || value === null ? null : String(value).toUpperCase()),
       z.string().regex(/^[A-Z]{3}$/).nullable(),
     ),
+    advertisedPrice: z.number().positive().finite().nullish(),
+    advertisedCurrency: z.preprocess(
+      (value) => {
+        if (value === undefined) return undefined;
+        if (value === "" || value === null) return null;
+        return String(value).toUpperCase();
+      },
+      z.string().regex(/^[A-Z]{3}$/).nullish(),
+    ),
+    advertisedPriceHigh: z.number().positive().finite().nullish(),
     minimumOrderQuantity: optionalNumber(z.number().int().positive()),
     incoterm: z.preprocess(
       (value) => (value === "" || value === undefined || value === null ? null : String(value).toUpperCase()),
@@ -120,6 +130,27 @@ export const supplierOfferSearchResultSchema = z
         code: "custom",
         path: ["currency"],
         message: "Price and currency must be provided together.",
+      });
+    }
+    const advertisedPriceMissing = result.advertisedPrice === null || result.advertisedPrice === undefined;
+    const advertisedCurrencyMissing = result.advertisedCurrency === null || result.advertisedCurrency === undefined;
+    const advertisedLow = result.advertisedPrice ?? result.price;
+    if (advertisedPriceMissing !== advertisedCurrencyMissing) {
+      context.addIssue({
+        code: "custom",
+        path: ["advertisedCurrency"],
+        message: "Advertised price and currency must be provided together.",
+      });
+    }
+    if (
+      result.advertisedPriceHigh !== null &&
+      result.advertisedPriceHigh !== undefined &&
+      (advertisedLow === null || advertisedLow === undefined || result.advertisedPriceHigh <= advertisedLow)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["advertisedPriceHigh"],
+        message: "Advertised price high must be greater than the advertised low price.",
       });
     }
   });

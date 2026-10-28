@@ -33,7 +33,7 @@ describe("ImportPilot 1.0 simple supplier results", () => {
     expect(resultsSource).toContain("Ovo nije ukupan broj kandidata nove pretrage.");
     expect(resultsSource).toContain('origin === "cache"');
     expect(resultsSource).toContain('whySelected: "Zašto je izdvojena"');
-    expect(resultsSource).toContain("selectionReasons(result, analysis, quantity, text)");
+    expect(resultsSource).toContain("selectionReasons(result, analysis, quantity, text, constraintQueries)");
     expect(resultsSource).toContain('className="supplier-selection-summary"');
     expect(resultsSource).toContain('className="selection-reasons"');
     expect(resultCss).toContain(".supplier-selection-summary");
@@ -149,7 +149,10 @@ describe("ImportPilot 1.0 simple supplier results", () => {
     expect(rankingSource).not.toContain('matchStatus !== "MISMATCH"');
     expect(rankingSource).not.toContain(".slice(0, 10)");
     expect(resultsSource).toContain('bestChoice: "Najbolji izbor"');
-    expect(resultsSource).toContain('index === 0 && <span className="best-choice-badge">');
+    expect(resultsSource).toContain("canPresentBestChoice");
+    expect(resultsSource).toContain('showBestChoice && <span className="best-choice-badge">');
+    expect(resultsSource).toContain("formatMissingDataLabels(analysis.missingData, locale)");
+    expect(resultsSource).not.toContain("analysis.missingData.join(");
     expect(resultCss).toContain(".search-result-card-best");
     expect(resultCss).toContain(".best-choice-badge");
   });

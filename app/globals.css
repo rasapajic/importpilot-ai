@@ -495,10 +495,46 @@ button:disabled {
   color: #60766c;
 }
 
-.project-form label {
+.project-form label,
+.offer-form label,
+.cost-form label {
   display: grid;
   gap: 0.4rem;
   font-weight: 700;
+  min-width: 0;
+}
+
+.offer-form,
+.cost-form {
+  align-items: start;
+  display: grid;
+  gap: 0.9rem 1rem;
+  grid-template-columns: repeat(2, minmax(12rem, 1fr));
+}
+
+.offer-form .cost-form-wide,
+.cost-form .cost-form-wide,
+.offer-form > button,
+.cost-form > button {
+  grid-column: 1 / -1;
+}
+
+.offer-form input,
+.offer-form select,
+.cost-form input,
+.cost-form select {
+  box-sizing: border-box;
+  font: inherit;
+  min-width: 0;
+  padding: 0.65rem 0.75rem;
+  width: 100%;
+}
+
+@media (max-width: 760px) {
+  .offer-form,
+  .cost-form {
+    grid-template-columns: 1fr;
+  }
 }
 
 .project-form input,

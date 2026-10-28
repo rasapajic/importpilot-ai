@@ -79,6 +79,22 @@ export function createSupplierOfferSourceMetadata(
     providerSource: result.source,
     marketplaceDetails: result.marketplaceDetails ?? null,
     supplierLogistics: result.supplierLogistics ?? null,
+    ...(result.advertisedPrice !== null &&
+      result.advertisedPrice !== undefined &&
+      result.advertisedCurrency
+      ? {
+          advertisedPrice: result.advertisedPrice,
+          advertisedCurrency: result.advertisedCurrency,
+        }
+      : result.price !== null && result.currency
+        ? {
+            advertisedPrice: result.price,
+            advertisedCurrency: result.currency,
+          }
+        : {}),
+    ...(typeof result.advertisedPriceHigh === "number"
+      ? { advertisedPriceHigh: result.advertisedPriceHigh }
+      : {}),
     fetchedAt: provenance.fetchedAt,
     resultOrigin: provenance.resultOrigin,
     captureMode,

@@ -97,6 +97,7 @@ export const supplierSearchResultSchema = z
       (value) => value === null || /^[A-Z]{3}$/.test(value),
       "currency must be a three-letter code.",
     ),
+    advertisedPriceHigh: z.number().positive().finite().optional(),
     minimumOrderQuantity: nullableNumber(z.number().int().positive()),
     incoterm: nullableCode(20),
     productUrl: z.url().max(2_000),
@@ -114,6 +115,16 @@ export const supplierSearchResultSchema = z
         code: "custom",
         path: ["currency"],
         message: "price and currency must be provided together.",
+      });
+    }
+    if (
+      result.advertisedPriceHigh !== undefined &&
+      (result.price === null || result.advertisedPriceHigh <= result.price)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["advertisedPriceHigh"],
+        message: "advertisedPriceHigh must be greater than price.",
       });
     }
   });

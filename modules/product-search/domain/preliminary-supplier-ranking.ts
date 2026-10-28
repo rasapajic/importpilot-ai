@@ -5,6 +5,10 @@ import {
   sameTajaPriceComparisonGroup,
   tajaProductFormRank,
 } from "./taja-product-form";
+import {
+  evaluateExplicitProductConstraints,
+  explicitProductConstraintRank,
+} from "./explicit-product-constraints";
 import { evaluateTajaRequirementMatch } from "./taja-requirement-match";
 import { assessSupplierOfferQuantityPrice } from "./supplier-quantity-pricing";
 
@@ -96,6 +100,10 @@ function preliminaryScore(
       context.productQuery,
       result,
     ).scoreAdjustment;
+    score += evaluateExplicitProductConstraints(
+      context.productQuery,
+      result,
+    ).scoreAdjustment;
   }
 
   return score;
@@ -120,16 +128,23 @@ export function rankPreliminarySupplierOffers(
       const productForm = context.productQuery
         ? evaluateTajaProductForm(context.productQuery, result)
         : null;
+      const productConstraint = context.productQuery
+        ? evaluateExplicitProductConstraints(context.productQuery, result)
+        : null;
       return {
         result,
         originalIndex,
         productFormRank: productForm
           ? tajaProductFormRank(productForm.matchStatus)
           : 0,
+        constraintRank: productConstraint
+          ? explicitProductConstraintRank(productConstraint.status)
+          : 0,
         score: preliminaryScore(result, results, context),
       };
     })
     .sort((left, right) =>
+      left.constraintRank - right.constraintRank ||
       left.productFormRank - right.productFormRank ||
       right.score - left.score ||
       left.originalIndex - right.originalIndex,
