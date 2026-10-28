@@ -29,6 +29,7 @@ import type { SupplierOfferMarketplaceSupplierProfile } from "@/modules/product-
 import {
   allowGenericProductMatchClaim,
   canPresentBestChoice,
+  canPresentPreliminaryCandidate,
   evaluateExplicitProductConstraintsForQueries,
   explicitProductConstraintRank,
 } from "@/modules/product-search/domain/explicit-product-constraints";
@@ -107,6 +108,8 @@ type Copy = {
   cachedSelectionOverview: (shown: number) => string;
   liveSelectionOverview: (found: number, relevant: number, shown: number) => string;
   bestChoice: string;
+  preliminaryCandidate: string;
+  preliminaryCandidateWarning: string;
   notARecommendation: string;
   needsConfirmation: string;
   disqualifiedProduct: string;
@@ -192,10 +195,12 @@ const copy: Record<Locale, Copy> = {
     cachedSelectionOverview: (shown) => `Prikazano je ${shown} sačuvanih ponuda iz prethodne pretrage. Ovo nije ukupan broj kandidata nove pretrage.`,
     liveSelectionOverview: (found, relevant, shown) => `Pronađeno ${found} kandidata → prikazano svih ${shown} dostupnih ponuda → ${relevant} trenutno prolazi osnovnu proveru.`,
     bestChoice: "Najbolji izbor",
+    preliminaryCandidate: "Najbolji preliminarni kandidat",
+    preliminaryCandidateWarning: "Ponuda, transport, carina i porezi još nisu provereni. Ovo nije konačan izbor.",
     notARecommendation: "Nije potvrđena preporuka",
     needsConfirmation: "Potrebna potvrda dobavljača. Tip proizvoda još nije dokazan.",
     disqualifiedProduct: "Ne odgovara zahtevu. Progresivna, podesiva ili drugačija dioptrija ne može biti najbolji izbor.",
-    selectionCriteria: "Sve dostupne ponude su prikazane. Najbolji izbor se prikazuje samo kada proizvod dokazano odgovara zahtevu i kada su podaci dovoljno pouzdani. Rezultat i procenat pouzdanosti nisu sami po sebi preporuka.",
+    selectionCriteria: "Sve dostupne ponude su prikazane. Najbolji izbor postoji tek kada su nabavna cena i ukupan trošak uvoza potvrđeni. Pre toga prvi kandidat može biti samo preliminaran.",
     whySelected: "Zašto je izdvojena",
     reasonProductMatch: "Proizvod odgovara traženom tipu ili specifikaciji.",
     reasonProductLikely: "Ponuda je relevantna za traženi proizvod, ali deo specifikacije još treba potvrditi.",
@@ -277,10 +282,12 @@ const copy: Record<Locale, Copy> = {
     cachedSelectionOverview: (shown) => `${shown} gespeicherte Angebote aus der vorherigen Suche werden angezeigt. Dies ist nicht die Gesamtzahl der Kandidaten einer neuen Suche.`,
     liveSelectionOverview: (found, relevant, shown) => `${found} Kandidaten gefunden → alle ${shown} verfügbaren Angebote werden angezeigt → ${relevant} bestehen derzeit die Grundprüfung.`,
     bestChoice: "Beste Wahl",
+    preliminaryCandidate: "Bester vorläufiger Kandidat",
+    preliminaryCandidateWarning: "Angebot, Transport, Zoll und Steuern sind noch nicht geprüft. Dies ist keine endgültige Auswahl.",
     notARecommendation: "Keine bestätigte Empfehlung",
     needsConfirmation: "Lieferantenbestätigung erforderlich. Der Produkttyp ist noch nicht nachgewiesen.",
     disqualifiedProduct: "Entspricht der Anfrage nicht. Progressive, verstellbare oder abweichende Dioptrien können nicht die beste Wahl sein.",
-    selectionCriteria: "Alle verfügbaren Angebote werden angezeigt. Die beste Wahl erscheint nur, wenn das Produkt nachweislich zur Anfrage passt und die Daten ausreichend zuverlässig sind. Punktzahl und Zuverlässigkeit sind allein keine Empfehlung.",
+    selectionCriteria: "Alle verfügbaren Angebote werden angezeigt. Die endgültige beste Wahl gibt es erst, wenn Einkaufspreis und Landed Cost bestätigt sind. Davor kann der erste Kandidat nur vorläufig sein.",
     whySelected: "Warum ausgewählt",
     reasonProductMatch: "Das Produkt entspricht dem gesuchten Typ oder der Spezifikation.",
     reasonProductLikely: "Das Angebot ist relevant, ein Teil der Spezifikation muss jedoch noch bestätigt werden.",
@@ -362,10 +369,12 @@ const copy: Record<Locale, Copy> = {
     cachedSelectionOverview: (shown) => `Showing ${shown} saved offers from the previous search. This is not the total candidate count for a new search.`,
     liveSelectionOverview: (found, relevant, shown) => `${found} candidates found → all ${shown} available offers are displayed → ${relevant} currently pass the basic check.`,
     bestChoice: "Best choice",
+    preliminaryCandidate: "Best preliminary candidate",
+    preliminaryCandidateWarning: "The offer, transport, duties, and taxes are still unverified. This is not a final selection.",
     notARecommendation: "Not a confirmed recommendation",
     needsConfirmation: "Supplier confirmation is required. The product type is not proven yet.",
     disqualifiedProduct: "Does not match the request. Progressive, adjustable, or out-of-range diopters cannot be the best choice.",
-    selectionCriteria: "All available offers are shown. Best choice appears only when the product is proven to match the request and the data are reliable enough. The score and confidence percentage are not themselves a recommendation.",
+    selectionCriteria: "All available offers are shown. Best choice appears only after the purchase price and landed cost are confirmed. Before that, the first candidate can only be preliminary.",
     whySelected: "Why it was selected",
     reasonProductMatch: "The product matches the requested type or specification.",
     reasonProductLikely: "The offer is relevant, but part of the specification still needs confirmation.",
@@ -921,12 +930,16 @@ export function SimpleSupplierOfferSearch({
       explicitProductConstraintRank(left.suitability.status) - explicitProductConstraintRank(right.suitability.status) ||
       (left.analysis?.rank ?? left.index + 100) - (right.analysis?.rank ?? right.index + 100),
     );
-  const bestChoiceVisible = visible[0]
-    ? canPresentBestChoice({
+  const topChoiceInput = visible[0]
+    ? {
         status: visible[0].suitability.status,
         confidenceScore: visible[0].analysis?.confidenceScore ?? null,
         finalEligible: visible[0].analysis?.finalEligible ?? false,
-      })
+      }
+    : null;
+  const bestChoiceVisible = topChoiceInput ? canPresentBestChoice(topChoiceInput) : false;
+  const preliminaryCandidateVisible = topChoiceInput
+    ? canPresentPreliminaryCandidate(topChoiceInput)
     : false;
   const hasDeferredSupplierRisk = visible.some(({ result, analysis }) =>
     (!analysis || analysis.supplierRiskLevel === "UNKNOWN") &&
@@ -1065,6 +1078,7 @@ export function SimpleSupplierOfferSearch({
             const confirmationText = supplierConfirmationCopy(locale);
             const reasons = selectionReasons(result, analysis, quantity, text, constraintQueries);
             const showBestChoice = index === 0 && bestChoiceVisible;
+            const showPreliminaryCandidate = index === 0 && preliminaryCandidateVisible;
             const showAdvertisedPrice = pricePresentation.advertisedPrice !== null &&
               pricePresentation.advertisedCurrency !== null &&
               (
@@ -1087,7 +1101,13 @@ export function SimpleSupplierOfferSearch({
                     </a>
                   </p>
                   {showBestChoice && <span className="best-choice-badge">{text.bestChoice}</span>}
-                  {index === 0 && !showBestChoice && (
+                  {showPreliminaryCandidate && (
+                    <>
+                      <span className="best-choice-badge best-choice-badge-pending">{text.preliminaryCandidate}</span>
+                      <p className="warning-text">{text.preliminaryCandidateWarning}</p>
+                    </>
+                  )}
+                  {index === 0 && !showBestChoice && !showPreliminaryCandidate && (
                     <span className="best-choice-badge best-choice-badge-pending">{text.notARecommendation}</span>
                   )}
                   {suitability.status === "DISQUALIFIED" && (

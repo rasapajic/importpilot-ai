@@ -6,6 +6,7 @@ import {
 import {
   allowGenericProductMatchClaim,
   canPresentBestChoice,
+  canPresentPreliminaryCandidate,
   evaluateExplicitProductConstraints,
 } from "../../modules/product-search/domain/explicit-product-constraints";
 import { formatMissingDataLabels } from "../../modules/product-search/domain/taja-missing-data-copy";
@@ -114,11 +115,51 @@ describe("explicit reading-glass constraints", () => {
       confidenceScore: 24,
       finalEligible: false,
     })).toBe(false);
-    expect(canPresentBestChoice({
-      status: "COMPATIBLE",
+  });
+
+  it("withholds the final best-choice label when confidence is high but landed cost is not eligible", () => {
+    const listingOnly = {
+      status: "COMPATIBLE" as const,
       confidenceScore: 60,
       finalEligible: false,
+    };
+
+    expect(canPresentBestChoice(listingOnly)).toBe(false);
+    expect(canPresentPreliminaryCandidate(listingOnly)).toBe(true);
+    expect(canPresentBestChoice({
+      status: "COMPATIBLE",
+      confidenceScore: 90,
+      finalEligible: true,
     })).toBe(true);
+    expect(canPresentPreliminaryCandidate({
+      status: "COMPATIBLE",
+      confidenceScore: 90,
+      finalEligible: true,
+    })).toBe(false);
+    expect(canPresentPreliminaryCandidate({
+      status: "NEEDS_CONFIRMATION",
+      confidenceScore: 80,
+      finalEligible: false,
+    })).toBe(false);
+  });
+
+  it("reads an explicit Serbian Cyrillic non-progressive request", () => {
+    const cyrillicRequest = "наочаре за читање +1.00 до +3.50, фиксне диоптрије, није прогресивно, 1000 ком";
+
+    expect(evaluateExplicitProductConstraints(
+      cyrillicRequest,
+      result(
+        "Adjustable +4.00 Progressive Multifocal Reading Glasses",
+        "https://wzouyuan.en.made-in-china.com/product/example.html",
+      ),
+    ).status).toBe("DISQUALIFIED");
+    expect(evaluateExplicitProductConstraints(
+      cyrillicRequest,
+      result(
+        "Wholesale reading glasses model 18107",
+        "https://zlineyewear.en.made-in-china.com/product/example.html",
+      ),
+    ).status).toBe("NEEDS_CONFIRMATION");
   });
 
   it("does not let a default product-form match claim compatibility", () => {

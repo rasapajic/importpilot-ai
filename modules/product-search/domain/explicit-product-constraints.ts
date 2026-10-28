@@ -34,6 +34,43 @@ const STATUS_PRIORITY: Record<ExplicitProductConstraintStatus, number> = {
   NOT_APPLICABLE: 0,
 };
 
+const SERBIAN_CYRILLIC_TO_LATIN: Record<string, string> = {
+  а: "a",
+  б: "b",
+  в: "v",
+  г: "g",
+  д: "d",
+  ђ: "dj",
+  е: "e",
+  ж: "z",
+  з: "z",
+  и: "i",
+  ј: "j",
+  к: "k",
+  л: "l",
+  љ: "lj",
+  м: "m",
+  н: "n",
+  њ: "nj",
+  о: "o",
+  п: "p",
+  р: "r",
+  с: "s",
+  т: "t",
+  ћ: "c",
+  у: "u",
+  ф: "f",
+  х: "h",
+  ц: "c",
+  ч: "c",
+  џ: "dz",
+  ш: "s",
+};
+
+function transliterateSerbianCyrillic(value: string) {
+  return [...value].map((char) => SERBIAN_CYRILLIC_TO_LATIN[char.toLowerCase()] ?? char).join("");
+}
+
 const READING_GLASSES_QUERY =
   /\b(?:reading\s+glass\w*|readers|presbyopia|lesebrillen?|naocare\s+za\s+citanje|stakla\s+za\s+citanje)\b/;
 const OPTICAL_PRODUCT =
@@ -57,7 +94,7 @@ function hasConflictingLens(text: string) {
 }
 
 function normalize(value: string) {
-  return value
+  return transliterateSerbianCyrillic(value)
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
@@ -176,22 +213,33 @@ export function explicitProductConstraintRank(status: ExplicitProductConstraintS
   return 0;
 }
 
+function blocksRecommendation(status: ExplicitProductConstraintStatus) {
+  return status === ExplicitProductConstraintStatuses.DISQUALIFIED ||
+    status === ExplicitProductConstraintStatuses.NEEDS_CONFIRMATION;
+}
+
+/**
+ * "Najbolji izbor" is a final selection. It requires a confirmed landed-cost
+ * result. High confidence in a listing, including a compatible lens, is not
+ * enough while the supplier price and import costs are still unverified.
+ */
 export function canPresentBestChoice(input: {
   status: ExplicitProductConstraintStatus;
   confidenceScore: number | null;
   finalEligible: boolean;
 }) {
-  if (
-    input.status === ExplicitProductConstraintStatuses.DISQUALIFIED ||
-    input.status === ExplicitProductConstraintStatuses.NEEDS_CONFIRMATION
-  ) {
-    return false;
-  }
-  const confidence = input.confidenceScore ?? 0;
-  if (input.status === ExplicitProductConstraintStatuses.COMPATIBLE) {
-    return input.finalEligible || confidence >= 60;
-  }
-  return input.finalEligible && confidence >= 60;
+  if (blocksRecommendation(input.status) || !input.finalEligible) return false;
+  return (input.confidenceScore ?? 0) >= 60;
+}
+
+export function canPresentPreliminaryCandidate(input: {
+  status: ExplicitProductConstraintStatus;
+  confidenceScore: number | null;
+  finalEligible: boolean;
+}) {
+  if (canPresentBestChoice(input) || blocksRecommendation(input.status)) return false;
+  return input.status === ExplicitProductConstraintStatuses.COMPATIBLE ||
+    input.status === ExplicitProductConstraintStatuses.NOT_APPLICABLE;
 }
 
 export function allowGenericProductMatchClaim(input: {

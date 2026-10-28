@@ -149,7 +149,9 @@ describe("ImportPilot 1.0 simple supplier results", () => {
     expect(rankingSource).not.toContain('matchStatus !== "MISMATCH"');
     expect(rankingSource).not.toContain(".slice(0, 10)");
     expect(resultsSource).toContain('bestChoice: "Najbolji izbor"');
+    expect(resultsSource).toContain('preliminaryCandidate: "Najbolji preliminarni kandidat"');
     expect(resultsSource).toContain("canPresentBestChoice");
+    expect(resultsSource).toContain("canPresentPreliminaryCandidate");
     expect(resultsSource).toContain('showBestChoice && <span className="best-choice-badge">');
     expect(resultsSource).toContain("formatMissingDataLabels(analysis.missingData, locale)");
     expect(resultsSource).not.toContain("analysis.missingData.join(");

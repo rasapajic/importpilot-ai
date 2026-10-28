@@ -10,6 +10,7 @@ import { useEffect, useState } from "react";
 
 import { CostCalculatorForm } from "@/components/costs/cost-calculator-form";
 import { PreliminaryOfferComparison } from "@/components/projects/preliminary-offer-comparison";
+import { readStoredMarketplaceDetails } from "@/modules/product-search/domain/preliminary-offer-comparison";
 import { useI18n } from "@/components/i18n/i18n-provider";
 import { CommercialTermsForm } from "@/components/offers/commercial-terms-form";
 import { ProfitabilityCheckControl } from "@/components/projects/profitability-check-control";
@@ -609,6 +610,7 @@ export function SimpleProfitabilityPanel({
                   advertisedPriceHigh,
                   writtenQuoteConfirmed: Boolean(transferredSupplierQuote(metadata)),
                   productQuery: comparisonProductQuery(metadata, projectName),
+                  marketplaceDetails: readStoredMarketplaceDetails(metadata),
                 };
               })}
             />

@@ -2,6 +2,10 @@ import {
   evaluateExplicitProductConstraintsForQueries,
   type ExplicitProductConstraintStatus,
 } from "./explicit-product-constraints";
+import {
+  supplierOfferMarketplaceDetailsSchema,
+  type SupplierOfferMarketplaceDetails,
+} from "./marketplace-product-details";
 
 export type PreliminaryComparisonPriceEvidence =
   | "CONFIRMED_QUOTE"
@@ -24,6 +28,7 @@ export type PreliminaryComparisonInput = {
   advertisedPriceHigh: number | null;
   writtenQuoteConfirmed: boolean;
   productQuery: string;
+  marketplaceDetails?: SupplierOfferMarketplaceDetails | null;
 };
 
 export type PreliminaryComparisonRow = {
@@ -42,6 +47,14 @@ export type PreliminaryComparisonRow = {
   purchasePriceConfirmed: boolean;
   landedCostAvailable: false;
 };
+
+export function readStoredMarketplaceDetails(metadata: unknown) {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  const parsed = supplierOfferMarketplaceDetailsSchema.safeParse(
+    (metadata as Record<string, unknown>).marketplaceDetails,
+  );
+  return parsed.success ? parsed.data : null;
+}
 
 function positive(value: number | null) {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
@@ -91,7 +104,10 @@ export function buildPreliminaryOfferComparison(
       incoterm: offer.incoterm,
       suitability: evaluateExplicitProductConstraintsForQueries(
         [offer.productQuery],
-        { title: offer.title ?? offer.supplierName, marketplaceDetails: null },
+        {
+          title: offer.title ?? offer.supplierName,
+          marketplaceDetails: offer.marketplaceDetails ?? null,
+        },
       ).status,
       priceEvidence,
       priceLow,

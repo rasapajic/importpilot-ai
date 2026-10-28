@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { buildPreliminaryOfferComparison } from "../../modules/product-search/domain/preliminary-offer-comparison";
+import { evaluateExplicitProductConstraints } from "../../modules/product-search/domain/explicit-product-constraints";
+import { supplierOfferMarketplaceDetailsSchema } from "../../modules/product-search/domain/marketplace-product-details";
+import {
+  buildPreliminaryOfferComparison,
+  readStoredMarketplaceDetails,
+} from "../../modules/product-search/domain/preliminary-offer-comparison";
 import { presentSupplierOfferPrice } from "../../modules/product-search/domain/supplier-quantity-pricing";
 import type { SupplierOfferSearchResult } from "../../modules/product-search/domain/search";
 
@@ -87,6 +92,56 @@ describe("preliminary offer comparison", () => {
       purchasePriceConfirmed: false,
       landedCostAvailable: false,
     });
+  });
+
+  it("keeps page-evidence suitability consistent between search and comparison", () => {
+    const details = supplierOfferMarketplaceDetailsSchema.parse({
+      adapter: "made-in-china-product-page-v2",
+      evidence: "PRODUCT_PAGE",
+      priceTiers: [],
+      attributes: [{
+        name: "Lens type",
+        value: "single vision fixed diopter +1.00 +2.00 +3.50",
+        category: "PRODUCT_SPECIFICATION",
+      }],
+      variants: [],
+      packaging: null,
+    });
+    const offer = {
+      id: "fixed",
+      supplierName: "Readsun",
+      title: "Wholesale reading glasses",
+      productUrl: "https://readsunoptical.en.made-in-china.com/product/example.html",
+      supplierCountry: "CN",
+      listedMoq: 200,
+      incoterm: null,
+      unitPrice: null,
+      currency: null,
+      advertisedPrice: null,
+      advertisedCurrency: null,
+      advertisedPriceHigh: null,
+      writtenQuoteConfirmed: false,
+      productQuery: REQUEST,
+      marketplaceDetails: details,
+    };
+    const fromSearch = evaluateExplicitProductConstraints(REQUEST, {
+      title: offer.title,
+      marketplaceDetails: details,
+    });
+    const [fromComparison] = buildPreliminaryOfferComparison([offer]);
+    const [titleOnly] = buildPreliminaryOfferComparison([{
+      ...offer,
+      marketplaceDetails: null,
+    }]);
+    const stored = readStoredMarketplaceDetails({ marketplaceDetails: details });
+
+    expect(fromSearch.status).toBe("COMPATIBLE");
+    expect(fromComparison?.suitability).toBe(fromSearch.status);
+    expect(titleOnly?.suitability).toBe("NEEDS_CONFIRMATION");
+    expect(buildPreliminaryOfferComparison([{
+      ...offer,
+      marketplaceDetails: stored,
+    }])[0]?.suitability).toBe("COMPATIBLE");
   });
 });
 
