@@ -57,3 +57,38 @@
   margin: 0;
   overflow-wrap: anywhere;
 }
+
+.gmailSection {
+  border-top: 1px solid #dce7e1;
+  padding: 1.25rem 0 1.75rem;
+}
+
+.gmailSection h2 {
+  font-size: 1.35rem;
+  margin-bottom: 0.5rem;
+}
+
+.gmailSection p {
+  color: #49665b;
+}
+
+.gmailSection button {
+  background: #fff;
+  border: 1px solid #13754c;
+  border-radius: 0.55rem;
+  color: #09663d;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  padding: 0.65rem 0.85rem;
+}
+
+.gmailConnection {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: space-between;
+  margin: 0.8rem 0;
+  overflow-wrap: anywhere;
+}
