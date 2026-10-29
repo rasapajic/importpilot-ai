@@ -156,4 +156,4 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
       - name: Supplier inbox tests
-        run: npx vitest run tests/unit/supplier-inbox.test.ts tests/unit/supplier-inbox-view.test.tsx tests/integration/supplier-inbox.integration.test.ts --reporter=dot
+        run: npx vitest run tests/unit/supplier-inbox.test.ts tests/unit/supplier-inbox-view.test.tsx tests/unit/ses-receiving-preflight.test.ts tests/integration/supplier-inbox.integration.test.ts tests/integration/ses-receiving-preflight.integration.test.ts --reporter=dot
