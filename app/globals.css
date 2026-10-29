@@ -1616,3 +1616,33 @@ details.workflow-step > summary::-webkit-details-marker {
 .preliminary-import-estimate > p:last-child {
   margin-bottom: 0;
 }
+
+.supplier-inbox-link {
+  margin: 0.4rem 0 0;
+}
+
+.supplier-inbox-banner,
+.supplier-inbox p {
+  line-height: 1.5;
+}
+
+.supplier-inbox-columns {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.supplier-inbox pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.supplier-inbox-thread + .supplier-inbox-thread {
+  margin-top: 1rem;
+}
+
+@media (max-width: 760px) {
+  .supplier-inbox-columns {
+    grid-template-columns: 1fr;
+  }
+}

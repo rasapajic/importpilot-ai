@@ -19,6 +19,7 @@ import { getServerLocale } from "@/modules/i18n/server";
 import { getStatusLabel, translateText } from "@/modules/i18n/translations";
 import { loadCachedProjectSupplierOffers } from "@/modules/product-search/application/product-search-service";
 import { getProject } from "@/modules/projects/application/project-service";
+import { inboxCopy } from "@/modules/supplier-inbox/domain/copy";
 import { canDeleteEmptySearch } from "@/modules/projects/domain/empty-search-deletion";
 import {
   getProjectWorkflow,
@@ -157,6 +158,9 @@ export default async function ProjectPage({
               : getStatusLabel(project.status, locale)}
           </p>
           <h1>{projectDisplayName}</h1>
+          <p className="supplier-inbox-link">
+            <a href={`/projects/${project.id}/inbox`}>{inboxCopy(locale).openInbox}</a>
+          </p>
         </div>
       </header>
 

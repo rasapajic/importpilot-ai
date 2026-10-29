@@ -131,6 +131,11 @@ if (billingConfigured) {
   }
 }
 
+const inboundMailFlag = process.env.JAKOV360_INBOUND_MAIL_ENABLED?.trim() ?? "";
+if (inboundMailFlag === "true") {
+  problems.push("JAKOV360_INBOUND_MAIL_ENABLED: must stay false until a separate production approval");
+}
+
 const uniqueProblems = [...new Set(problems)];
 if (uniqueProblems.length > 0) {
   console.error("IMPORTPILOT_PRODUCTION_CONFIG BLOCKED");
