@@ -1,6 +1,6 @@
 # JAKOV360 M2 — redacted snapshot, original retention, and vendor comparison
 
-- Status: design only. No vendor is selected.
+- Status: design note for the synthetic inbox. The owner later selected Amazon SES receiving as the future technical direction. That selection is preparation only and is recorded in `docs/architecture/JAKOV360_M2_SES_RECEIVING_PREFLIGHT.md`. It does not purchase SES, change this snapshot, or turn receiving on.
 - Date: 2026-10-29
 - Scope: synthetic Supplier Inbox draft (PR #182). No DNS, MX, contract, secret, privacy publish, or live mail.
 
