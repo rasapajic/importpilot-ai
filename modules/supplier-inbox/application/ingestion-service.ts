@@ -11,6 +11,7 @@ import {
   safeFilename,
   syntheticMalwareScan,
 } from "@/modules/supplier-inbox/domain/attachment-policy";
+import { buildRedactedSyntheticSnapshot } from "@/modules/supplier-inbox/domain/evidence";
 import { isInboundMailEnabled } from "@/modules/supplier-inbox/domain/feature-flag";
 import { buildClarificationFollowUp } from "@/modules/supplier-inbox/domain/follow-up";
 import { translateToSerbianFixture } from "@/modules/supplier-inbox/domain/fixture-translation";
@@ -22,7 +23,9 @@ import {
   hashReplyToken,
   parseReplyRecipient,
   redactSecrets,
+  replyRecipientRejection,
   sha256Hex,
+  untrustedReplyTokenCandidate,
 } from "@/modules/supplier-inbox/domain/reply-token";
 import { sanitizeInboundText } from "@/modules/supplier-inbox/domain/sanitize";
 import {
@@ -47,6 +50,10 @@ export type SyntheticHandlerOptions = {
   now?: Date;
   logger?: InboundLogger;
   maxFailedAttempts?: number;
+  /** Test-only latch. Awaited inside the parse transaction after the row lock. */
+  pauseAfterParseLock?: Promise<void>;
+  /** Test-only. Called once this delivery holds the parse lock and will write. */
+  onParseLockAcquired?: () => void;
 };
 
 function uniqueViolation(error: unknown): boolean {
@@ -69,20 +76,24 @@ function emptyResult(httpStatus: SyntheticHandlerResult["httpStatus"]): Syntheti
   };
 }
 
-function snapshot(envelope: SyntheticInboundEnvelope, secrets: string[]) {
-  const json = redactSecrets(JSON.stringify({
-    from: envelope.fromAddress,
-    to: envelope.toAddresses,
+function snapshot(
+  envelope: SyntheticInboundEnvelope,
+  secrets: string[],
+  configuredInboundDomain: boolean,
+) {
+  return buildRedactedSyntheticSnapshot({
+    fromAddress: envelope.fromAddress,
+    toAddresses: envelope.toAddresses,
     subject: envelope.subject,
     receivedAt: envelope.receivedAt,
     providerMessageId: envelope.providerMessageId,
-    inReplyTo: envelope.inReplyTo ?? null,
-    references: envelope.references ?? [],
-    text: envelope.textBody,
-    html: envelope.htmlBody ?? null,
-    untrustedAuthenticationResultsHeader: envelope.rawAuthenticationResults ?? null,
-  }), secrets);
-  return { json, sha256: sha256Hex(json), key: `db:supplier-inbox/synthetic/${sha256Hex(json)}` };
+    inReplyTo: envelope.inReplyTo,
+    references: envelope.references,
+    textBody: envelope.textBody,
+    htmlBody: envelope.htmlBody,
+    rawAuthenticationResults: envelope.rawAuthenticationResults,
+    configuredInboundDomain,
+  }, secrets);
 }
 
 function envelopeProblem(envelope: SyntheticInboundEnvelope): SyntheticHandlerResult["httpStatus"] | null {
@@ -113,6 +124,8 @@ export async function handleSyntheticInbound(
     log(options.logger, [], "inbound mail disabled");
     return emptyResult(403);
   }
+  // In-process fixture marker, not cryptographic webhook authentication.
+  // The envelope, its From, subject, and token are not consulted for this check.
   if (!isSyntheticProviderContext(context)) {
     log(options.logger, [], "inbound provider authentication failed");
     return emptyResult(401);
@@ -122,16 +135,23 @@ export async function handleSyntheticInbound(
   if (problem) return emptyResult(problem);
   const token = parseReplyRecipient(envelope.recipient);
   if (!token) {
-    return quarantine(envelope, "UNKNOWN_TOKEN", null);
+    const rejection = replyRecipientRejection(envelope.recipient);
+    const candidate = untrustedReplyTokenCandidate(envelope.recipient);
+    return quarantine(
+      envelope,
+      rejection === "UNCONFIGURED_DOMAIN" ? "UNCONFIGURED_DOMAIN" : "UNKNOWN_TOKEN",
+      candidate ? [candidate] : null,
+      false,
+    );
   }
 
   const tokenRow = await prisma.supplierInboxReplyToken.findUnique({
     where: { tokenHash: hashReplyToken(token) },
     include: { thread: true },
   });
-  if (!tokenRow) return quarantine(envelope, "UNKNOWN_TOKEN", [token]);
+  if (!tokenRow) return quarantine(envelope, "UNKNOWN_TOKEN", [token], true);
   if (tokenRow.status !== "ACTIVE") {
-    const result = await quarantine(envelope, "REVOKED_TOKEN", [token]);
+    const result = await quarantine(envelope, "REVOKED_TOKEN", [token], true);
     if (!result.duplicate) {
       await prisma.supplierInboxEvent.create({
         data: {
@@ -154,7 +174,7 @@ export async function handleSyntheticInbound(
   if (options.failDuringParse && !stored.duplicate) {
     return { ...stored, httpStatus: 500 };
   }
-  await ensureParsed(stored.messageId as string, options.now ?? new Date());
+  await ensureParsed(stored.messageId as string, options.now ?? new Date(), options);
   return stored;
 }
 
@@ -194,8 +214,9 @@ async function recordOutage(
 
 async function quarantine(
   envelope: SyntheticInboundEnvelope,
-  reason: "UNKNOWN_TOKEN" | "REVOKED_TOKEN",
+  reason: "UNKNOWN_TOKEN" | "REVOKED_TOKEN" | "UNCONFIGURED_DOMAIN",
   secrets: string[] | null,
+  configuredInboundDomain: boolean,
 ): Promise<SyntheticHandlerResult> {
   const tokenSecrets = secrets ?? [];
   const receivedAt = new Date(envelope.receivedAt);
@@ -211,7 +232,7 @@ async function quarantine(
       threadId: null,
     };
   }
-  const raw = snapshot(envelope, tokenSecrets);
+  const raw = snapshot(envelope, tokenSecrets, configuredInboundDomain);
   const originalText = redactSecrets(envelope.textBody, tokenSecrets);
   const sanitizedText = sanitizeInboundText(redactSecrets(`${envelope.textBody}\n${envelope.htmlBody ?? ""}`, tokenSecrets));
   try {
@@ -284,7 +305,7 @@ async function storeOnThread(
       threadId: existing.threadId,
     };
   }
-  const raw = snapshot(envelope, [token]);
+  const raw = snapshot(envelope, [token], true);
   const originalText = redactSecrets(envelope.textBody, [token]);
   const sanitizedText = sanitizeInboundText(redactSecrets(`${envelope.textBody}\n${envelope.htmlBody ?? ""}`, [token]));
   const senderTrust = resolveSenderTrust({
@@ -375,7 +396,11 @@ async function storeOnThread(
   }
 }
 
-export async function ensureParsed(messageId: string, now = new Date()): Promise<void> {
+export async function ensureParsed(
+  messageId: string,
+  now = new Date(),
+  options: Pick<SyntheticHandlerOptions, "pauseAfterParseLock" | "onParseLockAcquired"> = {},
+): Promise<void> {
   const message = await prisma.supplierInboundMessage.findUnique({
     where: { id: messageId },
     include: { attachments: true, thread: true },
@@ -398,99 +423,113 @@ export async function ensureParsed(messageId: string, now = new Date()): Promise
   const translation = translateToSerbianFixture(message.originalText);
   const status = extraction.needsClarification ? "NEEDS_CLARIFICATION" : "PARSED";
 
-  await prisma.$transaction(async (tx) => {
-    const current = await tx.supplierInboundMessage.findUnique({
+  try {
+    await prisma.$transaction(async (tx) => {
+      const locked = await tx.$queryRaw<Array<{ parse_completed_at: Date | null }>>`
+        SELECT parse_completed_at
+        FROM supplier_inbound_messages
+        WHERE id = CAST(${message.id} AS uuid)
+        FOR UPDATE
+      `;
+      if (!locked[0] || locked[0].parse_completed_at) return;
+      options.onParseLockAcquired?.();
+      if (options.pauseAfterParseLock) await options.pauseAfterParseLock;
+      await tx.supplierMessageTranslation.create({
+        data: {
+          messageId: message.id,
+          organizationId: message.organizationId as string,
+          locale: "sr",
+          translatedText: translation.text,
+          modelId: translation.modelId,
+        },
+      });
+      for (const item of extraction.fields) {
+        await tx.supplierQuoteExtraction.create({
+          data: {
+            threadId: message.threadId as string,
+            messageId: message.id,
+            organizationId: message.organizationId as string,
+            fieldKey: item.fieldKey,
+            valueJson: item.value as Prisma.InputJsonValue,
+            confidence: item.confidence,
+            citationSnippet: item.snippet,
+            citationAttachmentId: item.attachmentId,
+            citationPage: item.page,
+            flag: item.flag,
+            reviewStatus: "UNREVIEWED",
+          },
+        });
+      }
+      if (extraction.needsClarification) {
+        const existingFollowUp = await tx.supplierOutboundMessage.findFirst({
+          where: { threadId: message.threadId as string, kind: "FOLLOW_UP" },
+          select: { id: true },
+        });
+        if (!existingFollowUp) {
+          const rfq = await tx.supplierOutboundMessage.findFirst({
+            where: { threadId: message.threadId as string, kind: "RFQ" },
+          });
+          const draft = buildClarificationFollowUp({
+            supplierName: message.thread?.supplierName ?? "supplier",
+            fromAddress: rfq?.fromAddress ?? "inbox@example.test",
+            toAddress: rfq?.toAddress ?? message.fromAddress,
+            replyTokenHash: message.thread?.replyTokenHash ?? "",
+            conflicts: extraction.fields.filter((item) => item.flag !== "NONE").map((item) => `${item.fieldKey} is ${item.flag}`),
+          });
+          await tx.supplierOutboundMessage.create({
+            data: {
+              organizationId: message.organizationId as string,
+              threadId: message.threadId as string,
+              authorUserId: message.thread?.createdByUserId as string,
+              kind: "FOLLOW_UP",
+              status: "DRAFT",
+              fromAddress: rfq?.fromAddress ?? "inbox@example.test",
+              toAddress: rfq?.toAddress ?? message.fromAddress,
+              replyTokenHash: message.thread?.replyTokenHash ?? "",
+              subject: draft.subject,
+              body: draft.body,
+              contentHash: draft.contentHash,
+            },
+          });
+          await tx.supplierInboxEvent.create({
+            data: {
+              organizationId: message.organizationId,
+              threadId: message.threadId,
+              type: "FOLLOW_UP_DRAFTED",
+              metadata: { summary: "Clarification draft created. It was not sent." },
+            },
+          });
+        }
+      }
+      await tx.supplierInboundMessage.update({
+        where: { id: message.id },
+        data: { parseCompletedAt: now },
+      });
+      await tx.supplierInboxThread.update({
+        where: { id: message.threadId as string },
+        data: { status },
+      });
+      await tx.supplierInboxEvent.create({
+        data: {
+          organizationId: message.organizationId,
+          threadId: message.threadId,
+          type: status === "NEEDS_CLARIFICATION" ? "NEEDS_CLARIFICATION" : "PARSED",
+          metadata: {
+            summary: status === "NEEDS_CLARIFICATION"
+              ? "Parsed quote needs clarification. No monetary calculation was changed."
+              : "Parsed quote is unreviewed. No monetary calculation was changed.",
+            extractor: extraction.modelId,
+          },
+        },
+      });
+    }, { maxWait: 10_000, timeout: 20_000 });
+  } catch (error) {
+    if (!uniqueViolation(error)) throw error;
+    const current = await prisma.supplierInboundMessage.findUnique({
       where: { id: message.id },
       select: { parseCompletedAt: true },
     });
     if (current?.parseCompletedAt) return;
-    await tx.supplierMessageTranslation.create({
-      data: {
-        messageId: message.id,
-        organizationId: message.organizationId as string,
-        locale: "sr",
-        translatedText: translation.text,
-        modelId: translation.modelId,
-      },
-    });
-    for (const item of extraction.fields) {
-      await tx.supplierQuoteExtraction.create({
-        data: {
-          threadId: message.threadId as string,
-          messageId: message.id,
-          organizationId: message.organizationId as string,
-          fieldKey: item.fieldKey,
-          valueJson: item.value as Prisma.InputJsonValue,
-          confidence: item.confidence,
-          citationSnippet: item.snippet,
-          citationAttachmentId: item.attachmentId,
-          citationPage: item.page,
-          flag: item.flag,
-          reviewStatus: "UNREVIEWED",
-        },
-      });
-    }
-    if (extraction.needsClarification) {
-      const existingFollowUp = await tx.supplierOutboundMessage.findFirst({
-        where: { threadId: message.threadId as string, kind: "FOLLOW_UP" },
-        select: { id: true },
-      });
-      if (!existingFollowUp) {
-        const rfq = await tx.supplierOutboundMessage.findFirst({
-          where: { threadId: message.threadId as string, kind: "RFQ" },
-        });
-        const draft = buildClarificationFollowUp({
-          supplierName: message.thread?.supplierName ?? "supplier",
-          fromAddress: rfq?.fromAddress ?? "inbox@example.test",
-          toAddress: rfq?.toAddress ?? message.fromAddress,
-          replyTokenHash: message.thread?.replyTokenHash ?? "",
-          conflicts: extraction.fields.filter((item) => item.flag !== "NONE").map((item) => `${item.fieldKey} is ${item.flag}`),
-        });
-        await tx.supplierOutboundMessage.create({
-          data: {
-            organizationId: message.organizationId as string,
-            threadId: message.threadId as string,
-            authorUserId: message.thread?.createdByUserId as string,
-            kind: "FOLLOW_UP",
-            status: "DRAFT",
-            fromAddress: rfq?.fromAddress ?? "inbox@example.test",
-            toAddress: rfq?.toAddress ?? message.fromAddress,
-            replyTokenHash: message.thread?.replyTokenHash ?? "",
-            subject: draft.subject,
-            body: draft.body,
-            contentHash: draft.contentHash,
-          },
-        });
-        await tx.supplierInboxEvent.create({
-          data: {
-            organizationId: message.organizationId,
-            threadId: message.threadId,
-            type: "FOLLOW_UP_DRAFTED",
-            metadata: { summary: "Clarification draft created. It was not sent." },
-          },
-        });
-      }
-    }
-    await tx.supplierInboundMessage.update({
-      where: { id: message.id },
-      data: { parseCompletedAt: now },
-    });
-    await tx.supplierInboxThread.update({
-      where: { id: message.threadId as string },
-      data: { status },
-    });
-    await tx.supplierInboxEvent.create({
-      data: {
-        organizationId: message.organizationId,
-        threadId: message.threadId,
-        type: status === "NEEDS_CLARIFICATION" ? "NEEDS_CLARIFICATION" : "PARSED",
-        metadata: {
-          summary: status === "NEEDS_CLARIFICATION"
-            ? "Parsed quote needs clarification. No monetary calculation was changed."
-            : "Parsed quote is unreviewed. No monetary calculation was changed.",
-          extractor: extraction.modelId,
-        },
-      },
-    });
-  });
+    throw error;
+  }
 }

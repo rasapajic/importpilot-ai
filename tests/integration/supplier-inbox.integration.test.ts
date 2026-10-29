@@ -1,10 +1,13 @@
 import { OrganizationRole } from "@prisma/client";
+import { NextRequest } from "next/server";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { SESSION_COOKIE } from "@/modules/auth/domain/constants";
 import { syntheticPdf } from "@/modules/supplier-inbox/domain/attachment-policy";
+import { REDACTED_SYNTHETIC_EVIDENCE_CLASS, REDACTED_SYNTHETIC_OBJECT_PREFIX } from "@/modules/supplier-inbox/domain/evidence";
 import { ApprovalReuseError, AttachmentDownloadBlockedError, QuoteReviewError, SupplierInboxNotFoundError } from "@/modules/supplier-inbox/domain/errors";
 import { hashReplyToken, replyToAddress, sha256Hex } from "@/modules/supplier-inbox/domain/reply-token";
-import type { SyntheticInboundEnvelope, SyntheticProviderContext } from "@/modules/supplier-inbox/domain/types";
+import { createSyntheticProviderContext, type SyntheticInboundEnvelope, type SyntheticProviderContext } from "@/modules/supplier-inbox/domain/types";
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 const describeWithDatabase = testDatabaseUrl ? describe : describe.skip;
@@ -38,6 +41,8 @@ describeWithDatabase("synthetic supplier inbox", () => {
   let ingestion: typeof import("@/modules/supplier-inbox/application/ingestion-service");
   let review: typeof import("@/modules/supplier-inbox/application/review-service");
   let query: typeof import("@/modules/supplier-inbox/application/inbox-query");
+  let reviewRoute: typeof import("@/app/api/projects/[projectId]/supplier-inbox/review/route");
+  let attachmentRoute: typeof import("@/app/api/projects/[projectId]/supplier-inbox/attachments/[attachmentId]/route");
   let userId: string;
   let otherUserId: string;
   let organizationId: string;
@@ -49,12 +54,10 @@ describeWithDatabase("synthetic supplier inbox", () => {
   let replyToken: string;
   let rfqApprovalHash: string;
   let costId: string;
+  let ownerSessionToken: string;
+  let otherSessionToken: string;
   const prefix = `m2-${crypto.randomUUID()}`;
-  const providerContext: SyntheticProviderContext = {
-    authenticated: true,
-    provider: "synthetic",
-    testDoubleId: "milestone-b-fixture",
-  };
+  const providerContext = createSyntheticProviderContext("milestone-b-fixture");
 
   function messageId(name: string) {
     return `${prefix}-${name}`;
@@ -63,7 +66,13 @@ describeWithDatabase("synthetic supplier inbox", () => {
   function ingest(
     payload: SyntheticInboundEnvelope,
     context: SyntheticProviderContext | null,
-    options: { failBeforeCommit?: boolean; failDuringParse?: boolean; logger?: (line: string) => void } = {},
+    options: {
+      failBeforeCommit?: boolean;
+      failDuringParse?: boolean;
+      logger?: (line: string) => void;
+      pauseAfterParseLock?: Promise<void>;
+      onParseLockAcquired?: () => void;
+    } = {},
   ) {
     return ingestion.handleSyntheticInbound(payload, context, {
       now: new Date("2026-10-28T12:00:00.000Z"),
@@ -124,6 +133,8 @@ describeWithDatabase("synthetic supplier inbox", () => {
     ingestion = await import("@/modules/supplier-inbox/application/ingestion-service");
     review = await import("@/modules/supplier-inbox/application/review-service");
     query = await import("@/modules/supplier-inbox/application/inbox-query");
+    reviewRoute = await import("@/app/api/projects/[projectId]/supplier-inbox/review/route");
+    attachmentRoute = await import("@/app/api/projects/[projectId]/supplier-inbox/attachments/[attachmentId]/route");
     const user = await prisma.user.create({
       data: { email: `inbox-a-${prefix}@example.test`, name: "Inbox Owner A" },
     });
@@ -188,6 +199,19 @@ describeWithDatabase("synthetic supplier inbox", () => {
     otherProjectId = otherProject.id;
     offerId = offer.id;
     costId = cost.id;
+    const sessionService = await import("@/modules/auth/infrastructure/session");
+    const ownerSession = sessionService.createSessionData(user.id, organization.id, {
+      ipAddress: "127.0.0.1",
+      userAgent: "Supplier inbox owner",
+    });
+    const otherSession = sessionService.createSessionData(otherUser.id, other.id, {
+      ipAddress: "127.0.0.1",
+      userAgent: "Supplier inbox other organization",
+    });
+    await prisma.session.create({ data: ownerSession.data });
+    await prisma.session.create({ data: otherSession.data });
+    ownerSessionToken = ownerSession.token;
+    otherSessionToken = otherSession.token;
     const opened = await openSentThread();
     threadId = opened.threadId;
     replyToken = opened.replyToken;
@@ -233,10 +257,15 @@ describeWithDatabase("synthetic supplier inbox", () => {
       envelope({ providerMessageId: messageId("postmark"), recipient: replyToAddress(replyToken) }),
       { authenticated: true, provider: "postmark", testDoubleId: "not-a-credential" },
     );
+    const fromJson = await ingest(
+      envelope({ providerMessageId: messageId("json-auth"), recipient: replyToAddress(replyToken) }),
+      JSON.parse(JSON.stringify(createSyntheticProviderContext("from-json"))) as SyntheticProviderContext,
+    );
     expect(disabled.httpStatus).toBe(403);
     expect(missing.httpStatus).toBe(401);
     expect(tokenOnly.httpStatus).toBe(401);
     expect(wrongProvider.httpStatus).toBe(401);
+    expect(fromJson.httpStatus).toBe(401);
     expect(await prisma.supplierInboundMessage.count()).toBe(before);
   });
 
@@ -260,6 +289,38 @@ describeWithDatabase("synthetic supplier inbox", () => {
     expect(await query.getProjectSupplierInbox(projectId, otherOrganizationId)).toBeNull();
     const removed = await threads.purgeExpiredQuarantine(new Date("2026-11-20T00:00:00.000Z"));
     expect(removed).toBeGreaterThanOrEqual(2);
+  });
+
+  it("rejects a real reply token sent to a domain other than the configured inbound domain", async () => {
+    const before = await prisma.supplierInboundMessage.count({ where: { threadId } });
+    const wrongDomain = await ingest(envelope({
+      providerMessageId: messageId("wrong-domain"),
+      recipient: `r.${replyToken}@unrelated.example`,
+      toAddresses: [replyToAddress(replyToken)],
+      textBody: `${cleanBody}\n${replyToken}`,
+    }), providerContext);
+    const suffix = await ingest(envelope({
+      providerMessageId: messageId("suffix-domain"),
+      recipient: `r.${replyToken}@replies.example.test.attacker.test`,
+    }), providerContext);
+    const displayHeader = await ingest(envelope({
+      providerMessageId: messageId("display-header"),
+      recipient: `Supplier <${replyToAddress(replyToken)}>`,
+    }), providerContext);
+    expect(wrongDomain).toMatchObject({ quarantined: true, organizationId: null, threadId: null, stored: true });
+    expect(suffix).toMatchObject({ quarantined: true, organizationId: null, threadId: null });
+    expect(displayHeader).toMatchObject({ quarantined: true, threadId: null, organizationId: null });
+    expect(await prisma.supplierInboundMessage.count({ where: { threadId } })).toBe(before);
+    const stored = await prisma.supplierInboundMessage.findUniqueOrThrow({ where: { id: wrongDomain.messageId ?? "" } });
+    expect(stored.quarantineReason).toBe("UNCONFIGURED_DOMAIN");
+    expect(stored.organizationId).toBeNull();
+    expect(stored.rawMessage).not.toContain(replyToken);
+    expect(JSON.parse(stored.rawMessage).configuredInboundDomain).toBe(false);
+    expect(await prisma.supplierInboxEvent.count({
+      where: { threadId, type: { in: ["TOKEN_REJECTED", "REPLY_RECEIVED"] } },
+    })).toBe(0);
+    const inbox = await query.getProjectSupplierInbox(projectId, organizationId);
+    expect(inbox?.threads.find((thread) => thread.id === threadId)?.messages ?? []).toHaveLength(0);
   });
 
   it("stores one conflicting quote for organization A and ignores a replay, a spoofed header, and a claimed organization", async () => {
@@ -288,6 +349,16 @@ describeWithDatabase("synthetic supplier inbox", () => {
     expect(stored[0]?.senderTrust).toBe("UNVERIFIED");
     expect(stored[0]?.source).toBe("SYNTHETIC");
     expect(stored[0]?.rawSha256).toBe(sha256Hex(stored[0]?.rawMessage ?? ""));
+    expect(stored[0]?.rawObjectKey.startsWith(REDACTED_SYNTHETIC_OBJECT_PREFIX)).toBe(true);
+    const rawSnapshot = JSON.parse(stored[0]?.rawMessage ?? "{}") as {
+      evidenceClass: string;
+      byteForByteSmtp: boolean;
+      providerOriginalRetained: boolean;
+    };
+    expect(rawSnapshot.evidenceClass).toBe(REDACTED_SYNTHETIC_EVIDENCE_CLASS);
+    expect(rawSnapshot.byteForByteSmtp).toBe(false);
+    expect(rawSnapshot.providerOriginalRetained).toBe(false);
+    expect(stored[0]?.rawMessage).not.toContain("Return-Path");
     expect(stored[0]?.rawMessage).not.toContain(replyToken);
     expect(stored[0]?.rawMessage).toContain("<script>");
     expect(stored[0]?.sanitizedText).not.toContain("<script>");
@@ -409,6 +480,224 @@ describeWithDatabase("synthetic supplier inbox", () => {
     expect(afterSend.sentAt).toBeNull();
     const rfq = await prisma.supplierOutboundMessage.findFirstOrThrow({ where: { threadId, kind: "RFQ" } });
     expect(rfq.status).toBe("SENT");
+  });
+
+  it("keeps one parse, one follow-up, and one notification when two deliveries overlap", async () => {
+    const raceThread = await openSentThread();
+    let releaseParse: () => void = () => undefined;
+    const hold = new Promise<void>((resolve) => {
+      releaseParse = resolve;
+    });
+    let notifyLocked: () => void = () => undefined;
+    const locked = new Promise<void>((resolve) => {
+      notifyLocked = resolve;
+    });
+    const payload = envelope({
+      providerMessageId: messageId("concurrent-parse"),
+      recipient: replyToAddress(raceThread.replyToken),
+      textBody: `${cleanBody}\nUnit price USD 1.80\nProgressive lenses`,
+    });
+    const firstPromise = ingest(payload, providerContext, {
+      onParseLockAcquired: () => notifyLocked(),
+      pauseAfterParseLock: hold,
+    });
+    let secondPromise: ReturnType<typeof ingest> | undefined;
+    let waiting = false;
+    try {
+      await Promise.race([
+        locked,
+        new Promise((_, reject) => {
+          setTimeout(() => reject(new Error("parse lock was not acquired")), 8_000);
+        }),
+      ]);
+      secondPromise = ingest(payload, providerContext);
+      const deadline = Date.now() + 4_000;
+      while (Date.now() < deadline) {
+        const rows = await prisma.$queryRaw<Array<{ waiting: number }>>`
+          SELECT COUNT(*)::int AS waiting
+          FROM pg_stat_activity
+          WHERE wait_event_type = 'Lock'
+            AND query LIKE '%supplier_inbound_messages%'
+            AND query LIKE '%FOR UPDATE%'
+        `;
+        if (Number(rows[0]?.waiting ?? 0) > 0) {
+          waiting = true;
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+    } finally {
+      releaseParse();
+    }
+    const [first, second] = await Promise.all([
+      firstPromise,
+      secondPromise ?? Promise.reject(new Error("second delivery did not start")),
+    ]);
+    expect(waiting).toBe(true);
+    expect(first).toMatchObject({ httpStatus: 200, stored: true, duplicate: false, threadId: raceThread.threadId });
+    expect(second).toMatchObject({ httpStatus: 200, stored: false, duplicate: true, messageId: first.messageId });
+
+    const messageIdOnThread = first.messageId ?? "";
+    const extractions = await prisma.supplierQuoteExtraction.findMany({ where: { messageId: messageIdOnThread } });
+    expect(extractions.length).toBeGreaterThan(0);
+    expect(new Set(extractions.map((row) => row.fieldKey)).size).toBe(extractions.length);
+    expect(extractions.every((row) => row.reviewStatus === "UNREVIEWED")).toBe(true);
+    expect(await prisma.supplierInboundMessage.count({ where: { threadId: raceThread.threadId } })).toBe(1);
+    expect(await prisma.supplierMessageTranslation.count({ where: { messageId: messageIdOnThread } })).toBe(1);
+    expect(await prisma.supplierOutboundMessage.count({ where: { threadId: raceThread.threadId, kind: "FOLLOW_UP" } })).toBe(1);
+    expect(await prisma.supplierInboxEvent.count({ where: { threadId: raceThread.threadId, type: "REPLY_RECEIVED" } })).toBe(1);
+    expect(await prisma.supplierInboxEvent.count({ where: { threadId: raceThread.threadId, type: "NEEDS_CLARIFICATION" } })).toBe(1);
+    expect(await prisma.supplierInboxEvent.count({ where: { threadId: raceThread.threadId, type: "FOLLOW_UP_DRAFTED" } })).toBe(1);
+    expect(await prisma.supplierInboxEvent.count({ where: { threadId: raceThread.threadId, type: "PARSED" } })).toBe(0);
+    const followUp = await prisma.supplierOutboundMessage.findFirstOrThrow({
+      where: { threadId: raceThread.threadId, kind: "FOLLOW_UP" },
+    });
+    expect(followUp.status).toBe("DRAFT");
+    expect(followUp.sentAt).toBeNull();
+
+    const replay = await ingest(payload, providerContext);
+    expect(replay).toMatchObject({ httpStatus: 200, duplicate: true, messageId: first.messageId });
+    expect(await prisma.supplierQuoteExtraction.count({ where: { messageId: messageIdOnThread } })).toBe(extractions.length);
+    expect(await prisma.supplierMessageTranslation.count({ where: { messageId: messageIdOnThread } })).toBe(1);
+    expect(await prisma.supplierInboxEvent.count({ where: { threadId: raceThread.threadId, type: "NEEDS_CLARIFICATION" } })).toBe(1);
+    expect(await prisma.supplierOutboundMessage.count({ where: { threadId: raceThread.threadId, kind: "FOLLOW_UP" } })).toBe(1);
+    const cost = await prisma.costCalculation.findUniqueOrThrow({ where: { id: costId } });
+    expect(cost.landedCostTotal?.toString()).toBe("1234.56");
+  });
+
+  it("keeps review and attachment routes inside the authenticated organization and does not send mail or change cost", async () => {
+    const routeThread = await openSentThread();
+    const pdf = syntheticPdf("Proforma RG-1810\nUnit price USD 1.80\nMOQ 2000\nProgressive lenses\n");
+    const exe = Uint8Array.from([0x4d, 0x5a, 0x90]);
+    const stored = await ingest(envelope({
+      providerMessageId: messageId("route-tenant"),
+      recipient: replyToAddress(routeThread.replyToken),
+      textBody: `${cleanBody}\nUnit price USD 1.80\nProgressive lenses`,
+      attachments: [
+        { filename: "proforma.pdf", declaredMime: "application/pdf", bytes: pdf },
+        { filename: "offer.exe", declaredMime: "application/octet-stream", bytes: exe },
+      ],
+    }), providerContext);
+    expect(stored.httpStatus).toBe(200);
+    const message = await prisma.supplierInboundMessage.findUniqueOrThrow({
+      where: { id: stored.messageId ?? "" },
+      include: { attachments: true, quoteExtractions: true },
+    });
+    const pdfRow = message.attachments.find((attachment) => attachment.filename === "proforma.pdf");
+    const exeRow = message.attachments.find((attachment) => attachment.filename === "offer.exe");
+    const price = message.quoteExtractions.find((field) => field.fieldKey === "unit_price_at_quantity");
+    const model = message.quoteExtractions.find((field) => field.fieldKey === "model");
+    expect(pdfRow?.scanStatus).toBe("CLEAN");
+    expect(exeRow?.scanStatus).toBe("REJECTED");
+    expect(price?.reviewStatus).toBe("UNREVIEWED");
+    expect(model?.reviewStatus).toBe("UNREVIEWED");
+
+    const outboundBefore = await prisma.supplierOutboundMessage.findMany({
+      where: { threadId: routeThread.threadId },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, kind: true, status: true, sentAt: true, provider: true, providerMessageId: true },
+    });
+    const costBefore = await prisma.costCalculation.findUniqueOrThrow({ where: { id: costId } });
+    const costCountBefore = await prisma.costCalculation.count();
+
+    function reviewRequest(token: string, project: string, fields: Record<string, string>) {
+      return new NextRequest(`http://localhost/api/projects/${project}/supplier-inbox/review`, {
+        method: "POST",
+        headers: {
+          cookie: `${SESSION_COOKIE}=${token}`,
+          "content-type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams(fields),
+      });
+    }
+    function attachmentRequest(token: string | null, project: string, attachmentId: string) {
+      const headers: Record<string, string> = {};
+      if (token) headers.cookie = `${SESSION_COOKIE}=${token}`;
+      return new NextRequest(
+        `http://localhost/api/projects/${project}/supplier-inbox/attachments/${attachmentId}`,
+        { headers },
+      );
+    }
+
+    const crossReject = await reviewRoute.POST(
+      reviewRequest(otherSessionToken, projectId, { action: "reject", extractionId: price?.id ?? "" }),
+      { params: Promise.resolve({ projectId }) },
+    );
+    const crossAccept = await reviewRoute.POST(
+      reviewRequest(otherSessionToken, otherProjectId, { action: "accept", extractionId: price?.id ?? "" }),
+      { params: Promise.resolve({ projectId: otherProjectId }) },
+    );
+    const crossConfirm = await reviewRoute.POST(
+      reviewRequest(otherSessionToken, projectId, { action: "confirm", threadId: routeThread.threadId }),
+      { params: Promise.resolve({ projectId }) },
+    );
+    const crossAcknowledge = await reviewRoute.POST(
+      reviewRequest(otherSessionToken, projectId, { action: "acknowledge", threadId: routeThread.threadId }),
+      { params: Promise.resolve({ projectId }) },
+    );
+    expect(crossReject.status).toBe(404);
+    expect(crossAccept.status).toBe(404);
+    expect(crossConfirm.status).toBe(404);
+    expect(crossAcknowledge.status).toBe(404);
+
+    const anonymous = await attachmentRoute.GET(
+      attachmentRequest(null, projectId, pdfRow?.id ?? ""),
+      { params: Promise.resolve({ projectId, attachmentId: pdfRow?.id ?? "" }) },
+    );
+    const crossDownload = await attachmentRoute.GET(
+      attachmentRequest(otherSessionToken, projectId, pdfRow?.id ?? ""),
+      { params: Promise.resolve({ projectId, attachmentId: pdfRow?.id ?? "" }) },
+    );
+    const ownerDownload = await attachmentRoute.GET(
+      attachmentRequest(ownerSessionToken, projectId, pdfRow?.id ?? ""),
+      { params: Promise.resolve({ projectId, attachmentId: pdfRow?.id ?? "" }) },
+    );
+    const blockedDownload = await attachmentRoute.GET(
+      attachmentRequest(ownerSessionToken, projectId, exeRow?.id ?? ""),
+      { params: Promise.resolve({ projectId, attachmentId: exeRow?.id ?? "" }) },
+    );
+    expect(anonymous.status).toBe(401);
+    expect(crossDownload.status).toBe(404);
+    expect(blockedDownload.status).toBe(403);
+    expect(ownerDownload.status).toBe(200);
+    expect(sha256Hex(new Uint8Array(await ownerDownload.arrayBuffer()))).toBe(sha256Hex(pdf));
+
+    const ownerReject = await reviewRoute.POST(
+      reviewRequest(ownerSessionToken, projectId, { action: "reject", extractionId: model?.id ?? "" }),
+      { params: Promise.resolve({ projectId }) },
+    );
+    const ownerConfirm = await reviewRoute.POST(
+      reviewRequest(ownerSessionToken, projectId, { action: "confirm", threadId: routeThread.threadId }),
+      { params: Promise.resolve({ projectId }) },
+    );
+    expect(ownerReject.status).toBe(303);
+    expect(ownerConfirm.status).toBe(409);
+
+    const priceAfter = await prisma.supplierQuoteExtraction.findUniqueOrThrow({ where: { id: price?.id } });
+    const modelAfter = await prisma.supplierQuoteExtraction.findUniqueOrThrow({ where: { id: model?.id } });
+    expect(priceAfter.reviewStatus).toBe("UNREVIEWED");
+    expect(modelAfter.reviewStatus).toBe("REJECTED");
+    const threadAfter = await prisma.supplierInboxThread.findUniqueOrThrow({ where: { id: routeThread.threadId } });
+    expect(threadAfter.status).toBe("NEEDS_CLARIFICATION");
+    expect(threadAfter.unverifiedSenderAcknowledged).toBe(false);
+    const outboundAfter = await prisma.supplierOutboundMessage.findMany({
+      where: { threadId: routeThread.threadId },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, kind: true, status: true, sentAt: true, provider: true, providerMessageId: true },
+    });
+    expect(outboundAfter.map((row) => ({
+      ...row,
+      sentAt: row.sentAt?.toISOString() ?? null,
+    }))).toEqual(outboundBefore.map((row) => ({
+      ...row,
+      sentAt: row.sentAt?.toISOString() ?? null,
+    })));
+    expect(outboundAfter.filter((row) => row.sentAt).map((row) => row.kind)).toEqual(["RFQ"]);
+    const cost = await prisma.costCalculation.findUniqueOrThrow({ where: { id: costId } });
+    expect(cost.landedCostTotal?.toString()).toBe(costBefore.landedCostTotal?.toString());
+    expect(cost.unitPrice.toString()).toBe(costBefore.unitPrice.toString());
+    expect(cost.updatedAt.toISOString()).toBe(costBefore.updatedAt.toISOString());
+    expect(await prisma.costCalculation.count()).toBe(costCountBefore);
   });
 
   it("keeps a single message when parsing fails and the provider retries", async () => {

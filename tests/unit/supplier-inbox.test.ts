@@ -11,9 +11,14 @@ import { translateToSerbianFixture } from "@/modules/supplier-inbox/domain/fixtu
 import { assertFreshFollowUpApproval, outboundContentHash } from "@/modules/supplier-inbox/domain/follow-up";
 import { ApprovalReuseError, FollowUpNotApprovedError } from "@/modules/supplier-inbox/domain/errors";
 import { extractQuoteWithFixtureAdapter } from "@/modules/supplier-inbox/domain/quote-extraction";
-import { generateReplyToken, hashReplyToken, parseReplyRecipient, redactSecrets, REPLY_TOKEN_BYTES } from "@/modules/supplier-inbox/domain/reply-token";
+import {
+  REDACTED_SYNTHETIC_EVIDENCE_CLASS,
+  REDACTED_SYNTHETIC_OBJECT_PREFIX,
+  buildRedactedSyntheticSnapshot,
+} from "@/modules/supplier-inbox/domain/evidence";
+import { generateReplyToken, hashReplyToken, parseReplyRecipient, redactSecrets, replyRecipientRejection, REPLY_TOKEN_BYTES, sha256Hex } from "@/modules/supplier-inbox/domain/reply-token";
 import { resolveSenderTrust } from "@/modules/supplier-inbox/domain/sender-trust";
-import { isSyntheticProviderContext } from "@/modules/supplier-inbox/domain/types";
+import { createSyntheticProviderContext, isSyntheticProviderContext } from "@/modules/supplier-inbox/domain/types";
 
 const requirement = {
   product: "non-progressive reading glasses",
@@ -66,6 +71,12 @@ describe("supplier inbox domain", () => {
     const recipient = `r.${token}@replies.example.test`;
     expect(parseReplyRecipient(recipient)).toBe(token);
     expect(parseReplyRecipient("sales@supplier.example.test")).toBeNull();
+    expect(parseReplyRecipient(`r.${token}@unrelated.example`)).toBeNull();
+    expect(parseReplyRecipient(`r.${token}@replies.example.test.unrelated.example`)).toBeNull();
+    expect(parseReplyRecipient(`Supplier <${recipient}>`)).toBeNull();
+    expect(parseReplyRecipient(`r.${token}@unrelated.example`, "replies.example.test")).toBeNull();
+    expect(replyRecipientRejection(`r.${token}@unrelated.example`)).toBe("UNCONFIGURED_DOMAIN");
+    expect(replyRecipientRejection(recipient)).toBeNull();
     expect(redactSecrets(`accepted ${recipient}`, [token])).not.toContain(token);
     expect(redactSecrets(`accepted ${recipient}`, [token])).toContain("r.[redacted]@");
   });
@@ -74,7 +85,14 @@ describe("supplier inbox domain", () => {
     expect(isSyntheticProviderContext(null)).toBe(false);
     expect(isSyntheticProviderContext({ authenticated: false, provider: "synthetic", testDoubleId: "x" })).toBe(false);
     expect(isSyntheticProviderContext({ authenticated: true, provider: "postmark", testDoubleId: "x" })).toBe(false);
-    expect(isSyntheticProviderContext({ authenticated: true, provider: "synthetic", testDoubleId: "fixture" })).toBe(true);
+    const fixture = createSyntheticProviderContext("fixture");
+    expect(isSyntheticProviderContext({ authenticated: true, provider: "synthetic", testDoubleId: "fixture" })).toBe(false);
+    expect(isSyntheticProviderContext(JSON.parse(JSON.stringify(fixture)))).toBe(false);
+    expect(isSyntheticProviderContext({ ...fixture })).toBe(false);
+    expect(isSyntheticProviderContext(fixture)).toBe(true);
+    expect(readFileSync("modules/supplier-inbox/domain/types.ts", "utf8")).toContain(
+      "In-process fixture marker, not cryptographic webhook authentication.",
+    );
     expect(resolveSenderTrust({
       providerAuth: { spf: "fail", dkim: "fail", dmarc: "fail", alignedDomain: null },
       expectedSupplierEmail: "sales@wenzhou-glasses.example.test",
@@ -193,18 +211,68 @@ describe("supplier inbox domain", () => {
     })).not.toThrow();
   });
 
+  it("keeps the redacted synthetic snapshot distinct from provider-original SMTP bytes", () => {
+    const token = generateReplyToken();
+    const snapshot = buildRedactedSyntheticSnapshot({
+      fromAddress: "sales@supplier.example.test",
+      toAddresses: [`r.${token}@unrelated.example`],
+      subject: "Quote",
+      receivedAt: "2026-10-28T12:00:00.000Z",
+      providerMessageId: "fixture-message",
+      textBody: `Unit price USD 1.20\n${token}`,
+      htmlBody: "<script>alert(1)</script>",
+      rawAuthenticationResults: "dmarc=pass",
+      configuredInboundDomain: false,
+    }, [token]);
+    const parsed = JSON.parse(snapshot.json) as {
+      evidenceClass: string;
+      byteForByteSmtp: boolean;
+      providerOriginalRetained: boolean;
+      configuredInboundDomain: boolean;
+    };
+    expect(parsed.evidenceClass).toBe(REDACTED_SYNTHETIC_EVIDENCE_CLASS);
+    expect(parsed.byteForByteSmtp).toBe(false);
+    expect(parsed.providerOriginalRetained).toBe(false);
+    expect(parsed.configuredInboundDomain).toBe(false);
+    expect(snapshot.json).not.toContain(token);
+    expect(snapshot.json).not.toContain("Return-Path");
+    expect(snapshot.sha256).toBe(sha256Hex(snapshot.json));
+    expect(snapshot.key.startsWith(REDACTED_SYNTHETIC_OBJECT_PREFIX)).toBe(true);
+    expect(readFileSync("docs/architecture/JAKOV360_M2_INBOUND_EVIDENCE_AND_VENDORS.md", "utf8")).toContain(
+      "not byte-for-byte SMTP",
+    );
+  });
+
   it("does not mount a public inbound webhook or request Gmail read access", () => {
     const apiFiles = walk("app/api");
     expect(apiFiles.some((path) => path.includes("webhook"))).toBe(false);
     const apiSource = apiFiles.map((path) => readFileSync(path, "utf8")).join("\n");
     expect(apiSource).not.toContain("handleSyntheticInbound");
+    expect(apiSource).not.toContain("createSyntheticProviderContext");
+    expect(apiSource).not.toContain("isSyntheticProviderContext");
+    const productionFiles = walk("app").concat(walk("modules"));
+    const factoryHits = productionFiles.filter((path) => (
+      readFileSync(path, "utf8").includes("createSyntheticProviderContext")
+      && !path.endsWith("modules/supplier-inbox/domain/types.ts")
+    ));
+    expect(factoryHits).toEqual([]);
+    const markerHits = productionFiles.filter((path) => (
+      readFileSync(path, "utf8").includes("jakov360.inProcessSyntheticInboundFixture")
+    ));
+    expect(markerHits.map((path) => path.replaceAll("\\", "/"))).toEqual([
+      "modules/supplier-inbox/domain/types.ts",
+    ]);
     const inboxSource = walk("modules/supplier-inbox").map((path) => readFileSync(path, "utf8")).join("\n");
     expect(inboxSource).not.toContain("googleapis.com/auth/gmail.readonly");
     expect(inboxSource).not.toContain("googleapis.com/auth/gmail.metadata");
     expect(inboxSource).not.toContain("googleapis");
     expect(inboxSource).toContain("does not request gmail.readonly");
     expect(inboxSource).not.toContain("fetch(");
-    expect(readFileSync("modules/supplier-inbox/application/ingestion-service.ts", "utf8")).not.toContain("costCalculation");
+    const ingestionSource = readFileSync("modules/supplier-inbox/application/ingestion-service.ts", "utf8");
+    expect(ingestionSource).not.toContain("costCalculation");
+    expect(ingestionSource).toContain("parseReplyRecipient(envelope.recipient)");
+    expect(ingestionSource).toContain("not cryptographic webhook authentication");
+    expect(ingestionSource).not.toContain("request.json");
     expect(readFileSync("modules/supplier-inbox/application/review-service.ts", "utf8")).not.toContain("costCalculation");
   });
 });

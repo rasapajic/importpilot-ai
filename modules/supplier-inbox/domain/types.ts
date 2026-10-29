@@ -6,6 +6,32 @@ export type SyntheticProviderContext = {
   testDoubleId?: string;
 };
 
+/**
+ * In-process fixture marker, not cryptographic webhook authentication.
+ * HTTP JSON cannot carry it. Object spread and JSON.parse drop it.
+ * No public inbound route may construct this value from a request.
+ * Basic Auth, a From header, and a reply token are not this marker.
+ */
+const SYNTHETIC_FIXTURE_MARKER = Symbol("jakov360.inProcessSyntheticInboundFixture");
+
+export function createSyntheticProviderContext(testDoubleId: string): SyntheticProviderContext {
+  if (testDoubleId.trim().length === 0 || testDoubleId.length > 80) {
+    throw new Error("Synthetic provider context requires an in-process test double id.");
+  }
+  const context: SyntheticProviderContext = {
+    authenticated: true,
+    provider: "synthetic",
+    testDoubleId,
+  };
+  Object.defineProperty(context, SYNTHETIC_FIXTURE_MARKER, {
+    value: true,
+    enumerable: false,
+    configurable: false,
+    writable: false,
+  });
+  return context;
+}
+
 export type SyntheticAttachment = {
   filename: string;
   declaredMime: string;
@@ -40,14 +66,17 @@ export type SyntheticHandlerResult = {
 };
 
 export function isSyntheticProviderContext(
-  value: SyntheticProviderContext | null | undefined,
+  value: unknown,
 ): value is { authenticated: true; provider: "synthetic"; testDoubleId: string } {
-  return Boolean(
-    value &&
-      value.authenticated === true &&
-      value.provider === "synthetic" &&
-      typeof value.testDoubleId === "string" &&
-      value.testDoubleId.length > 0,
+  if (!value || typeof value !== "object") return false;
+  const record = value as Record<PropertyKey, unknown>;
+  return (
+    record[SYNTHETIC_FIXTURE_MARKER] === true &&
+    record.authenticated === true &&
+    record.provider === "synthetic" &&
+    typeof record.testDoubleId === "string" &&
+    record.testDoubleId.length > 0 &&
+    record.testDoubleId.length <= 80
   );
 }
 
