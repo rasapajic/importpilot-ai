@@ -4,6 +4,7 @@
 - Date checked: 2026-10-29
 - Depends on draft PR #182 (`cursor/m2-supplier-inbox-synthetic-9ccf`). This branch does not retarget `main` or `release/1.0.0`.
 - Owner decision: Amazon SES receiving is the preferred future direction for the auditable reply archive. Postmark is not the selected path. That decision does not purchase SES and does not turn receiving on.
+- Cost, spend-limit, and stop planning for issue #184 is in `docs/architecture/JAKOV360_M2_SES_PILOT_COST_AND_SAFETY.md`. That note does not create resources either.
 
 `JAKOV360_INBOUND_MAIL_ENABLED` stays `false` in `.env.example` and in deployed configuration. The preflight module does not read AWS credentials. It does not import the AWS SDK. It does not perform an HTTP request. No `app/api` route calls it. It does not request `gmail.readonly` or `gmail.metadata`.
 
