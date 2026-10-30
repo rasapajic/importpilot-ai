@@ -64,6 +64,10 @@ jobs:
         working-directory: services/importpilot-search-provider
         run: npm ci && npm run typecheck && npm test && npm run build
 
+      - name: URL import provider parser gate
+        working-directory: services/importpilot-url-import-provider
+        run: npm ci && npm run typecheck && npm test && npm run build
+
       - name: Generate Prisma client
         run: npm run db:generate
 
