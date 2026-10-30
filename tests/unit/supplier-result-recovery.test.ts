@@ -3,6 +3,10 @@ import { describe, expect, it } from "vitest";
 import { isLikelyProductImageUrl } from "../../components/search/search-result-image";
 import { mergeRecoveredSupplierPreview } from "../../components/search/simple-supplier-offer-search";
 import { supplierOfferForQuantity } from "../../components/search/supplier-choice-display";
+import {
+  reconcileSourceMoq,
+  resultWithSourceMoq,
+} from "../../modules/product-search/domain/source-moq-reconciliation";
 import type {
   SupplierOfferSearchResult,
   SupplierOfferUrlPreview,
@@ -78,12 +82,25 @@ describe("supplier result exact-page recovery", () => {
       minimumOrderQuantity: 100,
     };
 
-    expect(mergeRecoveredSupplierPreview(stale, preview())).toMatchObject({
+    // Background price/image enrichment must not quietly overwrite an
+    // historical cached MOQ. The explicit source check owns that transition.
+    const recovered = mergeRecoveredSupplierPreview(stale, preview());
+    expect(recovered).toMatchObject({
       price: 6.16,
       currency: "EUR",
-      minimumOrderQuantity: 2,
+      minimumOrderQuantity: 100,
       priceEvidence: "PRODUCT_PAGE",
     });
+    const evidence = reconcileSourceMoq(recovered, preview(), "2026-10-30T22:00:00.000Z");
+    expect(evidence).toMatchObject({
+      status: "DIFFERENT",
+      cachedMoq: 100,
+      pageMoq: 2,
+    });
+    const checked = resultWithSourceMoq(recovered, evidence);
+    expect(checked).toMatchObject({ minimumOrderQuantity: 2, price: 6.16, currency: "EUR" });
+    expect(checked.marketplaceDetails).toBeNull();
+    expect(recovered.minimumOrderQuantity).toBe(100);
   });
 
   it("does not present a partial preview price as a real supplier price", () => {
