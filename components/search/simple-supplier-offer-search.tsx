@@ -35,6 +35,7 @@ import {
 } from "@/modules/product-search/domain/explicit-product-constraints";
 import { formatMissingDataLabels } from "@/modules/product-search/domain/taja-missing-data-copy";
 import { unverifiedPresentationTies } from "@/modules/product-search/domain/unverified-offer-presentation";
+import { assessAdvertisedPriceTieBreak } from "@/modules/product-search/domain/advertised-price-tie-break";
 import { estimateTajaPreliminaryLandedCost } from "@/modules/product-search/domain/taja-preliminary-cost-estimate";
 import {
   presentSupplierOfferPrice,
@@ -118,6 +119,9 @@ type Copy = {
   whySelected: string;
   knownFacts: string;
   equivalentUnverified: (count: number, score: number, confidence: number) => string;
+  conditionalAdvertisedPrice: string;
+  lowestAdvertisedIncomparable: string;
+  lowestAdvertisedComparable: string;
   reasonProductMatch: string;
   reasonProductLikely: string;
   variantMixUnconfirmed: string;
@@ -206,7 +210,10 @@ const copy: Record<Locale, Copy> = {
     selectionCriteria: "Sve dostupne ponude su prikazane. Najbolji izbor postoji tek kada su nabavna cena i ukupan trošak uvoza potvrđeni. Pre toga prvi kandidat može biti samo preliminaran.",
     whySelected: "Zašto je izdvojena",
     knownFacts: "Šta je poznato",
-    equivalentUnverified: (count, score, confidence) => `Isti rezultat ${score}/100 i ista pouzdanost ${confidence}% (${count}). To je isti neprovereni nivo, ne rang kvaliteta. Broj na kartici je samo redosled prikaza. Niža oglašena cena ili manji MOQ ne čine ponudu boljom dok tip sočiva, cena za traženu količinu i uslovi nisu potvrđeni.`,
+    equivalentUnverified: (count, score, confidence) => `Isti rezultat ${score}/100 i ista pouzdanost ${confidence}% (${count}). Broj na kartici je redosled prikaza, ne najbolja potvrđena ponuda. Nepotvrđena oglašena cena se ne koristi za taj redosled, pa oglas sa višom cenom može biti prvi. Najniža oglašena cena je samo pokazatelj kada su specifikacija, valuta i količinski razred zaista uporedivi.`,
+    conditionalAdvertisedPrice: "Cena po oglasu (uslovna)",
+    lowestAdvertisedIncomparable: "Najniža oglašena cena (neuporedivi/uslovni oglasi). Nije najbolja potvrđena ponuda.",
+    lowestAdvertisedComparable: "Najniža oglašena cena. Nije najbolja potvrđena ponuda i nije promenila redosled prikaza.",
     reasonProductMatch: "Proizvod odgovara traženom tipu ili specifikaciji.",
     reasonProductLikely: "Ponuda je relevantna za traženi proizvod, ali deo specifikacije još treba potvrditi.",
     variantMixUnconfirmed: "Mešanje varijanti u jednoj narudžbini nije potvrđeno.",
@@ -295,7 +302,10 @@ const copy: Record<Locale, Copy> = {
     selectionCriteria: "Alle verfügbaren Angebote werden angezeigt. Die endgültige beste Wahl gibt es erst, wenn Einkaufspreis und Landed Cost bestätigt sind. Davor kann der erste Kandidat nur vorläufig sein.",
     whySelected: "Warum ausgewählt",
     knownFacts: "Was bekannt ist",
-    equivalentUnverified: (count, score, confidence) => `Dieselbe Bewertung ${score}/100 und dieselbe Zuverlässigkeit ${confidence}% (${count}). Das ist dieselbe ungeprüfte Stufe, keine Qualitätsrangfolge. Die Nummer auf der Karte ist nur die Anzeigereihenfolge. Ein niedrigerer angezeigter Preis oder ein kleinerer MOQ macht das Angebot nicht besser, solange Linsentyp, Preis für die gewünschte Menge und Konditionen nicht bestätigt sind.`,
+    equivalentUnverified: (count, score, confidence) => `Dieselbe Bewertung ${score}/100 und dieselbe Zuverlässigkeit ${confidence}% (${count}). Die Nummer ist die Anzeigereihenfolge, nicht das beste bestätigte Angebot. Ein unbestätigter Angebotspreis ändert diese Reihenfolge nicht, daher kann ein höherer Preis zuerst stehen. Der niedrigste Angebotspreis ist nur ein Hinweis, wenn Spezifikation, Währung und Mengenstaffel wirklich vergleichbar sind.`,
+    conditionalAdvertisedPrice: "Preis laut Anzeige (bedingt)",
+    lowestAdvertisedIncomparable: "Niedrigster angezeigter Preis (nicht vergleichbare/bedingte Anzeigen). Nicht das beste bestätigte Angebot.",
+    lowestAdvertisedComparable: "Niedrigster angezeigter Preis. Nicht das beste bestätigte Angebot, und die Anzeigereihenfolge bleibt unverändert.",
     reasonProductMatch: "Das Produkt entspricht dem gesuchten Typ oder der Spezifikation.",
     reasonProductLikely: "Das Angebot ist relevant, ein Teil der Spezifikation muss jedoch noch bestätigt werden.",
     variantMixUnconfirmed: "Das Mischen von Varianten in einer Bestellung ist nicht bestätigt.",
@@ -384,7 +394,10 @@ const copy: Record<Locale, Copy> = {
     selectionCriteria: "All available offers are shown. Best choice appears only after the purchase price and landed cost are confirmed. Before that, the first candidate can only be preliminary.",
     whySelected: "Why it was selected",
     knownFacts: "What is known",
-    equivalentUnverified: (count, score, confidence) => `Same score ${score}/100 and same confidence ${confidence}% (${count}). That is the same unverified level, not a quality ranking. The number on the card is only display order. A lower advertised price or a smaller MOQ does not make an offer better until the lens type, the price for the requested quantity, and the terms are confirmed.`,
+    equivalentUnverified: (count, score, confidence) => `Same score ${score}/100 and same confidence ${confidence}% (${count}). The card number is display order, not the best confirmed offer. An unconfirmed advertised price does not set that order, so a higher teaser price can appear first. The lowest advertised price is only an indicator when the specification, currency, and quantity tier are truly comparable.`,
+    conditionalAdvertisedPrice: "Advertised listing price (conditional)",
+    lowestAdvertisedIncomparable: "Lowest advertised price (incomparable/conditional listings). Not the best confirmed offer.",
+    lowestAdvertisedComparable: "Lowest advertised price. Not the best confirmed offer, and it did not change the display order.",
     reasonProductMatch: "The product matches the requested type or specification.",
     reasonProductLikely: "The offer is relevant, but part of the specification still needs confirmation.",
     variantMixUnconfirmed: "Mixing variants in one order is not confirmed.",
@@ -962,6 +975,17 @@ export function SimpleSupplierOfferSearch({
       : []
   )));
   const equivalentUnverifiedIds = new Set(unverifiedTies.flatMap((tie) => tie.ids));
+  const advertisedPriceTieBreak = assessAdvertisedPriceTieBreak(visible.map(({ result, suitability }) => {
+    const presentation = presentSupplierOfferPrice(result, quantity);
+    return {
+      id: result.productUrl,
+      suitability: suitability.status,
+      currency: presentation.advertisedCurrency,
+      advertisedPrice: presentation.advertisedPrice,
+      listedMoq: result.minimumOrderQuantity,
+      confirmedPurchasePrice: presentation.supplierOrderQuote,
+    };
+  }));
   const hasDeferredSupplierRisk = visible.some(({ result, analysis }) =>
     (!analysis || analysis.supplierRiskLevel === "UNKNOWN") &&
     !supplierPlatformProfileSummary(result.marketplaceDetails?.supplierProfile, locale)
@@ -1106,6 +1130,7 @@ export function SimpleSupplierOfferSearch({
             const showBestChoice = index === 0 && bestChoiceVisible;
             const showPreliminaryCandidate = index === 0 && preliminaryCandidateVisible;
             const equivalentUnverified = equivalentUnverifiedIds.has(result.productUrl);
+            const lowestAdvertised = advertisedPriceTieBreak.lowestAdvertisedId === result.productUrl;
             const showAdvertisedPrice = pricePresentation.advertisedPrice !== null &&
               pricePresentation.advertisedCurrency !== null &&
               (
@@ -1148,7 +1173,9 @@ export function SimpleSupplierOfferSearch({
                         ? text.writtenQuotePrice
                         : publishedTier
                           ? text.publishedTierPrice
-                          : text.supplierPrice}
+                          : pricePresentation.kind === "ADVERTISED_ONLY"
+                            ? text.conditionalAdvertisedPrice
+                            : text.supplierPrice}
                       {pricePresentation.supplierOrderQuote &&
                       pricePresentation.quantityUnitPrice !== null &&
                       pricePresentation.quantityCurrency ? (
@@ -1187,6 +1214,13 @@ export function SimpleSupplierOfferSearch({
                       {showAdvertisedPrice && (
                         <small className="supplier-fx-note">
                           {advertisedPriceNote(pricePresentation, text, locale, fxSnapshot)}
+                        </small>
+                      )}
+                      {lowestAdvertised && (
+                        <small className="supplier-fx-note">
+                          {advertisedPriceTieBreak.useAsTieBreak
+                            ? text.lowestAdvertisedComparable
+                            : text.lowestAdvertisedIncomparable}
                         </small>
                       )}
                       {publishedTier &&

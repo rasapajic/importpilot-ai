@@ -150,7 +150,10 @@ describe("ImportPilot 1.0 simple supplier results", () => {
     expect(rankingSource).not.toContain(".slice(0, 10)");
     expect(resultsSource).toContain('bestChoice: "Najbolji izbor"');
     expect(resultsSource).toContain('knownFacts: "Šta je poznato"');
-    expect(resultsSource).toContain("unverifiedPresentationTies");
+    expect(resultsSource).toContain("assessAdvertisedPriceTieBreak");
+    expect(resultsSource).toContain('conditionalAdvertisedPrice: "Cena po oglasu (uslovna)"');
+    expect(resultsSource).toContain('lowestAdvertisedIncomparable: "Najniža oglašena cena (neuporedivi/uslovni oglasi). Nije najbolja potvrđena ponuda."');
+    expect(resultsSource).not.toContain("orderByOptionalAdvertisedTieBreak");
     expect(resultsSource).toContain("equivalentUnverified ? text.knownFacts : text.whySelected");
     expect(resultsSource).toContain("canPresentBestChoice");
     expect(resultsSource).toContain("canPresentPreliminaryCandidate");
