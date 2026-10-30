@@ -64,7 +64,7 @@ describe("source MOQ reconciliation #187", () => {
   });
 
   it("does not cross-apply evidence to another similar Dilicin SKU", () => {
-    const another = { ...page, productUrl: url.replace("jYzpeDthEMkd", "anotherSku") };
+    const another = { ...page, productUrl: url.replace("jYzpeDtbEMkd", "anotherSku") };
     const evidence = reconcileSourceMoq(saved, another, checkedAt);
     expect(evidence.status).toBe("URL_MISMATCH");
     expect(resultWithSourceMoq(saved, evidence).minimumOrderQuantity).toBe(200);
