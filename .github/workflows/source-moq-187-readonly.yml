@@ -1,4 +1,4 @@
-name: #187 Isolated Dilicin source-read test
+name: "187 - Isolated Dilicin source-read test"
 
 on:
   pull_request:
