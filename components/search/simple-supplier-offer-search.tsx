@@ -33,7 +33,10 @@ import {
 } from "@/modules/product-search/domain/explicit-product-constraints";
 import { formatMissingDataLabels } from "@/modules/product-search/domain/taja-missing-data-copy";
 import { unverifiedPresentationTies } from "@/modules/product-search/domain/unverified-offer-presentation";
-import { inquiryContactPriority } from "@/modules/product-search/domain/advertised-price-tie-break";
+import {
+  inquiryContactPriority,
+  preliminaryAdvertisedScorePresentation,
+} from "@/modules/product-search/domain/advertised-price-tie-break";
 import { estimateTajaPreliminaryLandedCost } from "@/modules/product-search/domain/taja-preliminary-cost-estimate";
 import {
   presentSupplierOfferPrice,
@@ -125,6 +128,8 @@ type Copy = {
   inquiryPriceReason: (position: number, moq: string) => string;
   excludedFromInquiry: string;
   priceNotComparable: string;
+  advertisedScoreBonus: (bonus: number) => string;
+  advertisedNotConfirmedForMixed: (quantity: string | null) => string;
   conditionalAdvertisedPrice: string;
   reasonProductMatch: string;
   reasonProductLikely: string;
@@ -186,7 +191,7 @@ const copy: Record<Locale, Copy> = {
     incoterm: "Uslov isporuke (Incoterm)",
     details: "Detalji analize",
     confidence: "Pouzdanost podataka",
-    score: "Rezultat analize",
+    score: "Preliminarna analiza",
     missing: "Još treba proveriti",
     source: "Otvori izvornu ponudu",
     select: "Dodaj za poređenje",
@@ -223,6 +228,12 @@ const copy: Record<Locale, Copy> = {
     inquiryPriceReason: (position, moq) => `Prioritet za upit ${position} zbog uslovne oglašene cene u istoj valuti. MOQ iz oglasa ${moq} ne potvrđuje mešovite dioptrije, prihvaćenu količinu ni čvrstu cenu.`,
     excludedFromInquiry: "Izvor pokazuje neusklađen tip sočiva, pa oglašena cena ne ulazi u red za upit.",
     priceNotComparable: "Oglašene cene nisu isti osnov. Redosled nije napravljen po ceni jer nema dovoljno uporedivih dokaza.",
+    advertisedScoreBonus: (bonus) => bonus > 0
+      ? `Uslovna oglašena cena dodaje +${bonus} na preliminarnu analizu. Pouzdanost podataka se ne menja.`
+      : "Nema dodatka za oglašenu cenu jer u ovom uporedivom skupu ova cena nije niža. Pouzdanost podataka se ne menja.",
+    advertisedNotConfirmedForMixed: (quantity) => quantity
+      ? `Oglašena cena nije potvrđena za ${quantity} mešovitih komada.`
+      : "Oglašena cena nije potvrđena za traženu mešovitu količinu.",
     conditionalAdvertisedPrice: "Cena po oglasu (uslovna)",
     reasonProductMatch: "Proizvod odgovara traženom tipu ili specifikaciji.",
     reasonProductLikely: "Ponuda je relevantna za traženi proizvod, ali deo specifikacije još treba potvrditi.",
@@ -284,7 +295,7 @@ const copy: Record<Locale, Copy> = {
     incoterm: "Incoterm",
     details: "Analysedetails",
     confidence: "Datenzuverlässigkeit",
-    score: "Analyseergebnis",
+    score: "Vorläufige Analyse",
     missing: "Noch zu prüfen",
     source: "Quellangebot öffnen",
     select: "Zum Vergleich hinzufügen",
@@ -321,6 +332,12 @@ const copy: Record<Locale, Copy> = {
     inquiryPriceReason: (position, moq) => `Anfragepriorität ${position} wegen des bedingten Anzeigenpreises in derselben Währung. MOQ laut Anzeige ${moq} bestätigt weder gemischte Dioptrien noch die akzeptierte Menge oder einen festen Preis.`,
     excludedFromInquiry: "Die Quelle zeigt einen unpassenden Linsentyp, daher zählt der Anzeigenpreis nicht für die Anfragereihenfolge.",
     priceNotComparable: "Die Anzeigenpreise sind keine gemeinsame Grundlage. Die Reihenfolge folgt nicht dem Preis, weil vergleichbare Nachweise fehlen.",
+    advertisedScoreBonus: (bonus) => bonus > 0
+      ? `Der bedingte Anzeigenpreis addiert +${bonus} zur vorläufigen Analyse. Die Datenzuverlässigkeit bleibt unverändert.`
+      : "Kein Zuschlag für den Anzeigenpreis, weil dieser Preis im vergleichbaren Satz nicht niedriger ist. Die Datenzuverlässigkeit bleibt unverändert.",
+    advertisedNotConfirmedForMixed: (quantity) => quantity
+      ? `Der Anzeigenpreis ist nicht für ${quantity} gemischte Stück bestätigt.`
+      : "Der Anzeigenpreis ist nicht für die gewünschte gemischte Menge bestätigt.",
     conditionalAdvertisedPrice: "Preis laut Anzeige (bedingt)",
     reasonProductMatch: "Das Produkt entspricht dem gesuchten Typ oder der Spezifikation.",
     reasonProductLikely: "Das Angebot ist relevant, ein Teil der Spezifikation muss jedoch noch bestätigt werden.",
@@ -382,7 +399,7 @@ const copy: Record<Locale, Copy> = {
     incoterm: "Incoterm",
     details: "Analysis details",
     confidence: "Data confidence",
-    score: "Analysis score",
+    score: "Preliminary analysis",
     missing: "Still to verify",
     source: "Open source offer",
     select: "Add for comparison",
@@ -419,6 +436,12 @@ const copy: Record<Locale, Copy> = {
     inquiryPriceReason: (position, moq) => `Inquiry priority ${position} because of the conditional advertised price in the same currency. Listing MOQ ${moq} does not confirm mixed diopters, an accepted quantity, or a firm price.`,
     excludedFromInquiry: "The source shows an incompatible lens type, so the advertised price is not part of the inquiry order.",
     priceNotComparable: "The advertised prices are not one basis. The order is not by price because comparable evidence is missing.",
+    advertisedScoreBonus: (bonus) => bonus > 0
+      ? `The conditional advertised price adds +${bonus} to the preliminary analysis. Data confidence stays unchanged.`
+      : "No advertised-price addition, because this price is not lower in the comparable set. Data confidence stays unchanged.",
+    advertisedNotConfirmedForMixed: (quantity) => quantity
+      ? `The advertised price is not confirmed for ${quantity} mixed pieces.`
+      : "The advertised price is not confirmed for the requested mixed quantity.",
     conditionalAdvertisedPrice: "Advertised listing price (conditional)",
     reasonProductMatch: "The product matches the requested type or specification.",
     reasonProductLikely: "The offer is relevant, but part of the specification still needs confirmation.",
@@ -980,7 +1003,7 @@ export function SimpleSupplierOfferSearch({
           currency: presentation.advertisedCurrency,
           advertisedPrice: presentation.advertisedPrice,
           listedMoq: result.minimumOrderQuantity,
-          confirmedPurchasePrice: presentation.supplierOrderQuote,
+          confirmedPurchasePrice: presentation.supplierOrderQuote || presentation.kind === "PUBLISHED_TIER",
         },
       };
     });
@@ -990,11 +1013,16 @@ export function SimpleSupplierOfferSearch({
     (inquiryPosition.get(left.result.productUrl) ?? left.index) -
       (inquiryPosition.get(right.result.productUrl) ?? right.index),
   );
+  const presentedScores = new Map(preliminaryAdvertisedScorePresentation(
+    visible.flatMap(({ analysis, inquiryCandidate }) => (
+      analysis ? [{ ...inquiryCandidate, baseScore: analysis.overallScore }] : []
+    )),
+  ).map((score) => [score.id, score]));
   const unverifiedTies = unverifiedPresentationTies(visible.flatMap(({ result, analysis, suitability }) => (
     analysis
       ? [{
           id: result.productUrl,
-          overallScore: analysis.overallScore,
+          overallScore: presentedScores.get(result.productUrl)?.preliminaryDisplayedScore ?? analysis.overallScore,
           confidenceScore: analysis.confidenceScore,
           finalEligible: analysis.finalEligible,
           suitability: suitability.status,
@@ -1146,7 +1174,9 @@ export function SimpleSupplierOfferSearch({
             const confirmationMounted = openedConfirmationUrls.includes(result.productUrl);
             const confirmationText = supplierConfirmationCopy(locale);
             const reasons = selectionReasons(result, analysis, quantity, text, constraintQueries);
-            const inquiryRank = inquiry.priorityById[result.productUrl];
+            const inquiryRank = inquiry.priceUsed ? inquiry.priorityById[result.productUrl] : undefined;
+            const presentedScore = presentedScores.get(result.productUrl);
+            const displayedScore = presentedScore?.preliminaryDisplayedScore ?? analysis?.overallScore;
             const lowestAdvertised = inquiry.lowestAdvertisedId === result.productUrl;
             const showConfirmedFinal = analysis
               ? canPresentBestChoice({
@@ -1182,7 +1212,7 @@ export function SimpleSupplierOfferSearch({
                       <p className="muted-text">{text.confirmedFinalOffer}</p>
                     </>
                   )}
-                  {!showConfirmedFinal && inquiryRank && (
+                  {!showConfirmedFinal && inquiry.priceUsed && inquiryRank && (
                     <span className="best-choice-badge best-choice-badge-pending">{text.inquiryPriority(inquiryRank)}</span>
                   )}
                   {lowestAdvertised && (
@@ -1297,6 +1327,12 @@ export function SimpleSupplierOfferSearch({
                     )}
                   </div>
 
+                  {analysis && displayedScore !== undefined && (
+                    <p className="preliminary-analysis-score">
+                      {text.score}: {displayedScore}/100 · {text.confidence}: {analysis.confidenceScore}%
+                    </p>
+                  )}
+
                   {!orderTerms.confirmedForRequestedQuantity && (
                     <p className="supplier-terms-warning">{text.orderTermsUnconfirmed}</p>
                   )}
@@ -1369,6 +1405,12 @@ export function SimpleSupplierOfferSearch({
                         {inquiry.priceUsed && inquiryRank && result.minimumOrderQuantity !== null && (
                           <li>{text.inquiryPriceReason(inquiryRank, formatQuantity(result.minimumOrderQuantity, locale))}</li>
                         )}
+                        {presentedScore?.priceCompared && (
+                          <>
+                            <li>{text.advertisedScoreBonus(presentedScore.priceIndicatorBonus)}</li>
+                            <li>{text.advertisedNotConfirmedForMixed(quantity === null ? null : formatQuantity(quantity, locale))}</li>
+                          </>
+                        )}
                         {!inquiry.priceUsed && suitability.status !== "DISQUALIFIED" && (
                           <li>{text.priceNotComparable}</li>
                         )}
@@ -1386,9 +1428,9 @@ export function SimpleSupplierOfferSearch({
                         {text.landedCost}: {formatMoney(liveEstimate.lowPerUnitEur, locale)} – {formatMoney(liveEstimate.highPerUnitEur, locale)} / {text.pieces}
                       </p>
                     )}
-                    {analysis && (
+                    {analysis && displayedScore !== undefined && (
                       <>
-                        <p>{text.score}: {analysis.overallScore}/100 · {text.confidence}: {analysis.confidenceScore}%</p>
+                        <p className="preliminary-analysis-score">{text.score}: {displayedScore}/100 · {text.confidence}: {analysis.confidenceScore}%</p>
                         <p className="muted-text">{analysis.explanation}</p>
                         {analysis.missingData.length > 0 && (
                           <p className="muted-text">{text.missing}: {formatMissingDataLabels(analysis.missingData, locale)}</p>

@@ -154,6 +154,11 @@ describe("ImportPilot 1.0 simple supplier results", () => {
     expect(resultsSource).toContain('conditionalAdvertisedPrice: "Cena po oglasu (uslovna)"');
     expect(resultsSource).toContain('lowestUnconfirmedAdvertised: "Najniža oglašena cena (nepotvrđena)"');
     expect(resultsSource).toContain('inquiryPriority: (position) => `Prioritet za upit ${position}`');
+    expect(resultsSource).toContain("preliminaryAdvertisedScorePresentation");
+    expect(resultsSource).toContain('score: "Preliminarna analiza"');
+    expect(resultsSource).toContain("Oglašena cena nije potvrđena za ${quantity} mešovitih komada.");
+    expect(resultsSource).toContain("inquiry.priceUsed && inquiryRank");
+    expect(resultsSource).toContain('presentation.supplierOrderQuote || presentation.kind === "PUBLISHED_TIER"');
     expect(resultsSource).toContain('confirmedFinalOffer: "Potvrđena konačna ponuda"');
     expect(resultsSource).toContain("canPresentBestChoice");
     expect(resultsSource).toContain('showConfirmedFinal && (');

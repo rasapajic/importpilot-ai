@@ -231,6 +231,11 @@
   box-shadow: 0 0 0 2px rgb(22 130 93 / 10%);
 }
 
+.preliminary-analysis-score {
+  margin: 0.35rem 0 0.75rem;
+  overflow-wrap: anywhere;
+}
+
 .preliminary-comparison {
   margin: 0 0 1.25rem;
 }

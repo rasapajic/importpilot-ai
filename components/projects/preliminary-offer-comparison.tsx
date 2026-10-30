@@ -20,6 +20,9 @@ type Copy = {
   landedBlocked: string;
   unknown: string;
   quoteRoute: string;
+  preliminaryAnalysis: string;
+  confidence: string;
+  mixedQuantityCaveat: (quantity: string | null) => string;
   evidence: Record<PreliminaryComparisonPriceEvidence, string>;
   fit: Record<ExplicitProductConstraintStatus, string>;
 };
@@ -39,6 +42,11 @@ const copy: Record<Locale, Copy> = {
     landedBlocked: "blokirano dok nema potvrđene nabavne cene",
     unknown: "nije poznato",
     quoteRoute: "Potvrdu zatražite u koraku sa ponudama. Poruka se ne šalje sama i cena se ne označava kao poslata.",
+    preliminaryAnalysis: "Preliminarna analiza",
+    confidence: "Pouzdanost podataka",
+    mixedQuantityCaveat: (quantity) => quantity
+      ? `Oglašena cena nije potvrđena za ${quantity} mešovitih komada.`
+      : "Oglašena cena nije potvrđena za traženu mešovitu količinu.",
     evidence: {
       CONFIRMED_QUOTE: "Potvrđena pisana ponuda",
       ADVERTISED_RANGE: "Reklamirani raspon, nije čvrsta ponuda",
@@ -66,6 +74,11 @@ const copy: Record<Locale, Copy> = {
     landedBlocked: "blockiert, bis ein Einkaufspreis bestätigt ist",
     unknown: "unbekannt",
     quoteRoute: "Bitten Sie im Angebotsschritt um Bestätigung. Es wird nichts automatisch gesendet und kein Preis als gesendet markiert.",
+    preliminaryAnalysis: "Vorläufige Analyse",
+    confidence: "Datenzuverlässigkeit",
+    mixedQuantityCaveat: (quantity) => quantity
+      ? `Der Anzeigenpreis ist nicht für ${quantity} gemischte Stück bestätigt.`
+      : "Der Anzeigenpreis ist nicht für die gewünschte gemischte Menge bestätigt.",
     evidence: {
       CONFIRMED_QUOTE: "Bestätigtes schriftliches Angebot",
       ADVERTISED_RANGE: "Beworbene Spanne, kein festes Angebot",
@@ -93,6 +106,11 @@ const copy: Record<Locale, Copy> = {
     landedBlocked: "blocked until a purchase price is confirmed",
     unknown: "unknown",
     quoteRoute: "Request confirmation from the offer step. Nothing is sent automatically and no price is marked as sent.",
+    preliminaryAnalysis: "Preliminary analysis",
+    confidence: "Data confidence",
+    mixedQuantityCaveat: (quantity) => quantity
+      ? `The advertised price is not confirmed for ${quantity} mixed pieces.`
+      : "The advertised price is not confirmed for the requested mixed quantity.",
     evidence: {
       CONFIRMED_QUOTE: "Confirmed written quotation",
       ADVERTISED_RANGE: "Advertised range, not a firm quote",
@@ -115,16 +133,25 @@ function priceText(row: ReturnType<typeof buildPreliminaryOfferComparison>[numbe
   return `${amount}. ${text.evidence[row.priceEvidence]}`;
 }
 
+function quantityLabel(quantity: number | null, locale: Locale) {
+  if (quantity === null) return null;
+  const numberLocale = locale === "sr" ? "sr-RS" : locale === "de" ? "de-DE" : "en-US";
+  return new Intl.NumberFormat(numberLocale, { maximumFractionDigits: 0 }).format(quantity);
+}
+
 export function PreliminaryOfferComparison({
   locale,
   offers,
+  requestedQuantity = null,
 }: {
   locale: Locale;
   offers: PreliminaryComparisonInput[];
+  requestedQuantity?: number | null;
 }) {
   if (offers.length < 2) return null;
   const text = copy[locale];
   const rows = buildPreliminaryOfferComparison(offers);
+  const quantityText = quantityLabel(requestedQuantity, locale);
 
   return (
     <section className="preliminary-comparison" aria-label={text.title}>
@@ -163,7 +190,25 @@ export function PreliminaryOfferComparison({
                 <dt>{text.landedCost}</dt>
                 <dd>{text.landedBlocked}</dd>
               </div>
+              {row.preliminaryDisplayedScore !== null && (
+                <div>
+                  <dt>{text.preliminaryAnalysis}</dt>
+                  <dd>
+                    {row.preliminaryDisplayedScore}/100
+                    {row.priceIndicatorBonus > 0 ? ` (+${row.priceIndicatorBonus})` : ""}
+                  </dd>
+                </div>
+              )}
+              {row.confidenceScore !== null && (
+                <div>
+                  <dt>{text.confidence}</dt>
+                  <dd>{row.confidenceScore}%</dd>
+                </div>
+              )}
             </dl>
+            {(row.priceEvidence === "ADVERTISED_PRICE" || row.priceEvidence === "ADVERTISED_RANGE") && (
+              <p className="muted-text">{text.mixedQuantityCaveat(quantityText)}</p>
+            )}
             {row.productUrl && (
               <p><a href={row.productUrl} rel="noreferrer" target="_blank">{row.supplierName}</a></p>
             )}

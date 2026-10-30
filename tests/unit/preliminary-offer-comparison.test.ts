@@ -59,6 +59,8 @@ describe("preliminary offer comparison", () => {
       listedMoq: 12,
       incoterm: null,
     });
+    expect(rows[0]?.preliminaryDisplayedScore).toBeNull();
+    expect(rows[0]?.confidenceScore).toBeNull();
     expect(rows[1]).toMatchObject({
       priceEvidence: "UNKNOWN",
       priceLow: null,
@@ -142,6 +144,32 @@ describe("preliminary offer comparison", () => {
       ...offer,
       marketplaceDetails: stored,
     }])[0]?.suitability).toBe("COMPATIBLE");
+  });
+});
+
+describe("provisional advertised score in the comparison", () => {
+  it("shows the same capped bonus as the inquiry comparison and does not confirm a purchase price", () => {
+    const rows = buildPreliminaryOfferComparison([
+      { id: "zlin", supplierName: "Zlin", title: "Wholesale reading glasses", productUrl: "https://example.com/zlin", supplierCountry: "CN", listedMoq: 12, incoterm: null, unitPrice: null, currency: null, advertisedPrice: 1.2, advertisedCurrency: "USD", advertisedPriceHigh: null, writtenQuoteConfirmed: false, productQuery: REQUEST, baseAnalysisScore: 55, confidenceScore: 24 },
+      { id: "wzouyuan", supplierName: "Wzouyuan", title: "Reading glasses", productUrl: "https://example.com/wzouyuan", supplierCountry: "CN", listedMoq: 100, incoterm: null, unitPrice: null, currency: null, advertisedPrice: 0.35, advertisedCurrency: "USD", advertisedPriceHigh: null, writtenQuoteConfirmed: false, productQuery: REQUEST, baseAnalysisScore: 55, confidenceScore: 24 },
+      { id: "readsun", supplierName: "Readsun", title: "Reading glasses assorted strengths", productUrl: "https://example.com/readsun", supplierCountry: "CN", listedMoq: 200, incoterm: null, unitPrice: null, currency: null, advertisedPrice: 1, advertisedCurrency: "USD", advertisedPriceHigh: null, writtenQuoteConfirmed: false, productQuery: REQUEST, baseAnalysisScore: 55, confidenceScore: 24 },
+      { id: "progressive", supplierName: "Progressive Control", title: "Adjustable +4.00 Progressive Multifocal Reading Glasses", productUrl: "https://example.com/progressive", supplierCountry: "CN", listedMoq: 12, incoterm: null, unitPrice: null, currency: null, advertisedPrice: 0.2, advertisedCurrency: "USD", advertisedPriceHigh: null, writtenQuoteConfirmed: false, productQuery: REQUEST, baseAnalysisScore: 55, confidenceScore: 24 },
+    ]);
+
+    expect(rows.map((row) => ({
+      id: row.id,
+      score: row.preliminaryDisplayedScore,
+      bonus: row.priceIndicatorBonus,
+      confidence: row.confidenceScore,
+      purchasePriceConfirmed: row.purchasePriceConfirmed,
+      landedCostAvailable: row.landedCostAvailable,
+      suitability: row.suitability,
+    }))).toEqual([
+      { id: "zlin", score: 55, bonus: 0, confidence: 24, purchasePriceConfirmed: false, landedCostAvailable: false, suitability: "NEEDS_CONFIRMATION" },
+      { id: "wzouyuan", score: 60, bonus: 5, confidence: 24, purchasePriceConfirmed: false, landedCostAvailable: false, suitability: "NEEDS_CONFIRMATION" },
+      { id: "readsun", score: 57, bonus: 2, confidence: 24, purchasePriceConfirmed: false, landedCostAvailable: false, suitability: "NEEDS_CONFIRMATION" },
+      { id: "progressive", score: 55, bonus: 0, confidence: 24, purchasePriceConfirmed: false, landedCostAvailable: false, suitability: "DISQUALIFIED" },
+    ]);
   });
 });
 

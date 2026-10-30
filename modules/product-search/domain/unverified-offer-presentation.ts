@@ -16,10 +16,10 @@ export type UnverifiedPresentationTie = {
 };
 
 /**
- * Groups saved or live offers that still need confirmation and show the same
- * score and confidence. The card number is only display order after that tie.
- * A lower advertised price or a lower listing MOQ is not a separate quality
- * rank until the supplier confirms the product and the quantity price.
+ * Groups offers that still need confirmation and show the same score and
+ * confidence. Pass the score the card shows. That score may include a
+ * provisional advertised-price bonus, so equal shown scores are still one
+ * unverified level. Confidence is the unchanged data-confidence value.
  */
 export function unverifiedPresentationTies(
   offers: readonly UnverifiedPresentationOffer[],

@@ -32,6 +32,12 @@ import { extractSupplierLogisticsData } from "@/modules/transport/domain/transpo
 
 type DecisionView = ProjectDecisionResult & { id: string; createdAt: Date };
 
+type SearchAnalysisScore = {
+  productUrl: string;
+  overallScore: number;
+  confidenceScore: number;
+};
+
 type OfferWithDetails = SupplierOffer & {
   costCalculations: CostCalculation[];
   assessments: OfferAssessment[];
@@ -361,6 +367,7 @@ export function SimpleProfitabilityPanel({
   focusedOfferId,
   selectedCalculationOfferId,
   profitabilityError,
+  searchScores = [],
 }: {
   projectId: string;
   projectName: string;
@@ -368,6 +375,7 @@ export function SimpleProfitabilityPanel({
   projectQuantity: number;
   offers: OfferWithDetails[];
   decision: DecisionView | null;
+  searchScores?: readonly SearchAnalysisScore[];
   focusedOfferId?: string;
   selectedCalculationOfferId?: string;
   profitabilityError?: string;
@@ -591,15 +599,20 @@ export function SimpleProfitabilityPanel({
           {offersForInput.length >= 2 && (
             <PreliminaryOfferComparison
               locale={locale}
+              requestedQuantity={projectQuantity}
               offers={offersForInput.map((offer) => {
                 const metadata = offer.sourceMetadata;
                 const advertisedPrice = metadataNumber(metadata, "advertisedPrice");
                 const advertisedPriceHigh = metadataNumber(metadata, "advertisedPriceHigh");
+                const productUrl = sourceOfferUrl(metadata);
+                const searchScore = productUrl
+                  ? searchScores.find((score) => score.productUrl === productUrl) ?? null
+                  : null;
                 return {
                   id: offer.id,
                   supplierName: offer.supplierName,
                   title: metadataText(metadata, "title"),
-                  productUrl: sourceOfferUrl(metadata),
+                  productUrl,
                   supplierCountry: offer.supplierCountry,
                   listedMoq: offer.moq,
                   incoterm: offer.incoterm,
@@ -611,6 +624,10 @@ export function SimpleProfitabilityPanel({
                   writtenQuoteConfirmed: Boolean(transferredSupplierQuote(metadata)),
                   productQuery: comparisonProductQuery(metadata, projectName),
                   marketplaceDetails: readStoredMarketplaceDetails(metadata),
+                  baseAnalysisScore: searchScore?.overallScore ?? null,
+                  confidenceScore: searchScore === null
+                    ? null
+                    : Number(searchScore.confidenceScore),
                 };
               })}
             />
