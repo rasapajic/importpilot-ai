@@ -113,6 +113,7 @@ export function comparisonInquiryPriority(
     listedMoq: number | null;
     purchasePriceConfirmed: boolean;
   }>,
+  requestedQuantity: number | null = null,
 ) {
   return inquiryContactPriority(rows.map((row) => ({
     id: row.id,
@@ -121,7 +122,7 @@ export function comparisonInquiryPriority(
     advertisedPrice: row.purchasePriceConfirmed ? null : row.priceLow,
     listedMoq: row.listedMoq,
     confirmedPurchasePrice: row.purchasePriceConfirmed,
-  })));
+  })), requestedQuantity);
 }
 
 function finiteScore(value: number | null | undefined) {
@@ -130,6 +131,7 @@ function finiteScore(value: number | null | undefined) {
 
 export function buildPreliminaryOfferComparison(
   offers: PreliminaryComparisonInput[],
+  requestedQuantity: number | null = null,
 ): PreliminaryComparisonRow[] {
   const drafted = offers.map((offer) => {
     const advertisedLow = positive(offer.advertisedPrice);
@@ -193,7 +195,7 @@ export function buildPreliminaryOfferComparison(
     listedMoq: row.listedMoq,
     confirmedPurchasePrice: row.purchasePriceConfirmed,
     baseScore: row.baseAnalysisScore ?? 0,
-  }))).map((score) => [score.id, score]));
+  })), requestedQuantity).map((score) => [score.id, score]));
 
   return drafted.map((row) => {
     const score = presented.get(row.id);
