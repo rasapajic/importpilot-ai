@@ -376,3 +376,27 @@ describe("supplier offer URL import provider", () => {
     vi.unstubAllEnvs();
   });
 });
+
+
+describe("listing MOQ from visible grouped count #187", () => {
+  it("prefers 1,200 Pieces (MOQ) over embedded MOQ 200 without confirming a price tier", async () => {
+    const html = `<html><head>
+      <meta property="og:title" content="New Model Senior Reading Glasses">
+      <meta property="og:image" content="https://image.made-in-china.com/glasses.jpg">
+      <script>{"moq":200,"price":"0.18"}</script>
+    </head><body>
+      <h1>New Model Senior Reading Glasses</h1>
+      <span>US$0.18</span><span>1,200 Pieces (MOQ)</span>
+      <p>Trial MOQ 12/color</p>
+    </body></html>`;
+    const provider = createSupplierOfferUrlImportProvider({
+      resolveHost: publicResolver,
+      fetcher: async () => htmlResponse(html),
+    });
+    const preview = await provider.previewSupplierOfferUrl(
+      "https://dilicin.en.made-in-china.com/product/jYzpeDthEMkd/China-New-Model-Senior-Reading-Glasses.html",
+    );
+    expect(preview.minimumOrderQuantity).toBe(1200);
+    expect(preview.price).toBe(0.18);
+  });
+});
