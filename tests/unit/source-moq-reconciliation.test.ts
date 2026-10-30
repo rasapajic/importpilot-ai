@@ -8,7 +8,7 @@ import { inquiryContactPriority, preliminaryAdvertisedScorePresentation } from "
 import { presentSupplierOfferPrice } from "../../modules/product-search/domain/supplier-quantity-pricing";
 import type { SupplierOfferSearchResult, SupplierOfferUrlPreview } from "../../modules/product-search/domain/search";
 
-const url = "https://dilicin.en.made-in-china.com/product/jYzpeDthEMkd/China-New-Model-Senior-Reading-Glasses-High-Definition-Wholesale-From-Manufacturers-Direct-Sales-.html";
+const url = "https://dilicn.en.made-in-china.com/product/jYzpeDtbEMkd/China-New-Model-Senior-Reading-Glasses-High-Definition-Wholesale-From-Manufacturers-Direct-Sales-.html";
 const saved: SupplierOfferSearchResult = {
   title: "New Model Senior Reading Glasses",
   supplierName: "Dilicin",
