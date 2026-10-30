@@ -34,6 +34,7 @@ import {
   explicitProductConstraintRank,
 } from "@/modules/product-search/domain/explicit-product-constraints";
 import { formatMissingDataLabels } from "@/modules/product-search/domain/taja-missing-data-copy";
+import { unverifiedPresentationTies } from "@/modules/product-search/domain/unverified-offer-presentation";
 import { estimateTajaPreliminaryLandedCost } from "@/modules/product-search/domain/taja-preliminary-cost-estimate";
 import {
   presentSupplierOfferPrice,
@@ -115,6 +116,8 @@ type Copy = {
   disqualifiedProduct: string;
   selectionCriteria: string;
   whySelected: string;
+  knownFacts: string;
+  equivalentUnverified: (count: number, score: number, confidence: number) => string;
   reasonProductMatch: string;
   reasonProductLikely: string;
   variantMixUnconfirmed: string;
@@ -202,6 +205,8 @@ const copy: Record<Locale, Copy> = {
     disqualifiedProduct: "Ne odgovara zahtevu. Progresivna, podesiva ili drugačija dioptrija ne može biti najbolji izbor.",
     selectionCriteria: "Sve dostupne ponude su prikazane. Najbolji izbor postoji tek kada su nabavna cena i ukupan trošak uvoza potvrđeni. Pre toga prvi kandidat može biti samo preliminaran.",
     whySelected: "Zašto je izdvojena",
+    knownFacts: "Šta je poznato",
+    equivalentUnverified: (count, score, confidence) => `Isti rezultat ${score}/100 i ista pouzdanost ${confidence}% (${count}). To je isti neprovereni nivo, ne rang kvaliteta. Broj na kartici je samo redosled prikaza. Niža oglašena cena ili manji MOQ ne čine ponudu boljom dok tip sočiva, cena za traženu količinu i uslovi nisu potvrđeni.`,
     reasonProductMatch: "Proizvod odgovara traženom tipu ili specifikaciji.",
     reasonProductLikely: "Ponuda je relevantna za traženi proizvod, ali deo specifikacije još treba potvrditi.",
     variantMixUnconfirmed: "Mešanje varijanti u jednoj narudžbini nije potvrđeno.",
@@ -289,6 +294,8 @@ const copy: Record<Locale, Copy> = {
     disqualifiedProduct: "Entspricht der Anfrage nicht. Progressive, verstellbare oder abweichende Dioptrien können nicht die beste Wahl sein.",
     selectionCriteria: "Alle verfügbaren Angebote werden angezeigt. Die endgültige beste Wahl gibt es erst, wenn Einkaufspreis und Landed Cost bestätigt sind. Davor kann der erste Kandidat nur vorläufig sein.",
     whySelected: "Warum ausgewählt",
+    knownFacts: "Was bekannt ist",
+    equivalentUnverified: (count, score, confidence) => `Dieselbe Bewertung ${score}/100 und dieselbe Zuverlässigkeit ${confidence}% (${count}). Das ist dieselbe ungeprüfte Stufe, keine Qualitätsrangfolge. Die Nummer auf der Karte ist nur die Anzeigereihenfolge. Ein niedrigerer angezeigter Preis oder ein kleinerer MOQ macht das Angebot nicht besser, solange Linsentyp, Preis für die gewünschte Menge und Konditionen nicht bestätigt sind.`,
     reasonProductMatch: "Das Produkt entspricht dem gesuchten Typ oder der Spezifikation.",
     reasonProductLikely: "Das Angebot ist relevant, ein Teil der Spezifikation muss jedoch noch bestätigt werden.",
     variantMixUnconfirmed: "Das Mischen von Varianten in einer Bestellung ist nicht bestätigt.",
@@ -376,6 +383,8 @@ const copy: Record<Locale, Copy> = {
     disqualifiedProduct: "Does not match the request. Progressive, adjustable, or out-of-range diopters cannot be the best choice.",
     selectionCriteria: "All available offers are shown. Best choice appears only after the purchase price and landed cost are confirmed. Before that, the first candidate can only be preliminary.",
     whySelected: "Why it was selected",
+    knownFacts: "What is known",
+    equivalentUnverified: (count, score, confidence) => `Same score ${score}/100 and same confidence ${confidence}% (${count}). That is the same unverified level, not a quality ranking. The number on the card is only display order. A lower advertised price or a smaller MOQ does not make an offer better until the lens type, the price for the requested quantity, and the terms are confirmed.`,
     reasonProductMatch: "The product matches the requested type or specification.",
     reasonProductLikely: "The offer is relevant, but part of the specification still needs confirmation.",
     variantMixUnconfirmed: "Mixing variants in one order is not confirmed.",
@@ -941,6 +950,18 @@ export function SimpleSupplierOfferSearch({
   const preliminaryCandidateVisible = topChoiceInput
     ? canPresentPreliminaryCandidate(topChoiceInput)
     : false;
+  const unverifiedTies = unverifiedPresentationTies(visible.flatMap(({ result, analysis, suitability }) => (
+    analysis
+      ? [{
+          id: result.productUrl,
+          overallScore: analysis.overallScore,
+          confidenceScore: analysis.confidenceScore,
+          finalEligible: analysis.finalEligible,
+          suitability: suitability.status,
+        }]
+      : []
+  )));
+  const equivalentUnverifiedIds = new Set(unverifiedTies.flatMap((tie) => tie.ids));
   const hasDeferredSupplierRisk = visible.some(({ result, analysis }) =>
     (!analysis || analysis.supplierRiskLevel === "UNKNOWN") &&
     !supplierPlatformProfileSummary(result.marketplaceDetails?.supplierProfile, locale)
@@ -1022,6 +1043,11 @@ export function SimpleSupplierOfferSearch({
                   : text.selectionOverview(Math.max(reviewedCount, visible.length), visible.length)}
             </strong>
             <p>{text.selectionCriteria}</p>
+            {unverifiedTies.map((tie) => (
+              <p className="supplier-risk-notice" key={`${tie.suitability}-${tie.score}-${tie.confidence}`}>
+                {text.equivalentUnverified(tie.ids.length, tie.score, tie.confidence)}
+              </p>
+            ))}
             {hasDeferredSupplierRisk && (
               <p className="supplier-risk-notice">{text.supplierRiskDeferred}</p>
             )}
@@ -1079,6 +1105,7 @@ export function SimpleSupplierOfferSearch({
             const reasons = selectionReasons(result, analysis, quantity, text, constraintQueries);
             const showBestChoice = index === 0 && bestChoiceVisible;
             const showPreliminaryCandidate = index === 0 && preliminaryCandidateVisible;
+            const equivalentUnverified = equivalentUnverifiedIds.has(result.productUrl);
             const showAdvertisedPrice = pricePresentation.advertisedPrice !== null &&
               pricePresentation.advertisedCurrency !== null &&
               (
@@ -1107,7 +1134,7 @@ export function SimpleSupplierOfferSearch({
                       <p className="warning-text">{text.preliminaryCandidateWarning}</p>
                     </>
                   )}
-                  {index === 0 && !showBestChoice && !showPreliminaryCandidate && (
+                  {(equivalentUnverified || (index === 0 && !showBestChoice && !showPreliminaryCandidate)) && (
                     <span className="best-choice-badge best-choice-badge-pending">{text.notARecommendation}</span>
                   )}
                   {suitability.status === "DISQUALIFIED" && (
@@ -1281,7 +1308,7 @@ export function SimpleSupplierOfferSearch({
 
                   {reasons.length > 0 && (
                     <div className="selection-reasons">
-                      <strong>{text.whySelected}</strong>
+                      <strong>{equivalentUnverified ? text.knownFacts : text.whySelected}</strong>
                       <ul>
                         {reasons.map((reason) => <li key={reason}>{reason}</li>)}
                       </ul>
