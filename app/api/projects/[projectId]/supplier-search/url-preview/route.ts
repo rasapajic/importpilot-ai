@@ -105,6 +105,8 @@ export async function POST(
     });
     return NextResponse.json({
       preview,
+      // Response time, not a guarantee that the remote marketplace changed now.
+      checkedAt: new Date().toISOString(),
       diagnostics: developmentDiagnostics({
         providerStatus: "success",
         previewFieldCount: previewFieldCount(preview),
@@ -115,7 +117,7 @@ export async function POST(
         MOQ: preview.minimumOrderQuantity,
         image: preview.imageUrl,
       }),
-    });
+    }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     logPreviewRoute({
       route: "/api/projects/[projectId]/supplier-search/url-preview",
