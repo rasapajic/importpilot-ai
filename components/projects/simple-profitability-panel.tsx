@@ -9,6 +9,13 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { CostCalculatorForm } from "@/components/costs/cost-calculator-form";
+import { PreliminaryOfferComparison } from "@/components/projects/preliminary-offer-comparison";
+import { readStoredMarketplaceDetails } from "@/modules/product-search/domain/preliminary-offer-comparison";
+import {
+  bridgeSavedOfferSearchEvidence,
+  matchingSearchScore,
+} from "@/modules/product-search/domain/saved-offer-search-evidence";
+import type { SupplierOfferSearchResult } from "@/modules/product-search/domain/search";
 import { useI18n } from "@/components/i18n/i18n-provider";
 import { CommercialTermsForm } from "@/components/offers/commercial-terms-form";
 import { ProfitabilityCheckControl } from "@/components/projects/profitability-check-control";
@@ -23,12 +30,17 @@ import type { ProjectDecisionResult } from "@/modules/decisions/domain/project-d
 import { getEuroDisplay, type FxSnapshot } from "@/modules/fx/euro-display";
 import { getCountryDisplayName } from "@/modules/i18n/country-names";
 import type { Locale } from "@/modules/i18n/translations";
-import type { SupplierOfferSearchResult } from "@/modules/product-search/domain/search";
 import { estimateTajaPreliminaryLandedCost } from "@/modules/product-search/domain/taja-preliminary-cost-estimate";
 import { transferredSupplierQuote } from "@/modules/negotiation/domain/supplier-confirmation";
 import { extractSupplierLogisticsData } from "@/modules/transport/domain/transport-estimator";
 
 type DecisionView = ProjectDecisionResult & { id: string; createdAt: Date };
+
+type SearchAnalysisScore = {
+  productUrl: string;
+  overallScore: number;
+  confidenceScore: number;
+};
 
 type OfferWithDetails = SupplierOffer & {
   costCalculations: CostCalculation[];
@@ -89,6 +101,7 @@ type SimpleCopy = {
   missingCost: string;
   calculationSuperseded: string;
   unknown: string;
+  backToComparison: string;
 };
 
 const copy: Record<Locale, SimpleCopy> = {
@@ -143,6 +156,7 @@ const copy: Record<Locale, SimpleCopy> = {
     missingCost: "Unesite prodajnu cenu i proverite uvozne troškove",
     calculationSuperseded: "Prethodni obračun je sačuvan, ali više nije aktuelan. Potreban je novi obračun.",
     unknown: "nije poznato",
+    backToComparison: "Nazad na poređenje",
   },
   de: {
     eyebrow: "Einfache Prüfung",
@@ -195,6 +209,7 @@ const copy: Record<Locale, SimpleCopy> = {
     missingCost: "Verkaufspreis eingeben und Importkosten prüfen",
     calculationSuperseded: "Die vorherige Kalkulation bleibt gespeichert, ist aber nicht mehr aktuell. Eine neue Kalkulation ist erforderlich.",
     unknown: "unbekannt",
+    backToComparison: "Zurück zum Vergleich",
   },
   en: {
     eyebrow: "Simple check",
@@ -247,6 +262,7 @@ const copy: Record<Locale, SimpleCopy> = {
     missingCost: "Enter selling price and review import costs",
     calculationSuperseded: "The previous calculation is saved, but it is no longer current. A new calculation is required.",
     unknown: "unknown",
+    backToComparison: "Back to comparison",
   },
 };
 
@@ -267,6 +283,20 @@ function metadataText(metadata: unknown, key: string) {
   if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
   const value = (metadata as Record<string, unknown>)[key];
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function metadataNumber(metadata: unknown, key: string) {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  const value = (metadata as Record<string, unknown>)[key];
+  const parsed = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function comparisonProductQuery(metadata: unknown, projectName: string) {
+  const direct = metadataText(metadata, "originalQuery");
+  if (direct) return direct;
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return projectName;
+  return metadataText((metadata as Record<string, unknown>).provenance, "originalQuery") ?? projectName;
 }
 
 function preliminarySearchResult(
@@ -345,6 +375,8 @@ export function SimpleProfitabilityPanel({
   focusedOfferId,
   selectedCalculationOfferId,
   profitabilityError,
+  searchScores = [],
+  cachedSearchResults = [],
 }: {
   projectId: string;
   projectName: string;
@@ -352,6 +384,8 @@ export function SimpleProfitabilityPanel({
   projectQuantity: number;
   offers: OfferWithDetails[];
   decision: DecisionView | null;
+  searchScores?: readonly SearchAnalysisScore[];
+  cachedSearchResults?: readonly SupplierOfferSearchResult[];
   focusedOfferId?: string;
   selectedCalculationOfferId?: string;
   profitabilityError?: string;
@@ -379,6 +413,7 @@ export function SimpleProfitabilityPanel({
     ? offers.find((offer) => offer.id === selectedCalculationOfferId) ?? null
     : null;
   const offersForInput = focusedOffer ? [focusedOffer] : offers;
+  const showComparison = !focusedOffer && offersForInput.length >= 2;
   const canCheckProfitability = focusedOffer
     ? focusedOffer.costCalculations.length > 0
     : calculatedOffers.length > 0;
@@ -436,9 +471,14 @@ export function SimpleProfitabilityPanel({
     return display.converted ? `${display.original} (≈ ${display.eur})` : display.original;
   }
 
+  const comparisonHref = `/projects/${projectId}#workflow-step-decision`;
   if (editingOffer?.unitPrice && editingOffer.currency && editingOffer.incoterm) {
     return (
-      <section className="dashboard-card">
+      <section className="dashboard-card supplier-confirmation-detail">
+        <p>
+          <Link className="secondary-button" href={comparisonHref}>{text.backToComparison}</Link>
+        </p>
+        <h2>{editingOffer.supplierName}</h2>
         <CostCalculatorForm
           offerId={editingOffer.id}
           unitPrice={editingOffer.unitPrice.toString()}
@@ -572,7 +612,68 @@ export function SimpleProfitabilityPanel({
               !importCostNeedsReview(offer.latestCostAssumptions),
             );
           }) && <p>{text.readyForCheck}</p>}
+          {showComparison && (
+            <PreliminaryOfferComparison
+              locale={locale}
+              requestedQuantity={projectQuantity}
+              detailHrefById={Object.fromEntries(offersForInput.map((offer) => [
+                offer.id,
+                `/projects/${projectId}?selectedOffer=${offer.id}#workflow-step-decision`,
+              ]))}
+              leadTimeById={Object.fromEntries(offersForInput.map((offer) => [
+                offer.id,
+                offer.deliveryTimeDays === null ? null : `${offer.deliveryTimeDays} ${text.days}`,
+              ]))}
+              offers={offersForInput.map((offer) => {
+                const metadata = offer.sourceMetadata;
+                const productUrl = sourceOfferUrl(metadata);
+                const writtenQuoteConfirmed = Boolean(transferredSupplierQuote(metadata));
+                const storedMarketplaceDetails = readStoredMarketplaceDetails(metadata);
+                const evidence = writtenQuoteConfirmed
+                  ? null
+                  : bridgeSavedOfferSearchEvidence({
+                      productUrl,
+                      storedAdvertisedPrice: metadataNumber(metadata, "advertisedPrice"),
+                      storedAdvertisedCurrency: metadataText(metadata, "advertisedCurrency"),
+                      storedAdvertisedPriceHigh: metadataNumber(metadata, "advertisedPriceHigh"),
+                      storedTitle: metadataText(metadata, "title"),
+                      storedMarketplaceDetails,
+                      cachedResults: cachedSearchResults,
+                      quantity: projectQuantity,
+                    });
+                const searchScore = matchingSearchScore(searchScores, productUrl);
+                return {
+                  id: offer.id,
+                  supplierName: offer.supplierName,
+                  title: evidence?.title ?? metadataText(metadata, "title"),
+                  productUrl,
+                  supplierCountry: offer.supplierCountry,
+                  listedMoq: offer.moq,
+                  incoterm: offer.incoterm,
+                  unitPrice: numberValue(offer.unitPrice),
+                  currency: offer.currency,
+                  advertisedPrice: evidence?.advertisedPrice ?? metadataNumber(metadata, "advertisedPrice"),
+                  advertisedCurrency: evidence?.advertisedCurrency ?? metadataText(metadata, "advertisedCurrency"),
+                  advertisedPriceHigh: evidence?.advertisedPriceHigh ?? metadataNumber(metadata, "advertisedPriceHigh"),
+                  writtenQuoteConfirmed,
+                  productQuery: comparisonProductQuery(metadata, projectName),
+                  marketplaceDetails: evidence?.marketplaceDetails ?? storedMarketplaceDetails,
+                  baseAnalysisScore: searchScore?.overallScore ?? null,
+                  confidenceScore: searchScore === null
+                    ? null
+                    : Number(searchScore.confidenceScore),
+                  missingAdvertisedPriceReason: evidence?.missingAdvertisedPriceReason ?? null,
+                };
+              })}
+            />
+          )}
+          {!showComparison && (
           <div className="offer-list">
+            {focusedOffer && (
+              <p>
+                <Link className="secondary-button" href={comparisonHref}>{text.backToComparison}</Link>
+              </p>
+            )}
             {offersForInput.map((offer) => {
               const latest = offer.costCalculations[0];
               const sourceUrl = sourceOfferUrl(offer.sourceMetadata);
@@ -720,6 +821,7 @@ export function SimpleProfitabilityPanel({
               );
             })}
           </div>
+          )}
         </>
       )}
     </section>

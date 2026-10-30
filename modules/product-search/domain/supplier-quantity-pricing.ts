@@ -93,6 +93,7 @@ export type SupplierOfferPricePresentation = {
   quantityCurrency: string | null;
   advertisedPrice: number | null;
   advertisedCurrency: string | null;
+  advertisedPriceHigh: number | null;
   advertisedAppliesFromQuantity: number | null;
   supplierOrderQuote: boolean;
 };
@@ -144,6 +145,11 @@ export function presentSupplierOfferPrice(
   quantity: number | null | undefined,
 ): SupplierOfferPricePresentation {
   const pricing = assessSupplierOfferQuantityPrice(result, quantity);
+  const advertisedPriceHigh = typeof result.advertisedPriceHigh === "number" &&
+    pricing.advertisedPrice !== null &&
+    result.advertisedPriceHigh > pricing.advertisedPrice
+    ? result.advertisedPriceHigh
+    : null;
   const appliesFrom = advertisedAppliesFromQuantity(
     result,
     pricing.advertisedPrice,
@@ -168,6 +174,7 @@ export function presentSupplierOfferPrice(
       : pricing.quantityCurrency,
     advertisedPrice: pricing.advertisedPrice,
     advertisedCurrency: pricing.advertisedCurrency,
+    advertisedPriceHigh,
     advertisedAppliesFromQuantity: appliesFrom,
     supplierOrderQuote: pricing.supplierOrderQuote,
   };

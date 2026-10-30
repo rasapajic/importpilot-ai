@@ -41,3 +41,28 @@ export function parseLocalizedNumber(
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : null;
 }
+
+const ADVERTISED_RANGE = /([0-9][0-9.,]*)\s*[-–—]\s*([0-9][0-9.,]*)/;
+
+/**
+ * Reads an advertised unit-price string. A range is kept only when the source
+ * text itself contains two prices separated by a dash. The high bound is never
+ * invented from a single number.
+ */
+export function parseAdvertisedPriceBounds(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+    return { low: value, high: null as number | null };
+  }
+  if (typeof value !== "string") return null;
+  const range = value.match(ADVERTISED_RANGE);
+  if (range) {
+    const low = parseLocalizedNumber(range[1], "price");
+    const high = parseLocalizedNumber(range[2], "price");
+    if (low === null || low < 0) return null;
+    if (high === null || high <= low) return { low, high: null as number | null };
+    return { low, high };
+  }
+  const low = parseLocalizedNumber(value, "price");
+  if (low === null || low < 0) return null;
+  return { low, high: null as number | null };
+}

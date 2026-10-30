@@ -9,7 +9,7 @@ import {
 } from "./development-log.js";
 import type { SupplierSearchSource } from "./provider.js";
 import { createSupplierSearchQueryVariants } from "./query-variants.js";
-import { parseLocalizedNumber } from "./localized-number.js";
+import { parseAdvertisedPriceBounds, parseLocalizedNumber } from "./localized-number.js";
 
 const SEARCH_URL = "https://www.made-in-china.com/products-search/hot-china-products";
 const MULTI_SEARCH_URL = "https://www.made-in-china.com/multi-search";
@@ -134,7 +134,7 @@ function normalize(record: Record<string, unknown>): SupplierSearchResult | null
   if (!title || !supplierName || !productUrl || !productUrl.includes("made-in-china.com")) return null;
 
   const rawPrice = first(record, ["price", "priceText", "unitPrice"]);
-  const parsedPrice = parseLocalizedNumber(rawPrice, "price");
+  const priceBounds = parseAdvertisedPriceBounds(rawPrice);
   const parsedCurrency = currency(first(record, ["currency", "currencyCode"]), rawPrice);
   const rawMoq = parseLocalizedNumber(
     first(record, ["minimumOrderQuantity", "moq", "minOrder"]),
@@ -147,8 +147,9 @@ function normalize(record: Record<string, unknown>): SupplierSearchResult | null
     title,
     supplierName,
     supplierCountry: rawCountry && /^[A-Z]{2}$/.test(rawCountry) ? rawCountry : null,
-    price: parsedPrice !== null && parsedCurrency ? parsedPrice : null,
-    currency: parsedPrice !== null && parsedCurrency ? parsedCurrency : null,
+    price: priceBounds && parsedCurrency ? priceBounds.low : null,
+    currency: priceBounds && parsedCurrency ? parsedCurrency : null,
+    ...(priceBounds?.high && parsedCurrency ? { advertisedPriceHigh: priceBounds.high } : {}),
     minimumOrderQuantity: rawMoq && Number.isInteger(rawMoq) ? rawMoq : null,
     incoterm: rawIncoterm?.match(/\b(EXW|FCA|FAS|FOB|CFR|CIF|CPT|CIP|DAP|DPU|DDP)\b/)?.[1] ?? null,
     productUrl,

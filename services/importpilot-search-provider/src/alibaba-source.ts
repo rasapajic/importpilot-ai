@@ -8,7 +8,7 @@ import {
   type DevelopmentLogger,
 } from "./development-log.js";
 import type { SupplierSearchSource } from "./provider.js";
-import { parseLocalizedNumber } from "./localized-number.js";
+import { parseAdvertisedPriceBounds, parseLocalizedNumber } from "./localized-number.js";
 
 const ALIBABA_SEARCH_URL = "https://www.alibaba.com/trade/search";
 const MAX_RESULTS = 5;
@@ -102,9 +102,9 @@ function normalizeRecord(record: Record<string, unknown>): SupplierSearchResult 
   if (!title || !supplierName || !productUrl || !productUrl.includes("alibaba.com")) return null;
 
   const priceText = first(record, ["price", "priceText", "fobPrice", "promotionPrice"]);
-  const parsedPrice = parseLocalizedNumber(priceText, "price");
+  const priceBounds = parseAdvertisedPriceBounds(priceText);
   const parsedCurrency = currency(first(record, ["currency", "currencyCode"]), priceText);
-  const validPrice = parsedPrice !== null && parsedCurrency !== null;
+  const validPrice = priceBounds !== null && parsedCurrency !== null;
   const country = text(first(record, ["supplierCountry", "countryCode", "country"]))?.toUpperCase();
   const minimumOrderQuantity = parseLocalizedNumber(
     first(record, ["minimumOrderQuantity", "moq", "minOrderQuantity", "minOrder"]),
@@ -115,8 +115,9 @@ function normalizeRecord(record: Record<string, unknown>): SupplierSearchResult 
     title,
     supplierName,
     supplierCountry: country && /^[A-Z]{2}$/.test(country) ? country : null,
-    price: validPrice ? parsedPrice : null,
+    price: validPrice && priceBounds ? priceBounds.low : null,
     currency: validPrice ? parsedCurrency : null,
+    ...(validPrice && priceBounds?.high ? { advertisedPriceHigh: priceBounds.high } : {}),
     minimumOrderQuantity: minimumOrderQuantity && Number.isInteger(minimumOrderQuantity)
       ? minimumOrderQuantity
       : null,

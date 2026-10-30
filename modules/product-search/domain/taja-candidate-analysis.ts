@@ -21,6 +21,11 @@ import {
   type TajaPriceSignal,
 } from "./taja-price-signal";
 import {
+  evaluateExplicitProductConstraints,
+  explicitProductConstraintRank,
+  type ExplicitProductConstraintAssessment,
+} from "./explicit-product-constraints";
+import {
   evaluateTajaRequirementMatch,
   TajaRequirementMatchStatuses,
   tajaRequirementMatchRank,
@@ -113,6 +118,7 @@ type InternalAnalysis = {
   landedCostStatus: TajaLandedCostStatus;
   preliminaryCostEstimate: TajaPreliminaryCostEstimate | null;
   requirementMatch: TajaRequirementMatch;
+  productConstraint: ExplicitProductConstraintAssessment;
   priceSignal: TajaPriceSignal;
   moqStatus: MoqStatusValue;
   overallScore: number;
@@ -237,6 +243,7 @@ function missingData(
   landedCostStatus: TajaLandedCostStatus,
   requirementMatch: TajaRequirementMatch,
   priceSignal: TajaPriceSignal,
+  productConstraint: ExplicitProductConstraintAssessment,
 ): TajaMissingDataKey[] {
   const { result, enrichment = {} } = candidate;
   const missing: TajaMissingDataKey[] = [];
@@ -273,7 +280,9 @@ function missingData(
   }
   if (
     requirementMatch.status === TajaRequirementMatchStatuses.PARTIAL ||
-    requirementMatch.status === TajaRequirementMatchStatuses.UNCONFIRMED
+    requirementMatch.status === TajaRequirementMatchStatuses.UNCONFIRMED ||
+    productConstraint.status === "NEEDS_CONFIRMATION" ||
+    productConstraint.status === "DISQUALIFIED"
   ) {
     missing.push("PRODUCT_REQUIREMENTS");
   }
@@ -294,8 +303,11 @@ function finalEligibility(
   requirementMatch: TajaRequirementMatch,
   priceSignal: TajaPriceSignal,
   moqStatus: MoqStatusValue,
+  productConstraint: ExplicitProductConstraintAssessment,
 ) {
-  return coreOfferDataKnown(candidate.result) &&
+  return productConstraint.status !== "DISQUALIFIED" &&
+    productConstraint.status !== "NEEDS_CONFIRMATION" &&
+    coreOfferDataKnown(candidate.result) &&
     moqStatus === MoqStatuses.OK &&
     requirementsAllowFinal(requirementMatch) &&
     priceAllowsFinal(priceSignal) &&
@@ -322,6 +334,19 @@ function preliminaryOrder(
   return new Map(ordered.map((result, index) => [result.productUrl, index]));
 }
 
+function constraintText(constraint: ExplicitProductConstraintAssessment) {
+  if (constraint.reasons.includes("PROGRESSIVE_OR_ADJUSTABLE_LENS")) {
+    return "Ponuda navodi progresivna, multifokalna, bifokalna ili podesiva sočiva, što ne ispunjava izričit zahtev za fiksne dioptrije. ";
+  }
+  if (constraint.reasons.includes("DIOPTER_OUTSIDE_REQUEST")) {
+    return "Navedena dioptrija je van traženog opsega. ";
+  }
+  if (constraint.status === "NEEDS_CONFIRMATION") {
+    return "Tip sočiva nije dokazan. Ponuda nije označena kao odgovarajuća dok dobavljač ne potvrdi fiksne dioptrije. ";
+  }
+  return "";
+}
+
 function compactExplanation(
   assessment: OfferAssessmentResult,
   status: TajaCandidateAnalysisStatus,
@@ -330,8 +355,10 @@ function compactExplanation(
   result: SupplierOfferSearchResult,
   quantity: number,
   moqStatus: MoqStatusValue,
+  productConstraint: ExplicitProductConstraintAssessment,
 ) {
   if (status === TajaCandidateAnalysisStatuses.FINAL) return assessment.explanation;
+  const constraintPrefix = constraintText(productConstraint);
   const moqText =
     moqStatus === MoqStatuses.BLOCKING && result.minimumOrderQuantity !== null
       ? `Tražena količina je ${quantity} kom, a dobavljač navodi MOQ ${result.minimumOrderQuantity} kom; ponuda nije odgovarajuća bez potvrđenog izuzetka ili pregovora o MOQ-u. `
@@ -351,8 +378,8 @@ function compactExplanation(
     ? "Kinesko poreklo još nije potvrđeno i pretpostavljeno je samo na osnovu marketplace-a. "
     : "";
   return missing.length > 0
-    ? `${moqText}${estimateText}${basisText}${chinaPlanningText}${originText}Preporuka ostaje preliminarna dok se ne potvrde nedostajući podaci.`
-    : `${moqText}${estimateText}${basisText}${chinaPlanningText}${originText}Preporuka je preliminarna dok se ne završi detaljna provera finalista.`;
+    ? `${constraintPrefix}${moqText}${estimateText}${basisText}${chinaPlanningText}${originText}Preporuka ostaje preliminarna dok se ne potvrde nedostajući podaci.`
+    : `${constraintPrefix}${moqText}${estimateText}${basisText}${chinaPlanningText}${originText}Preporuka je preliminarna dok se ne završi detaljna provera finalista.`;
 }
 
 function rankingBucket(item: InternalAnalysis) {
@@ -404,6 +431,10 @@ export function analyzeAndRankTajaCandidates(
       context.productQuery ?? "",
       candidate.result,
     );
+    const productConstraint = evaluateExplicitProductConstraints(
+      context.productQuery ?? "",
+      candidate.result,
+    );
     const priceSignal = evaluateTajaPriceSignal(candidate.result, allResults);
     const moqStatus = getMoqStatus({
       projectQuantity: context.quantity,
@@ -417,7 +448,8 @@ export function analyzeAndRankTajaCandidates(
       assessment.overallScore +
       requirementMatch.scoreAdjustment +
       priceSignal.scoreAdjustment +
-      moqScoreAdjustment(moqStatus),
+      moqScoreAdjustment(moqStatus) +
+      productConstraint.scoreAdjustment,
     );
     const finalEligible = finalEligibility(
       candidate,
@@ -426,6 +458,7 @@ export function analyzeAndRankTajaCandidates(
       requirementMatch,
       priceSignal,
       moqStatus,
+      productConstraint,
     );
     return {
       result: candidate.result,
@@ -437,6 +470,7 @@ export function analyzeAndRankTajaCandidates(
       landedCostStatus,
       preliminaryCostEstimate,
       requirementMatch,
+      productConstraint,
       priceSignal,
       moqStatus,
       overallScore,
@@ -446,12 +480,16 @@ export function analyzeAndRankTajaCandidates(
         landedCostStatus,
         requirementMatch,
         priceSignal,
+        productConstraint,
       ),
       preliminaryIndex: preliminaryIndexes.get(candidate.result.productUrl) ?? Number.MAX_SAFE_INTEGER,
     };
   });
 
   analyzed.sort((left, right) => {
+    const constraintDifference = explicitProductConstraintRank(left.productConstraint.status) -
+      explicitProductConstraintRank(right.productConstraint.status);
+    if (constraintDifference !== 0) return constraintDifference;
     const bucketDifference = rankingBucket(left) - rankingBucket(right);
     if (bucketDifference !== 0) return bucketDifference;
     if (left.finalEligible && right.finalEligible) {
@@ -512,6 +550,7 @@ export function analyzeAndRankTajaCandidates(
         item.result,
         context.quantity,
         item.moqStatus,
+        item.productConstraint,
       ),
     })),
   };

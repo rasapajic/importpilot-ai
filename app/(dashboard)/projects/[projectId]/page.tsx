@@ -235,6 +235,12 @@ export default async function ProjectPage({
             targetCountry={project.targetCountry}
             projectQuantity={project.quantity}
             offers={project.offers}
+            searchScores={(initialSupplierSearch?.candidateAnalyses ?? []).map((analysis) => ({
+              productUrl: analysis.productUrl,
+              overallScore: analysis.overallScore,
+              confidenceScore: analysis.confidenceScore,
+            }))}
+            cachedSearchResults={initialSupplierSearch?.results ?? []}
             decision={currentDecision}
             focusedOfferId={focusedOfferId}
             selectedCalculationOfferId={selectedCalculationOfferId}

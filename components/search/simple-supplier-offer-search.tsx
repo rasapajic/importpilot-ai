@@ -26,6 +26,17 @@ import type {
   SupplierOfferUrlPreview,
 } from "@/modules/product-search/domain/search";
 import type { SupplierOfferMarketplaceSupplierProfile } from "@/modules/product-search/domain/marketplace-product-details";
+import {
+  allowGenericProductMatchClaim,
+  canPresentBestChoice,
+  evaluateExplicitProductConstraintsForQueries,
+} from "@/modules/product-search/domain/explicit-product-constraints";
+import { formatMissingDataLabels } from "@/modules/product-search/domain/taja-missing-data-copy";
+import { unverifiedPresentationTies } from "@/modules/product-search/domain/unverified-offer-presentation";
+import {
+  inquiryContactPriority,
+  preliminaryAdvertisedScorePresentation,
+} from "@/modules/product-search/domain/advertised-price-tie-break";
 import { estimateTajaPreliminaryLandedCost } from "@/modules/product-search/domain/taja-preliminary-cost-estimate";
 import {
   presentSupplierOfferPrice,
@@ -100,8 +111,26 @@ type Copy = {
   cachedSelectionOverview: (shown: number) => string;
   liveSelectionOverview: (found: number, relevant: number, shown: number) => string;
   bestChoice: string;
+  preliminaryCandidate: string;
+  preliminaryCandidateWarning: string;
+  notARecommendation: string;
+  needsConfirmation: string;
+  disqualifiedProduct: string;
   selectionCriteria: string;
   whySelected: string;
+  knownFacts: string;
+  equivalentUnverified: (count: number, score: number, confidence: number) => string;
+  inquiryOrderTitle: string;
+  inquiryBatch: string;
+  inquiryPriority: (position: number) => string;
+  confirmedFinalOffer: string;
+  lowestUnconfirmedAdvertised: string;
+  inquiryPriceReason: (position: number, moq: string) => string;
+  excludedFromInquiry: string;
+  priceNotComparable: string;
+  advertisedScoreBonus: (bonus: number) => string;
+  advertisedNotConfirmedForMixed: (quantity: string | null) => string;
+  conditionalAdvertisedPrice: string;
   reasonProductMatch: string;
   reasonProductLikely: string;
   variantMixUnconfirmed: string;
@@ -119,6 +148,7 @@ type Copy = {
   writtenQuotePrice: string;
   quantityPriceUnconfirmed: (quantity: string | null) => string;
   advertisedPriceLabel: string;
+  advertisedRangeNote: string;
   advertisedNotForQuantity: string;
   advertisedAppliesFrom: (quantity: string) => string;
   reasonDataConfidence: string;
@@ -161,7 +191,7 @@ const copy: Record<Locale, Copy> = {
     incoterm: "Uslov isporuke (Incoterm)",
     details: "Detalji analize",
     confidence: "Pouzdanost podataka",
-    score: "Rezultat analize",
+    score: "Preliminarna analiza",
     missing: "Još treba proveriti",
     source: "Otvori izvornu ponudu",
     select: "Dodaj za poređenje",
@@ -181,8 +211,30 @@ const copy: Record<Locale, Copy> = {
     cachedSelectionOverview: (shown) => `Prikazano je ${shown} sačuvanih ponuda iz prethodne pretrage. Ovo nije ukupan broj kandidata nove pretrage.`,
     liveSelectionOverview: (found, relevant, shown) => `Pronađeno ${found} kandidata → prikazano svih ${shown} dostupnih ponuda → ${relevant} trenutno prolazi osnovnu proveru.`,
     bestChoice: "Najbolji izbor",
-    selectionCriteria: "Sve dostupne ponude su prikazane redom. Najbolji izbor se određuje prema podudaranju proizvoda, količini i MOQ-u, ceni/uslovima i kvalitetu dostupnih podataka.",
+    preliminaryCandidate: "Najbolji preliminarni kandidat",
+    preliminaryCandidateWarning: "Ponuda, transport, carina i porezi još nisu provereni. Ovo nije konačan izbor.",
+    notARecommendation: "Nije potvrđena preporuka",
+    needsConfirmation: "Potrebna potvrda dobavljača. Tip proizvoda još nije dokazan.",
+    disqualifiedProduct: "Ne odgovara zahtevu. Progresivna, podesiva ili drugačija dioptrija ne može biti najbolji izbor.",
+    selectionCriteria: "Sve dostupne ponude su prikazane. Najbolji izbor postoji tek kada su nabavna cena i ukupan trošak uvoza potvrđeni. Pre toga prvi kandidat može biti samo preliminaran.",
     whySelected: "Zašto je izdvojena",
+    knownFacts: "Šta je poznato",
+    equivalentUnverified: (count, score, confidence) => `Isti rezultat ${score}/100 i ista pouzdanost ${confidence}% (${count}). To nije razlika u potvrđenom kvalitetu.`,
+    inquiryOrderTitle: "Redosled kontaktiranja dobavljača",
+    inquiryBatch: "Prioritet za slanje upita nije obavezan red. Možete odabrati više dobavljača i odobriti upite u istom koraku. Poruke se ne šalju same.",
+    inquiryPriority: (position) => `Prioritet za upit ${position}`,
+    confirmedFinalOffer: "Potvrđena konačna ponuda",
+    lowestUnconfirmedAdvertised: "Najniža oglašena cena (nepotvrđena)",
+    inquiryPriceReason: (position, moq) => `Prioritet za upit ${position} zbog uslovne oglašene cene u istoj valuti. MOQ iz oglasa ${moq} ne potvrđuje mešovite dioptrije, prihvaćenu količinu ni čvrstu cenu.`,
+    excludedFromInquiry: "Izvor pokazuje neusklađen tip sočiva, pa oglašena cena ne ulazi u red za upit.",
+    priceNotComparable: "Oglašene cene nisu isti osnov. Redosled nije napravljen po ceni jer nema dovoljno uporedivih dokaza.",
+    advertisedScoreBonus: (bonus) => bonus > 0
+      ? `Uslovna oglašena cena dodaje +${bonus} na preliminarnu analizu. Pouzdanost podataka se ne menja.`
+      : "Nema dodatka za oglašenu cenu jer u ovom uporedivom skupu ova cena nije niža. Pouzdanost podataka se ne menja.",
+    advertisedNotConfirmedForMixed: (quantity) => quantity
+      ? `Oglašena cena nije potvrđena za ${quantity} mešovitih komada.`
+      : "Oglašena cena nije potvrđena za traženu mešovitu količinu.",
+    conditionalAdvertisedPrice: "Cena po oglasu (uslovna)",
     reasonProductMatch: "Proizvod odgovara traženom tipu ili specifikaciji.",
     reasonProductLikely: "Ponuda je relevantna za traženi proizvod, ali deo specifikacije još treba potvrditi.",
     variantMixUnconfirmed: "Mešanje varijanti u jednoj narudžbini nije potvrđeno.",
@@ -202,6 +254,7 @@ const copy: Record<Locale, Copy> = {
       ? `Cena za ${quantity} komada nije potvrđena`
       : "Cena za traženu količinu nije potvrđena",
     advertisedPriceLabel: "Reklamirana cena",
+    advertisedRangeNote: "Ovo je reklamirani raspon sa oglasa, nije čvrsta ponuda za traženu količinu.",
     advertisedNotForQuantity: "Nije potvrđena za traženu količinu.",
     advertisedAppliesFrom: (quantity) => `Važi tek od ${quantity} komada.`,
     reasonDataConfidence: "Dostupni podaci imaju dobru pouzdanost.",
@@ -242,7 +295,7 @@ const copy: Record<Locale, Copy> = {
     incoterm: "Incoterm",
     details: "Analysedetails",
     confidence: "Datenzuverlässigkeit",
-    score: "Analyseergebnis",
+    score: "Vorläufige Analyse",
     missing: "Noch zu prüfen",
     source: "Quellangebot öffnen",
     select: "Zum Vergleich hinzufügen",
@@ -262,8 +315,30 @@ const copy: Record<Locale, Copy> = {
     cachedSelectionOverview: (shown) => `${shown} gespeicherte Angebote aus der vorherigen Suche werden angezeigt. Dies ist nicht die Gesamtzahl der Kandidaten einer neuen Suche.`,
     liveSelectionOverview: (found, relevant, shown) => `${found} Kandidaten gefunden → alle ${shown} verfügbaren Angebote werden angezeigt → ${relevant} bestehen derzeit die Grundprüfung.`,
     bestChoice: "Beste Wahl",
-    selectionCriteria: "Alle verfügbaren Angebote werden in Rangfolge angezeigt. Die beste Wahl basiert auf Produktübereinstimmung, Menge und MOQ, Preis/Konditionen sowie Datenqualität.",
+    preliminaryCandidate: "Bester vorläufiger Kandidat",
+    preliminaryCandidateWarning: "Angebot, Transport, Zoll und Steuern sind noch nicht geprüft. Dies ist keine endgültige Auswahl.",
+    notARecommendation: "Keine bestätigte Empfehlung",
+    needsConfirmation: "Lieferantenbestätigung erforderlich. Der Produkttyp ist noch nicht nachgewiesen.",
+    disqualifiedProduct: "Entspricht der Anfrage nicht. Progressive, verstellbare oder abweichende Dioptrien können nicht die beste Wahl sein.",
+    selectionCriteria: "Alle verfügbaren Angebote werden angezeigt. Die endgültige beste Wahl gibt es erst, wenn Einkaufspreis und Landed Cost bestätigt sind. Davor kann der erste Kandidat nur vorläufig sein.",
     whySelected: "Warum ausgewählt",
+    knownFacts: "Was bekannt ist",
+    equivalentUnverified: (count, score, confidence) => `Dieselbe Bewertung ${score}/100 und dieselbe Zuverlässigkeit ${confidence}% (${count}). Das ist kein bestätigter Qualitätsunterschied.`,
+    inquiryOrderTitle: "Reihenfolge der Lieferantenanfragen",
+    inquiryBatch: "Die Priorität ist keine Pflichtreihenfolge. Sie können mehrere Lieferanten auswählen und die Anfragen im selben Schritt freigeben. Es wird nichts automatisch gesendet.",
+    inquiryPriority: (position) => `Anfragepriorität ${position}`,
+    confirmedFinalOffer: "Bestätigtes endgültiges Angebot",
+    lowestUnconfirmedAdvertised: "Niedrigster angezeigter Preis (unbestätigt)",
+    inquiryPriceReason: (position, moq) => `Anfragepriorität ${position} wegen des bedingten Anzeigenpreises in derselben Währung. MOQ laut Anzeige ${moq} bestätigt weder gemischte Dioptrien noch die akzeptierte Menge oder einen festen Preis.`,
+    excludedFromInquiry: "Die Quelle zeigt einen unpassenden Linsentyp, daher zählt der Anzeigenpreis nicht für die Anfragereihenfolge.",
+    priceNotComparable: "Die Anzeigenpreise sind keine gemeinsame Grundlage. Die Reihenfolge folgt nicht dem Preis, weil vergleichbare Nachweise fehlen.",
+    advertisedScoreBonus: (bonus) => bonus > 0
+      ? `Der bedingte Anzeigenpreis addiert +${bonus} zur vorläufigen Analyse. Die Datenzuverlässigkeit bleibt unverändert.`
+      : "Kein Zuschlag für den Anzeigenpreis, weil dieser Preis im vergleichbaren Satz nicht niedriger ist. Die Datenzuverlässigkeit bleibt unverändert.",
+    advertisedNotConfirmedForMixed: (quantity) => quantity
+      ? `Der Anzeigenpreis ist nicht für ${quantity} gemischte Stück bestätigt.`
+      : "Der Anzeigenpreis ist nicht für die gewünschte gemischte Menge bestätigt.",
+    conditionalAdvertisedPrice: "Preis laut Anzeige (bedingt)",
     reasonProductMatch: "Das Produkt entspricht dem gesuchten Typ oder der Spezifikation.",
     reasonProductLikely: "Das Angebot ist relevant, ein Teil der Spezifikation muss jedoch noch bestätigt werden.",
     variantMixUnconfirmed: "Das Mischen von Varianten in einer Bestellung ist nicht bestätigt.",
@@ -283,6 +358,7 @@ const copy: Record<Locale, Copy> = {
       ? `Preis für ${quantity} Stück ist nicht bestätigt`
       : "Preis für die gewünschte Menge ist nicht bestätigt",
     advertisedPriceLabel: "Beworbener Preis",
+    advertisedRangeNote: "Dies ist die beworbene Preisspanne der Anzeige, kein festes Angebot für die gewünschte Menge.",
     advertisedNotForQuantity: "Für die gewünschte Menge nicht bestätigt.",
     advertisedAppliesFrom: (quantity) => `Gilt erst ab ${quantity} Stück.`,
     reasonDataConfidence: "Die verfügbaren Daten haben eine gute Zuverlässigkeit.",
@@ -323,7 +399,7 @@ const copy: Record<Locale, Copy> = {
     incoterm: "Incoterm",
     details: "Analysis details",
     confidence: "Data confidence",
-    score: "Analysis score",
+    score: "Preliminary analysis",
     missing: "Still to verify",
     source: "Open source offer",
     select: "Add for comparison",
@@ -343,8 +419,30 @@ const copy: Record<Locale, Copy> = {
     cachedSelectionOverview: (shown) => `Showing ${shown} saved offers from the previous search. This is not the total candidate count for a new search.`,
     liveSelectionOverview: (found, relevant, shown) => `${found} candidates found → all ${shown} available offers are displayed → ${relevant} currently pass the basic check.`,
     bestChoice: "Best choice",
-    selectionCriteria: "All available offers are shown in ranked order. The best choice is based on product fit, quantity and MOQ, price/terms, and data quality.",
+    preliminaryCandidate: "Best preliminary candidate",
+    preliminaryCandidateWarning: "The offer, transport, duties, and taxes are still unverified. This is not a final selection.",
+    notARecommendation: "Not a confirmed recommendation",
+    needsConfirmation: "Supplier confirmation is required. The product type is not proven yet.",
+    disqualifiedProduct: "Does not match the request. Progressive, adjustable, or out-of-range diopters cannot be the best choice.",
+    selectionCriteria: "All available offers are shown. Best choice appears only after the purchase price and landed cost are confirmed. Before that, the first candidate can only be preliminary.",
     whySelected: "Why it was selected",
+    knownFacts: "What is known",
+    equivalentUnverified: (count, score, confidence) => `Same score ${score}/100 and same confidence ${confidence}% (${count}). That is not a confirmed quality difference.`,
+    inquiryOrderTitle: "Order for contacting suppliers",
+    inquiryBatch: "The priority is not a required sequence. You can select several suppliers and approve the inquiries in the same step. Nothing is sent automatically.",
+    inquiryPriority: (position) => `Inquiry priority ${position}`,
+    confirmedFinalOffer: "Confirmed final offer",
+    lowestUnconfirmedAdvertised: "Lowest advertised price (unconfirmed)",
+    inquiryPriceReason: (position, moq) => `Inquiry priority ${position} because of the conditional advertised price in the same currency. Listing MOQ ${moq} does not confirm mixed diopters, an accepted quantity, or a firm price.`,
+    excludedFromInquiry: "The source shows an incompatible lens type, so the advertised price is not part of the inquiry order.",
+    priceNotComparable: "The advertised prices are not one basis. The order is not by price because comparable evidence is missing.",
+    advertisedScoreBonus: (bonus) => bonus > 0
+      ? `The conditional advertised price adds +${bonus} to the preliminary analysis. Data confidence stays unchanged.`
+      : "No advertised-price addition, because this price is not lower in the comparable set. Data confidence stays unchanged.",
+    advertisedNotConfirmedForMixed: (quantity) => quantity
+      ? `The advertised price is not confirmed for ${quantity} mixed pieces.`
+      : "The advertised price is not confirmed for the requested mixed quantity.",
+    conditionalAdvertisedPrice: "Advertised listing price (conditional)",
     reasonProductMatch: "The product matches the requested type or specification.",
     reasonProductLikely: "The offer is relevant, but part of the specification still needs confirmation.",
     variantMixUnconfirmed: "Mixing variants in one order is not confirmed.",
@@ -364,6 +462,7 @@ const copy: Record<Locale, Copy> = {
       ? `Price for ${quantity} pieces is not confirmed`
       : "Price for the requested quantity is not confirmed",
     advertisedPriceLabel: "Advertised price",
+    advertisedRangeNote: "This is the advertised listing range, not a firm quote for the requested quantity.",
     advertisedNotForQuantity: "Not confirmed for the requested quantity.",
     advertisedAppliesFrom: (quantity) => `Applies only from ${quantity} pieces.`,
     reasonDataConfidence: "The available data has good confidence.",
@@ -478,15 +577,26 @@ function advertisedPriceNote(
   fxSnapshot: FxSnapshot | null,
 ) {
   if (presentation.advertisedPrice === null || presentation.advertisedCurrency === null) return null;
-  const amount = formatSupplierPriceWithEuro(
+  const low = formatSupplierPriceWithEuro(
     presentation.advertisedPrice,
     presentation.advertisedCurrency,
     locale,
     fxSnapshot,
   );
-  const threshold = presentation.advertisedAppliesFromQuantity === null
-    ? text.advertisedNotForQuantity
-    : text.advertisedAppliesFrom(formatQuantity(presentation.advertisedAppliesFromQuantity, locale));
+  const high = presentation.advertisedPriceHigh === null
+    ? null
+    : formatSupplierPriceWithEuro(
+        presentation.advertisedPriceHigh,
+        presentation.advertisedCurrency,
+        locale,
+        fxSnapshot,
+      );
+  const amount = high ? `${low}–${high}` : low;
+  const threshold = high
+    ? text.advertisedRangeNote
+    : presentation.advertisedAppliesFromQuantity === null
+      ? text.advertisedNotForQuantity
+      : text.advertisedAppliesFrom(formatQuantity(presentation.advertisedAppliesFromQuantity, locale));
   return `${text.advertisedPriceLabel}: ${amount}. ${threshold}`;
 }
 
@@ -601,10 +711,21 @@ function selectionReasons(
   analysis: TajaCandidateAnalysisWithProductForm | undefined,
   quantity: number | null,
   text: Copy,
+  queries: readonly string[],
 ) {
   const reasons: string[] = [];
+  const constraint = evaluateExplicitProductConstraintsForQueries(queries, result);
 
-  if (analysis?.productForm.matchStatus === "MATCH" || analysis?.requirementMatch.status === "FULL") {
+  if (constraint.status === "DISQUALIFIED") {
+    reasons.push(text.disqualifiedProduct);
+  } else if (constraint.status === "NEEDS_CONFIRMATION") {
+    reasons.push(text.needsConfirmation);
+  } else if (allowGenericProductMatchClaim({
+    requirementStatus: analysis?.requirementMatch.status,
+    productFormStatus: analysis?.productForm.matchStatus,
+    requestedCompleteSystem: analysis?.productForm.requestedCompleteSystem ?? false,
+    constraintStatus: constraint.status,
+  })) {
     reasons.push(text.reasonProductMatch);
   } else if (
     analysis?.productForm.matchStatus === "UNCLEAR" ||
@@ -863,9 +984,51 @@ export function SimpleSupplierOfferSearch({
   }
 
   const analysisByUrl = new Map(analyses.map((analysis) => [analysis.productUrl, analysis]));
+  const constraintQueries = [
+    productName,
+    ...(results ?? []).flatMap((result) => result.provenance?.originalQuery ? [result.provenance.originalQuery] : []),
+  ];
   const visible = (results ?? [])
-    .map((result, index) => ({ result, index, analysis: analysisByUrl.get(result.productUrl) }))
-    .sort((left, right) => (left.analysis?.rank ?? left.index + 100) - (right.analysis?.rank ?? right.index + 100));
+    .map((result, index) => {
+      const suitability = evaluateExplicitProductConstraintsForQueries(constraintQueries, result);
+      const presentation = presentSupplierOfferPrice(result, quantity);
+      return {
+        result,
+        index,
+        analysis: analysisByUrl.get(result.productUrl),
+        suitability,
+        inquiryCandidate: {
+          id: result.productUrl,
+          suitability: suitability.status,
+          currency: presentation.advertisedCurrency,
+          advertisedPrice: presentation.advertisedPrice,
+          listedMoq: result.minimumOrderQuantity,
+          confirmedPurchasePrice: presentation.supplierOrderQuote || presentation.kind === "PUBLISHED_TIER",
+        },
+      };
+    });
+  const inquiry = inquiryContactPriority(visible.map((item) => item.inquiryCandidate));
+  const inquiryPosition = new Map(inquiry.orderedIds.map((id, index) => [id, index]));
+  visible.sort((left, right) =>
+    (inquiryPosition.get(left.result.productUrl) ?? left.index) -
+      (inquiryPosition.get(right.result.productUrl) ?? right.index),
+  );
+  const presentedScores = new Map(preliminaryAdvertisedScorePresentation(
+    visible.flatMap(({ analysis, inquiryCandidate }) => (
+      analysis ? [{ ...inquiryCandidate, baseScore: analysis.overallScore }] : []
+    )),
+  ).map((score) => [score.id, score]));
+  const unverifiedTies = unverifiedPresentationTies(visible.flatMap(({ result, analysis, suitability }) => (
+    analysis
+      ? [{
+          id: result.productUrl,
+          overallScore: presentedScores.get(result.productUrl)?.preliminaryDisplayedScore ?? analysis.overallScore,
+          confidenceScore: analysis.confidenceScore,
+          finalEligible: analysis.finalEligible,
+          suitability: suitability.status,
+        }]
+      : []
+  )));
   const hasDeferredSupplierRisk = visible.some(({ result, analysis }) =>
     (!analysis || analysis.supplierRiskLevel === "UNKNOWN") &&
     !supplierPlatformProfileSummary(result.marketplaceDetails?.supplierProfile, locale)
@@ -947,18 +1110,39 @@ export function SimpleSupplierOfferSearch({
                   : text.selectionOverview(Math.max(reviewedCount, visible.length), visible.length)}
             </strong>
             <p>{text.selectionCriteria}</p>
+            <p className="supplier-risk-notice">{text.inquiryOrderTitle}. {text.inquiryBatch}</p>
+            {!inquiry.priceUsed && visible.length > 1 && (
+              <p className="supplier-risk-notice">{text.priceNotComparable}</p>
+            )}
+            {unverifiedTies.map((tie) => (
+              <p className="supplier-risk-notice" key={`${tie.suitability}-${tie.score}-${tie.confidence}`}>
+                {text.equivalentUnverified(tie.ids.length, tie.score, tie.confidence)}
+              </p>
+            ))}
             {hasDeferredSupplierRisk && (
               <p className="supplier-risk-notice">{text.supplierRiskDeferred}</p>
             )}
           </section>
           <div className="search-result-list">
-          {visible.map(({ result, analysis }, index) => {
+          {visible.map(({ result, analysis, suitability }, index) => {
             const decision = simpleDecision(analysis);
             const pricePresentation = presentSupplierOfferPrice(result, quantity);
             const publishedTier = pricePresentation.kind === "PUBLISHED_TIER";
             const effectiveResult = publishedTier
-              ? supplierOfferForQuantity(result, quantity)
-              : { ...result, price: null, currency: null };
+              ? {
+                  ...supplierOfferForQuantity(result, quantity),
+                  advertisedPrice: pricePresentation.advertisedPrice,
+                  advertisedCurrency: pricePresentation.advertisedCurrency,
+                  advertisedPriceHigh: pricePresentation.advertisedPriceHigh,
+                }
+              : {
+                  ...result,
+                  price: null,
+                  currency: null,
+                  advertisedPrice: pricePresentation.advertisedPrice,
+                  advertisedCurrency: pricePresentation.advertisedCurrency,
+                  advertisedPriceHigh: pricePresentation.advertisedPriceHigh,
+                };
             const priceSnapshots = quantityPriceSnapshots(result, quantity);
             const priceTierSnapshots = supplierPriceTierSnapshots(result);
             const variantFacts = supplierOfferVariantFacts(result);
@@ -989,7 +1173,18 @@ export function SimpleSupplierOfferSearch({
             const confirmationOpen = confirmationUrl === result.productUrl;
             const confirmationMounted = openedConfirmationUrls.includes(result.productUrl);
             const confirmationText = supplierConfirmationCopy(locale);
-            const reasons = selectionReasons(result, analysis, quantity, text);
+            const reasons = selectionReasons(result, analysis, quantity, text, constraintQueries);
+            const inquiryRank = inquiry.priceUsed ? inquiry.priorityById[result.productUrl] : undefined;
+            const presentedScore = presentedScores.get(result.productUrl);
+            const displayedScore = presentedScore?.preliminaryDisplayedScore ?? analysis?.overallScore;
+            const lowestAdvertised = inquiry.lowestAdvertisedId === result.productUrl;
+            const showConfirmedFinal = analysis
+              ? canPresentBestChoice({
+                  status: suitability.status,
+                  confidenceScore: analysis.confidenceScore,
+                  finalEligible: analysis.finalEligible,
+                })
+              : false;
             const showAdvertisedPrice = pricePresentation.advertisedPrice !== null &&
               pricePresentation.advertisedCurrency !== null &&
               (
@@ -997,7 +1192,7 @@ export function SimpleSupplierOfferSearch({
                 pricePresentation.advertisedPrice !== pricePresentation.quantityUnitPrice
               );
             return (
-              <article className={`search-result-card${index === 0 ? " search-result-card-best" : ""}`} key={`${result.source}-${result.productUrl}`}>
+              <article className={`search-result-card${showConfirmedFinal ? " search-result-card-best" : ""}`} key={`${result.source}-${result.productUrl}`}>
                 <SearchResultImage src={result.imageUrl} title={t(result.title)} />
                 <div>
                   <p className="eyebrow">
@@ -1011,7 +1206,21 @@ export function SimpleSupplierOfferSearch({
                       #{index + 1} · {t(result.supplierName)}
                     </a>
                   </p>
-                  {index === 0 && <span className="best-choice-badge">{text.bestChoice}</span>}
+                  {showConfirmedFinal && (
+                    <>
+                      <span className="best-choice-badge">{text.bestChoice}</span>
+                      <p className="muted-text">{text.confirmedFinalOffer}</p>
+                    </>
+                  )}
+                  {!showConfirmedFinal && inquiry.priceUsed && inquiryRank && (
+                    <span className="best-choice-badge best-choice-badge-pending">{text.inquiryPriority(inquiryRank)}</span>
+                  )}
+                  {lowestAdvertised && (
+                    <p className="warning-text">{text.lowestUnconfirmedAdvertised}</p>
+                  )}
+                  {suitability.status === "DISQUALIFIED" && (
+                    <p className="warning-text">{text.disqualifiedProduct}</p>
+                  )}
                   <span className={`provider-status ${decisionClass(decision)}`}>{text.decision[decision]}</span>
                   <h3>{t(result.title)}</h3>
                   <div className="offer-highlights">
@@ -1020,7 +1229,9 @@ export function SimpleSupplierOfferSearch({
                         ? text.writtenQuotePrice
                         : publishedTier
                           ? text.publishedTierPrice
-                          : text.supplierPrice}
+                          : pricePresentation.kind === "ADVERTISED_ONLY"
+                            ? text.conditionalAdvertisedPrice
+                            : text.supplierPrice}
                       {pricePresentation.supplierOrderQuote &&
                       pricePresentation.quantityUnitPrice !== null &&
                       pricePresentation.quantityCurrency ? (
@@ -1060,6 +1271,9 @@ export function SimpleSupplierOfferSearch({
                         <small className="supplier-fx-note">
                           {advertisedPriceNote(pricePresentation, text, locale, fxSnapshot)}
                         </small>
+                      )}
+                      {lowestAdvertised && (
+                        <small className="supplier-fx-note">{text.lowestUnconfirmedAdvertised}</small>
                       )}
                       {publishedTier &&
                         pricePresentation.quantityUnitPrice !== null &&
@@ -1112,6 +1326,12 @@ export function SimpleSupplierOfferSearch({
                       </span>
                     )}
                   </div>
+
+                  {analysis && displayedScore !== undefined && (
+                    <p className="preliminary-analysis-score">
+                      {text.score}: {displayedScore}/100 · {text.confidence}: {analysis.confidenceScore}%
+                    </p>
+                  )}
 
                   {!orderTerms.confirmedForRequestedQuantity && (
                     <p className="supplier-terms-warning">{text.orderTermsUnconfirmed}</p>
@@ -1178,10 +1398,23 @@ export function SimpleSupplierOfferSearch({
                         )).join(" · ")}
                   </p>
 
-                  {reasons.length > 0 && (
+                  {(reasons.length > 0 || inquiryRank || suitability.status === "DISQUALIFIED") && (
                     <div className="selection-reasons">
-                      <strong>{text.whySelected}</strong>
+                      <strong>{text.knownFacts}</strong>
                       <ul>
+                        {inquiry.priceUsed && inquiryRank && result.minimumOrderQuantity !== null && (
+                          <li>{text.inquiryPriceReason(inquiryRank, formatQuantity(result.minimumOrderQuantity, locale))}</li>
+                        )}
+                        {presentedScore?.priceCompared && (
+                          <>
+                            <li>{text.advertisedScoreBonus(presentedScore.priceIndicatorBonus)}</li>
+                            <li>{text.advertisedNotConfirmedForMixed(quantity === null ? null : formatQuantity(quantity, locale))}</li>
+                          </>
+                        )}
+                        {!inquiry.priceUsed && suitability.status !== "DISQUALIFIED" && (
+                          <li>{text.priceNotComparable}</li>
+                        )}
+                        {suitability.status === "DISQUALIFIED" && <li>{text.excludedFromInquiry}</li>}
                         {reasons.map((reason) => <li key={reason}>{reason}</li>)}
                       </ul>
                     </div>
@@ -1195,11 +1428,13 @@ export function SimpleSupplierOfferSearch({
                         {text.landedCost}: {formatMoney(liveEstimate.lowPerUnitEur, locale)} – {formatMoney(liveEstimate.highPerUnitEur, locale)} / {text.pieces}
                       </p>
                     )}
-                    {analysis && (
+                    {analysis && displayedScore !== undefined && (
                       <>
-                        <p>{text.score}: {analysis.overallScore}/100 · {text.confidence}: {analysis.confidenceScore}%</p>
+                        <p className="preliminary-analysis-score">{text.score}: {displayedScore}/100 · {text.confidence}: {analysis.confidenceScore}%</p>
                         <p className="muted-text">{analysis.explanation}</p>
-                        {analysis.missingData.length > 0 && <p className="muted-text">{text.missing}: {analysis.missingData.join(", ")}</p>}
+                        {analysis.missingData.length > 0 && (
+                          <p className="muted-text">{text.missing}: {formatMissingDataLabels(analysis.missingData, locale)}</p>
+                        )}
                       </>
                     )}
                     <p><a href={result.productUrl} rel="noreferrer" target="_blank">{text.source}</a></p>
