@@ -9,7 +9,9 @@ import { parseProductPreview } from "../src/parser.js";
 const EXPECTED_URL =
   "https://dilicn.en.made-in-china.com/product/jYzpeDtbEMkd/China-New-Model-Senior-Reading-Glasses-High-Definition-Wholesale-From-Manufacturers-Direct-Sales-.html";
 const REQUESTED_QUANTITY = 1000;
-const CACHED_MOQ = 200;
+// These come from different observations and must not be conflated.
+const UI_OBSERVED_MOQ = 200; // user's earlier staging screenshot
+const STAGING_DATABASE_CACHE_MOQ = 1200; // read-only staging-cache inspection
 const MAX_BYTES = 1_000_000;
 
 function report(status: string, extra: Record<string, string | number | boolean | null> = {}) {
@@ -19,7 +21,8 @@ function report(status: string, extra: Record<string, string | number | boolean 
     checkedAt: new Date().toISOString(),
     productUrl: EXPECTED_URL,
     buyerQuantity: REQUESTED_QUANTITY,
-    cachedMoq: CACHED_MOQ,
+    observedUiMoq: UI_OBSERVED_MOQ,
+    stagingDatabaseCachedMoq: STAGING_DATABASE_CACHE_MOQ,
     ...extra,
   };
   const line = JSON.stringify(payload);
@@ -113,7 +116,8 @@ async function main() {
     }
     report("VERIFIED_SOURCE_MOQ", {
       httpStatus: res.status, pageMoq: visibleMoq,
-      differsFromCache: visibleMoq !== CACHED_MOQ,
+      differsFromStoredCache: visibleMoq !== STAGING_DATABASE_CACHE_MOQ,
+      differsFromObservedUi: visibleMoq !== UI_OBSERVED_MOQ,
       aboveBuyerQuantity: visibleMoq > REQUESTED_QUANTITY,
       advertisedPriceForBuyerConfirmed: false,
     });
