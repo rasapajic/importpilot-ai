@@ -16,6 +16,7 @@ type Copy = {
   supplier: string;
   product: string;
   moq: string;
+  minimumAboveRequest: (requested: string, minimum: string) => string;
   price: string;
   origin: string;
   incoterm: string;
@@ -53,6 +54,7 @@ const copy: Record<Locale, Copy> = {
     supplier: "Dobavljač",
     product: "Proizvod",
     moq: "MOQ iz oglasa",
+    minimumAboveRequest: (requested, minimum) => `Traženo ${requested} kom. · Minimum prodavca ${minimum} kom. Cena za traženu količinu nije potvrđena.`,
     price: "Cena",
     origin: "Poreklo",
     incoterm: "Incoterm",
@@ -103,6 +105,7 @@ const copy: Record<Locale, Copy> = {
     supplier: "Lieferant",
     product: "Produkt",
     moq: "MOQ aus der Anzeige",
+    minimumAboveRequest: (requested, minimum) => `Gesucht ${requested} Stück · Mindestmenge des Verkäufers ${minimum} Stück. Preis für die gewünschte Menge nicht bestätigt.`,
     price: "Preis",
     origin: "Herkunft",
     incoterm: "Incoterm",
@@ -153,6 +156,7 @@ const copy: Record<Locale, Copy> = {
     supplier: "Supplier",
     product: "Product",
     moq: "Listing MOQ",
+    minimumAboveRequest: (requested, minimum) => `Requested ${requested} pcs · Seller minimum ${minimum} pcs. Price for the requested quantity is unconfirmed.`,
     price: "Price",
     origin: "Origin",
     incoterm: "Incoterm",
@@ -227,8 +231,8 @@ export function PreliminaryOfferComparison({
 }) {
   if (offers.length < 2) return null;
   const text = copy[locale];
-  const built = buildPreliminaryOfferComparison(offers);
-  const inquiry = comparisonInquiryPriority(built);
+  const built = buildPreliminaryOfferComparison(offers, requestedQuantity);
+  const inquiry = comparisonInquiryPriority(built, requestedQuantity);
   const rows = orderPreliminaryComparisonRows(built, inquiry);
   const quantityText = quantityLabel(requestedQuantity, locale);
   const columns = Math.min(rows.length, 3);
@@ -262,6 +266,16 @@ export function PreliminaryOfferComparison({
               <div>
                 <dt>{text.moq}</dt>
                 <dd>{row.listedMoq ?? text.unknown}</dd>
+                {requestedQuantity !== null &&
+                  row.listedMoq !== null &&
+                  row.listedMoq > requestedQuantity && (
+                  <dd className="warning-text" role="note">
+                    {text.minimumAboveRequest(
+                      quantityLabel(requestedQuantity, locale) ?? String(requestedQuantity),
+                      quantityLabel(row.listedMoq, locale) ?? String(row.listedMoq),
+                    )}
+                  </dd>
+                )}
               </div>
               <div>
                 <dt>{text.price}</dt>

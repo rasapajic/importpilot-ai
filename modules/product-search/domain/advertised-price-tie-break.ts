@@ -58,6 +58,18 @@ function hasAdvertisedPrice(offer: AdvertisedPriceCandidate) {
     !offer.confirmedPurchasePrice;
 }
 
+function sellerMinimumExceedsRequest(
+  offer: AdvertisedPriceCandidate,
+  requestedQuantity: number | null,
+) {
+  return requestedQuantity !== null &&
+    Number.isSafeInteger(requestedQuantity) &&
+    requestedQuantity > 0 &&
+    offer.listedMoq !== null &&
+    Number.isSafeInteger(offer.listedMoq) &&
+    offer.listedMoq > requestedQuantity;
+}
+
 function clampDisplayedScore(value: number) {
   if (!Number.isFinite(value)) return 0;
   return Math.min(
@@ -76,10 +88,15 @@ function clampDisplayedScore(value: number) {
  */
 export function inquiryContactPriority(
   offers: readonly AdvertisedPriceCandidate[],
+  requestedQuantity: number | null = null,
 ): InquiryContactPriority {
   const excluded = offers.filter((offer) => offer.suitability === "DISQUALIFIED");
   const contenders = offers.filter((offer) => offer.suitability !== "DISQUALIFIED");
-  const priced = contenders.filter(hasAdvertisedPrice);
+  // Sellers asking for more pieces remain visible, but their listing price
+  // does not establish a comparable price for the buyer's requested quantity.
+  const priced = contenders.filter((offer) =>
+    hasAdvertisedPrice(offer) && !sellerMinimumExceedsRequest(offer, requestedQuantity)
+  );
   const currencies = new Set(priced.map((offer) => offer.currency));
   const priceUsed = priced.length >= 2 && currencies.size === 1;
   const reason = priced.length < 2
@@ -89,8 +106,10 @@ export function inquiryContactPriority(
       : InquiryPriorityReasons.CURRENCY;
   const orderedContenders = priceUsed
     ? [...contenders].sort((left, right) => {
-        const leftMissing = !hasAdvertisedPrice(left);
-        const rightMissing = !hasAdvertisedPrice(right);
+        const leftMissing = !hasAdvertisedPrice(left) ||
+          sellerMinimumExceedsRequest(left, requestedQuantity);
+        const rightMissing = !hasAdvertisedPrice(right) ||
+          sellerMinimumExceedsRequest(right, requestedQuantity);
         if (leftMissing !== rightMissing) return leftMissing ? 1 : -1;
         return (left.advertisedPrice ?? Number.POSITIVE_INFINITY) -
           (right.advertisedPrice ?? Number.POSITIVE_INFINITY);
@@ -100,7 +119,7 @@ export function inquiryContactPriority(
   if (priceUsed) {
     let position = 1;
     for (const offer of orderedContenders) {
-      if (!hasAdvertisedPrice(offer)) continue;
+      if (!hasAdvertisedPrice(offer) || sellerMinimumExceedsRequest(offer, requestedQuantity)) continue;
       priorityById[offer.id] = position;
       position += 1;
     }
@@ -138,10 +157,15 @@ function bonusForDistinctPrice(price: number, uniqueAscending: readonly number[]
  */
 export function preliminaryAdvertisedScorePresentation(
   offers: readonly (AdvertisedPriceCandidate & { baseScore: number })[],
+  requestedQuantity: number | null = null,
 ): PreliminaryAdvertisedScore[] {
-  const priority = inquiryContactPriority(offers);
+  const priority = inquiryContactPriority(offers, requestedQuantity);
   const compared = priority.priceUsed
-    ? offers.filter((offer) => offer.suitability !== "DISQUALIFIED" && hasAdvertisedPrice(offer))
+    ? offers.filter((offer) =>
+        offer.suitability !== "DISQUALIFIED" &&
+        hasAdvertisedPrice(offer) &&
+        !sellerMinimumExceedsRequest(offer, requestedQuantity)
+      )
     : [];
   const uniqueAscending = [...new Set(compared.flatMap((offer) => (
     offer.advertisedPrice === null ? [] : [offer.advertisedPrice]
