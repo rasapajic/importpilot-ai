@@ -439,6 +439,12 @@ export function extractPriceTiers(html: string): ExtractedPriceTier[] {
   const currencyMarker = "(?:US\\s*\\$|US\\$|USD|EUR|GBP|CNY|RMB|\\$|€|£|¥)";
   const quantityToken = "(?:[0-9]{1,3}(?:[.,\\s\\u00a0][0-9]{3})+|[0-9]+)";
   const unitMarker = "(?:pieces?|pcs?|sets?|units?|st(?:ü|u)ck|stk\\.?)";
+  // An advertised teaser beside "1,200 Pieces (MOQ)" does not prove a
+  // quantity-price tier. Never convert that visual proximity into a quote.
+  const nextIsMoqLabel = (match: RegExpMatchArray) => {
+    const after = bodyText.slice((match.index ?? 0) + match[0].length);
+    return /^\s*\(\s*(?:MOQ|Minimum\s+Order|Min\.\s*Order)\s*\)/i.test(after);
+  };
   const priceFirstResults: ExtractedPriceTier[] = [];
   const quantityFirstResults: ExtractedPriceTier[] = [];
 
@@ -447,6 +453,7 @@ export function extractPriceTiers(html: string): ExtractedPriceTier[] {
     "gi",
   );
   for (const match of bodyText.matchAll(forward)) {
+    if (nextIsMoqLabel(match)) continue;
     const price = tierPrice(match[2]);
     const minQuantity = quantityNumber(match[3] ?? match[4]);
     const maxQuantity = match[3] ? null : quantityNumber(match[5]);
@@ -464,6 +471,7 @@ export function extractPriceTiers(html: string): ExtractedPriceTier[] {
     "gi",
   );
   for (const match of bodyText.matchAll(forwardLocalized)) {
+    if (nextIsMoqLabel(match)) continue;
     const price = tierPrice(match[1]);
     const minQuantity = quantityNumber(match[3] ?? match[4]);
     const maxQuantity = match[3] ? null : quantityNumber(match[5]);
@@ -481,6 +489,7 @@ export function extractPriceTiers(html: string): ExtractedPriceTier[] {
     "gi",
   );
   for (const match of bodyText.matchAll(reverse)) {
+    if (nextIsMoqLabel(match)) continue;
     const minQuantity = quantityNumber(match[1] ?? match[2]);
     const maxQuantity = match[1] ? null : quantityNumber(match[3]);
     const price = tierPrice(match[5]);
@@ -498,6 +507,7 @@ export function extractPriceTiers(html: string): ExtractedPriceTier[] {
     "gi",
   );
   for (const match of bodyText.matchAll(reverseLocalized)) {
+    if (nextIsMoqLabel(match)) continue;
     const minQuantity = quantityNumber(match[1] ?? match[2]);
     const maxQuantity = match[1] ? null : quantityNumber(match[3]);
     const price = tierPrice(match[4]);
