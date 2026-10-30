@@ -319,3 +319,23 @@ describe("URL import provider parser", () => {
     )).toThrow("BLOCKED");
   });
 });
+
+
+describe("exact visible listing MOQ versus stale embedded data #187", () => {
+  it("reads 1,200 Pieces (MOQ), keeps teaser US$0.18 separate, and ignores trial 12/color", () => {
+    const productUrl = "https://dilicin.en.made-in-china.com/product/jYzpeDthEMkd/China-New-Model-Senior-Reading-Glasses-High-Definition-Wholesale-From-Manufacturers-Direct-Sales-.html";
+    const html = `<html><head>
+      <meta property="og:title" content="New Model Senior Reading Glasses">
+      <meta property="og:image" content="https://image.made-in-china.com/reading-glasses.jpg">
+      <script>{"minimumOrderQuantity":"200","price":"0.18","currency":"USD"}</script>
+    </head><body>
+      <h1>New Model Senior Reading Glasses</h1>
+      <div>US$0.18</div><div>1,200 Pieces (MOQ)</div>
+      <div>Trial MOQ: 12 per color</div>
+    </body></html>`;
+    const preview = parseProductPreview(html, productUrl);
+    expect(preview.minimumOrderQuantity).toBe("1200");
+    expect(preview.price).toBe("0.18");
+    expect(extractPriceTiers(html)).toEqual([]);
+  });
+});
