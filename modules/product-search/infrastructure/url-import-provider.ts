@@ -400,7 +400,11 @@ export function extractSupplierOfferFromHtml(html: string, productUrl: string): 
     ?? meta(html, "twitter:image")
     ?? embeddedJsonString(html, ["imageUrl", "mainImage", "mainImageUrl", "imagePath", "imgUrl", "productImage"]),
   ) ?? fallbackProductImage(html);
-  const moq = embeddedMoq ?? moqMatch?.[1] ?? null;
+  // Prefer a visible "1,200 Pieces (MOQ)" listing minimum over JSON.
+  const visibleListingMoq = bodyText.match(/\b([0-9]{1,3}(?:[,\s\u00a0][0-9]{3})+|[0-9]+)\s*(?:pieces?|pcs?|sets?|units?)\s*\(\s*MOQ\s*\)/i)?.[1];
+  const moq = visibleListingMoq
+    ? visibleListingMoq.replace(/[^0-9]/g, "")
+    : embeddedMoq ?? moqMatch?.[1] ?? null;
 
   if (!title && !supplierName && !fallbackPrice && !fallbackCurrency && !moq && !imageUrl) {
     throw new UrlImportParsingError("No product fields found.");
