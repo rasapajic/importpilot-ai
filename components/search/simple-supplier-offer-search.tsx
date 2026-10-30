@@ -137,6 +137,7 @@ type Copy = {
   mixingConfirmed: string;
   orderTermsUnconfirmed: string;
   listedMoq: (quantity: string) => string;
+  minimumAboveRequest: (requested: string, minimum: string) => string;
   stockMoq: (quantity: string) => string;
   productionMoq: (quantity: string) => string;
   variantMoq: (quantity: string) => string;
@@ -241,6 +242,7 @@ const copy: Record<Locale, Copy> = {
     mixingConfirmed: "Mešanje varijanti u jednoj narudžbini je izričito potvrđeno.",
     orderTermsUnconfirmed: "Uslovi za traženu količinu nisu potvrđeni.",
     listedMoq: (quantity) => `MOQ iz oglasa: ${quantity} komada — ne potvrđuje mogućnost narudžbine tražene količine ili mešanja varijanti.`,
+    minimumAboveRequest: (requested, minimum) => `Traženo: ${requested} kom. · Minimum prodavca iz oglasa: ${minimum} kom. Oglašena cena nije potvrđena za ${requested} komada. Možete zatražiti potvrdu prodavca za traženu količinu.`,
     stockMoq: (quantity) => `MOQ za robu sa lagera: ${quantity}`,
     productionMoq: (quantity) => `MOQ za proizvodnju: ${quantity}`,
     variantMoq: (quantity) => `MOQ po modelu, boji ili varijanti: ${quantity}`,
@@ -345,6 +347,7 @@ const copy: Record<Locale, Copy> = {
     mixingConfirmed: "Das Mischen von Varianten in einer Bestellung ist ausdrücklich bestätigt.",
     orderTermsUnconfirmed: "Die Bedingungen für die gewünschte Menge sind nicht bestätigt.",
     listedMoq: (quantity) => `MOQ aus der Anzeige: ${quantity} Stück — bestätigt weder, dass die gewünschte Menge bestellt werden kann, noch dass Varianten gemischt werden dürfen.`,
+    minimumAboveRequest: (requested, minimum) => `Gesucht: ${requested} Stück · Mindestmenge laut Anzeige: ${minimum} Stück. Der Anzeigenpreis gilt nicht nachweislich für ${requested} Stück. Fragen Sie den Verkäufer nach dieser Menge.`,
     stockMoq: (quantity) => `MOQ für Lagerware: ${quantity}`,
     productionMoq: (quantity) => `MOQ für die Produktion: ${quantity}`,
     variantMoq: (quantity) => `MOQ je Modell, Farbe oder Variante: ${quantity}`,
@@ -449,6 +452,7 @@ const copy: Record<Locale, Copy> = {
     mixingConfirmed: "Mixing variants in one order is explicitly confirmed.",
     orderTermsUnconfirmed: "The terms for the requested quantity are not confirmed.",
     listedMoq: (quantity) => `Listing MOQ: ${quantity} pieces — does not confirm that the requested quantity can be ordered or that variants can be mixed.`,
+    minimumAboveRequest: (requested, minimum) => `Requested: ${requested} pcs · Seller's listing minimum: ${minimum} pcs. The advertised price is not verified for ${requested} pcs. Ask the seller about the requested quantity.`,
     stockMoq: (quantity) => `Stock MOQ: ${quantity}`,
     productionMoq: (quantity) => `Production MOQ: ${quantity}`,
     variantMoq: (quantity) => `MOQ per model, color, or variant: ${quantity}`,
@@ -1007,7 +1011,7 @@ export function SimpleSupplierOfferSearch({
         },
       };
     });
-  const inquiry = inquiryContactPriority(visible.map((item) => item.inquiryCandidate));
+  const inquiry = inquiryContactPriority(visible.map((item) => item.inquiryCandidate), quantity);
   const inquiryPosition = new Map(inquiry.orderedIds.map((id, index) => [id, index]));
   visible.sort((left, right) =>
     (inquiryPosition.get(left.result.productUrl) ?? left.index) -
@@ -1017,6 +1021,7 @@ export function SimpleSupplierOfferSearch({
     visible.flatMap(({ analysis, inquiryCandidate }) => (
       analysis ? [{ ...inquiryCandidate, baseScore: analysis.overallScore }] : []
     )),
+    quantity,
   ).map((score) => [score.id, score]));
   const unverifiedTies = unverifiedPresentationTies(visible.flatMap(({ result, analysis, suitability }) => (
     analysis
@@ -1336,7 +1341,18 @@ export function SimpleSupplierOfferSearch({
                   {!orderTerms.confirmedForRequestedQuantity && (
                     <p className="supplier-terms-warning">{text.orderTermsUnconfirmed}</p>
                   )}
-                  {result.minimumOrderQuantity !== null && (
+                  {typeof quantity === "number" &&
+                    result.minimumOrderQuantity !== null &&
+                    result.minimumOrderQuantity > quantity && (
+                    <p className="supplier-terms-warning" role="note">
+                      {text.minimumAboveRequest(
+                        formatQuantity(quantity, locale),
+                        formatQuantity(result.minimumOrderQuantity, locale),
+                      )}
+                    </p>
+                  )}
+                  {result.minimumOrderQuantity !== null &&
+                    (typeof quantity !== "number" || result.minimumOrderQuantity <= quantity) && (
                     <p className="muted-text">
                       {text.listedMoq(formatQuantity(result.minimumOrderQuantity, locale))}
                     </p>
