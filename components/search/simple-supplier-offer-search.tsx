@@ -4,6 +4,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { useI18n } from "@/components/i18n/i18n-provider";
+import { SourceMoqVerificationPanel } from "@/components/search/source-moq-verification-panel";
+import {
+  resultWithSourceMoq,
+  type SourceMoqEvidence,
+} from "@/modules/product-search/domain/source-moq-reconciliation";
 import {
   isLikelyProductImageUrl,
   SearchResultImage,
@@ -697,9 +702,10 @@ export function mergeRecoveredSupplierPreview(
       : result.priceEvidence
         ? { priceEvidence: result.priceEvidence }
         : {}),
-    minimumOrderQuantity: preview.minimumOrderQuantity !== null && !preview.isPartial
-      ? preview.minimumOrderQuantity
-      : result.minimumOrderQuantity ?? preview.minimumOrderQuantity,
+    // The background image/price preview is NOT a historical MOQ
+    // reconciliation. Keep the saved value until a deliberate, exact-URL
+    // source check supplies separately labeled evidence.
+    minimumOrderQuantity: result.minimumOrderQuantity,
     incoterm: preview.incoterm !== null && !preview.isPartial
       ? preview.incoterm
       : result.incoterm ?? preview.incoterm,
@@ -779,6 +785,7 @@ export function SimpleSupplierOfferSearch({
       })
     : null;
   const [results, setResults] = useState<SupplierOfferSearchResult[] | null>(initialOutcome?.results ?? null);
+  const [sourceMoqByUrl, setSourceMoqByUrl] = useState<Record<string, SourceMoqEvidence>>({});
   const [analyses, setAnalyses] = useState<TajaCandidateAnalysisWithProductForm[]>(initialOutcome?.candidateAnalyses ?? []);
   const [origin, setOrigin] = useState<ResultOrigin | null>(initialOutcome?.resultOrigin ?? null);
   const [disposition, setDisposition] = useState<SupplierSearchDisposition | null>(
@@ -811,6 +818,7 @@ export function SimpleSupplierOfferSearch({
     setLoading(true);
     setError("");
     setLimitReached(false);
+    setSourceMoqByUrl({});
     recoveryAttemptedUrls.current.clear();
     try {
       const response = await fetch(`/api/projects/${projectId}/supplier-search`, {
@@ -993,11 +1001,17 @@ export function SimpleSupplierOfferSearch({
     ...(results ?? []).flatMap((result) => result.provenance?.originalQuery ? [result.provenance.originalQuery] : []),
   ];
   const visible = (results ?? [])
-    .map((result, index) => {
+    .map((savedResult, index) => {
+      // Only a read-only session overlay is changed; saved search history
+      // and the provider record remain immutable.
+      const evidence = sourceMoqByUrl[savedResult.productUrl];
+      const result = resultWithSourceMoq(savedResult, evidence);
+      const sourceVerified = evidence?.status === "MATCHED" || evidence?.status === "DIFFERENT";
       const suitability = evaluateExplicitProductConstraintsForQueries(constraintQueries, result);
       const presentation = presentSupplierOfferPrice(result, quantity);
       return {
         result,
+        savedResult,
         index,
         analysis: analysisByUrl.get(result.productUrl),
         suitability,
@@ -1005,7 +1019,11 @@ export function SimpleSupplierOfferSearch({
           id: result.productUrl,
           suitability: suitability.status,
           currency: presentation.advertisedCurrency,
-          advertisedPrice: presentation.advertisedPrice,
+          // Cached MOQ has not been reconciled with the exact source page.
+          // Never give its teaser a buyer-quantity +5 / priority until checked.
+          advertisedPrice: origin === "cache" && !sourceVerified
+            ? null
+            : presentation.advertisedPrice,
           listedMoq: result.minimumOrderQuantity,
           confirmedPurchasePrice: presentation.supplierOrderQuote || presentation.kind === "PUBLISHED_TIER",
         },
@@ -1129,7 +1147,7 @@ export function SimpleSupplierOfferSearch({
             )}
           </section>
           <div className="search-result-list">
-          {visible.map(({ result, analysis, suitability }, index) => {
+          {visible.map(({ result, savedResult, analysis, suitability }, index) => {
             const decision = simpleDecision(analysis);
             const pricePresentation = presentSupplierOfferPrice(result, quantity);
             const publishedTier = pricePresentation.kind === "PUBLISHED_TIER";
@@ -1183,7 +1201,8 @@ export function SimpleSupplierOfferSearch({
             const presentedScore = presentedScores.get(result.productUrl);
             const displayedScore = presentedScore?.preliminaryDisplayedScore ?? analysis?.overallScore;
             const lowestAdvertised = inquiry.lowestAdvertisedId === result.productUrl;
-            const showConfirmedFinal = analysis
+            const showConfirmedFinal = analysis &&
+              sourceMoqByUrl[result.productUrl]?.status !== "DIFFERENT"
               ? canPresentBestChoice({
                   status: suitability.status,
                   confidenceScore: analysis.confidenceScore,
@@ -1338,6 +1357,17 @@ export function SimpleSupplierOfferSearch({
                     </p>
                   )}
 
+                  <SourceMoqVerificationPanel
+                    projectId={projectId}
+                    result={savedResult}
+                    cachedResult={origin === "cache"}
+                    locale={locale}
+                    evidence={sourceMoqByUrl[result.productUrl]}
+                    onEvidence={(next) => setSourceMoqByUrl((current) => ({
+                      ...current,
+                      [result.productUrl]: next,
+                    }))}
+                  />
                   {!orderTerms.confirmedForRequestedQuantity && (
                     <p className="supplier-terms-warning">{text.orderTermsUnconfirmed}</p>
                   )}
