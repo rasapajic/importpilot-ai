@@ -38,6 +38,7 @@ type Copy = {
   openDetail: string;
   columnOrderNote: string;
   priceNotComparable: string;
+  missingPrice: Record<"NO_PRODUCT_URL" | "NO_MATCHING_SEARCH_RESULT", string>;
   preliminaryAnalysis: string;
   confidence: string;
   mixedQuantityCaveat: (quantity: string | null) => string;
@@ -74,6 +75,10 @@ const copy: Record<Locale, Copy> = {
     openDetail: "Detalji i potvrda",
     columnOrderNote: "Redosled kolona je prioritet za upit po oglašenoj ceni. To nije redosled potvrđene nabavne cene ni ukupnog troška uvoza.",
     priceNotComparable: "Oglašene cene nisu isti osnov. Redosled nije napravljen po ceni jer nema dovoljno uporedivih dokaza.",
+    missingPrice: {
+      NO_PRODUCT_URL: "Ponuda nema adresu proizvoda, pa oglašena cena iz pretrage ne može da se poveže.",
+      NO_MATCHING_SEARCH_RESULT: "Keš pretrage nema istu adresu proizvoda, pa oglašena cena nije preuzeta.",
+    },
     preliminaryAnalysis: "Preliminarna analiza",
     confidence: "Pouzdanost podataka",
     mixedQuantityCaveat: (quantity) => quantity
@@ -120,6 +125,10 @@ const copy: Record<Locale, Copy> = {
     openDetail: "Details und Bestätigung",
     columnOrderNote: "Die Spaltenreihenfolge ist die Anfragepriorität nach dem Anzeigenpreis. Das ist keine Reihenfolge bestätigter Einkaufspreise oder Landed Costs.",
     priceNotComparable: "Die Anzeigenpreise sind keine gemeinsame Grundlage. Die Reihenfolge folgt nicht dem Preis, weil vergleichbare Nachweise fehlen.",
+    missingPrice: {
+      NO_PRODUCT_URL: "Das Angebot hat keine Produktadresse, daher kann der Anzeigenpreis aus der Suche nicht zugeordnet werden.",
+      NO_MATCHING_SEARCH_RESULT: "Der Suchcache hat nicht dieselbe Produktadresse, daher wurde kein Anzeigenpreis übernommen.",
+    },
     preliminaryAnalysis: "Vorläufige Analyse",
     confidence: "Datenzuverlässigkeit",
     mixedQuantityCaveat: (quantity) => quantity
@@ -166,6 +175,10 @@ const copy: Record<Locale, Copy> = {
     openDetail: "Details and confirmation",
     columnOrderNote: "Column order is the inquiry priority from the advertised price. It is not an order of confirmed purchase prices or landed cost.",
     priceNotComparable: "The advertised prices are not one basis. The order is not by price because comparable evidence is missing.",
+    missingPrice: {
+      NO_PRODUCT_URL: "The offer has no product address, so the advertised search price cannot be connected.",
+      NO_MATCHING_SEARCH_RESULT: "The search cache has no result for the same product address, so no advertised price was used.",
+    },
     preliminaryAnalysis: "Preliminary analysis",
     confidence: "Data confidence",
     mixedQuantityCaveat: (quantity) => quantity
@@ -308,6 +321,9 @@ export function PreliminaryOfferComparison({
             </dl>
             {(row.priceEvidence === "ADVERTISED_PRICE" || row.priceEvidence === "ADVERTISED_RANGE") && (
               <p className="muted-text">{text.mixedQuantityCaveat(quantityText)}</p>
+            )}
+            {row.missingAdvertisedPriceReason && (
+              <p className="muted-text">{text.missingPrice[row.missingAdvertisedPriceReason]}</p>
             )}
             {row.productUrl && (
               <p><a href={row.productUrl} rel="noreferrer" target="_blank">{row.supplierName}</a></p>

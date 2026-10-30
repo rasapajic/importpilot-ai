@@ -240,6 +240,7 @@ export default async function ProjectPage({
               overallScore: analysis.overallScore,
               confidenceScore: analysis.confidenceScore,
             }))}
+            cachedSearchResults={initialSupplierSearch?.results ?? []}
             decision={currentDecision}
             focusedOfferId={focusedOfferId}
             selectedCalculationOfferId={selectedCalculationOfferId}

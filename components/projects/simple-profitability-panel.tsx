@@ -11,6 +11,11 @@ import { useEffect, useState } from "react";
 import { CostCalculatorForm } from "@/components/costs/cost-calculator-form";
 import { PreliminaryOfferComparison } from "@/components/projects/preliminary-offer-comparison";
 import { readStoredMarketplaceDetails } from "@/modules/product-search/domain/preliminary-offer-comparison";
+import {
+  bridgeSavedOfferSearchEvidence,
+  matchingSearchScore,
+} from "@/modules/product-search/domain/saved-offer-search-evidence";
+import type { SupplierOfferSearchResult } from "@/modules/product-search/domain/search";
 import { useI18n } from "@/components/i18n/i18n-provider";
 import { CommercialTermsForm } from "@/components/offers/commercial-terms-form";
 import { ProfitabilityCheckControl } from "@/components/projects/profitability-check-control";
@@ -25,7 +30,6 @@ import type { ProjectDecisionResult } from "@/modules/decisions/domain/project-d
 import { getEuroDisplay, type FxSnapshot } from "@/modules/fx/euro-display";
 import { getCountryDisplayName } from "@/modules/i18n/country-names";
 import type { Locale } from "@/modules/i18n/translations";
-import type { SupplierOfferSearchResult } from "@/modules/product-search/domain/search";
 import { estimateTajaPreliminaryLandedCost } from "@/modules/product-search/domain/taja-preliminary-cost-estimate";
 import { transferredSupplierQuote } from "@/modules/negotiation/domain/supplier-confirmation";
 import { extractSupplierLogisticsData } from "@/modules/transport/domain/transport-estimator";
@@ -372,6 +376,7 @@ export function SimpleProfitabilityPanel({
   selectedCalculationOfferId,
   profitabilityError,
   searchScores = [],
+  cachedSearchResults = [],
 }: {
   projectId: string;
   projectName: string;
@@ -380,6 +385,7 @@ export function SimpleProfitabilityPanel({
   offers: OfferWithDetails[];
   decision: DecisionView | null;
   searchScores?: readonly SearchAnalysisScore[];
+  cachedSearchResults?: readonly SupplierOfferSearchResult[];
   focusedOfferId?: string;
   selectedCalculationOfferId?: string;
   profitabilityError?: string;
@@ -620,32 +626,43 @@ export function SimpleProfitabilityPanel({
               ]))}
               offers={offersForInput.map((offer) => {
                 const metadata = offer.sourceMetadata;
-                const advertisedPrice = metadataNumber(metadata, "advertisedPrice");
-                const advertisedPriceHigh = metadataNumber(metadata, "advertisedPriceHigh");
                 const productUrl = sourceOfferUrl(metadata);
-                const searchScore = productUrl
-                  ? searchScores.find((score) => score.productUrl === productUrl) ?? null
-                  : null;
+                const writtenQuoteConfirmed = Boolean(transferredSupplierQuote(metadata));
+                const storedMarketplaceDetails = readStoredMarketplaceDetails(metadata);
+                const evidence = writtenQuoteConfirmed
+                  ? null
+                  : bridgeSavedOfferSearchEvidence({
+                      productUrl,
+                      storedAdvertisedPrice: metadataNumber(metadata, "advertisedPrice"),
+                      storedAdvertisedCurrency: metadataText(metadata, "advertisedCurrency"),
+                      storedAdvertisedPriceHigh: metadataNumber(metadata, "advertisedPriceHigh"),
+                      storedTitle: metadataText(metadata, "title"),
+                      storedMarketplaceDetails,
+                      cachedResults: cachedSearchResults,
+                      quantity: projectQuantity,
+                    });
+                const searchScore = matchingSearchScore(searchScores, productUrl);
                 return {
                   id: offer.id,
                   supplierName: offer.supplierName,
-                  title: metadataText(metadata, "title"),
+                  title: evidence?.title ?? metadataText(metadata, "title"),
                   productUrl,
                   supplierCountry: offer.supplierCountry,
                   listedMoq: offer.moq,
                   incoterm: offer.incoterm,
                   unitPrice: numberValue(offer.unitPrice),
                   currency: offer.currency,
-                  advertisedPrice,
-                  advertisedCurrency: metadataText(metadata, "advertisedCurrency"),
-                  advertisedPriceHigh,
-                  writtenQuoteConfirmed: Boolean(transferredSupplierQuote(metadata)),
+                  advertisedPrice: evidence?.advertisedPrice ?? metadataNumber(metadata, "advertisedPrice"),
+                  advertisedCurrency: evidence?.advertisedCurrency ?? metadataText(metadata, "advertisedCurrency"),
+                  advertisedPriceHigh: evidence?.advertisedPriceHigh ?? metadataNumber(metadata, "advertisedPriceHigh"),
+                  writtenQuoteConfirmed,
                   productQuery: comparisonProductQuery(metadata, projectName),
-                  marketplaceDetails: readStoredMarketplaceDetails(metadata),
+                  marketplaceDetails: evidence?.marketplaceDetails ?? storedMarketplaceDetails,
                   baseAnalysisScore: searchScore?.overallScore ?? null,
                   confidenceScore: searchScore === null
                     ? null
                     : Number(searchScore.confidenceScore),
+                  missingAdvertisedPriceReason: evidence?.missingAdvertisedPriceReason ?? null,
                 };
               })}
             />

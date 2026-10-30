@@ -40,6 +40,7 @@ export type PreliminaryComparisonInput = {
    */
   baseAnalysisScore?: number | null;
   confidenceScore?: number | null;
+  missingAdvertisedPriceReason?: "NO_PRODUCT_URL" | "NO_MATCHING_SEARCH_RESULT" | null;
 };
 
 export type PreliminaryComparisonRow = {
@@ -60,6 +61,7 @@ export type PreliminaryComparisonRow = {
   priceIndicatorBonus: number;
   preliminaryDisplayedScore: number | null;
   confidenceScore: number | null;
+  missingAdvertisedPriceReason: "NO_PRODUCT_URL" | "NO_MATCHING_SEARCH_RESULT" | null;
 };
 
 export function readStoredMarketplaceDetails(metadata: unknown) {
@@ -87,14 +89,19 @@ function positive(value: number | null) {
  */
 export function orderPreliminaryComparisonRows<T extends { id: string }>(
   rows: readonly T[],
-  inquiry: Pick<InquiryContactPriority, "orderedIds" | "priceUsed">,
+  inquiry: Pick<InquiryContactPriority, "orderedIds" | "priceUsed" | "excludedIds">,
 ): T[] {
-  if (!inquiry.priceUsed) return [...rows];
+  const excluded = new Set(inquiry.excludedIds);
+  const eligible = rows.filter((row) => !excluded.has(row.id));
+  const incompatible = rows.filter((row) => excluded.has(row.id));
   const position = new Map(inquiry.orderedIds.map((id, index) => [id, index]));
-  return [...rows].sort((left, right) =>
-    (position.get(left.id) ?? Number.MAX_SAFE_INTEGER) -
-    (position.get(right.id) ?? Number.MAX_SAFE_INTEGER),
-  );
+  const orderedEligible = inquiry.priceUsed
+    ? [...eligible].sort((left, right) =>
+      (position.get(left.id) ?? Number.MAX_SAFE_INTEGER) -
+      (position.get(right.id) ?? Number.MAX_SAFE_INTEGER),
+    )
+    : eligible;
+  return [...orderedEligible, ...incompatible];
 }
 
 export function comparisonInquiryPriority(
@@ -175,6 +182,7 @@ export function buildPreliminaryOfferComparison(
       conditionalCurrency: writtenQuote ? null : offer.advertisedCurrency,
       baseAnalysisScore: finiteScore(offer.baseAnalysisScore),
       confidenceScore: finiteScore(offer.confidenceScore),
+      missingAdvertisedPriceReason: offer.missingAdvertisedPriceReason ?? null,
     };
   });
   const presented = new Map(preliminaryAdvertisedScorePresentation(drafted.map((row) => ({
@@ -209,6 +217,7 @@ export function buildPreliminaryOfferComparison(
         ? null
         : score?.preliminaryDisplayedScore ?? row.baseAnalysisScore,
       confidenceScore: row.confidenceScore,
+      missingAdvertisedPriceReason: row.priceLow === null ? row.missingAdvertisedPriceReason : null,
     };
   });
 }
