@@ -1,10 +1,11 @@
 import Link from "next/link";
 
 import type { Locale } from "@/modules/i18n/translations";
-import { inquiryContactPriority } from "@/modules/product-search/domain/advertised-price-tie-break";
 import type { ExplicitProductConstraintStatus } from "@/modules/product-search/domain/explicit-product-constraints";
 import {
   buildPreliminaryOfferComparison,
+  comparisonInquiryPriority,
+  orderPreliminaryComparisonRows,
   type PreliminaryComparisonInput,
   type PreliminaryComparisonPriceEvidence,
 } from "@/modules/product-search/domain/preliminary-offer-comparison";
@@ -35,6 +36,8 @@ type Copy = {
   vat: string;
   notEvidenced: string;
   openDetail: string;
+  columnOrderNote: string;
+  priceNotComparable: string;
   preliminaryAnalysis: string;
   confidence: string;
   mixedQuantityCaveat: (quantity: string | null) => string;
@@ -69,6 +72,8 @@ const copy: Record<Locale, Copy> = {
     vat: "PDV",
     notEvidenced: "nije poznato — nema dokaza",
     openDetail: "Detalji i potvrda",
+    columnOrderNote: "Redosled kolona je prioritet za upit po oglašenoj ceni. To nije redosled potvrđene nabavne cene ni ukupnog troška uvoza.",
+    priceNotComparable: "Oglašene cene nisu isti osnov. Redosled nije napravljen po ceni jer nema dovoljno uporedivih dokaza.",
     preliminaryAnalysis: "Preliminarna analiza",
     confidence: "Pouzdanost podataka",
     mixedQuantityCaveat: (quantity) => quantity
@@ -113,6 +118,8 @@ const copy: Record<Locale, Copy> = {
     vat: "MwSt.",
     notEvidenced: "unbekannt — kein Nachweis",
     openDetail: "Details und Bestätigung",
+    columnOrderNote: "Die Spaltenreihenfolge ist die Anfragepriorität nach dem Anzeigenpreis. Das ist keine Reihenfolge bestätigter Einkaufspreise oder Landed Costs.",
+    priceNotComparable: "Die Anzeigenpreise sind keine gemeinsame Grundlage. Die Reihenfolge folgt nicht dem Preis, weil vergleichbare Nachweise fehlen.",
     preliminaryAnalysis: "Vorläufige Analyse",
     confidence: "Datenzuverlässigkeit",
     mixedQuantityCaveat: (quantity) => quantity
@@ -157,6 +164,8 @@ const copy: Record<Locale, Copy> = {
     vat: "VAT",
     notEvidenced: "unknown — no evidence",
     openDetail: "Details and confirmation",
+    columnOrderNote: "Column order is the inquiry priority from the advertised price. It is not an order of confirmed purchase prices or landed cost.",
+    priceNotComparable: "The advertised prices are not one basis. The order is not by price because comparable evidence is missing.",
     preliminaryAnalysis: "Preliminary analysis",
     confidence: "Data confidence",
     mixedQuantityCaveat: (quantity) => quantity
@@ -205,22 +214,17 @@ export function PreliminaryOfferComparison({
 }) {
   if (offers.length < 2) return null;
   const text = copy[locale];
-  const rows = buildPreliminaryOfferComparison(offers);
+  const built = buildPreliminaryOfferComparison(offers);
+  const inquiry = comparisonInquiryPriority(built);
+  const rows = orderPreliminaryComparisonRows(built, inquiry);
   const quantityText = quantityLabel(requestedQuantity, locale);
-  const inquiry = inquiryContactPriority(rows.map((row) => ({
-    id: row.id,
-    suitability: row.suitability,
-    currency: row.purchasePriceConfirmed ? null : row.priceCurrency,
-    advertisedPrice: row.purchasePriceConfirmed ? null : row.priceLow,
-    listedMoq: row.listedMoq,
-    confirmedPurchasePrice: row.purchasePriceConfirmed,
-  })));
   const columns = Math.min(rows.length, 3);
 
   return (
     <section className="preliminary-comparison" aria-label={text.title}>
       <h3>{text.title}</h3>
       <p className="muted-text">{text.intro}</p>
+      <p className="supplier-risk-notice">{inquiry.priceUsed ? text.columnOrderNote : text.priceNotComparable}</p>
       <div className="preliminary-comparison-grid" data-columns={columns}>
         {rows.map((row) => {
           const inquiryRank = inquiry.priceUsed ? inquiry.priorityById[row.id] : undefined;

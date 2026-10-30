@@ -1,4 +1,8 @@
-import { preliminaryAdvertisedScorePresentation } from "./advertised-price-tie-break";
+import {
+  inquiryContactPriority,
+  preliminaryAdvertisedScorePresentation,
+  type InquiryContactPriority,
+} from "./advertised-price-tie-break";
 import {
   evaluateExplicitProductConstraintsForQueries,
   type ExplicitProductConstraintStatus,
@@ -75,6 +79,44 @@ function positive(value: number | null) {
  * An advertised price, including a source range, is not a purchase price and
  * cannot unlock a landed-cost figure.
  */
+/**
+ * Column order for the comparison. A conditional advertised-price priority
+ * is display order only. It is not a confirmed purchase price or a landed
+ * cost. When prices cannot be compared, the saved order stays unchanged.
+ * Disqualified offers stay after the eligible ones.
+ */
+export function orderPreliminaryComparisonRows<T extends { id: string }>(
+  rows: readonly T[],
+  inquiry: Pick<InquiryContactPriority, "orderedIds" | "priceUsed">,
+): T[] {
+  if (!inquiry.priceUsed) return [...rows];
+  const position = new Map(inquiry.orderedIds.map((id, index) => [id, index]));
+  return [...rows].sort((left, right) =>
+    (position.get(left.id) ?? Number.MAX_SAFE_INTEGER) -
+    (position.get(right.id) ?? Number.MAX_SAFE_INTEGER),
+  );
+}
+
+export function comparisonInquiryPriority(
+  rows: ReadonlyArray<{
+    id: string;
+    suitability: PreliminaryComparisonRow["suitability"];
+    priceCurrency: string | null;
+    priceLow: number | null;
+    listedMoq: number | null;
+    purchasePriceConfirmed: boolean;
+  }>,
+) {
+  return inquiryContactPriority(rows.map((row) => ({
+    id: row.id,
+    suitability: row.suitability,
+    currency: row.purchasePriceConfirmed ? null : row.priceCurrency,
+    advertisedPrice: row.purchasePriceConfirmed ? null : row.priceLow,
+    listedMoq: row.listedMoq,
+    confirmedPurchasePrice: row.purchasePriceConfirmed,
+  })));
+}
+
 function finiteScore(value: number | null | undefined) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }

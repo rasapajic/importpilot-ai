@@ -4,6 +4,8 @@ import { evaluateExplicitProductConstraints } from "../../modules/product-search
 import { supplierOfferMarketplaceDetailsSchema } from "../../modules/product-search/domain/marketplace-product-details";
 import {
   buildPreliminaryOfferComparison,
+  comparisonInquiryPriority,
+  orderPreliminaryComparisonRows,
   readStoredMarketplaceDetails,
 } from "../../modules/product-search/domain/preliminary-offer-comparison";
 import { presentSupplierOfferPrice } from "../../modules/product-search/domain/supplier-quantity-pricing";
@@ -170,6 +172,89 @@ describe("provisional advertised score in the comparison", () => {
       { id: "readsun", score: 57, bonus: 2, confidence: 24, purchasePriceConfirmed: false, landedCostAvailable: false, suitability: "NEEDS_CONFIRMATION" },
       { id: "progressive", score: 55, bonus: 0, confidence: 24, purchasePriceConfirmed: false, landedCostAvailable: false, suitability: "DISQUALIFIED" },
     ]);
+  });
+});
+
+describe("comparison column order", () => {
+  function offer(input: {
+    id: string;
+    supplierName: string;
+    title: string;
+    price: number | null;
+    currency: string | null;
+    moq: number;
+  }) {
+    return {
+      id: input.id,
+      supplierName: input.supplierName,
+      title: input.title,
+      productUrl: `https://example.com/${input.id}`,
+      supplierCountry: "CN",
+      listedMoq: input.moq,
+      incoterm: null,
+      unitPrice: null,
+      currency: null,
+      advertisedPrice: input.price,
+      advertisedCurrency: input.currency,
+      advertisedPriceHigh: null,
+      writtenQuoteConfirmed: false,
+      productQuery: REQUEST,
+      baseAnalysisScore: 55,
+      confidenceScore: 24,
+    };
+  }
+
+  it("orders columns by inquiry priority and keeps each offer id with its supplier", () => {
+    const savedOrder = [
+      offer({ id: "progressive", supplierName: "Progressive Control", title: "Adjustable +4.00 Progressive Multifocal Reading Glasses", price: 0.2, currency: "USD", moq: 12 }),
+      offer({ id: "readsun", supplierName: "Readsun Optical", title: "Reading glasses assorted strengths", price: 1, currency: "USD", moq: 200 }),
+      offer({ id: "wzouyuan", supplierName: "Wzouyuan", title: "Reading glasses", price: 0.35, currency: "USD", moq: 100 }),
+      offer({ id: "zlin", supplierName: "Zlin Eyewear", title: "Wholesale reading glasses", price: 1.2, currency: "USD", moq: 12 }),
+    ];
+    const built = buildPreliminaryOfferComparison(savedOrder);
+    const inquiry = comparisonInquiryPriority(built);
+    const ordered = orderPreliminaryComparisonRows(built, inquiry);
+
+    expect(inquiry.priceUsed).toBe(true);
+    expect(ordered.map((row) => row.supplierName)).toEqual([
+      "Wzouyuan",
+      "Readsun Optical",
+      "Zlin Eyewear",
+      "Progressive Control",
+    ]);
+    expect(ordered.map((row) => [row.id, row.preliminaryDisplayedScore, row.confidenceScore, row.suitability])).toEqual([
+      ["wzouyuan", 60, 24, "NEEDS_CONFIRMATION"],
+      ["readsun", 57, 24, "NEEDS_CONFIRMATION"],
+      ["zlin", 55, 24, "NEEDS_CONFIRMATION"],
+      ["progressive", 55, 24, "DISQUALIFIED"],
+    ]);
+    expect(inquiry.priorityById.progressive).toBeUndefined();
+  });
+
+  it("keeps saved order and assigns no inquiry numbers when currencies differ", () => {
+    const savedOrder = [
+      offer({ id: "zlin", supplierName: "Zlin Eyewear", title: "Wholesale reading glasses", price: 1.2, currency: "USD", moq: 12 }),
+      offer({ id: "euro", supplierName: "Euro Listing", title: "Reading glasses euro listing", price: 0.9, currency: "EUR", moq: 50 }),
+      offer({ id: "missing", supplierName: "Bez iznosa", title: "Reading glasses without a retrieved amount", price: null, currency: null, moq: 80 }),
+    ];
+    const built = buildPreliminaryOfferComparison(savedOrder);
+    const inquiry = comparisonInquiryPriority(built);
+
+    expect(inquiry.priceUsed).toBe(false);
+    expect(inquiry.priorityById).toEqual({});
+    expect(orderPreliminaryComparisonRows(built, inquiry).map((row) => row.id)).toEqual(["zlin", "euro", "missing"]);
+    expect(built.every((row) => row.confidenceScore === 24)).toBe(true);
+  });
+
+  it("does not invent a preliminary score when no stored analysis exists", () => {
+    const [row] = buildPreliminaryOfferComparison([
+      offer({ id: "zlin", supplierName: "Zlin Eyewear", title: "Wholesale reading glasses", price: 1.2, currency: "USD", moq: 12 }),
+      offer({ id: "wzouyuan", supplierName: "Wzouyuan", title: "Reading glasses", price: 0.35, currency: "USD", moq: 100 }),
+    ].map((item) => ({ ...item, baseAnalysisScore: null, confidenceScore: null })));
+
+    expect(row?.preliminaryDisplayedScore).toBeNull();
+    expect(row?.confidenceScore).toBeNull();
+    expect(row?.purchasePriceConfirmed).toBe(false);
   });
 });
 

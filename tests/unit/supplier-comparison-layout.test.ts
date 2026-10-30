@@ -56,7 +56,8 @@ describe("three-supplier comparison layout", () => {
   it("keeps freight, duty, VAT, and the mixed quantity unconfirmed in the comparison", () => {
     expect(comparisonSource).toContain('notEvidenced: "nije poznato — nema dokaza"');
     expect(comparisonSource).toContain('mixedUnconfirmed: "nije potvrđeno"');
-    expect(comparisonSource).toContain("inquiryContactPriority");
+    expect(comparisonSource).toContain("comparisonInquiryPriority");
+    expect(comparisonSource).toContain("orderPreliminaryComparisonRows");
     expect(comparisonSource).toContain("inquiry.priceUsed ? inquiry.priorityById[row.id]");
     expect(comparisonSource).toContain("text.landedBlocked");
     expect(comparisonSource).not.toContain("Najbolji izbor");
