@@ -29,13 +29,11 @@ import type { SupplierOfferMarketplaceSupplierProfile } from "@/modules/product-
 import {
   allowGenericProductMatchClaim,
   canPresentBestChoice,
-  canPresentPreliminaryCandidate,
   evaluateExplicitProductConstraintsForQueries,
-  explicitProductConstraintRank,
 } from "@/modules/product-search/domain/explicit-product-constraints";
 import { formatMissingDataLabels } from "@/modules/product-search/domain/taja-missing-data-copy";
 import { unverifiedPresentationTies } from "@/modules/product-search/domain/unverified-offer-presentation";
-import { assessAdvertisedPriceTieBreak } from "@/modules/product-search/domain/advertised-price-tie-break";
+import { inquiryContactPriority } from "@/modules/product-search/domain/advertised-price-tie-break";
 import { estimateTajaPreliminaryLandedCost } from "@/modules/product-search/domain/taja-preliminary-cost-estimate";
 import {
   presentSupplierOfferPrice,
@@ -119,9 +117,15 @@ type Copy = {
   whySelected: string;
   knownFacts: string;
   equivalentUnverified: (count: number, score: number, confidence: number) => string;
+  inquiryOrderTitle: string;
+  inquiryBatch: string;
+  inquiryPriority: (position: number) => string;
+  confirmedFinalOffer: string;
+  lowestUnconfirmedAdvertised: string;
+  inquiryPriceReason: (position: number, moq: string) => string;
+  excludedFromInquiry: string;
+  priceNotComparable: string;
   conditionalAdvertisedPrice: string;
-  lowestAdvertisedIncomparable: string;
-  lowestAdvertisedComparable: string;
   reasonProductMatch: string;
   reasonProductLikely: string;
   variantMixUnconfirmed: string;
@@ -210,10 +214,16 @@ const copy: Record<Locale, Copy> = {
     selectionCriteria: "Sve dostupne ponude su prikazane. Najbolji izbor postoji tek kada su nabavna cena i ukupan trošak uvoza potvrđeni. Pre toga prvi kandidat može biti samo preliminaran.",
     whySelected: "Zašto je izdvojena",
     knownFacts: "Šta je poznato",
-    equivalentUnverified: (count, score, confidence) => `Isti rezultat ${score}/100 i ista pouzdanost ${confidence}% (${count}). Broj na kartici je redosled prikaza, ne najbolja potvrđena ponuda. Nepotvrđena oglašena cena se ne koristi za taj redosled, pa oglas sa višom cenom može biti prvi. Najniža oglašena cena je samo pokazatelj kada su specifikacija, valuta i količinski razred zaista uporedivi.`,
+    equivalentUnverified: (count, score, confidence) => `Isti rezultat ${score}/100 i ista pouzdanost ${confidence}% (${count}). To nije razlika u potvrđenom kvalitetu.`,
+    inquiryOrderTitle: "Redosled kontaktiranja dobavljača",
+    inquiryBatch: "Prioritet za slanje upita nije obavezan red. Možete odabrati više dobavljača i odobriti upite u istom koraku. Poruke se ne šalju same.",
+    inquiryPriority: (position) => `Prioritet za upit ${position}`,
+    confirmedFinalOffer: "Potvrđena konačna ponuda",
+    lowestUnconfirmedAdvertised: "Najniža oglašena cena (nepotvrđena)",
+    inquiryPriceReason: (position, moq) => `Prioritet za upit ${position} zbog uslovne oglašene cene u istoj valuti. MOQ iz oglasa ${moq} ne potvrđuje mešovite dioptrije, prihvaćenu količinu ni čvrstu cenu.`,
+    excludedFromInquiry: "Izvor pokazuje neusklađen tip sočiva, pa oglašena cena ne ulazi u red za upit.",
+    priceNotComparable: "Oglašene cene nisu isti osnov. Redosled nije napravljen po ceni jer nema dovoljno uporedivih dokaza.",
     conditionalAdvertisedPrice: "Cena po oglasu (uslovna)",
-    lowestAdvertisedIncomparable: "Najniža oglašena cena (neuporedivi/uslovni oglasi). Nije najbolja potvrđena ponuda.",
-    lowestAdvertisedComparable: "Najniža oglašena cena. Nije najbolja potvrđena ponuda i nije promenila redosled prikaza.",
     reasonProductMatch: "Proizvod odgovara traženom tipu ili specifikaciji.",
     reasonProductLikely: "Ponuda je relevantna za traženi proizvod, ali deo specifikacije još treba potvrditi.",
     variantMixUnconfirmed: "Mešanje varijanti u jednoj narudžbini nije potvrđeno.",
@@ -302,10 +312,16 @@ const copy: Record<Locale, Copy> = {
     selectionCriteria: "Alle verfügbaren Angebote werden angezeigt. Die endgültige beste Wahl gibt es erst, wenn Einkaufspreis und Landed Cost bestätigt sind. Davor kann der erste Kandidat nur vorläufig sein.",
     whySelected: "Warum ausgewählt",
     knownFacts: "Was bekannt ist",
-    equivalentUnverified: (count, score, confidence) => `Dieselbe Bewertung ${score}/100 und dieselbe Zuverlässigkeit ${confidence}% (${count}). Die Nummer ist die Anzeigereihenfolge, nicht das beste bestätigte Angebot. Ein unbestätigter Angebotspreis ändert diese Reihenfolge nicht, daher kann ein höherer Preis zuerst stehen. Der niedrigste Angebotspreis ist nur ein Hinweis, wenn Spezifikation, Währung und Mengenstaffel wirklich vergleichbar sind.`,
+    equivalentUnverified: (count, score, confidence) => `Dieselbe Bewertung ${score}/100 und dieselbe Zuverlässigkeit ${confidence}% (${count}). Das ist kein bestätigter Qualitätsunterschied.`,
+    inquiryOrderTitle: "Reihenfolge der Lieferantenanfragen",
+    inquiryBatch: "Die Priorität ist keine Pflichtreihenfolge. Sie können mehrere Lieferanten auswählen und die Anfragen im selben Schritt freigeben. Es wird nichts automatisch gesendet.",
+    inquiryPriority: (position) => `Anfragepriorität ${position}`,
+    confirmedFinalOffer: "Bestätigtes endgültiges Angebot",
+    lowestUnconfirmedAdvertised: "Niedrigster angezeigter Preis (unbestätigt)",
+    inquiryPriceReason: (position, moq) => `Anfragepriorität ${position} wegen des bedingten Anzeigenpreises in derselben Währung. MOQ laut Anzeige ${moq} bestätigt weder gemischte Dioptrien noch die akzeptierte Menge oder einen festen Preis.`,
+    excludedFromInquiry: "Die Quelle zeigt einen unpassenden Linsentyp, daher zählt der Anzeigenpreis nicht für die Anfragereihenfolge.",
+    priceNotComparable: "Die Anzeigenpreise sind keine gemeinsame Grundlage. Die Reihenfolge folgt nicht dem Preis, weil vergleichbare Nachweise fehlen.",
     conditionalAdvertisedPrice: "Preis laut Anzeige (bedingt)",
-    lowestAdvertisedIncomparable: "Niedrigster angezeigter Preis (nicht vergleichbare/bedingte Anzeigen). Nicht das beste bestätigte Angebot.",
-    lowestAdvertisedComparable: "Niedrigster angezeigter Preis. Nicht das beste bestätigte Angebot, und die Anzeigereihenfolge bleibt unverändert.",
     reasonProductMatch: "Das Produkt entspricht dem gesuchten Typ oder der Spezifikation.",
     reasonProductLikely: "Das Angebot ist relevant, ein Teil der Spezifikation muss jedoch noch bestätigt werden.",
     variantMixUnconfirmed: "Das Mischen von Varianten in einer Bestellung ist nicht bestätigt.",
@@ -394,10 +410,16 @@ const copy: Record<Locale, Copy> = {
     selectionCriteria: "All available offers are shown. Best choice appears only after the purchase price and landed cost are confirmed. Before that, the first candidate can only be preliminary.",
     whySelected: "Why it was selected",
     knownFacts: "What is known",
-    equivalentUnverified: (count, score, confidence) => `Same score ${score}/100 and same confidence ${confidence}% (${count}). The card number is display order, not the best confirmed offer. An unconfirmed advertised price does not set that order, so a higher teaser price can appear first. The lowest advertised price is only an indicator when the specification, currency, and quantity tier are truly comparable.`,
+    equivalentUnverified: (count, score, confidence) => `Same score ${score}/100 and same confidence ${confidence}% (${count}). That is not a confirmed quality difference.`,
+    inquiryOrderTitle: "Order for contacting suppliers",
+    inquiryBatch: "The priority is not a required sequence. You can select several suppliers and approve the inquiries in the same step. Nothing is sent automatically.",
+    inquiryPriority: (position) => `Inquiry priority ${position}`,
+    confirmedFinalOffer: "Confirmed final offer",
+    lowestUnconfirmedAdvertised: "Lowest advertised price (unconfirmed)",
+    inquiryPriceReason: (position, moq) => `Inquiry priority ${position} because of the conditional advertised price in the same currency. Listing MOQ ${moq} does not confirm mixed diopters, an accepted quantity, or a firm price.`,
+    excludedFromInquiry: "The source shows an incompatible lens type, so the advertised price is not part of the inquiry order.",
+    priceNotComparable: "The advertised prices are not one basis. The order is not by price because comparable evidence is missing.",
     conditionalAdvertisedPrice: "Advertised listing price (conditional)",
-    lowestAdvertisedIncomparable: "Lowest advertised price (incomparable/conditional listings). Not the best confirmed offer.",
-    lowestAdvertisedComparable: "Lowest advertised price. Not the best confirmed offer, and it did not change the display order.",
     reasonProductMatch: "The product matches the requested type or specification.",
     reasonProductLikely: "The offer is relevant, but part of the specification still needs confirmation.",
     variantMixUnconfirmed: "Mixing variants in one order is not confirmed.",
@@ -946,23 +968,28 @@ export function SimpleSupplierOfferSearch({
   const visible = (results ?? [])
     .map((result, index) => {
       const suitability = evaluateExplicitProductConstraintsForQueries(constraintQueries, result);
-      return { result, index, analysis: analysisByUrl.get(result.productUrl), suitability };
-    })
-    .sort((left, right) =>
-      explicitProductConstraintRank(left.suitability.status) - explicitProductConstraintRank(right.suitability.status) ||
-      (left.analysis?.rank ?? left.index + 100) - (right.analysis?.rank ?? right.index + 100),
-    );
-  const topChoiceInput = visible[0]
-    ? {
-        status: visible[0].suitability.status,
-        confidenceScore: visible[0].analysis?.confidenceScore ?? null,
-        finalEligible: visible[0].analysis?.finalEligible ?? false,
-      }
-    : null;
-  const bestChoiceVisible = topChoiceInput ? canPresentBestChoice(topChoiceInput) : false;
-  const preliminaryCandidateVisible = topChoiceInput
-    ? canPresentPreliminaryCandidate(topChoiceInput)
-    : false;
+      const presentation = presentSupplierOfferPrice(result, quantity);
+      return {
+        result,
+        index,
+        analysis: analysisByUrl.get(result.productUrl),
+        suitability,
+        inquiryCandidate: {
+          id: result.productUrl,
+          suitability: suitability.status,
+          currency: presentation.advertisedCurrency,
+          advertisedPrice: presentation.advertisedPrice,
+          listedMoq: result.minimumOrderQuantity,
+          confirmedPurchasePrice: presentation.supplierOrderQuote,
+        },
+      };
+    });
+  const inquiry = inquiryContactPriority(visible.map((item) => item.inquiryCandidate));
+  const inquiryPosition = new Map(inquiry.orderedIds.map((id, index) => [id, index]));
+  visible.sort((left, right) =>
+    (inquiryPosition.get(left.result.productUrl) ?? left.index) -
+      (inquiryPosition.get(right.result.productUrl) ?? right.index),
+  );
   const unverifiedTies = unverifiedPresentationTies(visible.flatMap(({ result, analysis, suitability }) => (
     analysis
       ? [{
@@ -974,18 +1001,6 @@ export function SimpleSupplierOfferSearch({
         }]
       : []
   )));
-  const equivalentUnverifiedIds = new Set(unverifiedTies.flatMap((tie) => tie.ids));
-  const advertisedPriceTieBreak = assessAdvertisedPriceTieBreak(visible.map(({ result, suitability }) => {
-    const presentation = presentSupplierOfferPrice(result, quantity);
-    return {
-      id: result.productUrl,
-      suitability: suitability.status,
-      currency: presentation.advertisedCurrency,
-      advertisedPrice: presentation.advertisedPrice,
-      listedMoq: result.minimumOrderQuantity,
-      confirmedPurchasePrice: presentation.supplierOrderQuote,
-    };
-  }));
   const hasDeferredSupplierRisk = visible.some(({ result, analysis }) =>
     (!analysis || analysis.supplierRiskLevel === "UNKNOWN") &&
     !supplierPlatformProfileSummary(result.marketplaceDetails?.supplierProfile, locale)
@@ -1067,6 +1082,10 @@ export function SimpleSupplierOfferSearch({
                   : text.selectionOverview(Math.max(reviewedCount, visible.length), visible.length)}
             </strong>
             <p>{text.selectionCriteria}</p>
+            <p className="supplier-risk-notice">{text.inquiryOrderTitle}. {text.inquiryBatch}</p>
+            {!inquiry.priceUsed && visible.length > 1 && (
+              <p className="supplier-risk-notice">{text.priceNotComparable}</p>
+            )}
             {unverifiedTies.map((tie) => (
               <p className="supplier-risk-notice" key={`${tie.suitability}-${tie.score}-${tie.confidence}`}>
                 {text.equivalentUnverified(tie.ids.length, tie.score, tie.confidence)}
@@ -1127,10 +1146,15 @@ export function SimpleSupplierOfferSearch({
             const confirmationMounted = openedConfirmationUrls.includes(result.productUrl);
             const confirmationText = supplierConfirmationCopy(locale);
             const reasons = selectionReasons(result, analysis, quantity, text, constraintQueries);
-            const showBestChoice = index === 0 && bestChoiceVisible;
-            const showPreliminaryCandidate = index === 0 && preliminaryCandidateVisible;
-            const equivalentUnverified = equivalentUnverifiedIds.has(result.productUrl);
-            const lowestAdvertised = advertisedPriceTieBreak.lowestAdvertisedId === result.productUrl;
+            const inquiryRank = inquiry.priorityById[result.productUrl];
+            const lowestAdvertised = inquiry.lowestAdvertisedId === result.productUrl;
+            const showConfirmedFinal = analysis
+              ? canPresentBestChoice({
+                  status: suitability.status,
+                  confidenceScore: analysis.confidenceScore,
+                  finalEligible: analysis.finalEligible,
+                })
+              : false;
             const showAdvertisedPrice = pricePresentation.advertisedPrice !== null &&
               pricePresentation.advertisedCurrency !== null &&
               (
@@ -1138,7 +1162,7 @@ export function SimpleSupplierOfferSearch({
                 pricePresentation.advertisedPrice !== pricePresentation.quantityUnitPrice
               );
             return (
-              <article className={`search-result-card${showBestChoice ? " search-result-card-best" : ""}`} key={`${result.source}-${result.productUrl}`}>
+              <article className={`search-result-card${showConfirmedFinal ? " search-result-card-best" : ""}`} key={`${result.source}-${result.productUrl}`}>
                 <SearchResultImage src={result.imageUrl} title={t(result.title)} />
                 <div>
                   <p className="eyebrow">
@@ -1152,15 +1176,17 @@ export function SimpleSupplierOfferSearch({
                       #{index + 1} · {t(result.supplierName)}
                     </a>
                   </p>
-                  {showBestChoice && <span className="best-choice-badge">{text.bestChoice}</span>}
-                  {showPreliminaryCandidate && (
+                  {showConfirmedFinal && (
                     <>
-                      <span className="best-choice-badge best-choice-badge-pending">{text.preliminaryCandidate}</span>
-                      <p className="warning-text">{text.preliminaryCandidateWarning}</p>
+                      <span className="best-choice-badge">{text.bestChoice}</span>
+                      <p className="muted-text">{text.confirmedFinalOffer}</p>
                     </>
                   )}
-                  {(equivalentUnverified || (index === 0 && !showBestChoice && !showPreliminaryCandidate)) && (
-                    <span className="best-choice-badge best-choice-badge-pending">{text.notARecommendation}</span>
+                  {!showConfirmedFinal && inquiryRank && (
+                    <span className="best-choice-badge best-choice-badge-pending">{text.inquiryPriority(inquiryRank)}</span>
+                  )}
+                  {lowestAdvertised && (
+                    <p className="warning-text">{text.lowestUnconfirmedAdvertised}</p>
                   )}
                   {suitability.status === "DISQUALIFIED" && (
                     <p className="warning-text">{text.disqualifiedProduct}</p>
@@ -1217,11 +1243,7 @@ export function SimpleSupplierOfferSearch({
                         </small>
                       )}
                       {lowestAdvertised && (
-                        <small className="supplier-fx-note">
-                          {advertisedPriceTieBreak.useAsTieBreak
-                            ? text.lowestAdvertisedComparable
-                            : text.lowestAdvertisedIncomparable}
-                        </small>
+                        <small className="supplier-fx-note">{text.lowestUnconfirmedAdvertised}</small>
                       )}
                       {publishedTier &&
                         pricePresentation.quantityUnitPrice !== null &&
@@ -1340,10 +1362,17 @@ export function SimpleSupplierOfferSearch({
                         )).join(" · ")}
                   </p>
 
-                  {reasons.length > 0 && (
+                  {(reasons.length > 0 || inquiryRank || suitability.status === "DISQUALIFIED") && (
                     <div className="selection-reasons">
-                      <strong>{equivalentUnverified ? text.knownFacts : text.whySelected}</strong>
+                      <strong>{text.knownFacts}</strong>
                       <ul>
+                        {inquiry.priceUsed && inquiryRank && result.minimumOrderQuantity !== null && (
+                          <li>{text.inquiryPriceReason(inquiryRank, formatQuantity(result.minimumOrderQuantity, locale))}</li>
+                        )}
+                        {!inquiry.priceUsed && suitability.status !== "DISQUALIFIED" && (
+                          <li>{text.priceNotComparable}</li>
+                        )}
+                        {suitability.status === "DISQUALIFIED" && <li>{text.excludedFromInquiry}</li>}
                         {reasons.map((reason) => <li key={reason}>{reason}</li>)}
                       </ul>
                     </div>

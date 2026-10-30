@@ -1,15 +1,13 @@
 import type { ExplicitProductConstraintStatus } from "./explicit-product-constraints";
 
-export const AdvertisedPriceTieBreakReasons = {
-  COMPARABLE: "COMPARABLE",
-  SPEC_UNCONFIRMED: "SPEC_UNCONFIRMED",
+export const InquiryPriorityReasons = {
+  CONDITIONAL_ADVERTISED: "CONDITIONAL_ADVERTISED",
   CURRENCY: "CURRENCY",
-  QUANTITY_TIER: "QUANTITY_TIER",
-  NO_ADVERTISED_PRICE: "NO_ADVERTISED_PRICE",
+  INSUFFICIENT_PRICE: "INSUFFICIENT_PRICE",
 } as const;
 
-export type AdvertisedPriceTieBreakReason =
-  (typeof AdvertisedPriceTieBreakReasons)[keyof typeof AdvertisedPriceTieBreakReasons];
+export type InquiryPriorityReason =
+  (typeof InquiryPriorityReasons)[keyof typeof InquiryPriorityReasons];
 
 export type AdvertisedPriceCandidate = {
   id: string;
@@ -20,73 +18,67 @@ export type AdvertisedPriceCandidate = {
   confirmedPurchasePrice: boolean;
 };
 
-export type AdvertisedPriceTieBreakAssessment = {
-  /** True only when a weak advertised-price order would be allowed. Not applied by the live ranker. */
-  useAsTieBreak: boolean;
-  informationalOnly: boolean;
-  reason: AdvertisedPriceTieBreakReason;
+export type InquiryContactPriority = {
+  orderedIds: string[];
+  /** Card numbers follow this order only as a quote-request priority. */
+  priceUsed: boolean;
+  reason: InquiryPriorityReason;
+  priorityById: Record<string, number>;
   lowestAdvertisedId: string | null;
+  excludedIds: string[];
 };
 
-function lowestPriced(offers: readonly AdvertisedPriceCandidate[]) {
-  return offers.reduce<AdvertisedPriceCandidate | null>((lowest, offer) => {
-    if (offer.advertisedPrice === null || offer.advertisedPrice <= 0 || !offer.currency) return lowest;
-    if (!lowest || offer.advertisedPrice < (lowest.advertisedPrice ?? Number.POSITIVE_INFINITY)) return offer;
-    return lowest;
-  }, null);
+function hasAdvertisedPrice(offer: AdvertisedPriceCandidate) {
+  return offer.advertisedPrice !== null &&
+    offer.advertisedPrice > 0 &&
+    Boolean(offer.currency) &&
+    !offer.confirmedPurchasePrice;
 }
 
 /**
- * Decides whether an advertised unit price may later break a tie.
- * It does not change saved order. A disqualified product is ignored.
- * Unknown lens type, mixed currencies, or different listing MOQs keep the
- * lowest teaser informational: it is not a confirmed quote or a landed cost.
+ * Orders suppliers for a quote request. A hard product mismatch stays out of
+ * that order. Among the rest, the same currency and an advertised unit price
+ * set a conditional priority. A different listing MOQ does not prove the order
+ * and does not block the priority. Mixed currencies or missing prices leave
+ * the saved order unchanged. This is not a confirmed purchase price or a
+ * landed cost.
  */
-export function assessAdvertisedPriceTieBreak(
+export function inquiryContactPriority(
   offers: readonly AdvertisedPriceCandidate[],
-): AdvertisedPriceTieBreakAssessment {
-  const contenders = offers.filter((offer) => offer.suitability !== "DISQUALIFIED" && !offer.confirmedPurchasePrice);
-  const lowest = lowestPriced(contenders);
-  if (!lowest) {
-    return {
-      useAsTieBreak: false,
-      informationalOnly: false,
-      reason: AdvertisedPriceTieBreakReasons.NO_ADVERTISED_PRICE,
-      lowestAdvertisedId: null,
-    };
-  }
-
-  const specsConfirmed = contenders.length >= 2 && contenders.every((offer) => offer.suitability === "COMPATIBLE");
-  const priced = contenders.filter((offer) => offer.advertisedPrice !== null && offer.advertisedPrice > 0 && offer.currency);
+): InquiryContactPriority {
+  const excluded = offers.filter((offer) => offer.suitability === "DISQUALIFIED");
+  const contenders = offers.filter((offer) => offer.suitability !== "DISQUALIFIED");
+  const priced = contenders.filter(hasAdvertisedPrice);
   const currencies = new Set(priced.map((offer) => offer.currency));
-  const moqs = priced.map((offer) => offer.listedMoq);
-  const sameCurrency = currencies.size === 1;
-  const sameQuantityTier = moqs.length >= 2 && moqs.every((moq) => moq !== null && moq === moqs[0]);
-  const comparable = specsConfirmed && sameCurrency && sameQuantityTier;
-
-  const reason = !specsConfirmed
-    ? AdvertisedPriceTieBreakReasons.SPEC_UNCONFIRMED
-    : !sameCurrency
-      ? AdvertisedPriceTieBreakReasons.CURRENCY
-      : !sameQuantityTier
-        ? AdvertisedPriceTieBreakReasons.QUANTITY_TIER
-        : AdvertisedPriceTieBreakReasons.COMPARABLE;
+  const priceUsed = priced.length >= 2 && currencies.size === 1;
+  const reason = priced.length < 2
+    ? InquiryPriorityReasons.INSUFFICIENT_PRICE
+    : currencies.size === 1
+      ? InquiryPriorityReasons.CONDITIONAL_ADVERTISED
+      : InquiryPriorityReasons.CURRENCY;
+  const orderedContenders = priceUsed
+    ? [...contenders].sort((left, right) => {
+        const leftMissing = !hasAdvertisedPrice(left);
+        const rightMissing = !hasAdvertisedPrice(right);
+        if (leftMissing !== rightMissing) return leftMissing ? 1 : -1;
+        return (left.advertisedPrice ?? Number.POSITIVE_INFINITY) -
+          (right.advertisedPrice ?? Number.POSITIVE_INFINITY);
+      })
+    : [...contenders];
+  const priorityById: Record<string, number> = {};
+  orderedContenders.forEach((offer, index) => {
+    priorityById[offer.id] = index + 1;
+  });
+  const lowest = priceUsed
+    ? orderedContenders.find(hasAdvertisedPrice) ?? null
+    : null;
 
   return {
-    useAsTieBreak: comparable,
-    informationalOnly: !comparable,
+    orderedIds: [...orderedContenders, ...excluded].map((offer) => offer.id),
+    priceUsed,
     reason,
-    lowestAdvertisedId: lowest.id,
+    priorityById,
+    lowestAdvertisedId: lowest?.id ?? null,
+    excludedIds: excluded.map((offer) => offer.id),
   };
-}
-
-/** Optional order. Callers must not use this until a product decision turns the tie-break on. */
-export function orderByOptionalAdvertisedTieBreak<T extends AdvertisedPriceCandidate>(offers: readonly T[]) {
-  const assessment = assessAdvertisedPriceTieBreak(offers);
-  if (!assessment.useAsTieBreak) return [...offers];
-  return [...offers].sort((left, right) => {
-    if (left.suitability === "DISQUALIFIED" && right.suitability !== "DISQUALIFIED") return 1;
-    if (right.suitability === "DISQUALIFIED" && left.suitability !== "DISQUALIFIED") return -1;
-    return (left.advertisedPrice ?? Number.POSITIVE_INFINITY) - (right.advertisedPrice ?? Number.POSITIVE_INFINITY);
-  });
 }
