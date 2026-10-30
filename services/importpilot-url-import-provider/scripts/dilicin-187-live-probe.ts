@@ -1,20 +1,20 @@
 /**
  * #187 isolated, single-URL public-source acceptance probe.
  * Does not use a database, application account, provider tokens or supplier API.
- * Exactly one GET to the URL the owner clicked in JAKOV360; no redirects,
+ * Exactly one GET to the URL stored in the read-only staging cache; no redirects,
  * retries, proxy bypasses, messaging, scraping loops or writes.
  */
 import { parseProductPreview } from "../src/parser.js";
 
 const EXPECTED_URL =
-  "https://dilicin.en.made-in-china.com/product/jYzpeDthEMkd/China-New-Model-Senior-Reading-Glasses-High-Definition-Wholesale-From-Manufacturers-Direct-Sales-.html";
+  "https://dilicn.en.made-in-china.com/product/jYzpeDtbEMkd/China-New-Model-Senior-Reading-Glasses-High-Definition-Wholesale-From-Manufacturers-Direct-Sales-.html";
 const REQUESTED_QUANTITY = 1000;
 const CACHED_MOQ = 200;
 const MAX_BYTES = 1_000_000;
 
 function report(status: string, extra: Record<string, string | number | boolean | null> = {}) {
   const payload = {
-    test: "JAKOV360-187-DILICIN-EXACT-URL",
+    test: "JAKOV360-187-DILICIN-STAGING-CACHE-URL",
     status,
     checkedAt: new Date().toISOString(),
     productUrl: EXPECTED_URL,
