@@ -1,0 +1,33 @@
+name: #187 Isolated Dilicin source-read test
+
+on:
+  pull_request:
+    paths:
+      - "services/importpilot-url-import-provider/src/**"
+      - "services/importpilot-url-import-provider/tests/**"
+      - "services/importpilot-url-import-provider/scripts/dilicin-187-live-probe.ts"
+      - ".github/workflows/source-moq-187-readonly.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  isolated_exact_url:
+    if: github.head_ref == 'fix/jakov360-source-moq-reconciliation-187'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout only public test code, without persistent git credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install isolated parser dependencies (no lockfile)
+        working-directory: services/importpilot-url-import-provider
+        run: npm install --no-package-lock --ignore-scripts --no-audit
+      - name: Try exactly one public read of the original product URL
+        working-directory: services/importpilot-url-import-provider
+        run: ./node_modules/.bin/tsx scripts/dilicin-187-live-probe.ts
