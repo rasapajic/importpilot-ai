@@ -188,4 +188,47 @@ describe("quote-request priority from advertised prices", () => {
       "readsun",
     ]);
   });
+
+  it("keeps a seller's larger MOQ visible but does not rank its teaser as a price for 1,000", () => {
+    const offers = [
+      { id: "dilicin", suitability: "NEEDS_CONFIRMATION" as const, currency: "USD", advertisedPrice: 0.18, listedMoq: 1200, confirmedPurchasePrice: false },
+      { id: "wzouyuan", suitability: "NEEDS_CONFIRMATION" as const, currency: "USD", advertisedPrice: 0.35, listedMoq: 100, confirmedPurchasePrice: false },
+      { id: "readsun", suitability: "NEEDS_CONFIRMATION" as const, currency: "USD", advertisedPrice: 1, listedMoq: 200, confirmedPurchasePrice: false },
+    ];
+    const order = inquiryContactPriority(offers, 1000);
+    expect(order.orderedIds).toEqual(["wzouyuan", "readsun", "dilicin"]);
+    expect(order.priorityById).toEqual({ wzouyuan: 1, readsun: 2 });
+    expect(order.lowestAdvertisedId).toBe("wzouyuan");
+    const scores = preliminaryAdvertisedScorePresentation(
+      offers.map((offer) => ({ ...offer, baseScore: 55 })),
+      1000,
+    );
+    expect(scores.find((item) => item.id === "dilicin")).toMatchObject({
+      priceIndicatorBonus: 0, preliminaryDisplayedScore: 55, priceCompared: false,
+    });
+    expect(scores.find((item) => item.id === "wzouyuan")?.priceIndicatorBonus).toBe(5);
+    // The advertised 0.18 is still displayed on Dilicin's own card:
+    // quantity eligibility does not remove the original supplier offer.
+    expect(offers[0]).toMatchObject({ advertisedPrice: 0.18, listedMoq: 1200 });
+  });
+
+  it("does not fabricate a buyer-quantity price priority when only one offer meets its minimum", () => {
+    const offers = [
+      { id: "dilicin", suitability: "NEEDS_CONFIRMATION" as const, currency: "USD", advertisedPrice: 0.18, listedMoq: 1200, confirmedPurchasePrice: false },
+      { id: "wzouyuan", suitability: "NEEDS_CONFIRMATION" as const, currency: "USD", advertisedPrice: 0.35, listedMoq: 100, confirmedPurchasePrice: false },
+    ];
+    expect(inquiryContactPriority(offers, 1000)).toMatchObject({
+      orderedIds: ["dilicin", "wzouyuan"],
+      priceUsed: false,
+      priorityById: {},
+    });
+    expect(preliminaryAdvertisedScorePresentation(
+      offers.map((offer) => ({ ...offer, baseScore: 55 })),
+      1000,
+    ).map((item) => item.priceIndicatorBonus)).toEqual([0, 0]);
+    expect(inquiryContactPriority(offers, 1200).priorityById).toEqual({
+      dilicin: 1, wzouyuan: 2,
+    });
+  });
+
 });
