@@ -243,7 +243,25 @@
 .preliminary-comparison-grid {
   display: grid;
   gap: 0.75rem;
-  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.preliminary-comparison-action {
+  display: inline-block;
+  margin-top: 0.35rem;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+@media (min-width: 1100px) {
+  .preliminary-comparison-grid[data-columns="2"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .preliminary-comparison-grid[data-columns="3"] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 .preliminary-comparison article {

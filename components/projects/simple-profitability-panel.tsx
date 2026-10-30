@@ -97,6 +97,7 @@ type SimpleCopy = {
   missingCost: string;
   calculationSuperseded: string;
   unknown: string;
+  backToComparison: string;
 };
 
 const copy: Record<Locale, SimpleCopy> = {
@@ -151,6 +152,7 @@ const copy: Record<Locale, SimpleCopy> = {
     missingCost: "Unesite prodajnu cenu i proverite uvozne troškove",
     calculationSuperseded: "Prethodni obračun je sačuvan, ali više nije aktuelan. Potreban je novi obračun.",
     unknown: "nije poznato",
+    backToComparison: "Nazad na poređenje",
   },
   de: {
     eyebrow: "Einfache Prüfung",
@@ -203,6 +205,7 @@ const copy: Record<Locale, SimpleCopy> = {
     missingCost: "Verkaufspreis eingeben und Importkosten prüfen",
     calculationSuperseded: "Die vorherige Kalkulation bleibt gespeichert, ist aber nicht mehr aktuell. Eine neue Kalkulation ist erforderlich.",
     unknown: "unbekannt",
+    backToComparison: "Zurück zum Vergleich",
   },
   en: {
     eyebrow: "Simple check",
@@ -255,6 +258,7 @@ const copy: Record<Locale, SimpleCopy> = {
     missingCost: "Enter selling price and review import costs",
     calculationSuperseded: "The previous calculation is saved, but it is no longer current. A new calculation is required.",
     unknown: "unknown",
+    backToComparison: "Back to comparison",
   },
 };
 
@@ -403,6 +407,7 @@ export function SimpleProfitabilityPanel({
     ? offers.find((offer) => offer.id === selectedCalculationOfferId) ?? null
     : null;
   const offersForInput = focusedOffer ? [focusedOffer] : offers;
+  const showComparison = !focusedOffer && offersForInput.length >= 2;
   const canCheckProfitability = focusedOffer
     ? focusedOffer.costCalculations.length > 0
     : calculatedOffers.length > 0;
@@ -460,9 +465,14 @@ export function SimpleProfitabilityPanel({
     return display.converted ? `${display.original} (≈ ${display.eur})` : display.original;
   }
 
+  const comparisonHref = `/projects/${projectId}#workflow-step-decision`;
   if (editingOffer?.unitPrice && editingOffer.currency && editingOffer.incoterm) {
     return (
-      <section className="dashboard-card">
+      <section className="dashboard-card supplier-confirmation-detail">
+        <p>
+          <Link className="secondary-button" href={comparisonHref}>{text.backToComparison}</Link>
+        </p>
+        <h2>{editingOffer.supplierName}</h2>
         <CostCalculatorForm
           offerId={editingOffer.id}
           unitPrice={editingOffer.unitPrice.toString()}
@@ -596,10 +606,18 @@ export function SimpleProfitabilityPanel({
               !importCostNeedsReview(offer.latestCostAssumptions),
             );
           }) && <p>{text.readyForCheck}</p>}
-          {offersForInput.length >= 2 && (
+          {showComparison && (
             <PreliminaryOfferComparison
               locale={locale}
               requestedQuantity={projectQuantity}
+              detailHrefById={Object.fromEntries(offersForInput.map((offer) => [
+                offer.id,
+                `/projects/${projectId}?selectedOffer=${offer.id}#workflow-step-decision`,
+              ]))}
+              leadTimeById={Object.fromEntries(offersForInput.map((offer) => [
+                offer.id,
+                offer.deliveryTimeDays === null ? null : `${offer.deliveryTimeDays} ${text.days}`,
+              ]))}
               offers={offersForInput.map((offer) => {
                 const metadata = offer.sourceMetadata;
                 const advertisedPrice = metadataNumber(metadata, "advertisedPrice");
@@ -632,7 +650,13 @@ export function SimpleProfitabilityPanel({
               })}
             />
           )}
+          {!showComparison && (
           <div className="offer-list">
+            {focusedOffer && (
+              <p>
+                <Link className="secondary-button" href={comparisonHref}>{text.backToComparison}</Link>
+              </p>
+            )}
             {offersForInput.map((offer) => {
               const latest = offer.costCalculations[0];
               const sourceUrl = sourceOfferUrl(offer.sourceMetadata);
@@ -780,6 +804,7 @@ export function SimpleProfitabilityPanel({
               );
             })}
           </div>
+          )}
         </>
       )}
     </section>

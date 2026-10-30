@@ -1,4 +1,7 @@
+import Link from "next/link";
+
 import type { Locale } from "@/modules/i18n/translations";
+import { inquiryContactPriority } from "@/modules/product-search/domain/advertised-price-tie-break";
 import type { ExplicitProductConstraintStatus } from "@/modules/product-search/domain/explicit-product-constraints";
 import {
   buildPreliminaryOfferComparison,
@@ -20,6 +23,18 @@ type Copy = {
   landedBlocked: string;
   unknown: string;
   quoteRoute: string;
+  leadTime: string;
+  mixedRequest: string;
+  mixedUnconfirmed: string;
+  inquiry: string;
+  inquiryPriority: (position: number) => string;
+  inquiryNotComparable: string;
+  excludedFromInquiry: string;
+  freight: string;
+  duty: string;
+  vat: string;
+  notEvidenced: string;
+  openDetail: string;
   preliminaryAnalysis: string;
   confidence: string;
   mixedQuantityCaveat: (quantity: string | null) => string;
@@ -41,7 +56,19 @@ const copy: Record<Locale, Copy> = {
     landedCost: "Ukupan trošak uvoza",
     landedBlocked: "blokirano dok nema potvrđene nabavne cene",
     unknown: "nije poznato",
-    quoteRoute: "Potvrdu zatražite u koraku sa ponudama. Poruka se ne šalje sama i cena se ne označava kao poslata.",
+    quoteRoute: "Detalji i potvrda otvaraju samo tog dobavljača. Poruka se ne šalje sama i reklamirana cena se ne označava kao potvrđena.",
+    leadTime: "Rok isporuke",
+    mixedRequest: "Mešovite dioptrije i tražena količina",
+    mixedUnconfirmed: "nije potvrđeno",
+    inquiry: "Prioritet za upit",
+    inquiryPriority: (position) => `Prioritet za upit ${position}`,
+    inquiryNotComparable: "nema dovoljno uporedivih cena",
+    excludedFromInquiry: "ne ulazi u red za upit",
+    freight: "Transport",
+    duty: "Carina",
+    vat: "PDV",
+    notEvidenced: "nije poznato — nema dokaza",
+    openDetail: "Detalji i potvrda",
     preliminaryAnalysis: "Preliminarna analiza",
     confidence: "Pouzdanost podataka",
     mixedQuantityCaveat: (quantity) => quantity
@@ -73,7 +100,19 @@ const copy: Record<Locale, Copy> = {
     landedCost: "Landed Cost",
     landedBlocked: "blockiert, bis ein Einkaufspreis bestätigt ist",
     unknown: "unbekannt",
-    quoteRoute: "Bitten Sie im Angebotsschritt um Bestätigung. Es wird nichts automatisch gesendet und kein Preis als gesendet markiert.",
+    quoteRoute: "Details und Bestätigung öffnen nur diesen Lieferanten. Es wird nichts automatisch gesendet und kein beworbener Preis als bestätigt markiert.",
+    leadTime: "Lieferzeit",
+    mixedRequest: "Gemischte Dioptrien und gewünschte Menge",
+    mixedUnconfirmed: "nicht bestätigt",
+    inquiry: "Anfragepriorität",
+    inquiryPriority: (position) => `Anfragepriorität ${position}`,
+    inquiryNotComparable: "nicht genug vergleichbare Preise",
+    excludedFromInquiry: "nicht in der Anfragereihenfolge",
+    freight: "Transport",
+    duty: "Zoll",
+    vat: "MwSt.",
+    notEvidenced: "unbekannt — kein Nachweis",
+    openDetail: "Details und Bestätigung",
     preliminaryAnalysis: "Vorläufige Analyse",
     confidence: "Datenzuverlässigkeit",
     mixedQuantityCaveat: (quantity) => quantity
@@ -105,7 +144,19 @@ const copy: Record<Locale, Copy> = {
     landedCost: "Landed cost",
     landedBlocked: "blocked until a purchase price is confirmed",
     unknown: "unknown",
-    quoteRoute: "Request confirmation from the offer step. Nothing is sent automatically and no price is marked as sent.",
+    quoteRoute: "Details and confirmation open only that supplier. Nothing is sent automatically and an advertised price is not marked as confirmed.",
+    leadTime: "Lead time",
+    mixedRequest: "Mixed diopters and requested quantity",
+    mixedUnconfirmed: "not confirmed",
+    inquiry: "Inquiry priority",
+    inquiryPriority: (position) => `Inquiry priority ${position}`,
+    inquiryNotComparable: "not enough comparable prices",
+    excludedFromInquiry: "not in the inquiry order",
+    freight: "Freight",
+    duty: "Duty",
+    vat: "VAT",
+    notEvidenced: "unknown — no evidence",
+    openDetail: "Details and confirmation",
     preliminaryAnalysis: "Preliminary analysis",
     confidence: "Data confidence",
     mixedQuantityCaveat: (quantity) => quantity
@@ -143,22 +194,43 @@ export function PreliminaryOfferComparison({
   locale,
   offers,
   requestedQuantity = null,
+  detailHrefById = {},
+  leadTimeById = {},
 }: {
   locale: Locale;
   offers: PreliminaryComparisonInput[];
   requestedQuantity?: number | null;
+  detailHrefById?: Record<string, string>;
+  leadTimeById?: Record<string, string | null>;
 }) {
   if (offers.length < 2) return null;
   const text = copy[locale];
   const rows = buildPreliminaryOfferComparison(offers);
   const quantityText = quantityLabel(requestedQuantity, locale);
+  const inquiry = inquiryContactPriority(rows.map((row) => ({
+    id: row.id,
+    suitability: row.suitability,
+    currency: row.purchasePriceConfirmed ? null : row.priceCurrency,
+    advertisedPrice: row.purchasePriceConfirmed ? null : row.priceLow,
+    listedMoq: row.listedMoq,
+    confirmedPurchasePrice: row.purchasePriceConfirmed,
+  })));
+  const columns = Math.min(rows.length, 3);
 
   return (
     <section className="preliminary-comparison" aria-label={text.title}>
       <h3>{text.title}</h3>
       <p className="muted-text">{text.intro}</p>
-      <div className="preliminary-comparison-grid">
-        {rows.map((row) => (
+      <div className="preliminary-comparison-grid" data-columns={columns}>
+        {rows.map((row) => {
+          const inquiryRank = inquiry.priceUsed ? inquiry.priorityById[row.id] : undefined;
+          const inquiryText = row.suitability === "DISQUALIFIED"
+            ? text.excludedFromInquiry
+            : inquiryRank
+              ? text.inquiryPriority(inquiryRank)
+              : text.inquiryNotComparable;
+          const detailHref = detailHrefById[row.id];
+          return (
           <article key={row.id}>
             <h4>{row.supplierName}</h4>
             <dl>
@@ -183,8 +255,32 @@ export function PreliminaryOfferComparison({
                 <dd>{row.supplierCountry ?? text.unknown}</dd>
               </div>
               <div>
+                <dt>{text.leadTime}</dt>
+                <dd>{leadTimeById[row.id] || text.unknown}</dd>
+              </div>
+              <div>
                 <dt>{text.incoterm}</dt>
                 <dd>{row.incoterm ?? text.unknown}</dd>
+              </div>
+              <div>
+                <dt>{text.mixedRequest}</dt>
+                <dd>{text.mixedUnconfirmed}</dd>
+              </div>
+              <div>
+                <dt>{text.inquiry}</dt>
+                <dd>{inquiryText}</dd>
+              </div>
+              <div>
+                <dt>{text.freight}</dt>
+                <dd>{text.notEvidenced}</dd>
+              </div>
+              <div>
+                <dt>{text.duty}</dt>
+                <dd>{text.notEvidenced}</dd>
+              </div>
+              <div>
+                <dt>{text.vat}</dt>
+                <dd>{text.notEvidenced}</dd>
               </div>
               <div>
                 <dt>{text.landedCost}</dt>
@@ -212,8 +308,20 @@ export function PreliminaryOfferComparison({
             {row.productUrl && (
               <p><a href={row.productUrl} rel="noreferrer" target="_blank">{row.supplierName}</a></p>
             )}
+            {detailHref && (
+              <p>
+                <Link
+                  className="secondary-button preliminary-comparison-action"
+                  href={detailHref}
+                  aria-label={`${text.openDetail}: ${row.supplierName}`}
+                >
+                  {text.openDetail}
+                </Link>
+              </p>
+            )}
           </article>
-        ))}
+          );
+        })}
       </div>
       <p className="warning-text">{text.quoteRoute}</p>
     </section>
