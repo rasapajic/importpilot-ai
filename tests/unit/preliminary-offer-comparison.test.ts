@@ -231,6 +231,30 @@ describe("comparison column order", () => {
     expect(inquiry.priorityById.progressive).toBeUndefined();
   });
 
+  it("shows a 1,200-piece seller minimum without treating its teaser as a price for 1,000", () => {
+    const offers = [
+      offer({ id: "dilicin", supplierName: "Dilicin", title: "Fixed reading glasses", price: 0.18, currency: "USD", moq: 1200 }),
+      offer({ id: "wzouyuan", supplierName: "Wzouyuan", title: "Reading glasses", price: 0.35, currency: "USD", moq: 100 }),
+      offer({ id: "readsun", supplierName: "Readsun", title: "Reading glasses", price: 1, currency: "USD", moq: 200 }),
+    ];
+    const rows = buildPreliminaryOfferComparison(offers, 1000);
+    const inquiry = comparisonInquiryPriority(rows, 1000);
+    expect(orderPreliminaryComparisonRows(rows, inquiry).map((row) => row.id)).toEqual([
+      "wzouyuan", "readsun", "dilicin",
+    ]);
+    expect(inquiry.priorityById).toEqual({ wzouyuan: 1, readsun: 2 });
+    expect(rows.find((row) => row.id === "dilicin")).toMatchObject({
+      listedMoq: 1200,
+      priceLow: 0.18,
+      priceEvidence: "ADVERTISED_PRICE",
+      priceIndicatorBonus: 0,
+      preliminaryDisplayedScore: 55,
+      confidenceScore: 24,
+      purchasePriceConfirmed: false,
+      landedCostAvailable: false,
+    });
+  });
+
   it("keeps saved order and assigns no inquiry numbers when currencies differ", () => {
     const savedOrder = [
       offer({ id: "zlin", supplierName: "Zlin Eyewear", title: "Wholesale reading glasses", price: 1.2, currency: "USD", moq: 12 }),
