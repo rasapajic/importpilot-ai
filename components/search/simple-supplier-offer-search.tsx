@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useI18n } from "@/components/i18n/i18n-provider";
 import { SourceMoqVerificationPanel } from "@/components/search/source-moq-verification-panel";
 import {
+  exactProductPageIdentity,
   resultWithSourceMoq,
   type SourceMoqEvidence,
 } from "@/modules/product-search/domain/source-moq-reconciliation";
@@ -681,6 +682,12 @@ export function mergeRecoveredSupplierPreview(
   result: SupplierOfferSearchResult,
   preview: SupplierOfferUrlPreview,
 ) {
+  // Background enrichment must never introduce any commercial or SKU fields
+  // from a different listing, including similarly named products.
+  const resultIdentity = exactProductPageIdentity(result.productUrl);
+  if (!resultIdentity || resultIdentity !== exactProductPageIdentity(preview.productUrl)) {
+    return result;
+  }
   const authoritative = !preview.isPartial && !preview.titleFromSlug;
   const previewHasPrice = authoritative && preview.price !== null && preview.currency !== null;
   const recoveredImage = isLikelyProductImageUrl(preview.imageUrl)
