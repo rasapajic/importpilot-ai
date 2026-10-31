@@ -7,6 +7,10 @@ on:
       - "services/importpilot-url-import-provider/tests/**"
       - "services/importpilot-url-import-provider/scripts/dilicin-187-live-probe.ts"
       - ".github/workflows/source-moq-187-readonly.yml"
+      - "tests/browser/moq187-harness.tsx"
+      - "scripts/test-moq187-browser.mjs"
+      - "components/search/**"
+      - "modules/product-search/domain/source-moq-reconciliation.ts"
 
 permissions:
   contents: read
@@ -31,3 +35,28 @@ jobs:
       - name: Try exactly one public read of the original product URL
         working-directory: services/importpilot-url-import-provider
         run: ./node_modules/.bin/tsx scripts/dilicin-187-live-probe.ts
+
+  isolated_browser_ui:
+    if: github.head_ref == 'fix/jakov360-source-moq-reconciliation-187'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout isolated Draft PR code without persisted credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install project dependencies
+        run: npm ci
+      - name: Install pinned browser-only test tools without saving project files
+        run: npm install --no-save --package-lock=false playwright@1.56.1 esbuild@0.25.12
+      - name: Install Chromium for isolated UI test
+        run: npx playwright install --with-deps chromium
+      - name: Test actual React Step 2 at 390 and 1280px with mocked APIs
+        run: node scripts/test-moq187-browser.mjs
