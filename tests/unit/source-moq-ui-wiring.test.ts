@@ -21,7 +21,7 @@ describe("source MOQ card acceptance wiring #187", () => {
     expect(child).toContain("reconcileSourceMoq(");
     expect(child).toContain('cache: "no-store"');
     expect(child).toContain("sourceMoqCheck: true");
-    expect(route).toContain("useAcceptanceLocalMoqReader({");
+    expect(route).toContain("shouldUseAcceptanceLocalMoqReader({");
     expect(route).toContain('process.env.RENDER_SERVICE_ID');
     expect(route).toContain("process.env.JAKOV360_STAGING_LOCAL_MOQ_READER");
     expect(route).toContain("createAcceptanceLocalMoqReader()");
