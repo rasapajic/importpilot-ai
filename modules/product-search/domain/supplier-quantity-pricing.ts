@@ -51,7 +51,16 @@ export function assessSupplierOfferQuantityPrice(
   quantity: number | null | undefined,
 ): SupplierQuantityPriceAssessment {
   const details = result.marketplaceDetails;
-  const tier = details?.evidence === "PRODUCT_PAGE"
+  // A published price tier cannot establish an order at a quantity that
+  // is below the seller's stated listing minimum, even if its range spans
+  // the buyer quantity. Such pricing remains advertised information only.
+  const belowSellerMinimum =
+    typeof quantity === "number" &&
+    Number.isSafeInteger(quantity) &&
+    quantity > 0 &&
+    result.minimumOrderQuantity !== null &&
+    result.minimumOrderQuantity > quantity;
+  const tier = !belowSellerMinimum && details?.evidence === "PRODUCT_PAGE"
     ? selectSupplierOfferPriceTier(details, quantity)
     : null;
   const tierCurrency = tier?.currency ?? result.currency;

@@ -118,6 +118,61 @@ describe("TAJA finalist auto-enrichment", () => {
     expect(outcome.summary.reports[0]?.failureCode).toBe("UrlImportUnavailableError");
   });
 
+  it("keeps a historical cached Dilicn offer visible when a recheck reports unavailable #187", async () => {
+    const cachedUrl = "https://dilicn.en.made-in-china.com/product/jYzpeDtbEMkd/China-New-Model-Senior-Reading-Glasses-High-Definition-Wholesale-From-Manufacturers-Direct-Sales-.html";
+    const otherUrl = "https://www.alibaba.com/product-detail/known-reading-glasses_1600000001000.html";
+    const saved = result(cachedUrl, {
+      title: "New Model Senior Reading Glasses",
+      supplierName: "Dilicn",
+      price: 0.18,
+      currency: "USD",
+      minimumOrderQuantity: 1200,
+    });
+    const comparison = result(otherUrl);
+    const provider = previewProvider(vi.fn(async (productUrl: string) => {
+      if (productUrl === cachedUrl) throw new UrlImportUnavailableError("Transient unavailable page");
+      return {
+        title: "Known reading glasses",
+        supplierName: "Known supplier",
+        supplierCountry: null,
+        price: null,
+        currency: null,
+        minimumOrderQuantity: null,
+        incoterm: null,
+        productUrl,
+        imageUrl: null,
+        source: "alibaba.com",
+        isPartial: true,
+        titleFromSlug: false,
+      };
+    }));
+
+    const restored = await autoEnrichTajaCandidates(
+      [saved, comparison],
+      provider,
+      { maxCandidates: 2, concurrency: 2, preserveKnownMoq: true, preserveUnavailableResults: true },
+    );
+    expect(restored.results.map((item) => item.productUrl)).toEqual([cachedUrl, otherUrl]);
+    expect(restored.results[0]).toEqual(saved);
+    expect(saved.minimumOrderQuantity).toBe(1200);
+    expect(restored.summary).toMatchObject({ failedCandidates: 1, requestedCandidates: 2 });
+    expect(restored.summary.reports[0]).toMatchObject({
+      status: TajaAutoEnrichmentStatuses.FAILED,
+      failureCode: "UrlImportUnavailableError",
+      fieldsFilled: [],
+      fieldsCorrected: [],
+    });
+
+    // The existing fresh-search policy remains separate; it may exclude
+    // the source when the provider reports an unavailable product.
+    const live = await autoEnrichTajaCandidates(
+      [saved, comparison],
+      provider,
+      { maxCandidates: 2, concurrency: 2 },
+    );
+    expect(live.results.map((item) => item.productUrl)).toEqual([otherUrl]);
+  });
+
   it("isolates provider failures and skips unsupported or over-limit candidates", async () => {
     const failingUrl = "https://fan.en.made-in-china.com/product/fan_ABC123.html";
     const unsupportedUrl = "https://manufacturer.example/products/fan";
@@ -389,4 +444,72 @@ describe("TAJA finalist auto-enrichment", () => {
     expect(outcome.summary.reports[0]?.status)
       .toBe(TajaAutoEnrichmentStatuses.UNCHANGED);
   });
+  it("keeps known saved listing MOQ 1,200 despite a conflicting automatic preview of 200", async () => {
+    const productUrl = "https://dilicn.en.made-in-china.com/product/jYzpeDtbEMkd/China-New-Model-Senior-Reading-Glasses-High-Definition-Wholesale-From-Manufacturers-Direct-Sales-.html";
+    const original = result(productUrl, {
+      title: "New Model Senior Reading Glasses",
+      supplierName: "Dilicin",
+      price: 0.18,
+      currency: "USD",
+      minimumOrderQuantity: 1200,
+    });
+    const provider = previewProvider(async () => ({
+      title: original.title,
+      supplierName: original.supplierName,
+      supplierCountry: null,
+      price: 0.18,
+      currency: "USD",
+      minimumOrderQuantity: 200,
+      incoterm: null,
+      productUrl,
+      imageUrl: "https://image.made-in-china.com/glasses.jpg",
+      source: "made-in-china.com",
+      isPartial: false,
+      titleFromSlug: false,
+    }));
+
+    const cachedRestore = await autoEnrichTajaCandidates(
+      [original],
+      provider,
+      { preserveKnownMoq: true },
+    );
+    expect(cachedRestore.results).toHaveLength(1);
+    expect(cachedRestore.results[0]).toMatchObject({
+      productUrl,
+      price: 0.18,
+      minimumOrderQuantity: 1200,
+      imageUrl: "https://image.made-in-china.com/glasses.jpg",
+    });
+    expect(cachedRestore.summary.reports[0]?.fieldsCorrected).not.toContain("minimumOrderQuantity");
+    expect(original.minimumOrderQuantity).toBe(1200);
+
+    // Preserve existing behavior for fresh searches; only historical
+    // cache-restoration mode requires an explicit, source-labeled check.
+    const freshSearch = await autoEnrichTajaCandidates([original], provider);
+    expect(freshSearch.results[0]?.minimumOrderQuantity).toBe(200);
+  });
+
+  it("may fill an unknown cached MOQ, but never correct an existing known one silently", async () => {
+    const productUrl = "https://dilicn.en.made-in-china.com/product/jYzpeDtbEMkd/China-New-Model-Senior-Reading-Glasses.html";
+    const provider = previewProvider(async () => ({
+      title: "Senior Reading Glasses",
+      supplierName: "Dilicin",
+      supplierCountry: null,
+      price: 0.18,
+      currency: "USD",
+      minimumOrderQuantity: 1200,
+      incoterm: null,
+      productUrl,
+      imageUrl: null,
+      source: "made-in-china.com",
+      isPartial: false,
+      titleFromSlug: false,
+    }));
+    const saved = result(productUrl, { minimumOrderQuantity: null });
+    const outcome = await autoEnrichTajaCandidates([saved], provider, { preserveKnownMoq: true });
+    expect(outcome.results[0]?.minimumOrderQuantity).toBe(1200);
+    expect(outcome.summary.reports[0]?.fieldsFilled).toContain("minimumOrderQuantity");
+    expect(saved.minimumOrderQuantity).toBeNull();
+  });
+
 });

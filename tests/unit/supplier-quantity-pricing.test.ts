@@ -123,6 +123,46 @@ describe("quantity-aware supplier pricing", () => {
     expect(applySupplierOfferQuantityPrice(yougeOffer(), 5_000).price).toBe(0.7);
   });
 
+  it("does not use a covering price tier when listing MOQ exceeds buyer quantity #187", () => {
+    const seller = offer({
+      title: "New Model Senior Reading Glasses",
+      supplierName: "Dilicin",
+      price: 0.18,
+      currency: "USD",
+      minimumOrderQuantity: 1_200,
+      marketplaceDetails: {
+        adapter: "made-in-china-product-page-v2",
+        evidence: "PRODUCT_PAGE",
+        priceTiers: [{ price: 0.18, currency: "USD", minQuantity: 200, maxQuantity: 1_999 }],
+        attributes: [],
+        variants: [],
+        packaging: null,
+      },
+    });
+    // The 200-1999 tier appears to include 1000, but the listing itself
+    // states a minimum of 1200. It cannot become a buyer-1000 price.
+    expect(assessSupplierOfferQuantityPrice(seller, 1000)).toMatchObject({
+      advertisedPrice: 0.18,
+      quantityUnitPrice: null,
+      basis: "INFORMATIONAL",
+      procurementCostConfirmed: false,
+    });
+    expect(presentSupplierOfferPrice(seller, 1000)).toMatchObject({
+      kind: "ADVERTISED_ONLY",
+      quantityUnitPrice: null,
+    });
+    expect(quantityPriceSnapshots(seller, 1000).every(x => x.price === null)).toBe(true);
+    expect(estimateTajaPreliminaryLandedCost({
+      result: { ...seller, currency: "EUR" },
+      quantity: 1000,
+      targetCountry: "RS",
+      targetMarginPercent: 0,
+      fxSnapshot: null,
+    })).toBeNull();
+    // The page tier is informational, but it is usable where MOQ is met.
+    expect(assessSupplierOfferQuantityPrice(seller, 1_200).quantityUnitPrice).toBe(0.18);
+  });
+
   it("keeps the Youge advertised floor informational until a covering tier exists", () => {
     const pricing = assessSupplierOfferQuantityPrice(offer(), 500);
 

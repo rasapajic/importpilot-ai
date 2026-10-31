@@ -5,10 +5,14 @@ import {
   previewProjectSupplierOfferUrl,
   ProductSearchProjectNotFoundError,
 } from "@/modules/product-search/application/product-search-service";
-import { supplierOfferUrlImportRequestSchema } from "@/modules/product-search/domain/search";
+import { supplierOfferSourceMoqCheckRequestSchema } from "@/modules/product-search/domain/search";
 import {
   getDetailedSupplierOfferUrlImportProvider,
 } from "@/modules/product-search/infrastructure/detailed-url-import-provider";
+import {
+  createAcceptanceLocalMoqReader,
+  shouldUseAcceptanceLocalMoqReader,
+} from "@/modules/product-search/infrastructure/staging-source-moq-reader";
 import {
   buildSlugFallbackPreview,
   getUrlImportRuntimeDiagnostics,
@@ -75,23 +79,37 @@ export async function POST(
   const auth = await authenticateRequest(request);
   if (!auth) return NextResponse.json({ error: "Niste prijavljeni." }, { status: 401 });
 
-  const parsed = supplierOfferUrlImportRequestSchema.safeParse(await request.json().catch(() => null));
+  const rawRequest = await request.json().catch(() => null);
+  const parsed = supplierOfferSourceMoqCheckRequestSchema.safeParse(rawRequest);
   if (!parsed.success) {
     return NextResponse.json({ error: "Unesite ispravan HTTPS link." }, { status: 400 });
   }
+
+  // The browser may request an exact-source check, but cannot authorize local
+  // staging access. The server-side Render service ID + opt-in switch decide.
+  const sourceMoqCheck = parsed.data.sourceMoqCheck === true;
+  const acceptanceLocalReader = shouldUseAcceptanceLocalMoqReader({
+    serviceId: process.env.RENDER_SERVICE_ID,
+    enabled: process.env.JAKOV360_STAGING_LOCAL_MOQ_READER,
+    sourceMoqCheck,
+    productUrl: parsed.data.productUrl,
+  });
 
   try {
     const preview = await previewProjectSupplierOfferUrl(
       (await params).projectId,
       auth.membership.organizationId,
       parsed.data.productUrl,
-      getDetailedSupplierOfferUrlImportProvider(),
+      acceptanceLocalReader
+        ? createAcceptanceLocalMoqReader()
+        : getDetailedSupplierOfferUrlImportProvider(),
     );
     const details = detailCounts(preview);
     logPreviewRoute({
       route: "/api/projects/[projectId]/supplier-search/url-preview",
-      externalProviderConfigured: Boolean(process.env.URL_IMPORT_PROVIDER_URL),
-      providerUrl: process.env.URL_IMPORT_PROVIDER_URL ?? null,
+      externalProviderConfigured: Boolean(process.env.URL_IMPORT_PROVIDER_URL) && !acceptanceLocalReader,
+      providerUrl: acceptanceLocalReader ? null : process.env.URL_IMPORT_PROVIDER_URL ?? null,
+      sourceMoqReader: acceptanceLocalReader ? "isolated-staging-local" : "existing-provider",
       providerResponseStatus: 200,
       previewPresent: true,
       errorPresent: false,
@@ -105,6 +123,8 @@ export async function POST(
     });
     return NextResponse.json({
       preview,
+      // Response time, not a guarantee that the remote marketplace changed now.
+      checkedAt: new Date().toISOString(),
       diagnostics: developmentDiagnostics({
         providerStatus: "success",
         previewFieldCount: previewFieldCount(preview),
@@ -115,7 +135,7 @@ export async function POST(
         MOQ: preview.minimumOrderQuantity,
         image: preview.imageUrl,
       }),
-    });
+    }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     logPreviewRoute({
       route: "/api/projects/[projectId]/supplier-search/url-preview",

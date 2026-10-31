@@ -216,6 +216,14 @@ export const supplierOfferUrlImportRequestSchema = z
   })
   .strict();
 
+// Only the authenticated project URL-preview endpoint accepts the explicit
+// source verification marker. Keep the base import schema strict for all
+// other callers, and reject unknown fields or a false/non-boolean flag.
+export const supplierOfferSourceMoqCheckRequestSchema =
+  supplierOfferUrlImportRequestSchema.safeExtend({
+    sourceMoqCheck: z.literal(true).optional(),
+  });
+
 export const supplierOfferUrlPreviewSchema = z
   .object({
     title: optionalText(300),

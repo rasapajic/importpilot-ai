@@ -64,6 +64,12 @@ jobs:
         working-directory: services/importpilot-search-provider
         run: npm ci && npm run typecheck && npm test && npm run build
 
+      - name: URL import provider parser gate
+        working-directory: services/importpilot-url-import-provider
+        # This isolated provider has no package-lock.json: npm ci cannot run.
+        # Do not write a lockfile or mutate the repository in CI.
+        run: npm install --no-package-lock && npm run typecheck && npm test && npm run build
+
       - name: Generate Prisma client
         run: npm run db:generate
 

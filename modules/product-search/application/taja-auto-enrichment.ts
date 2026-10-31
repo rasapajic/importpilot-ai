@@ -52,6 +52,10 @@ export type TajaAutoEnrichmentSummary = {
 type AutoEnrichmentOptions = {
   maxCandidates?: number;
   concurrency?: number;
+  /** Cache restore must not silently replace a known listing MOQ. */
+  preserveKnownMoq?: boolean;
+  /** Failed re-checks must not silently remove offers from saved searches. */
+  preserveUnavailableResults?: boolean;
 };
 
 function boundedInteger(value: number | undefined, fallback: number, maximum: number) {
@@ -94,6 +98,7 @@ function unchangedMerge(result: SupplierOfferSearchResult) {
 function mergePreview(
   result: SupplierOfferSearchResult,
   preview: SupplierOfferUrlPreview,
+  options: Pick<AutoEnrichmentOptions, "preserveKnownMoq"> = {},
 ) {
   // Never accept commercial data from a redirect or parser result that points
   // to a different canonical product. This applies to both corrections and
@@ -140,6 +145,7 @@ function mergePreview(
       fieldsFilled.push("minimumOrderQuantity");
     } else if (
       authoritative &&
+      !options.preserveKnownMoq &&
       minimumOrderQuantity !== preview.minimumOrderQuantity
     ) {
       minimumOrderQuantity = preview.minimumOrderQuantity;
@@ -269,7 +275,7 @@ export async function autoEnrichTajaCandidates(
       if (!current) return;
       try {
         const preview = await provider.previewSupplierOfferUrl(current.result.productUrl);
-        const merged = mergePreview(current.result, preview);
+        const merged = mergePreview(current.result, preview, options);
         enrichedResults[current.index] = merged.result;
         reports[current.index] = {
           productUrl: current.result.productUrl,
@@ -280,7 +286,11 @@ export async function autoEnrichTajaCandidates(
           fieldsCorrected: merged.fieldsCorrected,
         };
       } catch (error) {
-        if (error instanceof UrlImportUnavailableError) {
+        // An UNAVAILABLE response from a re-check is not deletion evidence
+        // for a historical cached listing. Keep its original data visible
+        // with the existing unverified-source notice, and report the failure.
+        // Fresh discovery may still exclude a source confirmed unavailable.
+        if (error instanceof UrlImportUnavailableError && !options.preserveUnavailableResults) {
           unavailableIndexes.add(current.index);
         }
         reports[current.index] = {

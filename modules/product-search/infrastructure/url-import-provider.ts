@@ -316,6 +316,15 @@ function imageText(value: unknown) {
   return text(object?.url) ?? text(object?.contentUrl);
 }
 
+/** Positive evidence requires an explicit human-visible count tagged (MOQ). */
+export function visibleListingMoqFromHtml(html: string): number | null {
+  const text = html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>|<[^>]+>/gi, " ");
+  const count = text.match(/\b([0-9]{1,3}(?:[,\s\u00a0][0-9]{3})+|[0-9]+)\s*(?:pieces?|pcs?|sets?|units?)\s*\(\s*MOQ\s*\)/i)?.[1];
+  if (!count) return null;
+  const value = Number(count.replace(/[^0-9]/g, ""));
+  return Number.isSafeInteger(value) && value > 0 ? value : null;
+}
+
 export function extractSupplierOfferFromHtml(html: string, productUrl: string): SupplierOfferUrlPreview {
   if (isBlockedHtml(html)) throw new UrlImportBlockedError("Blocked or CAPTCHA page.");
   if (isUnavailableProductHtml(html)) {
@@ -400,7 +409,11 @@ export function extractSupplierOfferFromHtml(html: string, productUrl: string): 
     ?? meta(html, "twitter:image")
     ?? embeddedJsonString(html, ["imageUrl", "mainImage", "mainImageUrl", "imagePath", "imgUrl", "productImage"]),
   ) ?? fallbackProductImage(html);
-  const moq = embeddedMoq ?? moqMatch?.[1] ?? null;
+  // Prefer a visible "1,200 Pieces (MOQ)" listing minimum over JSON.
+  const visibleListingMoq = visibleListingMoqFromHtml(html);
+  const moq = visibleListingMoq !== null
+    ? String(visibleListingMoq)
+    : embeddedMoq ?? moqMatch?.[1] ?? null;
 
   if (!title && !supplierName && !fallbackPrice && !fallbackCurrency && !moq && !imageUrl) {
     throw new UrlImportParsingError("No product fields found.");
@@ -455,6 +468,8 @@ export function createSupplierOfferUrlImportProvider(options: {
   resolveHost?: (hostname: string) => Promise<string[]>;
   timeoutMs?: number;
   maxResponseBytes?: number;
+  /** For explicit source-evidence checks, reject embedded or unlabeled MOQ. */
+  requireVisibleListingMoq?: boolean;
 } = {}): SupplierOfferUrlImportProvider {
   const fetcher = options.fetcher ?? fetch;
   const resolveHost = options.resolveHost ?? (async (hostname) => (await lookup(hostname, { all: true })).map((item) => item.address));
@@ -513,12 +528,44 @@ export function createSupplierOfferUrlImportProvider(options: {
         const response = await Promise.race([
           fetcher(productUrl, {
             headers: urlImportHeaders(url),
-            redirect: "follow",
+            // Never follow a marketplace redirect: its target could be an
+            // unrelated SKU or an internal/private network address.
+            redirect: "manual",
             signal: controller.signal,
           }),
           timeoutPromise,
         ]);
         diagnostics.httpStatus = response.status;
+        // The parser labels output with productUrl. Refuse a redirect or a
+        // fetched final URL that differs from the exact requested product,
+        // otherwise another SKU could be falsely attributed to this offer.
+        // A bare Response created by an injected unit-test fetcher has no URL;
+        // real network responses are required to report their actual URL.
+        const requestedUrl = new URL(productUrl);
+        requestedUrl.hash = "";
+        let fetchedIdentityMatches = false;
+        try {
+          if (response.url) {
+            const fetchedUrl = new URL(response.url);
+            fetchedUrl.hash = "";
+            fetchedIdentityMatches = fetchedUrl.protocol === "https:" &&
+              !fetchedUrl.username && !fetchedUrl.password &&
+              fetchedUrl.href === requestedUrl.href;
+          } else if (options.fetcher) {
+            fetchedIdentityMatches = true; // Synthetic test Responses only.
+          }
+        } catch {
+          fetchedIdentityMatches = false;
+        }
+        if (
+          response.redirected ||
+          (response.status >= 300 && response.status < 400) ||
+          !fetchedIdentityMatches
+        ) {
+          diagnostics.finalReason = "exact_url_mismatch_or_redirect";
+          logDiagnostics(diagnostics);
+          throw new UrlImportFetchError("Exact supplier product URL could not be verified.");
+        }
         if (!response.ok) {
           diagnostics.finalReason = `http_${response.status}`;
           logDiagnostics(diagnostics);
@@ -532,6 +579,9 @@ export function createSupplierOfferUrlImportProvider(options: {
         }
         const html = await Promise.race([readLimitedBody(response, maxResponseBytes), timeoutPromise]);
         try {
+          if (options.requireVisibleListingMoq && visibleListingMoqFromHtml(html) === null) {
+            throw new UrlImportParsingError("Source page lacks explicit visible listing MOQ.");
+          }
           const preview = extractSupplierOfferFromHtml(html, productUrl);
           diagnostics.parserResult = "success";
           diagnostics.finalReason = "success";

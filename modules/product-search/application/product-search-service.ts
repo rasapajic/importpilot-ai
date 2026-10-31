@@ -255,7 +255,17 @@ async function buildSearchPresentation(input: SearchPresentationInput) {
     const autoEnrichment = await autoEnrichTajaCandidates(
       preliminaryResults,
       urlImportProvider,
-      { maxCandidates: 10, concurrency: 4 },
+      {
+        maxCandidates: 10,
+        concurrency: 4,
+        // Source previews used during cache restore are not an authorized
+        // reconciliation step. Preserve known historical listing MOQ until
+        // an explicit exact-URL check produces source-labeled evidence.
+        preserveKnownMoq: resultOrigin === "cache",
+        // A transient UNAVAILABLE during read-only cache restoration does
+        // not authorize removing a previously saved candidate from the UI.
+        preserveUnavailableResults: resultOrigin === "cache",
+      },
     );
     candidateResults = autoEnrichment.results;
     autoEnrichmentSummary = autoEnrichment.summary;

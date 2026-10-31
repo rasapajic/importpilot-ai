@@ -1,0 +1,88 @@
+name: "187 - Isolated Dilicin source-read test"
+
+on:
+  pull_request:
+    paths:
+      - "services/importpilot-url-import-provider/src/**"
+      - "services/importpilot-url-import-provider/tests/**"
+      - "services/importpilot-url-import-provider/scripts/dilicin-187-live-probe.ts"
+      - ".github/workflows/source-moq-187-readonly.yml"
+      - "tests/browser/moq187-harness.tsx"
+      - "scripts/test-moq187-browser.mjs"
+      - "components/search/**"
+      - "modules/product-search/domain/source-moq-reconciliation.ts"
+      - "modules/product-search/infrastructure/staging-source-moq-reader.ts"
+      - "modules/product-search/infrastructure/url-import-provider.ts"
+      - "app/api/projects/**/supplier-search/url-preview/route.ts"
+      - "tests/unit/staging-source-moq-reader.test.ts"
+      - "scripts/test-staging-source-moq-live.ts"
+
+permissions:
+  contents: read
+
+jobs:
+  isolated_exact_url:
+    if: github.head_ref == 'fix/jakov360-source-moq-reconciliation-187'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout only public test code, without persistent git credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install isolated parser dependencies (no lockfile)
+        working-directory: services/importpilot-url-import-provider
+        run: npm install --no-package-lock --ignore-scripts --no-audit
+      - name: Try exactly one public read of the original product URL
+        working-directory: services/importpilot-url-import-provider
+        run: ./node_modules/.bin/tsx scripts/dilicin-187-live-probe.ts
+
+  isolated_browser_ui:
+    if: github.head_ref == 'fix/jakov360-source-moq-reconciliation-187'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout isolated Draft PR code without persisted credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install project dependencies
+        run: npm ci
+      - name: Install pinned browser-only test tools without saving project files
+        run: npm install --no-save --package-lock=false playwright@1.56.1 esbuild@0.25.12
+      - name: Install Chromium for isolated UI test
+        run: npx playwright install --with-deps chromium
+      - name: Test actual React Step 2 at 390 and 1280px with mocked APIs
+        run: node scripts/test-moq187-browser.mjs
+
+  isolated_staging_local_reader:
+    if: github.head_ref == 'fix/jakov360-source-moq-reconciliation-187'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact PR changes with no stored Git credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install app dependencies
+        run: npm ci
+      - name: One-shot exact-SKU public source check with staging local reader
+        run: ./node_modules/.bin/tsx scripts/test-staging-source-moq-live.ts
