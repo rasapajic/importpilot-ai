@@ -118,6 +118,61 @@ describe("TAJA finalist auto-enrichment", () => {
     expect(outcome.summary.reports[0]?.failureCode).toBe("UrlImportUnavailableError");
   });
 
+  it("keeps a historical cached Dilicn offer visible when a recheck reports unavailable #187", async () => {
+    const cachedUrl = "https://dilicn.en.made-in-china.com/product/jYzpeDtbEMkd/China-New-Model-Senior-Reading-Glasses-High-Definition-Wholesale-From-Manufacturers-Direct-Sales-.html";
+    const otherUrl = "https://www.alibaba.com/product-detail/known-reading-glasses_1600000001000.html";
+    const saved = result(cachedUrl, {
+      title: "New Model Senior Reading Glasses",
+      supplierName: "Dilicn",
+      price: 0.18,
+      currency: "USD",
+      minimumOrderQuantity: 1200,
+    });
+    const comparison = result(otherUrl);
+    const provider = previewProvider(vi.fn(async (productUrl: string) => {
+      if (productUrl === cachedUrl) throw new UrlImportUnavailableError("Transient unavailable page");
+      return {
+        title: "Known reading glasses",
+        supplierName: "Known supplier",
+        supplierCountry: null,
+        price: null,
+        currency: null,
+        minimumOrderQuantity: null,
+        incoterm: null,
+        productUrl,
+        imageUrl: null,
+        source: "alibaba.com",
+        isPartial: true,
+        titleFromSlug: false,
+      };
+    }));
+
+    const restored = await autoEnrichTajaCandidates(
+      [saved, comparison],
+      provider,
+      { maxCandidates: 2, concurrency: 2, preserveKnownMoq: true, preserveUnavailableResults: true },
+    );
+    expect(restored.results.map((item) => item.productUrl)).toEqual([cachedUrl, otherUrl]);
+    expect(restored.results[0]).toEqual(saved);
+    expect(saved.minimumOrderQuantity).toBe(1200);
+    expect(restored.summary).toMatchObject({ failedCandidates: 1, requestedCandidates: 2 });
+    expect(restored.summary.reports[0]).toMatchObject({
+      status: TajaAutoEnrichmentStatuses.FAILED,
+      failureCode: "UrlImportUnavailableError",
+      fieldsFilled: [],
+      fieldsCorrected: [],
+    });
+
+    // The existing fresh-search policy remains separate; it may exclude
+    // the source when the provider reports an unavailable product.
+    const live = await autoEnrichTajaCandidates(
+      [saved, comparison],
+      provider,
+      { maxCandidates: 2, concurrency: 2 },
+    );
+    expect(live.results.map((item) => item.productUrl)).toEqual([otherUrl]);
+  });
+
   it("isolates provider failures and skips unsupported or over-limit candidates", async () => {
     const failingUrl = "https://fan.en.made-in-china.com/product/fan_ABC123.html";
     const unsupportedUrl = "https://manufacturer.example/products/fan";
