@@ -54,6 +54,8 @@ type AutoEnrichmentOptions = {
   concurrency?: number;
   /** Cache restore must not silently replace a known listing MOQ. */
   preserveKnownMoq?: boolean;
+  /** Failed re-checks must not silently remove offers from saved searches. */
+  preserveUnavailableResults?: boolean;
 };
 
 function boundedInteger(value: number | undefined, fallback: number, maximum: number) {
@@ -284,7 +286,11 @@ export async function autoEnrichTajaCandidates(
           fieldsCorrected: merged.fieldsCorrected,
         };
       } catch (error) {
-        if (error instanceof UrlImportUnavailableError) {
+        // An UNAVAILABLE response from a re-check is not deletion evidence
+        // for a historical cached listing. Keep its original data visible
+        // with the existing unverified-source notice, and report the failure.
+        // Fresh discovery may still exclude a source confirmed unavailable.
+        if (error instanceof UrlImportUnavailableError && !options.preserveUnavailableResults) {
           unavailableIndexes.add(current.index);
         }
         reports[current.index] = {
