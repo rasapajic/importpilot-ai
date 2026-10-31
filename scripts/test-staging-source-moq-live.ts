@@ -7,6 +7,7 @@ import {
   DILICN_187_EXACT_PRODUCT_URL,
 } from "../modules/product-search/infrastructure/staging-source-moq-reader";
 
+async function main() {
 const timestamp = new Date().toISOString();
 try {
   const result = await createAcceptanceLocalMoqReader()
@@ -42,3 +43,6 @@ try {
   }));
   process.exitCode = 2;
 }
+
+}
+void main();
