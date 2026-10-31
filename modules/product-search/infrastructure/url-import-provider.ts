@@ -528,12 +528,44 @@ export function createSupplierOfferUrlImportProvider(options: {
         const response = await Promise.race([
           fetcher(productUrl, {
             headers: urlImportHeaders(url),
-            redirect: "follow",
+            // Never follow a marketplace redirect: its target could be an
+            // unrelated SKU or an internal/private network address.
+            redirect: "manual",
             signal: controller.signal,
           }),
           timeoutPromise,
         ]);
         diagnostics.httpStatus = response.status;
+        // The parser labels output with productUrl. Refuse a redirect or a
+        // fetched final URL that differs from the exact requested product,
+        // otherwise another SKU could be falsely attributed to this offer.
+        // A bare Response created by an injected unit-test fetcher has no URL;
+        // real network responses are required to report their actual URL.
+        const requestedUrl = new URL(productUrl);
+        requestedUrl.hash = "";
+        let fetchedIdentityMatches = false;
+        try {
+          if (response.url) {
+            const fetchedUrl = new URL(response.url);
+            fetchedUrl.hash = "";
+            fetchedIdentityMatches = fetchedUrl.protocol === "https:" &&
+              !fetchedUrl.username && !fetchedUrl.password &&
+              fetchedUrl.href === requestedUrl.href;
+          } else if (options.fetcher) {
+            fetchedIdentityMatches = true; // Synthetic test Responses only.
+          }
+        } catch {
+          fetchedIdentityMatches = false;
+        }
+        if (
+          response.redirected ||
+          (response.status >= 300 && response.status < 400) ||
+          !fetchedIdentityMatches
+        ) {
+          diagnostics.finalReason = "exact_url_mismatch_or_redirect";
+          logDiagnostics(diagnostics);
+          throw new UrlImportFetchError("Exact supplier product URL could not be verified.");
+        }
         if (!response.ok) {
           diagnostics.finalReason = `http_${response.status}`;
           logDiagnostics(diagnostics);
