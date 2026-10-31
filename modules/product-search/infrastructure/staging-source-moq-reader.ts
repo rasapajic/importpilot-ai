@@ -15,7 +15,7 @@ export const JAKOV360_ACCEPTANCE_RENDER_SERVICE_ID = "srv-datu3v093c1s73c17m60";
 export const DILICN_187_EXACT_PRODUCT_URL =
   "https://dilicn.en.made-in-china.com/product/jYzpeDtbEMkd/China-New-Model-Senior-Reading-Glasses-High-Definition-Wholesale-From-Manufacturers-Direct-Sales-.html";
 
-export function useAcceptanceLocalMoqReader(input: {
+export function shouldUseAcceptanceLocalMoqReader(input: {
   serviceId?: string | null;
   enabled?: string | null;
   sourceMoqCheck: boolean;
