@@ -72,7 +72,7 @@ export function SourceMoqVerificationPanel({
         method: "POST",
         headers: { "content-type": "application/json" },
         cache: "no-store",
-        body: JSON.stringify({ productUrl: result.productUrl }),
+        body: JSON.stringify({ productUrl: result.productUrl, sourceMoqCheck: true }),
       });
       const payload = await response.json().catch(() => null) as {
         preview?: SupplierOfferUrlPreview;
