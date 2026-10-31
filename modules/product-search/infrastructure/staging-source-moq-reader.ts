@@ -40,6 +40,7 @@ export function createAcceptanceLocalMoqReader(options: {
 } = {}): SupplierOfferUrlImportProvider {
   const fetcher = options.fetcher ?? fetch;
   return createSupplierOfferUrlImportProvider({
+    requireVisibleListingMoq: true,
     resolveHost: options.resolveHost,
     fetcher: async (input, init) => {
       const requested = typeof input === "string" ? input : input.toString();
