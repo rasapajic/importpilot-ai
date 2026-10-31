@@ -4,7 +4,7 @@ import {
   createAcceptanceLocalMoqReader,
   DILICN_187_EXACT_PRODUCT_URL,
   JAKOV360_ACCEPTANCE_RENDER_SERVICE_ID,
-  useAcceptanceLocalMoqReader,
+  shouldUseAcceptanceLocalMoqReader,
 } from "../../modules/product-search/infrastructure/staging-source-moq-reader";
 import { UrlImportFetchError } from "../../modules/product-search/infrastructure/url-import-provider";
 
@@ -32,16 +32,16 @@ describe("#187 isolated staging local reader selection", () => {
     productUrl: DILICN_187_EXACT_PRODUCT_URL,
   };
   it("requires all four server-side and exact-SKU conditions", () => {
-    expect(useAcceptanceLocalMoqReader(enabled)).toBe(true);
-    expect(useAcceptanceLocalMoqReader({ ...enabled, serviceId: "srv-production" })).toBe(false);
-    expect(useAcceptanceLocalMoqReader({ ...enabled, serviceId: undefined })).toBe(false);
-    expect(useAcceptanceLocalMoqReader({ ...enabled, enabled: "0" })).toBe(false);
-    expect(useAcceptanceLocalMoqReader({ ...enabled, enabled: undefined })).toBe(false);
-    expect(useAcceptanceLocalMoqReader({ ...enabled, sourceMoqCheck: false })).toBe(false);
-    expect(useAcceptanceLocalMoqReader({ ...enabled, productUrl: DILICN_187_EXACT_PRODUCT_URL.replace("jYzpeDtbEMkd", "otherSku") })).toBe(false);
-    expect(useAcceptanceLocalMoqReader({ ...enabled, productUrl: DILICN_187_EXACT_PRODUCT_URL.replace("dilicn.", "other.") })).toBe(false);
-    expect(useAcceptanceLocalMoqReader({ ...enabled, productUrl: "http://127.0.0.1/internal" })).toBe(false);
-    expect(useAcceptanceLocalMoqReader({ ...enabled, productUrl: DILICN_187_EXACT_PRODUCT_URL + "?variant=another" })).toBe(false);
+    expect(shouldUseAcceptanceLocalMoqReader(enabled)).toBe(true);
+    expect(shouldUseAcceptanceLocalMoqReader({ ...enabled, serviceId: "srv-production" })).toBe(false);
+    expect(shouldUseAcceptanceLocalMoqReader({ ...enabled, serviceId: undefined })).toBe(false);
+    expect(shouldUseAcceptanceLocalMoqReader({ ...enabled, enabled: "0" })).toBe(false);
+    expect(shouldUseAcceptanceLocalMoqReader({ ...enabled, enabled: undefined })).toBe(false);
+    expect(shouldUseAcceptanceLocalMoqReader({ ...enabled, sourceMoqCheck: false })).toBe(false);
+    expect(shouldUseAcceptanceLocalMoqReader({ ...enabled, productUrl: DILICN_187_EXACT_PRODUCT_URL.replace("jYzpeDtbEMkd", "otherSku") })).toBe(false);
+    expect(shouldUseAcceptanceLocalMoqReader({ ...enabled, productUrl: DILICN_187_EXACT_PRODUCT_URL.replace("dilicn.", "other.") })).toBe(false);
+    expect(shouldUseAcceptanceLocalMoqReader({ ...enabled, productUrl: "http://127.0.0.1/internal" })).toBe(false);
+    expect(shouldUseAcceptanceLocalMoqReader({ ...enabled, productUrl: DILICN_187_EXACT_PRODUCT_URL + "?variant=another" })).toBe(false);
   });
 
   it("parses source-labeled 1200 above stale embedded 200 without following redirects", async () => {
