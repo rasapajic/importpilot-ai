@@ -10,6 +10,10 @@ import {
   getDetailedSupplierOfferUrlImportProvider,
 } from "@/modules/product-search/infrastructure/detailed-url-import-provider";
 import {
+  createAcceptanceLocalMoqReader,
+  useAcceptanceLocalMoqReader,
+} from "@/modules/product-search/infrastructure/staging-source-moq-reader";
+import {
   buildSlugFallbackPreview,
   getUrlImportRuntimeDiagnostics,
   UrlImportBlockedError,
@@ -75,23 +79,40 @@ export async function POST(
   const auth = await authenticateRequest(request);
   if (!auth) return NextResponse.json({ error: "Niste prijavljeni." }, { status: 401 });
 
-  const parsed = supplierOfferUrlImportRequestSchema.safeParse(await request.json().catch(() => null));
+  const rawRequest = await request.json().catch(() => null);
+  const parsed = supplierOfferUrlImportRequestSchema.safeParse(rawRequest);
   if (!parsed.success) {
     return NextResponse.json({ error: "Unesite ispravan HTTPS link." }, { status: 400 });
   }
+
+  // The browser may request an exact-source check, but cannot authorize local
+  // staging access. The server-side Render service ID + opt-in switch decide.
+  const sourceMoqCheck = rawRequest !== null &&
+    typeof rawRequest === "object" &&
+    !Array.isArray(rawRequest) &&
+    (rawRequest as Record<string, unknown>).sourceMoqCheck === true;
+  const acceptanceLocalReader = useAcceptanceLocalMoqReader({
+    serviceId: process.env.RENDER_SERVICE_ID,
+    enabled: process.env.JAKOV360_STAGING_LOCAL_MOQ_READER,
+    sourceMoqCheck,
+    productUrl: parsed.data.productUrl,
+  });
 
   try {
     const preview = await previewProjectSupplierOfferUrl(
       (await params).projectId,
       auth.membership.organizationId,
       parsed.data.productUrl,
-      getDetailedSupplierOfferUrlImportProvider(),
+      acceptanceLocalReader
+        ? createAcceptanceLocalMoqReader()
+        : getDetailedSupplierOfferUrlImportProvider(),
     );
     const details = detailCounts(preview);
     logPreviewRoute({
       route: "/api/projects/[projectId]/supplier-search/url-preview",
-      externalProviderConfigured: Boolean(process.env.URL_IMPORT_PROVIDER_URL),
-      providerUrl: process.env.URL_IMPORT_PROVIDER_URL ?? null,
+      externalProviderConfigured: Boolean(process.env.URL_IMPORT_PROVIDER_URL) && !acceptanceLocalReader,
+      providerUrl: acceptanceLocalReader ? null : process.env.URL_IMPORT_PROVIDER_URL ?? null,
+      sourceMoqReader: acceptanceLocalReader ? "isolated-staging-local" : "existing-provider",
       providerResponseStatus: 200,
       previewPresent: true,
       errorPresent: false,
