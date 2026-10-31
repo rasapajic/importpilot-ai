@@ -5,7 +5,7 @@ import {
   previewProjectSupplierOfferUrl,
   ProductSearchProjectNotFoundError,
 } from "@/modules/product-search/application/product-search-service";
-import { supplierOfferUrlImportRequestSchema } from "@/modules/product-search/domain/search";
+import { supplierOfferSourceMoqCheckRequestSchema } from "@/modules/product-search/domain/search";
 import {
   getDetailedSupplierOfferUrlImportProvider,
 } from "@/modules/product-search/infrastructure/detailed-url-import-provider";
@@ -80,17 +80,14 @@ export async function POST(
   if (!auth) return NextResponse.json({ error: "Niste prijavljeni." }, { status: 401 });
 
   const rawRequest = await request.json().catch(() => null);
-  const parsed = supplierOfferUrlImportRequestSchema.safeParse(rawRequest);
+  const parsed = supplierOfferSourceMoqCheckRequestSchema.safeParse(rawRequest);
   if (!parsed.success) {
     return NextResponse.json({ error: "Unesite ispravan HTTPS link." }, { status: 400 });
   }
 
   // The browser may request an exact-source check, but cannot authorize local
   // staging access. The server-side Render service ID + opt-in switch decide.
-  const sourceMoqCheck = rawRequest !== null &&
-    typeof rawRequest === "object" &&
-    !Array.isArray(rawRequest) &&
-    (rawRequest as Record<string, unknown>).sourceMoqCheck === true;
+  const sourceMoqCheck = parsed.data.sourceMoqCheck === true;
   const acceptanceLocalReader = shouldUseAcceptanceLocalMoqReader({
     serviceId: process.env.RENDER_SERVICE_ID,
     enabled: process.env.JAKOV360_STAGING_LOCAL_MOQ_READER,
