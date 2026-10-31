@@ -287,6 +287,65 @@ describe("supplier offer URL import provider", () => {
     await expect(privateProvider.previewSupplierOfferUrl("https://www.alibaba.com/product-detail/fan_1600000000001.html")).rejects.toBeInstanceOf(UrlImportFetchError);
   });
 
+  it("never follows redirects to another SKU or private host during a local preview #187", async () => {
+    const productUrl = "https://dilicn.en.made-in-china.com/product/jYzpeDtbEMkd/China-New-Model-Senior-Reading-Glasses.html";
+    const anotherSku = productUrl.replace("jYzpeDtbEMkd", "OtherSku123");
+    const destinations = [
+      anotherSku,
+      "http://169.254.169.254/latest/meta-data/",
+      "http://127.0.0.1/admin",
+    ];
+    for (const location of destinations) {
+      let requestedRedirect: RequestRedirect | undefined;
+      const provider = createSupplierOfferUrlImportProvider({
+        resolveHost: publicResolver,
+        fetcher: async (_input, init) => {
+          requestedRedirect = init?.redirect;
+          return new Response(null, {
+            status: 302,
+            headers: { location, "content-type": "text/html" },
+          });
+        },
+      });
+      await expect(provider.previewSupplierOfferUrl(productUrl)).rejects.toBeInstanceOf(UrlImportFetchError);
+      expect(requestedRedirect).toBe("manual");
+    }
+  });
+
+  it("refuses a 200 response belonging to a different SKU even without a 302 #187", async () => {
+    const productUrl = "https://dilicn.en.made-in-china.com/product/jYzpeDtbEMkd/China-New-Model-Senior-Reading-Glasses.html";
+    const html = `<html><head><title>Senior Reading Glasses</title></head><body>1,200 Pieces (MOQ)</body></html>`;
+    const wrongUrl = productUrl.replace("jYzpeDtbEMkd", "OtherSku123");
+    const provider = createSupplierOfferUrlImportProvider({
+      resolveHost: publicResolver,
+      fetcher: async () => {
+        const response = htmlResponse(html);
+        Object.defineProperty(response, "url", { value: wrongUrl });
+        return response;
+      },
+    });
+    await expect(provider.previewSupplierOfferUrl(productUrl)).rejects.toBeInstanceOf(UrlImportFetchError);
+  });
+
+  it("accepts unchanged exact-URL HTTP 200 source evidence #187", async () => {
+    const productUrl = "https://dilicn.en.made-in-china.com/product/jYzpeDtbEMkd/China-New-Model-Senior-Reading-Glasses.html";
+    let redirectSetting: RequestRedirect | undefined;
+    const provider = createSupplierOfferUrlImportProvider({
+      resolveHost: publicResolver,
+      fetcher: async (_input, init) => {
+        redirectSetting = init?.redirect;
+        const response = htmlResponse(`<html><head><title>Senior Reading Glasses</title></head><body>1,200 Pieces (MOQ)</body></html>`);
+        Object.defineProperty(response, "url", { value: productUrl });
+        return response;
+      },
+    });
+    await expect(provider.previewSupplierOfferUrl(productUrl)).resolves.toMatchObject({
+      productUrl,
+      minimumOrderQuantity: 1200,
+    });
+    expect(redirectSetting).toBe("manual");
+  });
+
   it("aborts slow responses after the configured timeout", async () => {
     const provider = createSupplierOfferUrlImportProvider({
       resolveHost: publicResolver,
