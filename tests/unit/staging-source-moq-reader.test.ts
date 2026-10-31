@@ -93,9 +93,10 @@ describe("#187 isolated staging local reader selection", () => {
       fetcher: async () => htmlResponse(DILICN_187_EXACT_PRODUCT_URL,
         "<html><head><title>New Model Senior Reading Glasses</title></head><body>1,200 Pieces (MOQ)</body></html>"),
     });
-    await expect(incomplete.previewSupplierOfferUrl(DILICN_187_EXACT_PRODUCT_URL)).rejects.toThrow(
-      "Source page lacks explicit visible listing MOQ.",
-    );
+    // The explicitly labeled MOQ is readable, but the rest of the page is
+    // incomplete: SourceMoqVerificationPanel must mark this NOT_VERIFIED.
+    const incompletePreview = await incomplete.previewSupplierOfferUrl(DILICN_187_EXACT_PRODUCT_URL);
+    expect(incompletePreview).toMatchObject({ minimumOrderQuantity: 1200, isPartial: true });
 
     const embeddedOnly = createAcceptanceLocalMoqReader({
       resolveHost: resolver,
