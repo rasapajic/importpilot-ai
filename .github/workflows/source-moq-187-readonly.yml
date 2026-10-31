@@ -11,6 +11,11 @@ on:
       - "scripts/test-moq187-browser.mjs"
       - "components/search/**"
       - "modules/product-search/domain/source-moq-reconciliation.ts"
+      - "modules/product-search/infrastructure/staging-source-moq-reader.ts"
+      - "modules/product-search/infrastructure/url-import-provider.ts"
+      - "app/api/projects/**/supplier-search/url-preview/route.ts"
+      - "tests/unit/staging-source-moq-reader.test.ts"
+      - "scripts/test-staging-source-moq-live.ts"
 
 permissions:
   contents: read
@@ -60,3 +65,24 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Test actual React Step 2 at 390 and 1280px with mocked APIs
         run: node scripts/test-moq187-browser.mjs
+
+  isolated_staging_local_reader:
+    if: github.head_ref == 'fix/jakov360-source-moq-reconciliation-187'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact PR changes with no stored Git credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install app dependencies
+        run: npm ci
+      - name: One-shot exact-SKU public source check with staging local reader
+        run: ./node_modules/.bin/tsx scripts/test-staging-source-moq-live.ts
