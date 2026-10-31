@@ -93,7 +93,17 @@ describe("#187 isolated staging local reader selection", () => {
       fetcher: async () => htmlResponse(DILICN_187_EXACT_PRODUCT_URL,
         "<html><head><title>New Model Senior Reading Glasses</title></head><body>1,200 Pieces (MOQ)</body></html>"),
     });
-    const preview = await incomplete.previewSupplierOfferUrl(DILICN_187_EXACT_PRODUCT_URL);
-    expect(preview.isPartial).toBe(true);
+    await expect(incomplete.previewSupplierOfferUrl(DILICN_187_EXACT_PRODUCT_URL)).rejects.toThrow(
+      "Source page lacks explicit visible listing MOQ.",
+    );
+
+    const embeddedOnly = createAcceptanceLocalMoqReader({
+      resolveHost: resolver,
+      fetcher: async () => htmlResponse(DILICN_187_EXACT_PRODUCT_URL,
+        body.replace("1,200 Pieces (MOQ)", "Wholesale available")),
+    });
+    await expect(embeddedOnly.previewSupplierOfferUrl(DILICN_187_EXACT_PRODUCT_URL)).rejects.toThrow(
+      "Source page lacks explicit visible listing MOQ.",
+    );
   });
 });
