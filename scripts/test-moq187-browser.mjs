@@ -159,16 +159,20 @@ async function exercise({ savedMoq, width }) {
   });
 
   try {
+    const backgroundResponse = page.waitForResponse(
+      r => r.url().endsWith("/supplier-search/url-preview") && r.status() === 422,
+      { timeout: 15000 },
+    );
     await page.goto(`http://127.0.0.1:${port}/isolated?savedMoq=${savedMoq}`, { waitUntil:"domcontentloaded" });
     const card = page.locator("article.search-result-card").filter({has:page.locator(`a.supplier-source-link[href*="${dilicinSku}"]`)});
     await card.waitFor({ state:"visible", timeout:20000 });
-    await page.waitForResponse(r=>r.url().endsWith("/supplier-search/url-preview") && r.status()===422, {timeout:15000});
+    await backgroundResponse;
 
     assert.equal(await card.count(),1,"Specific Dilicin SKU must remain visible");
     const before = await card.innerText();
     assert.match(before, new RegExp(`\\b${savedMoq.toLocaleString("sr-RS")}\\b`), "Initial cached MOQ must be visible");
     assert.doesNotMatch(before, /Prioritet za upit 1/, "Unverified cache must not receive price-priority 1");
-    assert.doesNotMatch(before, /daje \\+5|dodaje \\+5|\\+5 za cenu/, "Unverified price must not earn +5");
+    assert.doesNotMatch(before, /\+5/, "Unverified price must not earn +5");
     assert.match(before, /0,18/, "Conditional US$0.18 must remain visible");
 
     await card.getByRole("button",{name:"Proveri MOQ na originalnoj stranici"}).click();
@@ -184,7 +188,7 @@ async function exercise({ savedMoq, width }) {
     assert.match(after,/0,18/, "Advertised USD 0.18 must still be displayed");
     assert.match(after,/nije potvrđena za 1\.000/, "Price for buyer quantity must be unconfirmed");
     assert.doesNotMatch(after,/Prioritet za upit 1/, "No false price-based priority 1");
-    assert.doesNotMatch(after,/daje \\+5|dodaje \\+5|\\+5 za cenu/, "No false +5");
+    assert.doesNotMatch(after,/\+5/, "No false +5");
     if (savedMoq === 200) assert.match(after,/Neslaganje MOQ-a: sačuvana pretraga 200 kom\., pročitana stranica 1200 kom\./);
     if (savedMoq === 1200) assert.match(after,/MOQ iz sačuvane pretrage i pročitanog izvora je isti\./);
 
