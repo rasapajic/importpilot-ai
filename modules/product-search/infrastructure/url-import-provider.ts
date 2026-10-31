@@ -316,6 +316,15 @@ function imageText(value: unknown) {
   return text(object?.url) ?? text(object?.contentUrl);
 }
 
+/** Positive evidence requires an explicit human-visible count tagged (MOQ). */
+export function visibleListingMoqFromHtml(html: string): number | null {
+  const text = html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>|<[^>]+>/gi, " ");
+  const count = text.match(/\b([0-9]{1,3}(?:[,\s\u00a0][0-9]{3})+|[0-9]+)\s*(?:pieces?|pcs?|sets?|units?)\s*\(\s*MOQ\s*\)/i)?.[1];
+  if (!count) return null;
+  const value = Number(count.replace(/[^0-9]/g, ""));
+  return Number.isSafeInteger(value) && value > 0 ? value : null;
+}
+
 export function extractSupplierOfferFromHtml(html: string, productUrl: string): SupplierOfferUrlPreview {
   if (isBlockedHtml(html)) throw new UrlImportBlockedError("Blocked or CAPTCHA page.");
   if (isUnavailableProductHtml(html)) {
@@ -401,9 +410,9 @@ export function extractSupplierOfferFromHtml(html: string, productUrl: string): 
     ?? embeddedJsonString(html, ["imageUrl", "mainImage", "mainImageUrl", "imagePath", "imgUrl", "productImage"]),
   ) ?? fallbackProductImage(html);
   // Prefer a visible "1,200 Pieces (MOQ)" listing minimum over JSON.
-  const visibleListingMoq = bodyText.match(/\b([0-9]{1,3}(?:[,\s\u00a0][0-9]{3})+|[0-9]+)\s*(?:pieces?|pcs?|sets?|units?)\s*\(\s*MOQ\s*\)/i)?.[1];
-  const moq = visibleListingMoq
-    ? visibleListingMoq.replace(/[^0-9]/g, "")
+  const visibleListingMoq = visibleListingMoqFromHtml(html);
+  const moq = visibleListingMoq !== null
+    ? String(visibleListingMoq)
     : embeddedMoq ?? moqMatch?.[1] ?? null;
 
   if (!title && !supplierName && !fallbackPrice && !fallbackCurrency && !moq && !imageUrl) {
@@ -459,6 +468,8 @@ export function createSupplierOfferUrlImportProvider(options: {
   resolveHost?: (hostname: string) => Promise<string[]>;
   timeoutMs?: number;
   maxResponseBytes?: number;
+  /** For explicit source-evidence checks, reject embedded or unlabeled MOQ. */
+  requireVisibleListingMoq?: boolean;
 } = {}): SupplierOfferUrlImportProvider {
   const fetcher = options.fetcher ?? fetch;
   const resolveHost = options.resolveHost ?? (async (hostname) => (await lookup(hostname, { all: true })).map((item) => item.address));
@@ -536,6 +547,9 @@ export function createSupplierOfferUrlImportProvider(options: {
         }
         const html = await Promise.race([readLimitedBody(response, maxResponseBytes), timeoutPromise]);
         try {
+          if (options.requireVisibleListingMoq && visibleListingMoqFromHtml(html) === null) {
+            throw new UrlImportParsingError("Source page lacks explicit visible listing MOQ.");
+          }
           const preview = extractSupplierOfferFromHtml(html, productUrl);
           diagnostics.parserResult = "success";
           diagnostics.finalReason = "success";
