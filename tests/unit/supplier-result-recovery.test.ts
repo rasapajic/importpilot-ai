@@ -103,6 +103,26 @@ describe("supplier result exact-page recovery", () => {
     expect(recovered.minimumOrderQuantity).toBe(100);
   });
 
+  it("rejects a similar-supplier but different-SKU background preview #187", () => {
+    const original = {
+      ...result(),
+      minimumOrderQuantity: 1_200,
+      price: 0.18,
+      currency: "USD",
+    };
+    const other = {
+      ...preview(),
+      productUrl: productUrl.replace("1601390306760", "1601390306761"),
+      minimumOrderQuantity: 200,
+      price: 0.01,
+      currency: "USD",
+    };
+    const merged = mergeRecoveredSupplierPreview(original, other);
+    expect(merged).toEqual(original);
+    expect(merged.minimumOrderQuantity).toBe(1_200);
+    expect(merged.price).toBe(0.18);
+  });
+
   it("does not present a partial preview price as a real supplier price", () => {
     const partial = {
       ...preview(),
