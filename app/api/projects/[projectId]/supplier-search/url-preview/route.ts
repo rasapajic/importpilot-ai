@@ -11,7 +11,7 @@ import {
 } from "@/modules/product-search/infrastructure/detailed-url-import-provider";
 import {
   createAcceptanceLocalMoqReader,
-  useAcceptanceLocalMoqReader,
+  shouldUseAcceptanceLocalMoqReader,
 } from "@/modules/product-search/infrastructure/staging-source-moq-reader";
 import {
   buildSlugFallbackPreview,
@@ -91,7 +91,7 @@ export async function POST(
     typeof rawRequest === "object" &&
     !Array.isArray(rawRequest) &&
     (rawRequest as Record<string, unknown>).sourceMoqCheck === true;
-  const acceptanceLocalReader = useAcceptanceLocalMoqReader({
+  const acceptanceLocalReader = shouldUseAcceptanceLocalMoqReader({
     serviceId: process.env.RENDER_SERVICE_ID,
     enabled: process.env.JAKOV360_STAGING_LOCAL_MOQ_READER,
     sourceMoqCheck,
