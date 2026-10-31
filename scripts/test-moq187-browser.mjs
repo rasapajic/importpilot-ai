@@ -93,9 +93,11 @@ async function exercise({ savedMoq, width }) {
       // unverified and must not overwrite the cached MOQ. The explicit click is
       // the second request and receives synthetic, exact-page evidence.
       if (backgroundPreview === 0) {
+        assert.notEqual(payload.sourceMoqCheck, true, "Background enrichment must not enable staging local MOQ reader");
         backgroundPreview++;
         await route.fulfill({ status: 422, contentType: "application/json", body: JSON.stringify({error:"background read not authoritative"}) });
       } else {
+        assert.equal(payload.sourceMoqCheck, true, "Only explicit MOQ button requests the staging reader");
         manualPreview++;
         await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
           checkedAt: "2026-10-31T00:00:00.000Z",
