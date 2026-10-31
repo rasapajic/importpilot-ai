@@ -36,7 +36,7 @@ export function useSearchParams() { return new URLSearchParams(); }`,
   }],
   logLevel: "warning",
 });
-const js = bundle.outputFiles.find(x => x.path.endsWith(".js"))?.contents;
+const js = bundle.outputFiles.find(x => x.path.endsWith(".js"))?.contents ?? bundle.outputFiles[0]?.contents;
 assert(js, "esbuild did not produce a browser bundle");
 
 const server = createServer((req, res) => {
