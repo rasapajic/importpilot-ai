@@ -34,8 +34,16 @@ jobs:
         run: npm ci
       - name: Typecheck URL provider
         run: npm run typecheck
+      - name: Create ephemeral provider-only Vitest config
+        run: |
+          cat > vitest.security.config.mts <<'EOF'
+          import { defineConfig } from 'vitest/config';
+          export default defineConfig({
+            test: { include: ['tests/**/*.test.ts'], environment: 'node' },
+          });
+          EOF
       - name: Test redirect, exact SKU, and existing preview API
-        run: npm test
+        run: npx vitest run --config vitest.security.config.mts
       - name: Build URL provider
         run: npm run build
 
