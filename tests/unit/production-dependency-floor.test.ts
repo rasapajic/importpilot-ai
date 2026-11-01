@@ -10,7 +10,8 @@ type PackageLock = {
 };
 
 const patchedFloors = {
-  next: "16.3.8",
+  next: "16.4.3",
+  zod: "4.6.6",
   sharp: "0.35.5",
   "source-map-js": "1.2.2",
 } as const;
@@ -43,10 +44,13 @@ describe("production dependency security floor", () => {
   };
   const lock = JSON.parse(readFileSync("package-lock.json", "utf8")) as PackageLock;
 
-  it("pins Next.js and its ESLint config on the patched 16.3.8 release", () => {
-    expect(manifest.dependencies.next).toBe("16.3.8");
-    expect(manifest.devDependencies["eslint-config-next"]).toBe("16.3.8");
-    expect(lock.packages["node_modules/next"]?.version).toBe("16.3.8");
+  it("pins Next.js and ESLint on the patched 16.4.3 release and root Zod at 4.6.7", () => {
+    expect(manifest.dependencies.next).toBe("16.4.3");
+    expect(manifest.devDependencies["eslint-config-next"]).toBe("16.4.3");
+    expect(lock.packages["node_modules/next"]?.version).toBe("16.4.3");
+    expect(lock.packages["node_modules/eslint-config-next"]?.version).toBe("16.4.3");
+    expect(manifest.dependencies.zod).toBe("4.6.7");
+    expect(lock.packages["node_modules/zod"]?.version).toBe("4.6.7");
   });
 
   it("overrides transitive sharp and source-map-js to their patched releases", () => {
@@ -54,7 +58,7 @@ describe("production dependency security floor", () => {
     expect(manifest.overrides["source-map-js"]).toBe(patchedFloors["source-map-js"]);
   });
 
-  it("does not keep a vulnerable production copy of Next.js, sharp, or source-map-js", () => {
+  it("does not keep a vulnerable production copy of Next.js, Zod, sharp, or source-map-js", () => {
     for (const [name, minimum] of Object.entries(patchedFloors)) {
       const copies = resolvedPackages(lock, name);
       expect(copies.length).toBeGreaterThan(0);
