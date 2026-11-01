@@ -93,12 +93,41 @@ export async function previewProductUrl(productUrl: string, options: FetchOption
   try {
     const response = await (options.fetcher ?? fetch)(parsed.data.productUrl, {
       headers: requestHeaders(url),
-      redirect: "follow",
+      // A redirect can lead to another SKU or to an internal address.
+      // Fail closed rather than silently ascribing that page to this product.
+      redirect: "manual",
       signal: controller.signal,
     });
     upstreamStatus = response.status;
     finalUrl = response.url;
     logDevelopment({ provider, upstreamStatus: response.status, finalUrl: response.url });
+    // A parser labels its result with the requested productUrl. The HTTP
+    // response must therefore belong to that exact URL, never another SKU.
+    // Production fetch() supplies response.url; injected test Responses often
+    // omit it and are accepted only in that synthetic test configuration.
+    const expectedUrl = new URL(parsed.data.productUrl);
+    expectedUrl.hash = "";
+    let exactFinalUrl = false;
+    try {
+      if (response.url) {
+        const actualUrl = new URL(response.url);
+        actualUrl.hash = "";
+        exactFinalUrl = actualUrl.protocol === "https:" &&
+          !actualUrl.username && !actualUrl.password &&
+          actualUrl.href === expectedUrl.href;
+      } else if (options.fetcher) {
+        exactFinalUrl = true;
+      }
+    } catch {
+      exactFinalUrl = false;
+    }
+    if (
+      response.redirected ||
+      (response.status >= 300 && response.status < 400) ||
+      !exactFinalUrl
+    ) {
+      throw new UrlImportProviderError("NETWORK_ERROR", "Exact source URL redirect or mismatch.");
+    }
     const html = await readLimited(response, options.maxResponseBytes ?? 1_000_000);
     await maybeSaveDebugHtml(html, provider, Boolean(options.debugHtml));
     lastSnapshot = inspectPreviewExtraction(html);
