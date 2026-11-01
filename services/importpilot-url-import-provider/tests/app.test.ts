@@ -170,6 +170,65 @@ describe("URL import provider API", () => {
     });
   });
 
+  it("rejects redirects and a different final SKU before calling the parser #187", async () => {
+    const original = "https://dilicn.en.made-in-china.com/product/jYzpeDtbEMkd/China-New-Model-Senior-Reading-Glasses.html";
+    let caseNumber = 0;
+    const observedRedirectModes: Array<RequestRedirect | undefined> = [];
+    const baseUrl = await start({
+      fetcher: async (_input, init) => {
+        observedRedirectModes.push(init?.redirect);
+        caseNumber++;
+        if (caseNumber === 1) {
+          return new Response(null, {
+            status: 302,
+            headers: { location: "http://169.254.169.254/latest/meta-data/" },
+          });
+        }
+        if (caseNumber === 2) {
+          return new Response(null, {
+            status: 301,
+            headers: { location: original.replace("jYzpeDtbEMkd", "anotherSku") },
+          });
+        }
+        const forged = htmlResponse(fixture("made-in-china-supplier-product.html"));
+        Object.defineProperty(forged, "url", {
+          value: original.replace("jYzpeDtbEMkd", "anotherSku"),
+        });
+        return forged;
+      },
+    });
+    for (const _ of [1, 2, 3]) {
+      const response = await fetch(`${baseUrl}/preview`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ productUrl: original }),
+      });
+      expect(response.status).toBe(502);
+      await expect(response.json()).resolves.toMatchObject({ reason: "NETWORK_ERROR" });
+    }
+    expect(observedRedirectModes).toEqual(["manual", "manual", "manual"]);
+    expect(caseNumber).toBe(3);
+  });
+
+  it("allows an exact 200 response with the correct product URL #187", async () => {
+    const productUrl = "https://dilicn.en.made-in-china.com/product/jYzpeDtbEMkd/China-New-Model-Senior-Reading-Glasses.html";
+    const baseUrl = await start({
+      fetcher: async (_input, init) => {
+        expect(init?.redirect).toBe("manual");
+        const response = htmlResponse(fixture("made-in-china-supplier-product.html"));
+        Object.defineProperty(response, "url", { value: productUrl });
+        return response;
+      },
+    });
+    const response = await fetch(`${baseUrl}/preview`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ productUrl }),
+    });
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ preview: { productUrl } });
+  });
+
   it("returns INVALID_URL for invalid or unsupported URLs", async () => {
     const baseUrl = await start();
     const response = await fetch(`${baseUrl}/preview`, {
