@@ -238,6 +238,19 @@ function businessStatus(input: {
 }
 
 /**
+ * The detailed pump/nozzle presentation is for misting products, not a
+ * universal product analyser. An unrelated URL (glasses, chargers, tools)
+ * receives the category-neutral summary, even when no query was supplied.
+ */
+export function isMistingPreviewContext(
+  preview: Pick<SupplierOfferUrlPreview, "title">,
+  productQuery?: string | null,
+): boolean {
+  const subject = `${productQuery ?? ""} ${preview.title ?? ""}`;
+  return /\b(?:misting?|nozzles?|pumps?|fogging|sprinkler|spraying)\b|\bvodena\s+magla\b|\bmlaznic\w*\b|\bpump\w*\b/i.test(subject);
+}
+
+/**
  * Builds a concise, source-grounded business summary for a URL preview. This
  * helper never invents commercial facts: unclear product form, missing selling
  * unit or unusable packaging remain explicit blockers instead of being silently

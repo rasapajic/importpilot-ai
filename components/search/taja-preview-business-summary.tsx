@@ -5,6 +5,7 @@ import type { Locale } from "@/modules/i18n/translations";
 import type { SupplierOfferUrlPreview } from "@/modules/product-search/domain/search";
 import {
   buildTajaPreviewBusinessSummary,
+  isMistingPreviewContext,
   TajaPreviewBusinessStatuses,
   TajaPreviewLandedCostStatuses,
   TajaPreviewMoqStatuses,
@@ -38,6 +39,11 @@ type SummaryCopy = {
   landedCost: string;
   nextStep: string;
   supplierQuestion: string;
+  genericDescription: string;
+  genericProduct: string;
+  genericProductUnknown: string;
+  genericAction: string;
+  genericQuestion: string;
   formComplete: string;
   formPump: string;
   formNozzles: string;
@@ -99,6 +105,11 @@ const copyByLocale: Record<Locale, SummaryCopy> = {
     landedCost: "Ukupan trošak uvoza",
     nextStep: "Sledeći korak",
     supplierQuestion: "Predloženo pitanje dobavljaču",
+    genericDescription: "Podaci su preuzeti iz oglasa. Cena, minimalna količina i uslovi prodaje nisu pisana ponuda dobavljača.",
+    genericProduct: "Proizvod iz oglasa",
+    genericProductUnknown: "Naziv nije pouzdano pročitan",
+    genericAction: "Proveriti originalni MOQ i cenovni raspon za odgovarajući model i količinu; ne obračunavati uvoz na osnovu nepotvrđene oglašene cene.",
+    genericQuestion: "Molimo potvrdite tačan model i varijante, MOQ po artiklu i varijanti, jediničnu i ukupnu cenu za traženu količinu, rok proizvodnje i Incoterm sa navedenim mestom.",
     formComplete: "kompletan sistem / kit",
     formPump: "samo pumpa",
     formNozzles: "samo mlaznice",
@@ -162,6 +173,11 @@ const copyByLocale: Record<Locale, SummaryCopy> = {
     landedCost: "Landed Cost",
     nextStep: "Nächster Schritt",
     supplierQuestion: "Vorgeschlagene Lieferantenfrage",
+    genericDescription: "Die Daten stammen aus der Anzeige. Preis, Mindestmenge und Verkaufsbedingungen sind kein verbindliches Lieferantenangebot.",
+    genericProduct: "Produkt laut Anzeige",
+    genericProductUnknown: "Produktname nicht zuverlässig erkannt",
+    genericAction: "Original-MOQ und Preisspanne für das konkrete Modell und die Menge prüfen; Importkosten nicht mit unbestätigten Preisen berechnen.",
+    genericQuestion: "Bitte bestätigen Sie Modell und Varianten, MOQ pro Artikel/Variante, Stück- und Gesamtpreis für unsere Menge, Produktionszeit sowie Incoterm mit benanntem Ort.",
     formComplete: "komplettes System / Kit",
     formPump: "nur Pumpe",
     formNozzles: "nur Düsen",
@@ -225,6 +241,11 @@ const copyByLocale: Record<Locale, SummaryCopy> = {
     landedCost: "Landed cost",
     nextStep: "Next step",
     supplierQuestion: "Suggested supplier question",
+    genericDescription: "Data comes from the listing. Advertised prices, minimums and selling terms are not a binding supplier quote.",
+    genericProduct: "Listed product",
+    genericProductUnknown: "Product name not reliably identified",
+    genericAction: "Verify the original MOQ and price range for the exact model and quantity; do not calculate landed cost from an unconfirmed advertised price.",
+    genericQuestion: "Please confirm the exact model and variants, MOQ per SKU/variant, unit and total price for our requested quantity, lead time and Incoterm with named place.",
     formComplete: "complete system / kit",
     formPump: "pump only",
     formNozzles: "nozzles only",
@@ -422,7 +443,10 @@ export function TajaPreviewBusinessSummary({
     productQuery,
     requestedQuantity,
   });
-  const status = statusCopy(summary, copy);
+  const specialized = isMistingPreviewContext(preview, productQuery);
+  const status = specialized
+    ? statusCopy(summary, copy)
+    : { label: copy.statusReview, description: copy.genericDescription, className: "review" };
   const nozzleStatus = summary.requestedNozzleCount !== null && summary.nozzleCountStatus
     ? summary.nozzleCountStatus
     : summary.nozzleStatus;
@@ -439,23 +463,29 @@ export function TajaPreviewBusinessSummary({
       </header>
 
       <dl className="taja-preview-summary-grid">
-        <SummaryRow label={copy.productForm} value={productFormText(summary, copy)} />
-        {summary.requirementMatchStatus !== null && (
-          <SummaryRow
-            label={copy.requirementMatch}
-            value={requirementText(summary.requirementMatchStatus, copy)}
-          />
+        {specialized ? (
+          <>
+            <SummaryRow label={copy.productForm} value={productFormText(summary, copy)} />
+            {summary.requirementMatchStatus !== null && (
+              <SummaryRow
+                label={copy.requirementMatch}
+                value={requirementText(summary.requirementMatchStatus, copy)}
+              />
+            )}
+            <SummaryRow
+              label={copy.pump}
+              value={evidenceText(summary.pumpStatus, summary.pumpValue, copy)}
+            />
+            <SummaryRow
+              label={summary.requestedNozzleCount !== null
+                ? copy.exactNozzleCount(summary.requestedNozzleCount)
+                : copy.nozzles}
+              value={evidenceText(nozzleStatus, summary.nozzleValue, copy)}
+            />
+          </>
+        ) : (
+          <SummaryRow label={copy.genericProduct} value={preview.title || copy.genericProductUnknown} />
         )}
-        <SummaryRow
-          label={copy.pump}
-          value={evidenceText(summary.pumpStatus, summary.pumpValue, copy)}
-        />
-        <SummaryRow
-          label={summary.requestedNozzleCount !== null
-            ? copy.exactNozzleCount(summary.requestedNozzleCount)
-            : copy.nozzles}
-          value={evidenceText(nozzleStatus, summary.nozzleValue, copy)}
-        />
         <SummaryRow
           label={copy.displayedPrice}
           value={priceText(preview, summary, copy)}
@@ -469,12 +499,12 @@ export function TajaPreviewBusinessSummary({
 
       <div className="taja-preview-next-step">
         <strong>{copy.nextStep}</strong>
-        <p>{actionText(summary.nextAction, copy)}</p>
+        <p>{specialized ? actionText(summary.nextAction, copy) : copy.genericAction}</p>
       </div>
 
       <div className="taja-preview-supplier-question">
         <strong>{copy.supplierQuestion}</strong>
-        <p>{supplierQuestion(preview, summary, copy)}</p>
+        <p>{specialized ? supplierQuestion(preview, summary, copy) : copy.genericQuestion}</p>
       </div>
     </section>
   );

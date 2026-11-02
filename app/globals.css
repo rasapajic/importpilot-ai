@@ -1652,3 +1652,96 @@ details.workflow-step > summary::-webkit-details-marker {
 .preliminary-import-estimate > p:last-child {
   margin-bottom: 0;
 }
+
+/* JAKOV360 URL-first product import: labels/inputs must not collapse into a
+   single unstyled inline sentence on desktop or on 390px mobile. */
+.url-first-flow {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+  width: 100%;
+}
+
+.url-first-flow *,
+.url-first-flow *::before,
+.url-first-flow *::after {
+  box-sizing: border-box;
+}
+
+.url-first-flow .url-first-step {
+  align-items: end;
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-width: 0;
+}
+
+.url-first-flow .url-review-form {
+  display: grid;
+  gap: 1rem 1.25rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-width: 0;
+}
+
+.url-first-flow .url-review-form > :not(label) {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.url-first-flow .url-first-project-fields {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  min-width: 0;
+}
+
+.url-first-flow label {
+  color: #18392b;
+  display: grid;
+  font-size: 0.9rem;
+  font-weight: 600;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.url-first-flow label input {
+  background: #fff;
+  border: 1px solid #b5c9bf;
+  border-radius: 0.55rem;
+  color: #14281e;
+  display: block;
+  font: inherit;
+  font-weight: 400;
+  min-height: 2.75rem;
+  min-width: 0;
+  padding: 0.6rem 0.75rem;
+  width: 100%;
+}
+
+.url-first-flow label input:focus-visible {
+  border-color: #137752;
+  outline: 2px solid #137752;
+  outline-offset: 2px;
+}
+
+.url-first-flow .url-review-form > .primary-button {
+  justify-self: start;
+}
+
+@media (max-width: 760px) {
+  .url-first-flow .url-first-step,
+  .url-first-flow .url-review-form,
+  .url-first-flow .url-first-project-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .url-first-flow .url-first-step > .primary-button,
+  .url-first-flow .url-review-form > .primary-button {
+    justify-self: stretch;
+    width: 100%;
+  }
+
+  .url-first-flow label input {
+    font-size: 16px;
+  }
+}
