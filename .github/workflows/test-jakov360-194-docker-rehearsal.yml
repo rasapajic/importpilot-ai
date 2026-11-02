@@ -98,3 +98,5 @@ jobs:
         run: npx vitest run --config vitest.security.config.mts
       - name: Production build
         run: npm run build
+
+# locked deps Docker retry
