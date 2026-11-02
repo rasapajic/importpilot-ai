@@ -158,6 +158,7 @@ function cleanTitle(value: string | null) {
 const COMPANY_SUFFIX_SOURCE = "(?:Co\\.,?\\s*Ltd\\.?|Company\\s+Limited|Limited|Ltd\\.?|Factory|Manufacturer)";
 const COMPANY_SUFFIX_PATTERN = new RegExp(`\\b${COMPANY_SUFFIX_SOURCE}\\s*$`, "i");
 const PLATFORM_COMPANY_PATTERN = /\b(?:Made-in-China(?:\.com)?|Focus\s+Technology|Google|Facebook|Microsoft)\b/i;
+const SUPPLIER_PROFILE_PROSE_PATTERN = /\b(?:established|founded)\s+in\s+\d{4}\b|\b(?:is|are)\s+(?:a|an)\s+(?:prominent|leading|reputable|professional|experienced)\s+(?:manufacturer|supplier)\b|\b(?:located\s+in|speciali[sz](?:es|ing)\s+in)\b/i;
 
 function cleanSupplierName(value: string | null) {
   if (!value) return null;
@@ -168,6 +169,14 @@ function cleanSupplierName(value: string | null) {
     .replace(/^(?:verified\s+supplier|secured\s+trading|supplier|manufacturer|company\s+name)\s*[:\-]?\s*/i, "")
     .replace(/\s+/g, " ")
     .trim();
+  // Profiles like "Pilot Optics established in 1999, is a prominent manufacturer"
+  // are prose, not seller identities. Retain a preceding legal entity only.
+  if (SUPPLIER_PROFILE_PROSE_PATTERN.test(normalized)) {
+    const legalPrefix = normalized.split(/\b(?:established|founded)\s+in\s+\d{4}\b|\b(?:is|are)\s+(?:a|an)\s+(?:prominent|leading|reputable|professional|experienced)\b/i)[0]
+      ?.replace(/[\s,;:.]+$/, "") ?? "";
+    if (!COMPANY_SUFFIX_PATTERN.test(legalPrefix)) return null;
+    normalized = legalPrefix;
+  }
   const companyMatch = normalized.match(new RegExp(
     `([A-Za-z0-9][A-Za-z0-9&.,'()\\-\\/\\s]{2,180}?${COMPANY_SUFFIX_SOURCE})`,
     "i",
@@ -833,12 +842,21 @@ export function inspectPreviewExtraction(html: string, productUrl?: string): Pre
     embeddedJsonString(html, ["priceCurrency", "currency", "currencyCode", "priceUnit"]) ??
     (/US\s*\$|USD|\$\s*\d/i.test(html) ? "USD" : null),
   );
-  const minimumOrderQuantity = entryTier
-    ? String(entryTier.minQuantity)
-    : embeddedJsonNumber(html, ["moq", "minOrderQuantity", "minimumOrderQuantity", "minOrder", "minOrderNum"]) ??
-      bodyText.match(/(?:MOQ|minimum\s+order(?:\s+quantity)?|min\.\s*order)\s*[:\-]?\s*(\d+)/i)?.[1] ??
-      bodyText.match(/(\d+)\s*(?:piece|pieces|pcs|set|sets|unit|units)\s*\(?(?:MOQ|Min\.\s*Order|Minimum\s+Order)\)?/i)?.[1] ??
-      null;
+  // Supplier FAQ explicitly stating units per item is stronger evidence than
+  // an arbitrary "200 Pieces (MOQ)" copied from a related-product card.
+  // This does not establish a price tier or written acceptance of the order.
+  const itemFaqMoq = bodyText.match(/\b(?:what(?:\x27s| is)?\s+(?:your\s+)?MOQ\s*\?|what\s+is\s+(?:your\s+)?minimum\s+order(?:\s+quantity)?\s*\?)\s*(?:A\s*\d+\s*[:：]\s*|answer\s*[:：]\s*)?([0-9]{1,3}(?:[,\s\u00a0][0-9]{3})+|[0-9]+)\s*(?:pieces?|pcs?|sets?|units?)\s+per\s+(?:item|product)\b/i)?.[1];
+  const visibleListingMoq = bodyText.match(/\b([0-9]{1,3}(?:[,\s\u00a0][0-9]{3})+|[0-9]+)\s*(?:pieces?|pcs?|sets?|units?)\s*\(\s*MOQ\s*\)/i)?.[1];
+  const minimumOrderQuantity = itemFaqMoq
+    ? String(quantityNumber(itemFaqMoq))
+    : visibleListingMoq
+      ? String(quantityNumber(visibleListingMoq))
+    : entryTier
+      ? String(entryTier.minQuantity)
+      : embeddedJsonNumber(html, ["moq", "minOrderQuantity", "minimumOrderQuantity", "minOrder", "minOrderNum"]) ??
+        bodyText.match(/(?:MOQ|minimum\s+order(?:\s+quantity)?|min\.\s*order)\s*[:\-]?\s*(\d+)/i)?.[1] ??
+        bodyText.match(/(\d+)\s*(?:piece|pieces|pcs|set|sets|unit|units)\s*\(?(?:MOQ|Min\.\s*Order|Minimum\s+Order)\)?/i)?.[1] ??
+        null;
   const incoterm = extractIncoterm(bodyText);
   const imageUrl = extractProductImageUrl(html);
   const values = {
