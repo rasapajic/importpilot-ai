@@ -1,0 +1,94 @@
+name: JAKOV360 post-rollout read-only smoke 187
+
+on:
+  push:
+    branches:
+      - audit/jakov360-187-postdeploy-smoke-20261102
+
+permissions:
+  contents: read
+
+jobs:
+  live_read_only_endpoints:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check production/provider endpoints and unauthenticated POST rejection
+        env:
+          NODE_NO_WARNINGS: "1"
+        run: |
+          node <<'JS'
+          const expectedRevision = "3ed6cd5555ca";
+          const provider = "https://importpilot-url-import-provider.onrender.com";
+          const production = "https://importpilot-ai.onrender.com";
+          async function getJson(url, init = {}) {
+            const response = await fetch(url, {
+              ...init,
+              signal: AbortSignal.timeout(60_000),
+              cache: "no-store",
+            });
+            const body = await response.json();
+            return { status: response.status, body };
+          }
+          async function check(name, url, init, match) {
+            let last;
+            for (let n = 0; n < 3; n++) {
+              try {
+                const result = await getJson(url, init);
+                if (!match(result)) throw Error(name + " failed: HTTP " + result.status + " " + JSON.stringify(result.body));
+                console.log("PASS " + name + " (HTTP " + result.status + ")");
+                return;
+              } catch (e) {
+                last = e;
+                if (n < 2) await new Promise(r => setTimeout(r, 5000));
+              }
+            }
+            throw last;
+          }
+          (async () => {
+            await check("shared_provider_health", provider + "/health", {}, x => x.status === 200 && x.body.ok === true);
+            await check("shared_provider_exact_revision", provider + "/version", {}, x => x.status === 200 && x.body.revision === expectedRevision);
+            await check("shared_provider_auth_configuration", provider + "/auth-check", {}, x => x.status === 200 && x.body.tokenConfigured === true && x.body.authPresent === false && x.body.tokenAccepted === false);
+            await check("unauthorized_POST_rejected_before_upstream_fetch", provider + "/preview", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ productUrl: "https://www.alibaba.com/product-detail/NOT_A_REAL_REQUEST_0.html" }),
+            }, x => x.status === 401);
+            await check("production_app_and_database_health", production + "/api/health", {}, x => x.status === 200 && x.body.status === "ok" && x.body.database === "ok");
+            console.log("POST_ROLLOUT_READ_ONLY_SMOKE_PASS");
+          })().catch(e => { console.error(e.message); process.exitCode = 1; });
+          JS
+
+  isolated_dependency_audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: services/importpilot-url-import-provider
+    steps:
+      - name: Checkout public code without credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Generate ephemeral standalone lockfile, do not run scripts
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Verify production dependency audit
+        run: npm audit --omit=dev --audit-level=high
+      - name: Classify full dependency tree advisories without changing versions
+        run: |
+          npm audit --json > /tmp/jakov-url-import-audit.json || true
+          node <<'JS'
+          const fs = require("node:fs");
+          const x = JSON.parse(fs.readFileSync("/tmp/jakov-url-import-audit.json","utf8"));
+          const rows = Object.entries(x.vulnerabilities || {}).map(([name,v]) => ({
+            name,
+            severity:v.severity,
+            direct:!!v.isDirect,
+          })).sort((a,b)=>a.name.localeCompare(b.name));
+          console.log("FULL_DEPENDENCY_TREE_AUDIT_COUNTS", JSON.stringify(x.metadata?.vulnerabilities || {}));
+          console.log("PACKAGE_ADVISORY_SUMMARY", JSON.stringify(rows));
+          JS
