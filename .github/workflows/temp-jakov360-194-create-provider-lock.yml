@@ -5,6 +5,7 @@ on:
       - audit/jakov360-194-node22-docker-20261102
     paths:
       - .github/workflows/temp-jakov360-194-create-provider-lock.yml
+      - services/importpilot-url-import-provider/package.json
 permissions:
   contents: write
 jobs:
