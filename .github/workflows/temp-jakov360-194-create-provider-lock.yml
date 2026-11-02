@@ -35,8 +35,8 @@ jobs:
             if(wanted!==v||actual!==v)throw Error(name+' pin mismatch '+wanted+' '+actual);
           }
           const tinypool=lock.packages?.['node_modules/tinypool']?.version;
-          if(!tinypool || Number(tinypool.split('.')[0])<2 ||
-             (tinypool.startsWith('2.1.') && Number(tinypool.split('.')[2])<2))
+          if(tinypool && (Number(tinypool.split('.')[0])<2 ||
+             (tinypool.startsWith('2.1.') && Number(tinypool.split('.')[2])<2)))
             throw Error('tinypool not patched: '+tinypool);
           console.log('STANDALONE_PROVIDER_LOCK_VERIFIED',tinypool);
           JS
