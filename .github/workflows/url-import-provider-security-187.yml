@@ -39,7 +39,7 @@ jobs:
           cat > vitest.security.config.mts <<'EOF'
           import { defineConfig } from 'vitest/config';
           export default defineConfig({
-            test: { include: ['tests/**/*.test.ts'], environment: 'node' },
+            test: { include: ['tests/**/*.test.ts'], environment: 'node', clearMocks: false },
           });
           EOF
       - name: Test redirect, exact SKU, and existing preview API
@@ -68,3 +68,5 @@ jobs:
         run: npm ci
       - name: Audit production dependencies for high or critical issues
         run: npm audit --omit=dev --audit-level=high
+      - name: Audit complete development and production tree for moderate-or-higher issues
+        run: npm audit --audit-level=moderate
