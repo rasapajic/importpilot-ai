@@ -100,3 +100,5 @@ jobs:
         run: npm run build
 
 # locked deps Docker retry
+
+# clean lockfile and single Vite6 dependency retest
