@@ -40,7 +40,7 @@ type DetailedProviderOptions = {
 function companyNameCandidates(value: string) {
   const companyWord = "(?:[A-Z0-9][A-Za-z0-9&'()./\\-]*|and|of|the)";
   const pattern = new RegExp(
-    `(?:^|[,;:]\\s*|[.!?]\\s+)((?:${companyWord}\\s+){1,14}${COMPANY_SUFFIX_SOURCE})(?=$|[\\s,.;:()])`,
+    `(?:^|[,;:]\\s*|[.!?]\\s+)((?:${companyWord}\\s+){1,14}?${COMPANY_SUFFIX_SOURCE})(?=$|[\\s,.;:()])`,
     "gi",
   );
   return [...value.matchAll(pattern)]
