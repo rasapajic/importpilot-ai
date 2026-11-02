@@ -66,3 +66,35 @@ jobs:
         run: |
           docker logs jakov360-url-import-rehearsal --tail 40 || true
           docker rm -f jakov360-url-import-rehearsal || true
+
+  patched_vitest_audit_tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: services/importpilot-url-import-provider
+    steps:
+      - name: Checkout patch candidate without persisted credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Resolve ephemeral lockfile and install
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund && npm ci
+      - name: Audit entire dependency tree
+        run: npm audit --audit-level=moderate
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Create isolated Vitest config
+        run: |
+          cat > vitest.security.config.mts <<'EOF'
+          import { defineConfig } from 'vitest/config';
+          export default defineConfig({ test: { include: ['tests/**/*.test.ts'], environment: 'node', clearMocks: false } });
+          EOF
+      - name: Unit/integration tests for URL provider
+        run: npx vitest run --config vitest.security.config.mts
+      - name: Production build
+        run: npm run build
