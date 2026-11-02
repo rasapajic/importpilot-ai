@@ -70,7 +70,12 @@ export function normalizeExternalSupplierName(value: unknown) {
     .trim();
   if (!normalized || PLATFORM_COMPANY_PATTERN.test(normalized)) return null;
 
-  const legalEntities = companyNameCandidates(normalized);
+  // Do not treat occupation words in a company-profile paragraph (for example
+  // "is a prominent manufacturer") as a legal seller identity.
+  const legalEntities = companyNameCandidates(normalized).filter((candidate) =>
+    !SUPPLIER_PROFILE_PROSE_PATTERN.test(candidate) &&
+    !/\b(?:is|are|was|were)\s+(?:a|an)\s+(?:prominent|leading|reputable|experienced|professional)?\s*(?:manufacturer|supplier|factory)\b/i.test(candidate)
+  );
   if (legalEntities.length > 0) return legalEntities.at(-1) ?? null;
 
   if (
