@@ -1,0 +1,70 @@
+name: URL import provider security gate
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "services/importpilot-url-import-provider/**"
+      - ".github/workflows/url-import-provider-security-187.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  provider_typecheck_tests_build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: services/importpilot-url-import-provider
+    steps:
+      - name: Checkout PR code without persistent credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Use Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Generate ephemeral provider lockfile (not committed)
+        run: npm install --package-lock-only --ignore-scripts --no-audit
+      - name: Install isolated URL provider dependencies
+        run: npm ci
+      - name: Typecheck URL provider
+        run: npm run typecheck
+      - name: Create ephemeral provider-only Vitest config
+        run: |
+          cat > vitest.security.config.mts <<'EOF'
+          import { defineConfig } from 'vitest/config';
+          export default defineConfig({
+            test: { include: ['tests/**/*.test.ts'], environment: 'node' },
+          });
+          EOF
+      - name: Test redirect, exact SKU, and existing preview API
+        run: npx vitest run --config vitest.security.config.mts
+      - name: Build URL provider
+        run: npm run build
+
+  provider_dependency_audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: services/importpilot-url-import-provider
+    steps:
+      - name: Checkout PR code without persistent credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Use Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Generate ephemeral provider lockfile (not committed)
+        run: npm install --package-lock-only --ignore-scripts --no-audit
+      - name: Install isolated URL provider dependencies
+        run: npm ci
+      - name: Audit production dependencies for high or critical issues
+        run: npm audit --omit=dev --audit-level=high
