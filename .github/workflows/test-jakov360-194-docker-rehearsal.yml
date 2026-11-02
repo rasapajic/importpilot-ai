@@ -1,0 +1,68 @@
+name: JAKOV360 PR194 Node22 Docker rehearsal
+
+on:
+  push:
+    branches:
+      - audit/jakov360-194-node22-docker-20261102
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  url_provider_docker_smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout isolated release candidate without persisted credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build exact Render URL-import provider Dockerfile on Node 22
+        run: docker build --pull --tag jakov360-url-import-rehearsal:local services/importpilot-url-import-provider
+      - name: Start isolated ephemeral Docker container (no supplier requests)
+        run: |
+          docker run -d --name jakov360-url-import-rehearsal \
+            -p 127.0.0.1:4100:4100 \
+            -e URL_IMPORT_PROVIDER_TOKEN=ci-test-only-token \
+            jakov360-url-import-rehearsal:local
+      - name: Smoke health, revision endpoint, and protected invalid-request response
+        run: |
+          set -euo pipefail
+          node - <<'JS'
+          const base = 'http://127.0.0.1:4100';
+          const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+          async function healthy() {
+            for (let attempt=0; attempt < 45; attempt++) {
+              try {
+                const r = await fetch(base + '/health');
+                if (r.ok && (await r.json()).ok === true) return;
+              } catch {}
+              await pause(1000);
+            }
+            throw Error('Container did not become healthy');
+          }
+          (async () => {
+            await healthy();
+            const version = await fetch(base + '/version');
+            if (!version.ok || (await version.json()).service !== 'importpilot-url-import-provider') throw Error('Invalid version endpoint');
+            const unauthorized = await fetch(base + '/preview', {
+              method:'POST',
+              headers:{'content-type':'application/json'},
+              body:JSON.stringify({productUrl:'https://www.alibaba.com/product-detail/test_12345.html'})
+            });
+            if (unauthorized.status !== 401) throw Error('Preview auth regression');
+            const invalid = await fetch(base + '/preview', {
+              method:'POST',
+              headers:{'content-type':'application/json','authorization':'Bearer ci-test-only-token'},
+              body:JSON.stringify({productUrl:'http://127.0.0.1/private'})
+            });
+            if (invalid.status !== 400 || (await invalid.json()).reason !== 'INVALID_URL') throw Error('Invalid URL guard regression');
+            console.log('RENDER_DOCKER_NODE22_HEALTH_AUTH_URL_GATES_PASS');
+          })().catch(e => { console.error(e.message); process.exitCode=1; });
+          JS
+      - name: Clean up ephemeral container
+        if: always()
+        run: |
+          docker logs jakov360-url-import-rehearsal --tail 40 || true
+          docker rm -f jakov360-url-import-rehearsal || true
