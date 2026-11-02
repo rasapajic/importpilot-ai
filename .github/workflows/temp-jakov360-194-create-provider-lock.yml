@@ -1,0 +1,54 @@
+name: Temporary 194 isolated provider lockfile
+on:
+  push:
+    branches:
+      - audit/jakov360-194-node22-docker-20261102
+    paths:
+      - .github/workflows/temp-jakov360-194-create-provider-lock.yml
+permissions:
+  contents: write
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/jakov360-194-node22-docker-20261102
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Resolve standalone package-lock without executing scripts
+        working-directory: services/importpilot-url-import-provider
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Check exact pins and patched transitive packages
+        working-directory: services/importpilot-url-import-provider
+        run: |
+          node <<'JS'
+          const fs=require('node:fs');
+          const p=JSON.parse(fs.readFileSync('package.json','utf8'));
+          const lock=JSON.parse(fs.readFileSync('package-lock.json','utf8'));
+          for(const [name,v] of [['vitest','4.1.12'],['zod','4.6.7']]) {
+            const wanted=p.dependencies?.[name]??p.devDependencies?.[name];
+            const actual=lock.packages?.['node_modules/'+name]?.version;
+            if(wanted!==v||actual!==v)throw Error(name+' pin mismatch '+wanted+' '+actual);
+          }
+          const tinypool=lock.packages?.['node_modules/tinypool']?.version;
+          if(!tinypool || Number(tinypool.split('.')[0])<2 ||
+             (tinypool.startsWith('2.1.') && Number(tinypool.split('.')[2])<2))
+            throw Error('tinypool not patched: '+tinypool);
+          console.log('STANDALONE_PROVIDER_LOCK_VERIFIED',tinypool);
+          JS
+      - name: Commit only provider lockfile on test-only branch
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- services/importpilot-url-import-provider/package-lock.json
+          if git diff --cached --quiet; then
+            echo 'Provider lockfile unchanged'
+            exit 0
+          fi
+          git commit -m 'test-only: lock patched Vitest4 provider dependencies'
+          git push origin HEAD:refs/heads/audit/jakov360-194-node22-docker-20261102
