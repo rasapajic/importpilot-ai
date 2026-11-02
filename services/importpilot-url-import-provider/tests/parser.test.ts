@@ -319,3 +319,57 @@ describe("URL import provider parser", () => {
     )).toThrow("BLOCKED");
   });
 });
+
+describe("exact visible listing MOQ versus stale embedded data #187", () => {
+  it("reads 1,200 Pieces (MOQ), keeps teaser US$0.18 separate, and ignores trial 12/color", () => {
+    const productUrl = "https://dilicin.en.made-in-china.com/product/jYzpeDthEMkd/China-New-Model-Senior-Reading-Glasses-High-Definition-Wholesale-From-Manufacturers-Direct-Sales-.html";
+    const html = `<html><head>
+      <meta property="og:title" content="New Model Senior Reading Glasses">
+      <meta property="og:image" content="https://image.made-in-china.com/reading-glasses.jpg">
+      <script>{"minimumOrderQuantity":"200","price":"0.18","currency":"USD"}</script>
+    </head><body>
+      <h1>New Model Senior Reading Glasses</h1>
+      <div>US$0.18</div><div>1,200 Pieces (MOQ)</div>
+      <div>Trial MOQ: 12 per color</div>
+    </body></html>`;
+    const preview = parseProductPreview(html, productUrl);
+    expect(preview.minimumOrderQuantity).toBe("1200");
+    expect(preview.price).toBe("0.18");
+    expect(extractPriceTiers(html)).toEqual([]);
+  });
+});
+
+
+describe("Pilot Optics exact-page regression", () => {
+  const productUrl = "https://pilotoptics.en.made-in-china.com/product/WJfUCnDTuekA/China-Pilot-Optics-Wholesale-High-Quality-5-Colors-Custom-Logo-Square-Reading-Glasses.html";
+
+  it("uses the seller's explicit 1,200-per-item FAQ instead of a related card or stale JSON MOQ 200", () => {
+    const html = `<html><head>
+      <meta property="og:title" content="Pilot Optics Wholesale High Quality 5 Colors Custom Logo Square Reading Glasses" />
+      <script>{"minimumOrderQuantity":"200","price":"0.50","currency":"USD"}</script>
+    </head><body>
+      <h1>Pilot Optics Wholesale High Quality 5 Colors Custom Logo Square Reading Glasses</h1>
+      <div class="related-product">Unrelated reading frames — 200 Pieces (MOQ)</div>
+      <section class="product-description">FAQ
+        <p>Q3: what's your MOQ?</p>
+        <p>A3:1200 pcs per item,for some optical frame,only 300pcs per item per color.</p>
+      </section>
+      <a href="https://pilotoptics.en.made-in-china.com">Pilot Optics International Corp.Ltd.Wenzhou</a>
+      <section class="company-profile">Pilot Optics established in 1999, is a prominent manufacturer and supplier of eyewear products in Wenzhou, China.</section>
+    </body></html>`;
+    const parsed = parseProductPreview(html, productUrl);
+    expect(parsed.minimumOrderQuantity).toBe("1200");
+    expect(parsed.price).toBe("0.50");
+    expect(parsed.supplierName).toContain("Pilot Optics International");
+    expect(parsed.supplierName).not.toMatch(/prominent|established|manufacturer/i);
+  });
+
+  it("rejects a company-profile sentence as supplier identity when a legal seller name is absent", () => {
+    const html = `<html><head><meta property="og:title" content="Reading Glasses" /></head>
+      <body><script>{"supplierName":"Pilot Optics established in 1999, is a prominent manufacturer"}</script>
+      <p>Q3: What's your MOQ?</p><p>A3:1,200 pieces per item</p></body></html>`;
+    const parsed = parseProductPreview(html, productUrl);
+    expect(parsed.supplierName).toBeNull();
+    expect(parsed.minimumOrderQuantity).toBe("1200");
+  });
+});
