@@ -95,6 +95,15 @@ describe("detailed URL import provider", () => {
     )).toBeNull();
   });
 
+  it("rejects an advertised-profile manufacturer phrase as a seller name", () => {
+    expect(normalizeExternalSupplierName(
+      "Pilot Optics established in 1999, is a prominent manufacturer",
+    )).toBeNull();
+    expect(normalizeExternalSupplierName(
+      "Pilot Optics International Corp. Ltd. is a leading manufacturer in Wenzhou",
+    )).toBe("Pilot Optics International Corp. Ltd.");
+  });
+
   it("sanitizes a supplier profile sentence before returning the preview", async () => {
     const payload = externalPreview();
     payload.preview.supplierName =
