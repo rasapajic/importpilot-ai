@@ -10,7 +10,7 @@ type PackageLock = {
 };
 
 const patchedFloors = {
-  next: "16.4.2",
+  next: "16.4.3",
   zod: "4.6.7",
   sharp: "0.35.5",
   "source-map-js": "1.2.2",
@@ -44,11 +44,11 @@ describe("production dependency security floor", () => {
   };
   const lock = JSON.parse(readFileSync("package-lock.json", "utf8")) as PackageLock;
 
-  it("pins Next.js and its ESLint config on the patched 16.4.2 release", () => {
-    expect(manifest.dependencies.next).toBe("16.4.2");
-    expect(manifest.devDependencies["eslint-config-next"]).toBe("16.4.2");
-    expect(lock.packages["node_modules/next"]?.version).toBe("16.4.2");
-    expect(lock.packages["node_modules/eslint-config-next"]?.version).toBe("16.4.2");
+  it("pins Next.js and its ESLint config on the patched 16.4.3 release", () => {
+    expect(manifest.dependencies.next).toBe("16.4.3");
+    expect(manifest.devDependencies["eslint-config-next"]).toBe("16.4.3");
+    expect(lock.packages["node_modules/next"]?.version).toBe("16.4.3");
+    expect(lock.packages["node_modules/eslint-config-next"]?.version).toBe("16.4.3");
   });
 
   it("pins Zod on the release that bounds constrained collections", () => {
