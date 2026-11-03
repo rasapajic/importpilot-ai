@@ -95,6 +95,27 @@ describe("detailed URL import provider", () => {
     )).toBeNull();
   });
 
+  it("preserves the exact supplier identity when the provider returns Corp.Ltd. without spaces", async () => {
+    expect(normalizeExternalSupplierName("Pilot Optics International Corp.Ltd."))
+      .toBe("Pilot Optics International Corp. Ltd.");
+    expect(normalizeExternalSupplierName("Pilot Optics International Corp.Ltd.Wenzhou"))
+      .toBe("Pilot Optics International Corp. Ltd");
+    expect(normalizeExternalSupplierName(
+      "Pilot Optics established in 1999, is a prominent manufacturer",
+    )).toBeNull();
+
+    const payload = externalPreview();
+    payload.preview.supplierName = "Pilot Optics International Corp.Ltd.";
+    const fetcher = vi.fn(async () => Response.json(payload));
+    const provider = createDetailedSupplierOfferUrlImportProvider({
+      endpoint: "https://url-import.example/preview",
+      fetcher: fetcher as typeof fetch,
+    });
+    await expect(provider.previewSupplierOfferUrl(productUrl)).resolves.toMatchObject({
+      supplierName: "Pilot Optics International Corp. Ltd.",
+    });
+  });
+
   it("rejects an advertised-profile manufacturer phrase as a seller name", () => {
     expect(normalizeExternalSupplierName(
       "Pilot Optics established in 1999, is a prominent manufacturer",
