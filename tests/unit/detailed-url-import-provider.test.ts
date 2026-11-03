@@ -149,7 +149,7 @@ describe("detailed URL import provider", () => {
         unit: "Piece", evidence: "EXACT_PRODUCT_JSONLD", sourceUrl: productUrl,
       },
     } };
-    const fetcher = vi.fn(async () => Response.json(payload));
+    const fetcher = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => Response.json(payload));
     const provider = createDetailedSupplierOfferUrlImportProvider({
       endpoint: "https://url-import.example/preview",
       token: "secret",
