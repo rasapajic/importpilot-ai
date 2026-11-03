@@ -65,6 +65,9 @@ export function normalizeExternalSupplierName(value: unknown) {
     .replace(/&amp;/gi, "&")
     .replace(/&quot;/gi, "\"")
     .replace(/&#39;/gi, "'")
+    // Some marketplace legal names omit the space: "Corp.Ltd.". Treat that
+    // punctuation as a separator, without accepting profile prose as a name.
+    .replace(/\b(Corp|Co|Inc)\.(?=Ltd\b)/gi, "$1. ")
     .replace(/^(?:verified\s+supplier|secured\s+trading|supplier|manufacturer|company\s+name)\s*[:\-]?\s*/i, "")
     .replace(/\s+/g, " ")
     .trim();
