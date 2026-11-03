@@ -140,6 +140,53 @@ describe("detailed URL import provider", () => {
     });
   });
 
+  it("keeps source-attested ranges in preview only, without overriding tier price", async () => {
+    const base = externalPreview().preview;
+    const payload = { preview: {
+      ...base,
+      advertisedPriceRange: {
+        lowPrice: "0.50", highPrice: "2.00", currency: "USD",
+        unit: "Piece", evidence: "EXACT_PRODUCT_JSONLD", sourceUrl: productUrl,
+      },
+    } };
+    const fetcher = vi.fn(async () => Response.json(payload));
+    const provider = createDetailedSupplierOfferUrlImportProvider({
+      endpoint: "https://url-import.example/preview",
+      token: "secret",
+      requestedQuantity: 1_500,
+      fetcher: fetcher as typeof fetch,
+    });
+    const preview = await provider.previewSupplierOfferUrl(productUrl);
+    expect(preview.price).toBe(0.70);
+    expect(preview.advertisedPriceRange).toMatchObject({
+      lowPrice: 0.50, highPrice: 2, currency: "USD", sourceUrl: productUrl,
+    });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher.mock.calls[0]?.[1]).toMatchObject({
+      headers: { authorization: "Bearer secret" },
+    });
+  });
+
+  it("fails closed for range evidence linked to another SKU or currency", async () => {
+    for (const evidence of [
+      { lowPrice: "0.50", highPrice: "2.00", currency: "USD",
+        unit: "Piece", evidence: "EXACT_PRODUCT_JSONLD", sourceUrl: productUrl + "?otherSku=true" },
+      { lowPrice: "0.50", highPrice: "2.00", currency: "EUR",
+        unit: "Piece", evidence: "EXACT_PRODUCT_JSONLD", sourceUrl: productUrl },
+    ]) {
+      const fetcher = vi.fn(async () => Response.json({
+        preview: { ...externalPreview().preview, advertisedPriceRange: evidence },
+      }));
+      const provider = createDetailedSupplierOfferUrlImportProvider({
+        endpoint: "https://url-import.example/preview",
+        fetcher: fetcher as typeof fetch,
+      });
+      const preview = await provider.previewSupplierOfferUrl(productUrl);
+      expect(preview.advertisedPriceRange).toBeNull();
+      expect(preview.minimumOrderQuantity).toBe(100);
+    }
+  });
+
   it("uses the supplied fallback provider when no endpoint is configured", async () => {
     const fallback: SupplierOfferUrlImportProvider = {
       previewSupplierOfferUrl: vi.fn(async () => ({
