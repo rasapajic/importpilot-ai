@@ -3,6 +3,7 @@
 import { useI18n } from "@/components/i18n/i18n-provider";
 import type { Locale } from "@/modules/i18n/translations";
 import type { SupplierOfferUrlPreview } from "@/modules/product-search/domain/search";
+import { advertisedRangeDisplay } from "@/modules/product-search/domain/advertised-range-display";
 import {
   buildTajaPreviewBusinessSummary,
   isMistingPreviewContext,
@@ -331,7 +332,12 @@ function priceText(
   preview: SupplierOfferUrlPreview,
   summary: TajaPreviewBusinessSummaryValue,
   copy: SummaryCopy,
+  locale: Locale,
 ) {
+  // A published, exact-SKU AggregateOffer price range is informative only.
+  // It never upgrades an advertised teaser to a confirmed quantity quote.
+  const sourceRange = advertisedRangeDisplay(preview, locale);
+  if (sourceRange) return sourceRange;
   if (preview.price === null || preview.currency === null) return copy.priceMissing;
   const price = `${preview.price} ${preview.currency}`;
   return summary.priceBasisStatus === TajaPreviewPriceBasisStatuses.CONFIRMED
@@ -488,7 +494,7 @@ export function TajaPreviewBusinessSummary({
         )}
         <SummaryRow
           label={copy.displayedPrice}
-          value={priceText(preview, summary, copy)}
+          value={priceText(preview, summary, copy, locale)}
         />
         <SummaryRow label={copy.moq} value={moqText(preview, summary, copy)} />
         <SummaryRow
