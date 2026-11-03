@@ -224,6 +224,20 @@ export const supplierOfferSourceMoqCheckRequestSchema =
     sourceMoqCheck: z.literal(true).optional(),
   });
 
+// Preview-only marketplace evidence: NEVER a confirmed supplier quotation.
+export const supplierOfferAdvertisedRangeSchema = z.object({
+  lowPrice: z.number().positive().finite(),
+  highPrice: z.number().positive().finite(),
+  currency: z.string().regex(/^[A-Z]{3}$/),
+  unit: z.enum(["Piece", "Set", "Unit"]).nullable(),
+  evidence: z.literal("EXACT_PRODUCT_JSONLD"),
+  sourceUrl: supplierOfferUrlImportRequestSchema.shape.productUrl,
+}).strict().superRefine((range, context) => {
+  if (range.highPrice <= range.lowPrice) {
+    context.addIssue({ code: "custom", path: ["highPrice"], message: "Range bounds out of order." });
+  }
+});
+
 export const supplierOfferUrlPreviewSchema = z
   .object({
     title: optionalText(300),
@@ -238,6 +252,7 @@ export const supplierOfferUrlPreviewSchema = z
       z.string().regex(/^[A-Z]{3}$/).nullable(),
     ),
     minimumOrderQuantity: optionalNumber(z.number().int().positive()),
+    advertisedPriceRange: supplierOfferAdvertisedRangeSchema.nullable().optional(),
     incoterm: z.preprocess(
       (value) => (value === "" || value === undefined || value === null ? null : String(value).toUpperCase()),
       z.string().trim().min(2).max(20).nullable(),
@@ -252,7 +267,19 @@ export const supplierOfferUrlPreviewSchema = z
     isPartial: z.boolean().default(false),
     titleFromSlug: z.boolean().default(false),
   })
-  .strict();
+  .strict().superRefine((preview, context) => {
+    if (preview.advertisedPriceRange) {
+      const evidence = preview.advertisedPriceRange;
+      if (evidence.sourceUrl !== preview.productUrl ||
+          (preview.currency !== null && evidence.currency !== preview.currency)) {
+        context.addIssue({
+          code: "custom",
+          path: ["advertisedPriceRange"],
+          message: "Advertised range must match the exact product and currency.",
+        });
+      }
+    }
+  });
 
 export type SupplierOfferSearchInput = z.infer<typeof supplierOfferSearchInputSchema>;
 export type ProjectSupplierSearchRequest = z.infer<typeof projectSupplierSearchRequestSchema>;
