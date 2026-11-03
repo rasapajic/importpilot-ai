@@ -86,6 +86,9 @@ describe("JAKOV360 #199 price range preview", () => {
     const source = readFileSync("components/projects/create-project-from-url-form.tsx", "utf8");
     const creation = source.slice(source.indexOf("async function createSearch"), source.indexOf("return (", source.indexOf("async function createSearch")));
     expect(creation).not.toContain("advertisedPriceRange");
+    expect(source).toContain('sr: "Oglašena cena (nepotvrđena)"');
+    expect(source).toContain('de: "Angezeigter Preis (unbestätigt)"');
+    expect(source).toContain('en: "Advertised price (unconfirmed)"');
     expect(creation).toContain("preview.price");
     expect(creation).toContain("preview.minimumOrderQuantity");
     const css = readFileSync("app/globals.css", "utf8");
