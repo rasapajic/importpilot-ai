@@ -12,6 +12,7 @@ type AppOptions = {
   maxResponseBytes?: number;
   debugHtml?: boolean;
   fetcher?: typeof fetch;
+  verifyVideoPriceRange?: boolean;
 };
 
 function sendJson(response: ServerResponse, status: number, body: unknown) {
@@ -134,6 +135,9 @@ export function createUrlImportProviderApp(options: AppOptions = {}) {
           timeoutMs: options.timeoutMs,
           maxResponseBytes: options.maxResponseBytes,
           debugHtml: options.debugHtml,
+          // Disabled by default; requires explicit provider-side opt-in.
+          verifyVideoPriceRange: options.verifyVideoPriceRange ??
+            process.env.URL_IMPORT_VIDEO_PRICE_EVIDENCE === "true",
         });
         logPreviewDiagnostics({
           reason: "OK",
