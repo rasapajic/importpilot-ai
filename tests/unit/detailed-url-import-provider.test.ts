@@ -187,6 +187,42 @@ describe("detailed URL import provider", () => {
     }
   });
 
+  it("normalizes a verified video range from the same SKU and preserves a public-only quote status", async () => {
+    const pilot = "https://pilotoptics.en.made-in-china.com/product/WJfUCnDTuekA/China-Pilot-Optics-Wholesale-High-Quality-5-Colors-Custom-Logo-Square-Reading-Glasses.html";
+    const video = "https://www.made-in-china.com/video-channel/pilotoptics_WJfUCnDTuekA_Pilot-Optics-Wholesale-High-Quality-5-Colors-Custom-Logo-Square-Reading-Glasses.html";
+    const payload = {
+      preview: {
+        productTitle: "Pilot Optics Wholesale High Quality 5 Colors Custom Logo Square Reading Glasses",
+        supplierName: "Pilot Optics International Corp.Ltd.",
+        price: "0.50",
+        currency: "USD",
+        minimumOrderQuantity: "1200",
+        productUrl: pilot,
+        imageUrl: null,
+        details: null,
+        advertisedPriceRange: {
+          lowPrice: "0.50", highPrice: "2.00", currency: "USD",
+          unit: "Piece", evidence: "MATCHED_VIDEO_CHANNEL",
+          sourceUrl: pilot, evidenceUrl: video,
+        },
+      },
+    };
+    const fetcher = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => Response.json(payload));
+    const provider = createDetailedSupplierOfferUrlImportProvider({
+      endpoint: "https://url-import.example/preview",
+      token: "secret",
+      fetcher: fetcher as typeof fetch,
+    });
+    const result = await provider.previewSupplierOfferUrl(pilot);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(result.minimumOrderQuantity).toBe(1200);
+    expect(result.price).toBe(0.50);
+    expect(result.supplierName).toBe("Pilot Optics International Corp. Ltd.");
+    expect(result.advertisedPriceRange).toMatchObject({
+      lowPrice: 0.50, highPrice: 2, evidenceUrl: video, evidence: "MATCHED_VIDEO_CHANNEL",
+    });
+  });
+
   it("uses the supplied fallback provider when no endpoint is configured", async () => {
     const fallback: SupplierOfferUrlImportProvider = {
       previewSupplierOfferUrl: vi.fn(async () => ({
