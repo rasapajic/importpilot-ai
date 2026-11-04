@@ -78,7 +78,12 @@ export function CreateProjectFromUrlForm({
   initialProductUrl?: string;
   initialProductName?: string;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const previewPriceLabel = {
+    sr: "Oglašena cena (nepotvrđena)",
+    de: "Angezeigter Preis (unbestätigt)",
+    en: "Advertised price (unconfirmed)",
+  }[locale];
   const router = useRouter();
   const urlInputRef = useRef<HTMLInputElement>(null);
   const [productUrl, setProductUrl] = useState(initialProductUrl);
@@ -430,7 +435,7 @@ export function CreateProjectFromUrlForm({
             />
           </label>
           <label>
-            {t("Cena")}
+            {previewPriceLabel}
             <input
               min="0"
               onChange={(event) => update("price", event.target.value)}

@@ -2,6 +2,7 @@ import {
   selectSupplierOfferPriceTier,
 } from "../domain/marketplace-product-details";
 import {
+  supplierOfferAdvertisedRangeSchema,
   supplierOfferUrlImportRequestSchema,
   supplierOfferUrlPreviewSchema,
   type SupplierOfferUrlImportProvider,
@@ -98,6 +99,18 @@ function normalizeExternalPreview(candidate: unknown) {
   if (!candidate || typeof candidate !== "object") return candidate;
   const record = candidate as Record<string, unknown>;
   const productUrl = record.productUrl;
+  // A provider may be older or contain unrelated price metadata. Invalid or
+  // foreign-SKU ranges are omitted rather than breaking a valid URL preview.
+  const range = supplierOfferAdvertisedRangeSchema.safeParse(record.advertisedPriceRange && typeof record.advertisedPriceRange === "object"
+    ? { ...(record.advertisedPriceRange as Record<string, unknown>),
+        lowPrice: Number((record.advertisedPriceRange as Record<string, unknown>).lowPrice),
+        highPrice: Number((record.advertisedPriceRange as Record<string, unknown>).highPrice) }
+    : null);
+  const advertisedPriceRange = range.success &&
+      range.data.sourceUrl === productUrl &&
+      (record.currency === null || record.currency === undefined ||
+       range.data.currency === String(record.currency).toUpperCase())
+    ? range.data : null;
   let source = record.source;
   if (!source && typeof productUrl === "string") {
     try {
@@ -113,6 +126,7 @@ function normalizeExternalPreview(candidate: unknown) {
     price: record.price ?? null,
     currency: record.currency ?? null,
     minimumOrderQuantity: record.minimumOrderQuantity ?? null,
+    advertisedPriceRange,
     incoterm: record.incoterm ?? null,
     productUrl,
     imageUrl: record.imageUrl ?? null,
