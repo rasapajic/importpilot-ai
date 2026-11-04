@@ -111,8 +111,8 @@ export function reconcileMarketplacePriceEvidence(
     }
   }
   if (video.sourceUrl === catalog.sourceUrl ||
-      video.lowPrice !== catalog.lowPrice ||
-      video.highPrice !== catalog.highPrice ||
+      Number(video.lowPrice) !== Number(catalog.lowPrice) ||
+      Number(video.highPrice) !== Number(catalog.highPrice) ||
       video.currency !== catalog.currency ||
       video.unit !== catalog.unit ||
       video.minimumOrderQuantity !== catalog.minimumOrderQuantity) return null;
