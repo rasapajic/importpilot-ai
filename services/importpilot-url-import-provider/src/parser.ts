@@ -346,6 +346,11 @@ function productImageCandidate(value: string | null, priority: number) {
   try {
     const url = new URL(normalized);
     if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+    // Marketplace landing assets and vector controls are not product photos.
+    // A static path containing "/product/" is not sufficient image evidence.
+    if (/\.svg$/i.test(url.pathname)) return null;
+    if (/(?:^|\.)micstatic\.com$/i.test(url.hostname) &&
+        /\/landing\//i.test(url.pathname)) return null;
     const productSignal =
       /(?:alicdn\.com|made-in-china\.com|micstatic\.com)/i.test(url.hostname) ||
       /(?:\/kf\/|product|main|large|big|original|photo|image)/i.test(url.pathname);
