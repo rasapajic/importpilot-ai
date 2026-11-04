@@ -4,6 +4,9 @@ on:
   pull_request:
     paths:
       - 'scripts/url-import-199-live-probe.ts'
+      - 'services/importpilot-url-import-provider/src/marketplace-price-source-parser.ts'
+      - 'services/importpilot-url-import-provider/src/marketplace-price-source-reader.ts'
+      - 'services/importpilot-url-import-provider/tests/marketplace-price-source-reader-199.test.ts'
       - '.github/workflows/jakov360-199-live-source-probe.yml'
   workflow_dispatch:
 
