@@ -39,6 +39,16 @@ describe("exact-SKU corroboration, advertisement not written quote #199", () => 
         verifiedQuote: false,
       });
   });
+  it("accepts the catalog's 0.5–2 while the video says 0.50–2.00", () => {
+    const catalogEntry = { ...evidence("SUPPLIER_CATALOG"), lowPrice: "0.5", highPrice: "2" };
+    const verified = reconcileMarketplacePriceEvidence(url, [
+      evidence("VIDEO_CHANNEL"), catalogEntry,
+    ]);
+    expect(verified).toMatchObject({
+      lowPrice: "0.50", highPrice: "2.00", minimumOrderQuantity: 1200, verifiedQuote: false,
+    });
+  });
+
   it("requires two different source types, never a lone video or related card", () => {
     expect(reconcileMarketplacePriceEvidence(url, [evidence("VIDEO_CHANNEL")])).toBeNull();
     expect(reconcileMarketplacePriceEvidence(url, [
