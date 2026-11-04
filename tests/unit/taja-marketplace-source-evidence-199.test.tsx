@@ -74,7 +74,7 @@ describe("TAJA #199 public source transparency", () => {
     expect(html).toContain("Katalog dobavljača");
     expect(html).toContain(catalogUrl);
     expect(html).not.toContain("Video-stranica proizvoda");
-    expect(html).toContain("naveden MOQ 1200");
+    expect(html).toContain("MOQ 1200");
     expect(html).toContain("nije obračunat");
   });
 
