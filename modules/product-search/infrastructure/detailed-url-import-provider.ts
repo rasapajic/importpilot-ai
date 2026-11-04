@@ -3,6 +3,7 @@ import {
 } from "../domain/marketplace-product-details";
 import {
   supplierOfferAdvertisedRangeSchema,
+  supplierOfferMarketplacePriceEvidenceSchema,
   supplierOfferUrlImportRequestSchema,
   supplierOfferUrlPreviewSchema,
   type SupplierOfferUrlImportProvider,
@@ -111,6 +112,29 @@ function normalizeExternalPreview(candidate: unknown) {
       (record.currency === null || record.currency === undefined ||
        range.data.currency === String(record.currency).toUpperCase())
     ? range.data : null;
+  const candidatePublic = record.marketplacePriceEvidence;
+  const publicRecord = candidatePublic && typeof candidatePublic === "object" &&
+    !Array.isArray(candidatePublic) ? candidatePublic as Record<string, unknown> : null;
+  const publicParsed = supplierOfferMarketplacePriceEvidenceSchema.safeParse(publicRecord
+    ? { ...publicRecord,
+        lowPrice: typeof publicRecord.lowPrice === "string"
+          ? Number(publicRecord.lowPrice) : publicRecord.lowPrice,
+        highPrice: typeof publicRecord.highPrice === "string"
+          ? Number(publicRecord.highPrice) : publicRecord.highPrice,
+      }
+    : null);
+  // A later provider may return this source metadata; older providers omit it.
+  // Never accept a conflicting SKU, currency, MOQ or public range.
+  const marketplacePriceEvidence = publicParsed.success &&
+    publicParsed.data.productUrl === productUrl &&
+    Number(record.minimumOrderQuantity) === publicParsed.data.minimumOrderQuantity &&
+    (record.currency === null || record.currency === undefined ||
+      publicParsed.data.currency === String(record.currency).toUpperCase()) &&
+    (!advertisedPriceRange ||
+      (advertisedPriceRange.lowPrice === publicParsed.data.lowPrice &&
+       advertisedPriceRange.highPrice === publicParsed.data.highPrice &&
+       advertisedPriceRange.currency === publicParsed.data.currency))
+    ? publicParsed.data : null;
   let source = record.source;
   if (!source && typeof productUrl === "string") {
     try {
@@ -127,6 +151,7 @@ function normalizeExternalPreview(candidate: unknown) {
     currency: record.currency ?? null,
     minimumOrderQuantity: record.minimumOrderQuantity ?? null,
     advertisedPriceRange,
+    marketplacePriceEvidence,
     incoterm: record.incoterm ?? null,
     productUrl,
     imageUrl: record.imageUrl ?? null,
