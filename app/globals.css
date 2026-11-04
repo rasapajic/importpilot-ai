@@ -1745,3 +1745,43 @@ details.workflow-step > summary::-webkit-details-marker {
     font-size: 16px;
   }
 }
+
+
+/* Price source links stay readable in the 390px URL-first preview. This is
+   display-only; the public price must never affect quote or landed-cost data. */
+.taja-preview-public-price-sources {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid #bfd9ce;
+  border-radius: 0.65rem;
+  background: #f6fbf8;
+  font-size: 0.86rem;
+}
+.taja-preview-public-price-sources ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.25rem;
+  list-style: none;
+  margin: 0.45rem 0 0;
+  padding: 0;
+  min-width: 0;
+}
+.taja-preview-public-price-sources li,
+.taja-preview-public-price-sources a {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.taja-preview-public-price-sources a {
+  color: #086745;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+@media (max-width: 760px) {
+  .taja-preview-public-price-sources ul {
+    flex-direction: column;
+    gap: 0.45rem;
+  }
+}
