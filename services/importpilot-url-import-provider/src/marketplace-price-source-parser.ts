@@ -160,8 +160,10 @@ export function parseExactCatalogPriceSource(
 ): MarketplacePriceEvidence | null {
   const identity = exactMadeInChinaProductIdentity(productUrl);
   if (!identity) return null;
-  const expectedCatalog = new URL(sourceUrl);
+  let expectedCatalog: URL;
+  try { expectedCatalog = new URL(sourceUrl); } catch { return null; }
   if (expectedCatalog.protocol !== "https:" ||
+      expectedCatalog.username || expectedCatalog.password ||
       expectedCatalog.hostname.toLowerCase() !== identity.productHost ||
       expectedCatalog.search || expectedCatalog.hash || expectedCatalog.port ||
       !/^\/product-group\/[A-Za-z0-9]{6,}\/[A-Za-z0-9-]+\.html$/.test(expectedCatalog.pathname)) return null;
@@ -173,7 +175,19 @@ export function parseExactCatalogPriceSource(
     if ((href !== identity.productUrl && href !== identity.videoUrl) ||
         normalizedTitle(anchor.title) !== identity.title) continue;
     const subsequent = html.slice(anchor.end, anchor.end + 1800);
-    const text = stripHtml(subsequent);
+    // Stop at the NEXT listed product rather than borrowing that item's
+    // price when this SKU lacks one. An action link is not a product card.
+    const nextDifferentProduct = anchors(subsequent).find(next => {
+      try {
+        const link = new URL(next.href, sourceUrl);
+        return /^\/product\/[A-Za-z0-9]+\/[^/]+\.html$/.test(link.pathname) &&
+          link.toString() !== identity.productUrl;
+      } catch { return false; }
+    });
+    const scopedHtml = nextDifferentProduct
+      ? subsequent.slice(0, nextDifferentProduct.index)
+      : subsequent;
+    const text = stripHtml(scopedHtml);
     // This is a bounded window, not the entire catalog. Multiple price labels
     // in the window make the source ambiguous rather than conveniently usable.
     if ((text.match(/\bFOB\s+Price\b/gi) ?? []).length !== 1 ||
