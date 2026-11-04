@@ -3,7 +3,8 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 import { detectProvider, hasProductIdentifier, inspectPreviewExtraction, isUnavailableProductHtml, parseProductPreview, type PreviewExtractionSnapshot } from "./parser.js";
-import { previewRequestSchema, type ProductPreview } from "./contract.js";
+import { previewRequestSchema, productPreviewSchema, type ProductPreview } from "./contract.js";
+import { videoChannelUrlForProduct, extractVideoChannelAdvertisedPriceRange } from "./video-channel-range.js";
 import { classifyFetchError, rememberFetchError, rememberPreviewDiagnostics } from "./diagnostics.js";
 
 export class UrlImportProviderError extends Error {
@@ -17,6 +18,8 @@ type FetchOptions = {
   timeoutMs?: number;
   maxResponseBytes?: number;
   debugHtml?: boolean;
+  /** Explicit server-side opt-in only. Never accepts a client-provided video URL. */
+  verifyVideoPriceRange?: boolean;
 };
 
 function logDevelopment(event: Record<string, unknown>) {
@@ -64,6 +67,55 @@ async function maybeSaveDebugHtml(html: string, provider: string, enabled: boole
   const file = join(dir, `importpilot-url-import-${provider}-${Date.now()}.html`);
   await writeFile(file, html.slice(0, 300_000), "utf8");
   console.info(JSON.stringify({ event: "debug_html_saved", html_saved: true, file_path: file }));
+}
+
+/**
+ * Optional second-page fetch can only improve source evidence; any failure
+ * leaves the original exact-product preview untouched.
+ */
+async function corroborateVideoRange(
+  preview: ProductPreview,
+  productUrl: string,
+  options: FetchOptions,
+): Promise<ProductPreview> {
+  if (!options.verifyVideoPriceRange || preview.advertisedPriceRange ||
+      preview.price === null || preview.minimumOrderQuantity === null) return preview;
+  const videoUrl = videoChannelUrlForProduct(productUrl);
+  if (!videoUrl) return preview;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 2_500);
+  try {
+    const response = await (options.fetcher ?? fetch)(videoUrl, {
+      headers: requestHeaders(new URL(videoUrl)),
+      redirect: "manual",
+      signal: controller.signal,
+    });
+    if (!response.ok || response.status !== 200 || response.redirected) return preview;
+    const expected = new URL(videoUrl);
+    if (response.url) {
+      const actual = new URL(response.url);
+      if (actual.protocol !== "https:" || actual.username || actual.password ||
+          actual.href !== expected.href) return preview;
+    } else if (!options.fetcher) {
+      return preview;
+    }
+    const contentType = response.headers.get("content-type");
+    if (contentType && !/^text\/html\b/i.test(contentType)) return preview;
+    const html = await readLimited(response, 350_000);
+    const evidence = extractVideoChannelAdvertisedPriceRange(
+      html, productUrl, videoUrl, preview.minimumOrderQuantity, preview.price,
+    );
+    return evidence
+      ? productPreviewSchema.parse({ ...preview, advertisedPriceRange: evidence })
+      : preview;
+  } catch {
+    // A missing, blocked, oversized or changed video page must not prevent
+    // import of the real product or turn related-product prices into evidence.
+    return preview;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 export async function previewProductUrl(productUrl: string, options: FetchOptions = {}): Promise<ProductPreview> {
@@ -156,7 +208,8 @@ export async function previewProductUrl(productUrl: string, options: FetchOption
     if (isUnavailableProductHtml(html)) {
       throw new UrlImportProviderError("UNAVAILABLE", "Supplier product is no longer available.");
     }
-    const preview = parseProductPreview(html, parsed.data.productUrl);
+    const primaryPreview = parseProductPreview(html, parsed.data.productUrl);
+    const preview = await corroborateVideoRange(primaryPreview, parsed.data.productUrl, options);
     rememberPreviewDiagnostics({
       provider,
       productUrl: parsed.data.productUrl,
