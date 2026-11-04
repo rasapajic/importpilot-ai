@@ -98,6 +98,19 @@ if (!html) {
 } else {
   const discovered = discoverExactSellerCatalogUrl(html, PRODUCT_URL);
   const videoUrl = expectedVideoSourceUrl(PRODUCT_URL);
+  if (!discovered) {
+    // Metadata only. Do not print a downloaded page or dump arbitrary HTML.
+    const hints = [...html.matchAll(/product-group\/[a-zA-Z0-9%/_\-\.]{1,160}/g)]
+      .map(match => (match[0] ?? "").slice(0, 155))
+      .filter((s, i, all) => all.indexOf(s) === i)
+      .slice(0, 24);
+    const anchors = [...html.matchAll(/<a\b[^>]*\bhref\s*=\s*(["'])([^"']{1,500})\1[^>]*>([\s\S]{0,500}?)<\/a>/gi)]
+      .filter(match => /product-group\//i.test(match[2] ?? ""))
+      .slice(0, 15)
+      .map(match => ({ href: (match[2] ?? "").slice(0, 180),
+        text: (match[3] ?? "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 80) }));
+    summary("catalog_discovery_diagnostics", { hints, anchors });
+  }
   summary("source_discovery", {
     exactVideoUrl: videoUrl === EXPECTED_VIDEO,
     catalogFound: Boolean(discovered),
