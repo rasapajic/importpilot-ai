@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 import { previewProductUrl } from "../src/fetcher.js";
@@ -95,9 +96,9 @@ describe("provider #199 public evidence preview bridge", () => {
   });
 
   it("requires the exact server-only opt-in before any source fetching", () => {
-    const config = readFileSync("src/dev.ts", "utf8");
+    const config = readFileSync(join(import.meta.dirname, "..", "src", "dev.ts"), "utf8");
     expect(config).toContain('process.env.URL_IMPORT_PUBLIC_PRICE_EVIDENCE === "enabled"');
-    const route = readFileSync("src/app.ts", "utf8");
+    const route = readFileSync(join(import.meta.dirname, "..", "src", "app.ts"), "utf8");
     expect(route).toContain("publicPriceEvidenceEnabled: options.publicPriceEvidenceEnabled");
   });
 });
