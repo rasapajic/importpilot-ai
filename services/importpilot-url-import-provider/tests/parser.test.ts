@@ -373,3 +373,34 @@ describe("Pilot Optics exact-page regression", () => {
     expect(parsed.minimumOrderQuantity).toBe("1200");
   });
 });
+
+
+describe("URL product image evidence, not marketplace UI decoration", () => {
+  const misleadingSvg =
+    "https://www.micstatic.com/landing/www/product/img/as-long_e2640688.svg";
+  const genuinePhoto =
+    "https://image.made-in-china.com/202f0j00reading-glasses-main.jpg";
+
+  it("ignores the Pilot Optics micstatic landing SVG even when it is og:image", () => {
+    const html = '<html><head><meta property="og:image" content="' + misleadingSvg +
+      '"></head><body><img data-src="' + genuinePhoto + '"></body></html>';
+    expect(extractProductImageUrl(html)).toBe(genuinePhoto);
+  });
+
+  it("returns no image when the only candidate is a decorative SVG", () => {
+    const html = '<meta property="og:image" content="' + misleadingSvg + '">';
+    expect(extractProductImageUrl(html)).toBeNull();
+  });
+
+  it("rejects micstatic landing stock PNG but keeps a separate valid product JPEG", () => {
+    const html = '<meta name="twitter:image" content="' +
+      "https://www.micstatic.com/landing/www/product/img/landing-banner.png" +
+      '"><img src="' + genuinePhoto + '">';
+    expect(extractProductImageUrl(html)).toBe(genuinePhoto);
+  });
+
+  it("does not reject a genuine product picture on the micstatic CDN outside landing assets", () => {
+    const url = "https://www.micstatic.com/202f0j00/product/reading-glasses.webp";
+    expect(extractProductImageUrl('<meta property="og:image" content="' + url + '">')).toBe(url);
+  });
+});
