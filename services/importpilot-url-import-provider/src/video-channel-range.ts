@@ -47,9 +47,9 @@ function canonicalExactUrl(value: string) {
 }
 function normalizedTitle(value: string) {
   return value.toLowerCase()
-    .replace(/^(?:what is|china)\s+/i, "")
     .replace(/[^a-z0-9]+/g, " ")
-    .trim();
+    .trim()
+    .replace(/^(?:what is|china)\s+/i, "");
 }
 
 /**
