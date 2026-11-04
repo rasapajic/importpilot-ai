@@ -382,6 +382,23 @@ export const marketplaceProductDetailsSchema =
     };
   });
 
+/**
+ * Informational only: source-attested public product range, never a supplier quote.
+ * Its evidence must identify the exact product URL, not a related-card price.
+ */
+export const advertisedPriceRangeSchema = z.object({
+  lowPrice: z.string().regex(/^\d+(?:\.\d+)?$/),
+  highPrice: z.string().regex(/^\d+(?:\.\d+)?$/),
+  currency: z.string().regex(/^[A-Z]{3}$/),
+  unit: z.enum(["Piece", "Set", "Unit"]).nullable(),
+  evidence: z.literal("EXACT_PRODUCT_JSONLD"),
+  sourceUrl: previewRequestSchema.shape.productUrl,
+}).strict().superRefine((range, context) => {
+  if (Number(range.lowPrice) <= 0 || Number(range.highPrice) <= Number(range.lowPrice)) {
+    context.addIssue({ code: "custom", path: ["highPrice"], message: "Invalid advertised price range." });
+  }
+});
+
 export const productPreviewSchema = z.object({
   productTitle: optionalText(300),
   supplierName: optionalText(200),
@@ -391,6 +408,7 @@ export const productPreviewSchema = z.object({
     z.string().regex(/^[A-Z]{3}$/).nullable(),
   ),
   minimumOrderQuantity: optionalNumberText,
+  advertisedPriceRange: advertisedPriceRangeSchema.nullable().optional(),
   incoterm: z.preprocess(
     (value) => (value === "" || value === undefined || value === null ? null : String(value).toUpperCase()),
     z.string().trim().min(2).max(20).nullable(),

@@ -1,4 +1,5 @@
 import {
+  advertisedPriceRangeSchema,
   marketplaceProductDetailsSchema,
   productPreviewSchema,
   type MarketplaceProductDetails,
@@ -847,6 +848,92 @@ function detailCounts(details: MarketplaceProductDetails | null) {
   };
 }
 
+/**
+ * Fail-closed source attribution for a public price range.
+ *
+ * A range in "related products", a generic JSON priceRange field, or an
+ * unscoped search card does NOT prove the range of the requested SKU.
+ * Accept only a JSON-LD Product explicitly pointing to the exact HTTPS URL
+ * and its single AggregateOffer with a valid low/high pair and currency.
+ * This is informative listing evidence only, never a firm supplier quote.
+ */
+export function extractExactProductAdvertisedPriceRange(html: string, productUrl: string) {
+  const exactIdentity = (value: unknown): string | null => {
+    if (typeof value !== "string") return null;
+    try {
+      const parsed = new URL(value);
+      if (parsed.protocol !== "https:" || parsed.username || parsed.password) return null;
+      parsed.hash = "";
+      return parsed.toString();
+    } catch {
+      return null;
+    }
+  };
+  const expected = exactIdentity(productUrl);
+  if (!expected) return null;
+
+  const blocks = [...html.matchAll(
+    /<script\b(?=[^>]*\btype\s*=\s*["']application\/ld\+json["'])[^>]*>([\s\S]*?)<\/script>/gi,
+  )].slice(0, 16);
+  const matches: Array<ReturnType<typeof advertisedPriceRangeSchema.parse>> = [];
+  for (const block of blocks) {
+    if (!block[1] || block[1].length > 50_000) continue;
+    let parsed: unknown;
+    try { parsed = JSON.parse(block[1]); } catch { continue; }
+    const record = (value: unknown): Record<string, unknown> | null =>
+      value !== null && typeof value === "object" && !Array.isArray(value)
+        ? value as Record<string, unknown> : null;
+    const roots = Array.isArray(parsed) ? parsed : [parsed];
+    const nodes = roots.flatMap((root) => {
+      const item = record(root);
+      const graph = item && Array.isArray(item["@graph"]) ? item["@graph"] : [];
+      return [root, ...graph];
+    });
+    for (const node of nodes) {
+      const product = record(node);
+      if (!product) continue;
+      const kind = product["@type"];
+      const types = Array.isArray(kind) ? kind : [kind];
+      if (!types.includes("Product") || exactIdentity(product.url) !== expected) continue;
+      const offers = Array.isArray(product.offers) ? product.offers : [product.offers];
+      // Multiple offers/variants require their own explicit quantities; they
+      // cannot be merged into a fictitious min/max for the parent product.
+      if (offers.length !== 1) continue;
+      const offer = record(offers[0]);
+      if (!offer) continue;
+      const offerTypes = Array.isArray(offer["@type"]) ? offer["@type"] : [offer["@type"]];
+      if (!offerTypes.includes("AggregateOffer")) continue;
+      if (offer.url !== undefined && exactIdentity(offer.url) !== expected) continue;
+      const price = (value: unknown) =>
+        (typeof value === "string" || typeof value === "number")
+          ? String(value).trim() : "";
+      const currency = typeof offer.priceCurrency === "string"
+        ? offer.priceCurrency.trim().toUpperCase() : "";
+      const unitText = typeof offer.unitText === "string"
+        ? offer.unitText.trim().toLowerCase() : "";
+      const unit = /^(?:piece|pieces|pcs?|each)$/.test(unitText) || offer.unitCode === "H87"
+        ? "Piece" as const
+        : /^(?:set|sets)$/.test(unitText)
+          ? "Set" as const
+          : /^(?:unit|units)$/.test(unitText)
+            ? "Unit" as const : null;
+      const checked = advertisedPriceRangeSchema.safeParse({
+        lowPrice: price(offer.lowPrice),
+        highPrice: price(offer.highPrice),
+        currency,
+        unit,
+        evidence: "EXACT_PRODUCT_JSONLD",
+        sourceUrl: expected,
+      });
+      if (checked.success && Number(checked.data.highPrice) <= 1_000_000_000) {
+        matches.push(checked.data);
+      }
+    }
+  }
+  // Conflicting exact-product price ranges are ambiguous: show none.
+  return matches.length === 1 ? matches[0] : null;
+}
+
 export function inspectPreviewExtraction(html: string, productUrl?: string): PreviewExtractionSnapshot {
   const blocked = isBlockedHtml(html);
   const pageTitle = pageTitleFromHtml(html);
@@ -939,6 +1026,7 @@ export function parseProductPreview(html: string, productUrl: string): ProductPr
   const price = value("price");
   const currency = value("currency");
   const minimumOrderQuantity = value("minimumOrderQuantity");
+  const advertisedPriceRange = extractExactProductAdvertisedPriceRange(html, productUrl);
   const incoterm = value("incoterm");
   const imageUrl = value("imageUrl");
   const details = extractMarketplaceProductDetails(html, productUrl);
@@ -953,6 +1041,7 @@ export function parseProductPreview(html: string, productUrl: string): ProductPr
     price,
     currency,
     minimumOrderQuantity,
+    advertisedPriceRange,
     incoterm,
     imageUrl,
     productUrl,
