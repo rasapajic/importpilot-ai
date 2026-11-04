@@ -1,0 +1,35 @@
+name: JAKOV360 #199 isolated public-source probe
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/url-import-199-live-probe.ts'
+      - '.github/workflows/jakov360-199-live-source-probe.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live_source_probe:
+    if: github.event_name == 'workflow_dispatch' || github.head_ref == 'feat/url-import-199-bounded-video-catalog-reader'
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      URL_IMPORT_PROVIDER_URL: ""
+      URL_IMPORT_PROVIDER_TOKEN: ""
+      SUPPLIER_SEARCH_PROVIDER_URL: ""
+      SUPPLIER_SEARCH_PROVIDER_TOKEN: ""
+    steps:
+      - name: Checkout unprivileged candidate
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install tooling without package lifecycle scripts
+        run: npm ci --ignore-scripts --no-audit
+      - name: Probe exact public product, video, seller catalog (read-only; no raw HTML logs)
+        run: npx tsx scripts/url-import-199-live-probe.ts
