@@ -4,6 +4,7 @@ import { useI18n } from "@/components/i18n/i18n-provider";
 import type { Locale } from "@/modules/i18n/translations";
 import type { SupplierOfferUrlPreview } from "@/modules/product-search/domain/search";
 import { advertisedRangeDisplay } from "@/modules/product-search/domain/advertised-range-display";
+import { marketplacePublicPriceEvidenceDisplay } from "@/modules/product-search/domain/marketplace-public-price-evidence-display";
 import {
   buildTajaPreviewBusinessSummary,
   isMistingPreviewContext,
@@ -38,6 +39,7 @@ type SummaryCopy = {
   displayedPrice: string;
   advertisedRange: string;
   sourceVideoLink: string;
+  priceSourceHeading: string;
   moq: string;
   landedCost: string;
   nextStep: string;
@@ -106,6 +108,7 @@ const copyByLocale: Record<Locale, SummaryCopy> = {
     displayedPrice: "Prikazana cena",
     advertisedRange: "Javno oglašeni raspon",
     sourceVideoLink: "Proveri javni cenovni raspon na video-stranici istog proizvoda",
+    priceSourceHeading: "Izvori javno oglašene cene",
     moq: "Minimalna količina",
     landedCost: "Ukupan trošak uvoza",
     nextStep: "Sledeći korak",
@@ -176,6 +179,7 @@ const copyByLocale: Record<Locale, SummaryCopy> = {
     displayedPrice: "Angezeigter Preis",
     advertisedRange: "Öffentlich angegebene Preisspanne",
     sourceVideoLink: "Öffentlich angegebene Preisspanne beim identischen Produkt prüfen",
+    priceSourceHeading: "Quellen der öffentlichen Preisangabe",
     moq: "Mindestmenge",
     landedCost: "Landed Cost",
     nextStep: "Nächster Schritt",
@@ -246,6 +250,7 @@ const copyByLocale: Record<Locale, SummaryCopy> = {
     displayedPrice: "Displayed price",
     advertisedRange: "Public advertised range",
     sourceVideoLink: "Review public price range on the exact-product video page",
+    priceSourceHeading: "Public price evidence sources",
     moq: "Minimum order",
     landedCost: "Landed cost",
     nextStep: "Next step",
@@ -450,6 +455,8 @@ export function TajaPreviewBusinessSummary({
 }) {
   const { locale } = useI18n();
   const copy = copyByLocale[locale];
+  const publicPriceEvidence = marketplacePublicPriceEvidenceDisplay(preview, locale);
+  const legacyPublicRange = advertisedRangeDisplay(preview, locale);
   const summary = buildTajaPreviewBusinessSummary(preview, {
     productQuery,
     requestedQuantity,
@@ -501,21 +508,38 @@ export function TajaPreviewBusinessSummary({
           label={copy.displayedPrice}
           value={priceText(preview, summary, copy)}
         />
-        {advertisedRangeDisplay(preview, locale) && (
+        {publicPriceEvidence ? (
           <SummaryRow
-            label={copy.advertisedRange}
-            value={advertisedRangeDisplay(preview, locale) ?? ""}
+            label={publicPriceEvidence.label}
+            value={publicPriceEvidence.range + ". " + publicPriceEvidence.warning}
           />
-        )}
+        ) : legacyPublicRange ? (
+          <SummaryRow label={copy.advertisedRange} value={legacyPublicRange} />
+        ) : null}
         <SummaryRow label={copy.moq} value={moqText(preview, summary, copy)} />
         <SummaryRow
           label={copy.landedCost}
           value={landedCostText(summary.landedCostStatus, copy)}
         />
       </dl>
-      {preview.advertisedPriceRange?.evidence === "MATCHED_VIDEO_CHANNEL" &&
+      {publicPriceEvidence && (
+        <div className="taja-preview-public-price-sources">
+          <strong>{copy.priceSourceHeading}</strong>
+          <ul>
+            {publicPriceEvidence.sourceLinks.map((entry) => (
+              <li key={entry.href}>
+                <a href={entry.href} target="_blank" rel="noopener noreferrer">
+                  {entry.label}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {!publicPriceEvidence &&
+        preview.advertisedPriceRange?.evidence === "MATCHED_VIDEO_CHANNEL" &&
         preview.advertisedPriceRange.evidenceUrl &&
-        advertisedRangeDisplay(preview, locale) && (
+        legacyPublicRange && (
         <p className="taja-preview-range-source">
           <a
             href={preview.advertisedPriceRange.evidenceUrl}
