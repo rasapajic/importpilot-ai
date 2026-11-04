@@ -90,6 +90,7 @@ async function productHtml() {
   }
 }
 
+async function runProbe() {
 const html = await productHtml();
 if (!html) {
   summary("live_probe", { result: "UNAVAILABLE_OR_BLOCKED", requests: 1 });
@@ -140,3 +141,10 @@ if (!html) {
   });
   if (!result) process.exitCode = 1;
 }
+
+}
+
+void runProbe().catch((error) => {
+  summary("live_probe_unexpected_error", { kind: error instanceof Error ? error.name : "unknown" });
+  process.exitCode = 3;
+});
