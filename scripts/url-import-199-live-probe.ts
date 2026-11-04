@@ -12,7 +12,9 @@ import {
 } from "../services/importpilot-url-import-provider/src/marketplace-price-source-parser.ts";
 import {
   readCorroboratedMarketplacePrice,
+  readSingleCatalogAdvertisedRange,
 } from "../services/importpilot-url-import-provider/src/marketplace-price-source-reader.ts";
+import { parseProductPreview } from "../services/importpilot-url-import-provider/src/parser.ts";
 
 const PRODUCT_URL =
   "https://pilotoptics.en.made-in-china.com/product/WJfUCnDTuekA/China-Pilot-Optics-Wholesale-High-Quality-5-Colors-Custom-Logo-Square-Reading-Glasses.html";
@@ -146,48 +148,28 @@ if (!html) {
     maxResponseBytes: 380_000,
   });
 
-  // Separate diagnostic: video may correctly fail closed on HTTP 403.
-  // One additional GET to the exact discovered seller catalog checks whether
-  // that source and parser are independently readable. It is NOT corroboration.
+  // A video 403 never establishes two-source corroboration. Independently
+  // check a single catalog against the already parsed primary product MOQ.
   if (!result && discovered === EXPECTED_CATALOG) {
     try {
-      const response = await observer(EXPECTED_CATALOG, {
-        method: "GET", redirect: "manual",
-        headers: { accept: "text/html" },
-        signal: AbortSignal.timeout(7_000),
+      const primary = parseProductPreview(html, PRODUCT_URL);
+      const primaryMoq = Number(primary.minimumOrderQuantity);
+      const catalogObservation = await readSingleCatalogAdvertisedRange(
+        PRODUCT_URL, html, primaryMoq, {
+          enabled: true, fetcher: observer,
+          timeoutMs: 7_000, maxResponseBytes: 380_000,
+        },
+      );
+      catalogVerified = Boolean(catalogObservation);
+      summary("catalog_only_diagnostic", {
+        primaryMoq,
+        matched: Boolean(catalogObservation),
+        moq: catalogObservation?.minimumOrderQuantity ?? null,
+        min: catalogObservation?.lowPrice ?? null,
+        max: catalogObservation?.highPrice ?? null,
+        corroborated: catalogObservation?.corroborated ?? false,
+        verifiedQuote: catalogObservation?.verifiedQuote ?? false,
       });
-      if (response.status === 200 && sameExactUrl(response, EXPECTED_CATALOG) &&
-          /^text\/html(?:;|$)/i.test(response.headers.get("content-type") ?? "") &&
-          Number(response.headers.get("content-length") || "0") <= 390_000 &&
-          response.body) {
-        const reader = response.body.getReader();
-        let size = 0;
-        const decoder = new TextDecoder();
-        let body = "";
-        try {
-          while (true) {
-            const part = await reader.read();
-            if (part.done) break;
-            size += part.value.byteLength;
-            if (size > 390_000) {
-              await reader.cancel();
-              break;
-            }
-            body += decoder.decode(part.value, { stream: true });
-          }
-          body += decoder.decode();
-        } finally { reader.releaseLock(); }
-        const evidence = size <= 390_000
-          ? parseExactCatalogPriceSource(body, PRODUCT_URL, EXPECTED_CATALOG) : null;
-        catalogVerified = Boolean(evidence);
-        summary("catalog_only_diagnostic", {
-          bytes: size, withinLimit: size <= 390_000,
-          exactItemEvidence: Boolean(evidence),
-          moq: evidence?.minimumOrderQuantity ?? null,
-          min: evidence?.lowPrice ?? null, max: evidence?.highPrice ?? null,
-          confirmedSupplierQuote: false,
-        });
-      }
     } catch (e) {
       summary("catalog_only_diagnostic", {
         errorClass: e instanceof Error ? e.name : "unknown",
