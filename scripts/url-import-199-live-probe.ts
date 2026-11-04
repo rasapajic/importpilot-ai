@@ -9,12 +9,12 @@ import {
   discoverExactSellerCatalogUrl,
   expectedVideoSourceUrl,
   parseExactCatalogPriceSource,
-} from "../services/importpilot-url-import-provider/src/marketplace-price-source-parser.ts";
+} from "../services/importpilot-url-import-provider/src/marketplace-price-source-parser.js";
 import {
   readCorroboratedMarketplacePrice,
   readSingleCatalogAdvertisedRange,
-} from "../services/importpilot-url-import-provider/src/marketplace-price-source-reader.ts";
-import { parseProductPreview } from "../services/importpilot-url-import-provider/src/parser.ts";
+} from "../services/importpilot-url-import-provider/src/marketplace-price-source-reader.js";
+import { parseProductPreview } from "../services/importpilot-url-import-provider/src/parser.js";
 
 const PRODUCT_URL =
   "https://pilotoptics.en.made-in-china.com/product/WJfUCnDTuekA/China-Pilot-Optics-Wholesale-High-Quality-5-Colors-Custom-Logo-Square-Reading-Glasses.html";
