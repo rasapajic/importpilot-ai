@@ -372,16 +372,20 @@ const NON_PRODUCT_IMAGE_PATTERN =
 
 function productImageCandidate(value: string | null, priority: number, productTokens: Set<string>) {
   const normalized = normalizeUrl(decodeHtml(value) ?? null);
-  if (!normalized || NON_PRODUCT_IMAGE_PATTERN.test(normalized)) return null;
+  if (!normalized) return null;
   try {
     const url = new URL(normalized);
     if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+    const filename = url.pathname.split("/").at(-1) ?? "";
+    // "Custom-Logo" can be part of an exact product title. Reject logos and
+    // icons by default, but not a strongly matched same-SKU product filename.
+    if (NON_PRODUCT_IMAGE_PATTERN.test(normalized) &&
+        imageIdentityBonus(filename, productTokens) === 0) return null;
     // Marketplace landing assets and vector controls are not product photos.
     // A static path containing "/product/" is not sufficient image evidence.
     if (/\.svg$/i.test(url.pathname)) return null;
     if (/(?:^|\.)micstatic\.com$/i.test(url.hostname) &&
         /\/landing\//i.test(url.pathname)) return null;
-    const filename = url.pathname.split("/").at(-1) ?? "";
     // Supplier profile/factory pictures must not replace reading-glasses
     // images merely because the photo lives on the same marketplace CDN.
     if (CORPORATE_PROFILE_IMAGE_PATTERN.test(filename)) return null;
