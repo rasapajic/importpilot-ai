@@ -36,6 +36,7 @@ type SummaryCopy = {
   nozzles: string;
   exactNozzleCount: (count: number) => string;
   displayedPrice: string;
+  sourceVideoLink: string;
   moq: string;
   landedCost: string;
   nextStep: string;
@@ -102,6 +103,7 @@ const copyByLocale: Record<Locale, SummaryCopy> = {
     nozzles: "Mlaznice",
     exactNozzleCount: (count) => `Tačno ${count} mlaznica`,
     displayedPrice: "Prikazana cena",
+    sourceVideoLink: "Proveri javni cenovni raspon na video-stranici istog proizvoda",
     moq: "Minimalna količina",
     landedCost: "Ukupan trošak uvoza",
     nextStep: "Sledeći korak",
@@ -170,6 +172,7 @@ const copyByLocale: Record<Locale, SummaryCopy> = {
     nozzles: "Düsen",
     exactNozzleCount: (count) => `Genau ${count} Düsen`,
     displayedPrice: "Angezeigter Preis",
+    sourceVideoLink: "Öffentlich angegebene Preisspanne beim identischen Produkt prüfen",
     moq: "Mindestmenge",
     landedCost: "Landed Cost",
     nextStep: "Nächster Schritt",
@@ -238,6 +241,7 @@ const copyByLocale: Record<Locale, SummaryCopy> = {
     nozzles: "Nozzles",
     exactNozzleCount: (count) => `Exactly ${count} nozzles`,
     displayedPrice: "Displayed price",
+    sourceVideoLink: "Review public price range on the exact-product video page",
     moq: "Minimum order",
     landedCost: "Landed cost",
     nextStep: "Next step",
@@ -502,6 +506,19 @@ export function TajaPreviewBusinessSummary({
           value={landedCostText(summary.landedCostStatus, copy)}
         />
       </dl>
+      {preview.advertisedPriceRange?.evidence === "MATCHED_VIDEO_CHANNEL" &&
+        preview.advertisedPriceRange.evidenceUrl &&
+        advertisedRangeDisplay(preview, locale) && (
+        <p className="taja-preview-range-source">
+          <a
+            href={preview.advertisedPriceRange.evidenceUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {copy.sourceVideoLink}
+          </a>
+        </p>
+      )}
 
       <div className="taja-preview-next-step">
         <strong>{copy.nextStep}</strong>
