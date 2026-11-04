@@ -125,6 +125,18 @@ describe("read-only two-source extraction and fetch #199", () => {
     expect(discoverExactSellerCatalogUrl(productHtml.replace("https:", "http:"), productUrl)).toBe(catalogUrl);
   });
 
+  it("fails closed on real-world HTTP 403 from the video page without requesting a catalog", async () => {
+    const fetcher = vi.fn(async (request: RequestInfo | URL, _init?: RequestInit) => {
+      if (String(request) !== videoUrl) throw new Error("Catalog must not be fetched after 403");
+      return fakeResponse("Access denied", { status: 403 });
+    });
+    const result = await readCorroboratedMarketplacePrice(productUrl, productHtml, {
+      enabled: true, fetcher: fetcher as typeof fetch,
+    });
+    expect(result).toBeNull();
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
   it("rejects video redirect, wrong URL, non-html and oversized responses", async () => {
     const cases = [
       fakeResponse(videoHtml, { status: 302 }),
