@@ -364,7 +364,7 @@ function imageIdentityBonus(filename: string, productTokens: Set<string>) {
   ));
   const matches = [...productTokens].filter((token) => imageTokens.has(token)).length;
   // Only an overwhelmingly matching product title may outscore <meta og:image>.
-  return matches >= 3 && matches / productTokens.size >= 0.6 ? 100 : 0;
+  return matches >= 3 && matches / productTokens.size >= 0.8 ? 100 : 0;
 }
 
 const NON_PRODUCT_IMAGE_PATTERN =
