@@ -11,6 +11,7 @@ type AppOptions = {
   maxRequestBytes?: number;
   maxResponseBytes?: number;
   debugHtml?: boolean;
+  publicPriceEvidenceEnabled?: boolean;
   fetcher?: typeof fetch;
 };
 
@@ -134,6 +135,7 @@ export function createUrlImportProviderApp(options: AppOptions = {}) {
           timeoutMs: options.timeoutMs,
           maxResponseBytes: options.maxResponseBytes,
           debugHtml: options.debugHtml,
+          publicPriceEvidenceEnabled: options.publicPriceEvidenceEnabled,
         });
         logPreviewDiagnostics({
           reason: "OK",
