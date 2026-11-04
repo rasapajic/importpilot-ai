@@ -210,3 +210,57 @@ export async function readSingleCatalogAdvertisedRange(
     verifiedQuote: false,
   };
 }
+
+
+/**
+ * Preview-bridge helper: one trusted catalog GET plus at most one same-SKU
+ * video GET. If the video denies access (HTTP 403) this yields catalog-only
+ * public evidence, never a fabricated two-source confirmation.
+ *
+ * Enabled explicitly by the caller, and disabled in the running service
+ * unless the operator turns on the separate server-side feature flag.
+ * No writes, no retries, no arbitrary target URLs.
+ */
+export async function readMarketplacePublicPriceEvidence(
+  productUrl: string,
+  verifiedProductHtml: string,
+  primaryProductMoq: number,
+  options: PriceSourceReaderOptions = {},
+): Promise<CorroboratedAdvertisedRange | SingleCatalogAdvertisedRange | null> {
+  if (options.enabled !== true || !Number.isSafeInteger(primaryProductMoq) ||
+      primaryProductMoq <= 0 || verifiedProductHtml.length > 1_000_000 ||
+      !exactMadeInChinaProductIdentity(productUrl)) return null;
+
+  const catalogUrl = discoverExactSellerCatalogUrl(verifiedProductHtml, productUrl);
+  if (!catalogUrl) return null;
+  const catalogHtml = await readLimitedSourcePage(
+    catalogUrl, productUrl, "SUPPLIER_CATALOG", options,
+  );
+  if (!catalogHtml) return null;
+  const catalog = parseExactCatalogPriceSource(catalogHtml, productUrl, catalogUrl);
+  if (!catalog || catalog.minimumOrderQuantity !== primaryProductMoq) return null;
+
+  const catalogOnly: SingleCatalogAdvertisedRange = {
+    kind: "SINGLE_SELLER_CATALOG_ADVERTISED_RANGE",
+    sourceUrl: catalog.sourceUrl,
+    productUrl: catalog.productUrl,
+    lowPrice: catalog.lowPrice,
+    highPrice: catalog.highPrice,
+    currency: catalog.currency,
+    unit: catalog.unit,
+    minimumOrderQuantity: catalog.minimumOrderQuantity,
+    corroborated: false,
+    verifiedQuote: false,
+  };
+
+  const videoUrl = expectedVideoSourceUrl(productUrl);
+  if (!videoUrl) return catalogOnly;
+  const videoHtml = await readLimitedSourcePage(
+    videoUrl, productUrl, "VIDEO_CHANNEL", options,
+  );
+  if (!videoHtml) return catalogOnly; // e.g., real video page HTTP 403
+  const video = parseExactVideoPriceSource(videoHtml, productUrl, videoUrl);
+  if (!video) return catalogOnly;
+
+  return reconcileMarketplacePriceEvidence(productUrl, [video, catalog]) ?? catalogOnly;
+}
