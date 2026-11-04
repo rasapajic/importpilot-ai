@@ -42,6 +42,9 @@ describe("JAKOV360 #199 price range preview", () => {
       </I18nProvider>,
     );
     expect(html).toContain("Oglašeni raspon za ovaj proizvod");
+    expect(html).toContain("Javno oglašeni raspon");
+    expect(html).toContain("Prikazana cena");
+    expect(html).toContain("0.5 USD");
     expect(html).toContain("Nije potvrđena cena za traženu količinu");
     expect(html).not.toContain("Pumpa");
     expect(html).not.toContain("Mlaznice");
