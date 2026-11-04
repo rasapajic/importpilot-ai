@@ -82,6 +82,46 @@ describe("JAKOV360 #199 price range preview", () => {
     expect(html).toContain("nije potvrđeno");
   });
 
+  it("shows a clickable exact-SKU video evidence link without claiming a firm quote", () => {
+    const videoUrl = "https://www.made-in-china.com/video-channel/pilotoptics_WJfUCnDTuekA_Pilot-Optics-Wholesale-High-Quality-5-Colors-Custom-Logo-Square-Reading-Glasses.html";
+    const evidence = {
+      ...range, evidence: "MATCHED_VIDEO_CHANNEL" as const, evidenceUrl: videoUrl,
+    };
+    const preview = { ...base, advertisedPriceRange: evidence };
+    expect(supplierOfferUrlPreviewSchema.safeParse(preview).success).toBe(true);
+    expect(advertisedRangeDisplay(preview, "sr")).toContain("0,50–2,00 USD/kom.");
+    const html = renderToStaticMarkup(
+      <I18nProvider initialLocale="sr">
+        <TajaPreviewBusinessSummary preview={preview} requestedQuantity={1_000} />
+      </I18nProvider>,
+    );
+    expect(html).toContain(videoUrl);
+    expect(html).toContain("Proveri javni cenovni raspon");
+    expect(html).toContain("Nije potvrđena cena za traženu količinu");
+    expect(html).toContain("1200");
+    expect(html).not.toContain("Pumpa");
+  });
+
+  it("rejects video evidence from a mismatched SKU or an arbitrary host", () => {
+    const url = "https://www.made-in-china.com/video-channel/pilotoptics_WJfUCnDTuekA_Pilot-Optics-Wholesale-High-Quality-5-Colors-Custom-Logo-Square-Reading-Glasses.html";
+    for (const invalid of [
+      url.replace("WJfUCnDTuekA", "OTHERPRODUCT12"),
+      url.replace("www.made-in-china.com", "attacker.example"),
+      url + "?next=other",
+    ]) {
+      const preview = {
+        ...base, advertisedPriceRange: {
+          ...range, evidence: "MATCHED_VIDEO_CHANNEL" as const, evidenceUrl: invalid,
+        },
+      };
+      expect(supplierOfferUrlPreviewSchema.safeParse(preview).success).toBe(false);
+      expect(advertisedRangeDisplay(preview, "sr")).toBeNull();
+    }
+    expect(supplierOfferUrlPreviewSchema.safeParse({
+      ...base, advertisedPriceRange: { ...range, evidence: "MATCHED_VIDEO_CHANNEL" },
+    }).success).toBe(false);
+  });
+
   it("never passes the preview-only range into project creation payload", () => {
     const source = readFileSync("components/projects/create-project-from-url-form.tsx", "utf8");
     const creation = source.slice(source.indexOf("async function createSearch"), source.indexOf("return (", source.indexOf("async function createSearch")));
