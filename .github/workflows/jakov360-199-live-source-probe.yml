@@ -36,3 +36,35 @@ jobs:
         run: npm ci --ignore-scripts --no-audit
       - name: Probe exact public product, video, seller catalog (read-only; no raw HTML logs)
         run: npx tsx scripts/url-import-199-live-probe.ts
+
+  provider_security:
+    if: github.event_name == 'workflow_dispatch' || github.head_ref == 'feat/url-import-199-bounded-video-catalog-reader'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout candidate without stored credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Generate ephemeral provider lockfile
+        working-directory: services/importpilot-url-import-provider
+        run: npm install --package-lock-only --ignore-scripts --no-audit
+      - name: Install isolated provider dependencies
+        working-directory: services/importpilot-url-import-provider
+        run: npm ci --ignore-scripts --no-audit
+      - name: Audit runtime dependencies
+        working-directory: services/importpilot-url-import-provider
+        run: npm audit --omit=dev --audit-level=high
+      - name: Typecheck isolated provider
+        working-directory: services/importpilot-url-import-provider
+        run: npm run typecheck
+      - name: Run exact-SKU, redirect, catalog and video parser tests
+        working-directory: services/importpilot-url-import-provider
+        run: npm test
+      - name: Build isolated provider
+        working-directory: services/importpilot-url-import-provider
+        run: npm run build
