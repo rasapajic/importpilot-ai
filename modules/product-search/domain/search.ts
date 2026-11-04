@@ -224,15 +224,44 @@ export const supplierOfferSourceMoqCheckRequestSchema =
     sourceMoqCheck: z.literal(true).optional(),
   });
 
+// Strict browser-link provenance. The supplementary URL is a fixed platform
+// host derived from the exact original product's supplier, SKU and slug.
+export function isExactProductVideoEvidenceUrl(productUrl: string, evidenceUrl: string): boolean {
+  try {
+    const source = new URL(productUrl);
+    const video = new URL(evidenceUrl);
+    if (source.protocol !== "https:" || video.protocol !== "https:" ||
+        source.search || source.hash || source.port || source.username || source.password ||
+        video.search || video.hash || video.port || video.username || video.password) return false;
+    const host = source.hostname.match(/^([a-z0-9-]{2,48})\.en\.made-in-china\.com$/i);
+    const product = source.pathname.match(/^\/product\/([A-Za-z0-9]{8,32})\/China-([A-Za-z0-9][A-Za-z0-9-]{5,230})\.html$/i);
+    if (!host || !product) return false;
+    return video.href === "https://www.made-in-china.com/video-channel/" +
+      host[1].toLowerCase() + "_" + product[1] + "_" + product[2] + ".html";
+  } catch {
+    return false;
+  }
+}
+
 // Preview-only marketplace evidence: NEVER a confirmed supplier quotation.
 export const supplierOfferAdvertisedRangeSchema = z.object({
   lowPrice: z.number().positive().finite(),
   highPrice: z.number().positive().finite(),
   currency: z.string().regex(/^[A-Z]{3}$/),
   unit: z.enum(["Piece", "Set", "Unit"]).nullable(),
-  evidence: z.literal("EXACT_PRODUCT_JSONLD"),
+  evidence: z.enum(["EXACT_PRODUCT_JSONLD", "MATCHED_VIDEO_CHANNEL"]),
   sourceUrl: supplierOfferUrlImportRequestSchema.shape.productUrl,
+  evidenceUrl: supplierOfferUrlImportRequestSchema.shape.productUrl.optional(),
 }).strict().superRefine((range, context) => {
+  if (range.evidence === "MATCHED_VIDEO_CHANNEL" &&
+      (!range.evidenceUrl || !isExactProductVideoEvidenceUrl(range.sourceUrl, range.evidenceUrl))) {
+    context.addIssue({ code: "custom", path: ["evidenceUrl"],
+      message: "Video source does not refer to exact product." });
+  }
+  if (range.evidence === "EXACT_PRODUCT_JSONLD" && range.evidenceUrl !== undefined) {
+    context.addIssue({ code: "custom", path: ["evidenceUrl"],
+      message: "JSON-LD evidence cannot claim an unrelated secondary page." });
+  }
   if (range.highPrice <= range.lowPrice) {
     context.addIssue({ code: "custom", path: ["highPrice"], message: "Range bounds out of order." });
   }
