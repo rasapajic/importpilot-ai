@@ -119,6 +119,8 @@ if (!html) {
   });
 
   let requests = 0;
+  let videoHttpStatus: number | null = null;
+  let catalogVerified = false;
   const observer: typeof fetch = async (url, init) => {
     requests++;
     const target = String(url);
@@ -126,6 +128,7 @@ if (!html) {
       : target === EXPECTED_CATALOG ? "SUPPLIER_CATALOG" : "UNEXPECTED";
     if (source === "UNEXPECTED") throw new Error("Untrusted source request");
     const response = await fetch(url, init);
+    if (source === "VIDEO_CHANNEL") videoHttpStatus = response.status;
     summary("source_response", {
       source,
       status: response.status,
@@ -176,6 +179,7 @@ if (!html) {
         } finally { reader.releaseLock(); }
         const evidence = size <= 390_000
           ? parseExactCatalogPriceSource(body, PRODUCT_URL, EXPECTED_CATALOG) : null;
+        catalogVerified = Boolean(evidence);
         summary("catalog_only_diagnostic", {
           bytes: size, withinLimit: size <= 390_000,
           exactItemEvidence: Boolean(evidence),
@@ -200,8 +204,13 @@ if (!html) {
     moq: result?.minimumOrderQuantity ?? null,
     verifiedQuote: result?.verifiedQuote ?? false,
     sources: result?.evidence.length ?? 0,
+    diagnostic: !result && videoHttpStatus === 403 && catalogVerified
+      ? "VIDEO_403_CATALOG_VERIFIED_NO_CORROBORATION"
+      : result ? "FULL_CORROBORATION" : "UNRESOLVED",
   });
-  if (!result) process.exitCode = 1;
+  // A blocked video with a correctly parsed catalog is a successful
+  // *fail-closed security diagnostic*, not a successful price corroboration.
+  if (!result && !(videoHttpStatus === 403 && catalogVerified)) process.exitCode = 1;
 }
 
 }
