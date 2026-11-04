@@ -62,9 +62,18 @@ jobs:
       - name: Typecheck isolated provider
         working-directory: services/importpilot-url-import-provider
         run: npm run typecheck
+      - name: Create ephemeral provider-only Vitest config
+        working-directory: services/importpilot-url-import-provider
+        run: |
+          cat > vitest.security.config.mts <<'EOF'
+          import { defineConfig } from 'vitest/config';
+          export default defineConfig({
+            test: { include: ['tests/**/*.test.ts'], environment: 'node' },
+          });
+          EOF
       - name: Run exact-SKU, redirect, catalog and video parser tests
         working-directory: services/importpilot-url-import-provider
-        run: npm test
+        run: npx vitest run --config vitest.security.config.mts
       - name: Build isolated provider
         working-directory: services/importpilot-url-import-provider
         run: npm run build
