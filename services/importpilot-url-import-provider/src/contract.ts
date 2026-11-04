@@ -391,9 +391,16 @@ export const advertisedPriceRangeSchema = z.object({
   highPrice: z.string().regex(/^\d+(?:\.\d+)?$/),
   currency: z.string().regex(/^[A-Z]{3}$/),
   unit: z.enum(["Piece", "Set", "Unit"]).nullable(),
-  evidence: z.literal("EXACT_PRODUCT_JSONLD"),
+  evidence: z.enum(["EXACT_PRODUCT_JSONLD", "MATCHED_VIDEO_CHANNEL"]),
   sourceUrl: previewRequestSchema.shape.productUrl,
+  evidenceUrl: previewRequestSchema.shape.productUrl.optional(),
 }).strict().superRefine((range, context) => {
+  if (range.evidence === "MATCHED_VIDEO_CHANNEL" && !range.evidenceUrl) {
+    context.addIssue({ code: "custom", path: ["evidenceUrl"], message: "Video source URL is required." });
+  }
+  if (range.evidence === "EXACT_PRODUCT_JSONLD" && range.evidenceUrl !== undefined) {
+    context.addIssue({ code: "custom", path: ["evidenceUrl"], message: "JSON-LD evidence has no secondary source." });
+  }
   if (Number(range.lowPrice) <= 0 || Number(range.highPrice) <= Number(range.lowPrice)) {
     context.addIssue({ code: "custom", path: ["highPrice"], message: "Invalid advertised price range." });
   }
