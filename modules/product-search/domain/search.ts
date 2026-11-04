@@ -243,6 +243,63 @@ export function isExactProductVideoEvidenceUrl(productUrl: string, evidenceUrl: 
   }
 }
 
+function isSellerCatalogEvidenceUrl(productUrl: string, catalogUrl: string): boolean {
+  try {
+    const source = new URL(productUrl);
+    const catalog = new URL(catalogUrl);
+    if (source.protocol !== "https:" || catalog.protocol !== "https:" ||
+        source.username || source.password || catalog.username || catalog.password ||
+        source.port || catalog.port || source.search || source.hash ||
+        catalog.search || catalog.hash) return false;
+    const seller = source.hostname.match(/^([a-z0-9-]+)\.en\.made-in-china\.com$/i);
+    if (!seller || catalog.hostname.toLowerCase() !== source.hostname.toLowerCase() ||
+        !/^\/product\/[A-Za-z0-9]{8,32}\/China-[A-Za-z0-9-]+\.html$/.test(source.pathname)) return false;
+    return /^\/product-group\/[A-Za-z0-9]{6,}\/[A-Za-z0-9-]+-catalog-[0-9]+\.html$/i.test(catalog.pathname);
+  } catch {
+    return false;
+  }
+}
+
+/** Preview-only source provenance, never a supplier-issued quantity quote. */
+const publicEvidenceBase = {
+  productUrl: supplierOfferUrlImportRequestSchema.shape.productUrl,
+  lowPrice: z.number().positive().finite(),
+  highPrice: z.number().positive().finite(),
+  currency: z.string().regex(/^[A-Z]{3}$/),
+  unit: z.enum(["Piece", "Set", "Unit"]),
+  minimumOrderQuantity: z.number().int().positive(),
+  verifiedQuote: z.literal(false),
+};
+
+export const supplierOfferMarketplacePriceEvidenceSchema = z.discriminatedUnion("kind", [
+  z.object({
+    ...publicEvidenceBase,
+    kind: z.literal("SINGLE_SELLER_CATALOG_ADVERTISED_RANGE"),
+    sourceUrl: z.url(),
+    corroborated: z.literal(false),
+  }).strict(),
+  z.object({
+    ...publicEvidenceBase,
+    kind: z.literal("CORROBORATED_ADVERTISED_RANGE"),
+    evidence: z.tuple([z.url(), z.url()]),
+  }).strict(),
+]).superRefine((value, ctx) => {
+  if (!(value.highPrice > value.lowPrice)) {
+    ctx.addIssue({ code: "custom", path: ["highPrice"], message: "Invalid public range." });
+  }
+  const linksValid = value.kind === "SINGLE_SELLER_CATALOG_ADVERTISED_RANGE"
+    ? isSellerCatalogEvidenceUrl(value.productUrl, value.sourceUrl)
+    : isExactProductVideoEvidenceUrl(value.productUrl, value.evidence[0]) &&
+      isSellerCatalogEvidenceUrl(value.productUrl, value.evidence[1]) &&
+      value.evidence[0] !== value.evidence[1];
+  if (!linksValid) {
+    ctx.addIssue({
+      code: "custom", path: ["kind"],
+      message: "Public evidence does not match the exact product and seller.",
+    });
+  }
+});
+
 // Preview-only marketplace evidence: NEVER a confirmed supplier quotation.
 export const supplierOfferAdvertisedRangeSchema = z.object({
   lowPrice: z.number().positive().finite(),
@@ -282,6 +339,7 @@ export const supplierOfferUrlPreviewSchema = z
     ),
     minimumOrderQuantity: optionalNumber(z.number().int().positive()),
     advertisedPriceRange: supplierOfferAdvertisedRangeSchema.nullable().optional(),
+    marketplacePriceEvidence: supplierOfferMarketplacePriceEvidenceSchema.nullable().optional(),
     incoterm: z.preprocess(
       (value) => (value === "" || value === undefined || value === null ? null : String(value).toUpperCase()),
       z.string().trim().min(2).max(20).nullable(),
@@ -297,6 +355,27 @@ export const supplierOfferUrlPreviewSchema = z
     titleFromSlug: z.boolean().default(false),
   })
   .strict().superRefine((preview, context) => {
+    if (preview.marketplacePriceEvidence) {
+      const evidence = preview.marketplacePriceEvidence;
+      if (evidence.productUrl !== preview.productUrl ||
+          preview.minimumOrderQuantity === null ||
+          evidence.minimumOrderQuantity !== preview.minimumOrderQuantity ||
+          (preview.currency !== null && evidence.currency !== preview.currency)) {
+        context.addIssue({
+          code: "custom", path: ["marketplacePriceEvidence"],
+          message: "Public evidence must match product, seller MOQ and currency.",
+        });
+      }
+      if (preview.advertisedPriceRange &&
+          (preview.advertisedPriceRange.lowPrice !== evidence.lowPrice ||
+           preview.advertisedPriceRange.highPrice !== evidence.highPrice ||
+           preview.advertisedPriceRange.currency !== evidence.currency)) {
+        context.addIssue({
+          code: "custom", path: ["marketplacePriceEvidence"],
+          message: "Conflicting public price evidence must not be displayed.",
+        });
+      }
+    }
     if (preview.advertisedPriceRange) {
       const evidence = preview.advertisedPriceRange;
       if (evidence.sourceUrl !== preview.productUrl ||
