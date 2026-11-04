@@ -337,20 +337,58 @@ export function pageTitleFromHtml(html: string) {
   return regexText(html, [/<title[^>]*>([\s\S]*?)<\/title>/i]);
 }
 
+const CORPORATE_PROFILE_IMAGE_PATTERN =
+  /(?:^|[-_])(?:corp|corporation|co|inc|company)[-_](?:ltd|limited)(?:[-_.]|$)/i;
+const IMAGE_IDENTITY_STOPWORDS = new Set([
+  "china", "product", "products", "factory", "supplier", "manufacturer",
+  "wholesale", "high", "quality", "custom", "logo", "new", "model",
+  "with", "for", "and", "from", "direct", "sales", "price",
+]);
+
+function productTitleTokens(productUrl?: string) {
+  if (!productUrl) return new Set<string>();
+  try {
+    const slug = new URL(productUrl).pathname.split("/").at(-1)?.replace(/\.html?$/i, "") ?? "";
+    return new Set(slug.toLowerCase().split(/[^a-z0-9]+/).filter((token) =>
+      token.length > 1 && !IMAGE_IDENTITY_STOPWORDS.has(token) && !/^\d{4,}$/.test(token)
+    ));
+  } catch {
+    return new Set<string>();
+  }
+}
+
+function imageIdentityBonus(filename: string, productTokens: Set<string>) {
+  if (productTokens.size < 3) return 0;
+  const imageTokens = new Set(filename.toLowerCase().split(/[^a-z0-9]+/).filter((token) =>
+    token.length > 1 && !IMAGE_IDENTITY_STOPWORDS.has(token)
+  ));
+  const matches = [...productTokens].filter((token) => imageTokens.has(token)).length;
+  // Only an overwhelmingly matching product title may outscore <meta og:image>.
+  return matches >= 3 && matches / productTokens.size >= 0.8 ? 100 : 0;
+}
+
 const NON_PRODUCT_IMAGE_PATTERN =
   /(?:^|[\/_\-.])(?:logo|company[-_]?logo|favicon|icon|sprite|avatar|flag|star|badge|qr(?:code)?)(?:[\/_\-.]|$)/i;
 
-function productImageCandidate(value: string | null, priority: number) {
+function productImageCandidate(value: string | null, priority: number, productTokens: Set<string>) {
   const normalized = normalizeUrl(decodeHtml(value) ?? null);
-  if (!normalized || NON_PRODUCT_IMAGE_PATTERN.test(normalized)) return null;
+  if (!normalized) return null;
   try {
     const url = new URL(normalized);
     if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+    const filename = url.pathname.split("/").at(-1) ?? "";
+    // "Custom-Logo" can be part of an exact product title. Reject logos and
+    // icons by default, but not a strongly matched same-SKU product filename.
+    if (NON_PRODUCT_IMAGE_PATTERN.test(normalized) &&
+        imageIdentityBonus(filename, productTokens) === 0) return null;
     // Marketplace landing assets and vector controls are not product photos.
     // A static path containing "/product/" is not sufficient image evidence.
     if (/\.svg$/i.test(url.pathname)) return null;
     if (/(?:^|\.)micstatic\.com$/i.test(url.hostname) &&
         /\/landing\//i.test(url.pathname)) return null;
+    // Supplier profile/factory pictures must not replace reading-glasses
+    // images merely because the photo lives on the same marketplace CDN.
+    if (CORPORATE_PROFILE_IMAGE_PATTERN.test(filename)) return null;
     const productSignal =
       /(?:alicdn\.com|made-in-china\.com|micstatic\.com)/i.test(url.hostname) ||
       /(?:\/kf\/|product|main|large|big|original|photo|image)/i.test(url.pathname);
@@ -359,7 +397,8 @@ function productImageCandidate(value: string | null, priority: number) {
       url: normalized,
       score: priority +
         (/(?:\/kf\/|product|main|original)/i.test(url.pathname) ? 20 : 0) +
-        (/(?:\.jpe?g|\.png|\.webp)(?:$|\?)/i.test(normalized) ? 10 : 0),
+        (/(?:\.jpe?g|\.png|\.webp)(?:$|\?)/i.test(normalized) ? 10 : 0) +
+        imageIdentityBonus(filename, productTokens),
     };
   } catch {
     return null;
@@ -371,10 +410,11 @@ function productImageCandidate(value: string | null, priority: number) {
  * attributes instead of a normal img src. Collect all source-grounded image
  * candidates and explicitly reject marketplace/company logos and UI icons.
  */
-export function extractProductImageUrl(html: string) {
+export function extractProductImageUrl(html: string, productUrl?: string) {
   const candidates: Array<{ url: string; score: number }> = [];
+  const productTokens = productTitleTokens(productUrl);
   const add = (value: string | null | undefined, priority: number) => {
-    const candidate = productImageCandidate(value ?? null, priority);
+    const candidate = productImageCandidate(value ?? null, priority, productTokens);
     if (candidate) candidates.push(candidate);
   };
 
@@ -863,7 +903,7 @@ export function inspectPreviewExtraction(html: string, productUrl?: string): Pre
         bodyText.match(/(\d+)\s*(?:piece|pieces|pcs|set|sets|unit|units)\s*\(?(?:MOQ|Min\.\s*Order|Minimum\s+Order)\)?/i)?.[1] ??
         null;
   const incoterm = extractIncoterm(bodyText);
-  const imageUrl = extractProductImageUrl(html);
+  const imageUrl = extractProductImageUrl(html, productUrl);
   const values = {
     productTitle,
     supplierName,

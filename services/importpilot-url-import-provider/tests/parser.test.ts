@@ -404,3 +404,42 @@ describe("URL product image evidence, not marketplace UI decoration", () => {
     expect(extractProductImageUrl('<meta property="og:image" content="' + url + '">')).toBe(url);
   });
 });
+
+
+describe("Pilot Optics exact-product image versus company gallery", () => {
+  const productUrl = "https://pilotoptics.en.made-in-china.com/product/WJfUCnDTuekA/China-Pilot-Optics-Wholesale-High-Quality-5-Colors-Custom-Logo-Square-Reading-Glasses.html";
+  const supplierPicture =
+    "https://image.made-in-china.com/205f0j00zTpUQqRzYgv/Pilot-Optics-International-Corp-Ltd-Wenzhou.webp";
+  const productPicture =
+    "https://image.made-in-china.com/203f0j00BiKqyEJMygkv/Pilot-Optics-Wholesale-High-Quality-5-Colors-Custom-Logo-Square-Reading-Glasses.webp";
+  const unrelatedPicture =
+    "https://image.made-in-china.com/203f0j00unrelated/Pilot-Optics-Kids-Rectangle-Reading-Glasses.webp";
+
+  it("ignores supplier-profile images and chooses the exact reading-glasses gallery photo", () => {
+    const html = '<html><head><meta property="og:image" content="' + supplierPicture + '">' +
+      '<meta name="twitter:image" content="' + unrelatedPicture + '"></head><body>' +
+      '<h1>Pilot Optics Wholesale High Quality 5 Colors Custom Logo Square Reading Glasses</h1>' +
+      '<section class="product-gallery"><img data-original="' + productPicture + '"></section>' +
+      '<section class="supplier-profile"><img src="' + supplierPicture + '"></section></body></html>';
+    expect(extractProductImageUrl(html, productUrl)).toBe(productPicture);
+    expect(parseProductPreview(html, productUrl).imageUrl).toBe(productPicture);
+  });
+
+  it("does not substitute a supplier factory photo when no product gallery is available", () => {
+    const html = '<meta property="og:image" content="' + supplierPicture + '">';
+    expect(extractProductImageUrl(html, productUrl)).toBeNull();
+  });
+
+  it("prefers the matching exact product name over a related reading-glasses model", () => {
+    const html = '<meta property="og:image" content="' + unrelatedPicture + '">' +
+      '<img src="' + productPicture + '">';
+    expect(extractProductImageUrl(html, productUrl)).toBe(productPicture);
+  });
+
+  it("keeps a generic image when no title-based match can be established", () => {
+    const generic = "https://sc04.alicdn.com/kf/charger-main.jpg";
+    const alibabaUrl = "https://www.alibaba.com/product-detail/Factory-65W-GaN-Charger_1600000000001.html";
+    expect(extractProductImageUrl('<meta property="og:image" content="' + generic + '">', alibabaUrl))
+      .toBe(generic);
+  });
+});
