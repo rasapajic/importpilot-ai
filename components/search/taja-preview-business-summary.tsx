@@ -36,6 +36,7 @@ type SummaryCopy = {
   nozzles: string;
   exactNozzleCount: (count: number) => string;
   displayedPrice: string;
+  advertisedRange: string;
   sourceVideoLink: string;
   moq: string;
   landedCost: string;
@@ -103,6 +104,7 @@ const copyByLocale: Record<Locale, SummaryCopy> = {
     nozzles: "Mlaznice",
     exactNozzleCount: (count) => `Tačno ${count} mlaznica`,
     displayedPrice: "Prikazana cena",
+    advertisedRange: "Javno oglašeni raspon",
     sourceVideoLink: "Proveri javni cenovni raspon na video-stranici istog proizvoda",
     moq: "Minimalna količina",
     landedCost: "Ukupan trošak uvoza",
@@ -172,6 +174,7 @@ const copyByLocale: Record<Locale, SummaryCopy> = {
     nozzles: "Düsen",
     exactNozzleCount: (count) => `Genau ${count} Düsen`,
     displayedPrice: "Angezeigter Preis",
+    advertisedRange: "Öffentlich angegebene Preisspanne",
     sourceVideoLink: "Öffentlich angegebene Preisspanne beim identischen Produkt prüfen",
     moq: "Mindestmenge",
     landedCost: "Landed Cost",
@@ -241,6 +244,7 @@ const copyByLocale: Record<Locale, SummaryCopy> = {
     nozzles: "Nozzles",
     exactNozzleCount: (count) => `Exactly ${count} nozzles`,
     displayedPrice: "Displayed price",
+    advertisedRange: "Public advertised range",
     sourceVideoLink: "Review public price range on the exact-product video page",
     moq: "Minimum order",
     landedCost: "Landed cost",
@@ -336,12 +340,9 @@ function priceText(
   preview: SupplierOfferUrlPreview,
   summary: TajaPreviewBusinessSummaryValue,
   copy: SummaryCopy,
-  locale: Locale,
 ) {
-  // A published, exact-SKU AggregateOffer price range is informative only.
-  // It never upgrades an advertised teaser to a confirmed quantity quote.
-  const sourceRange = advertisedRangeDisplay(preview, locale);
-  if (sourceRange) return sourceRange;
+  // Keep the displayed base/tier price distinct from public range evidence.
+  // A source range is not a firm quote and must never replace a quantity tier.
   if (preview.price === null || preview.currency === null) return copy.priceMissing;
   const price = `${preview.price} ${preview.currency}`;
   return summary.priceBasisStatus === TajaPreviewPriceBasisStatuses.CONFIRMED
@@ -498,8 +499,14 @@ export function TajaPreviewBusinessSummary({
         )}
         <SummaryRow
           label={copy.displayedPrice}
-          value={priceText(preview, summary, copy, locale)}
+          value={priceText(preview, summary, copy)}
         />
+        {advertisedRangeDisplay(preview, locale) && (
+          <SummaryRow
+            label={copy.advertisedRange}
+            value={advertisedRangeDisplay(preview, locale) ?? ""}
+          />
+        )}
         <SummaryRow label={copy.moq} value={moqText(preview, summary, copy)} />
         <SummaryRow
           label={copy.landedCost}
