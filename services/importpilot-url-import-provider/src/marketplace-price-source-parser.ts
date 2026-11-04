@@ -92,6 +92,11 @@ export function discoverExactSellerCatalogUrl(productHtml: string, productUrl: s
         url.hostname.toLowerCase() !== identity.productHost || url.port ||
         url.search || url.hash) continue;
     if (!/^\/product-group\/[A-Za-z0-9]{6,}\/[A-Za-z0-9-]+\.html$/.test(url.pathname)) continue;
+    // The original product often links both "Reading-glasses-catalog-1"
+    // and "Reading-glasses-1" for the same category. Only a canonical
+    // catalog page may prove an exact product's FOB price; do not treat the
+    // category shortcut as a second competing catalog.
+    if (!/-catalog-[0-9]+\.html$/i.test(url.pathname)) continue;
     const pathLabel = url.pathname.split("/").at(-1)?.toLowerCase().replace(/[-_.]+/g, " ") ?? "";
     const label = normalizedTitle(anchor.title);
     if (label === category || pathLabel.includes(category)) found.add(url.toString());
