@@ -157,3 +157,56 @@ export async function readCorroboratedMarketplacePrice(
     catalogEvidence,
   ]);
 }
+
+
+/**
+ * A strictly lower-confidence alternative for public price discovery when
+ * the video site blocks automated reads. This is ONE seller-controlled catalog
+ * page, NOT independent corroboration, never a firm quote or landed-cost price.
+ * Callers must supply the MOQ already parsed from the exact primary product.
+ */
+export type SingleCatalogAdvertisedRange = {
+  kind: "SINGLE_SELLER_CATALOG_ADVERTISED_RANGE";
+  sourceUrl: string;
+  productUrl: string;
+  lowPrice: string;
+  highPrice: string;
+  currency: string;
+  unit: "Piece" | "Set" | "Unit";
+  minimumOrderQuantity: number;
+  corroborated: false;
+  verifiedQuote: false;
+};
+
+export async function readSingleCatalogAdvertisedRange(
+  productUrl: string,
+  verifiedProductHtml: string,
+  primaryProductMoq: number,
+  options: PriceSourceReaderOptions = {},
+): Promise<SingleCatalogAdvertisedRange | null> {
+  if (options.enabled !== true || !Number.isSafeInteger(primaryProductMoq) ||
+      primaryProductMoq <= 0 || verifiedProductHtml.length > 1_000_000 ||
+      !exactMadeInChinaProductIdentity(productUrl)) return null;
+
+  const catalog = discoverExactSellerCatalogUrl(verifiedProductHtml, productUrl);
+  if (!catalog) return null;
+  const html = await readLimitedSourcePage(
+    catalog, productUrl, "SUPPLIER_CATALOG", options,
+  );
+  if (!html) return null;
+  const evidence = parseExactCatalogPriceSource(html, productUrl, catalog);
+  if (!evidence || evidence.minimumOrderQuantity !== primaryProductMoq) return null;
+
+  return {
+    kind: "SINGLE_SELLER_CATALOG_ADVERTISED_RANGE",
+    sourceUrl: evidence.sourceUrl,
+    productUrl: evidence.productUrl,
+    lowPrice: evidence.lowPrice,
+    highPrice: evidence.highPrice,
+    currency: evidence.currency,
+    unit: evidence.unit,
+    minimumOrderQuantity: evidence.minimumOrderQuantity,
+    corroborated: false,
+    verifiedQuote: false,
+  };
+}
