@@ -8,6 +8,7 @@
 import {
   discoverExactSellerCatalogUrl,
   expectedVideoSourceUrl,
+  parseExactCatalogPriceSource,
 } from "../services/importpilot-url-import-provider/src/marketplace-price-source-parser.ts";
 import {
   readCorroboratedMarketplacePrice,
@@ -141,6 +142,54 @@ if (!html) {
     timeoutMs: 7_000,
     maxResponseBytes: 380_000,
   });
+
+  // Separate diagnostic: video may correctly fail closed on HTTP 403.
+  // One additional GET to the exact discovered seller catalog checks whether
+  // that source and parser are independently readable. It is NOT corroboration.
+  if (!result && discovered === EXPECTED_CATALOG) {
+    try {
+      const response = await observer(EXPECTED_CATALOG, {
+        method: "GET", redirect: "manual",
+        headers: { accept: "text/html" },
+        signal: AbortSignal.timeout(7_000),
+      });
+      if (response.status === 200 && sameExactUrl(response, EXPECTED_CATALOG) &&
+          /^text\/html(?:;|$)/i.test(response.headers.get("content-type") ?? "") &&
+          Number(response.headers.get("content-length") || "0") <= 390_000 &&
+          response.body) {
+        const reader = response.body.getReader();
+        let size = 0;
+        const decoder = new TextDecoder();
+        let body = "";
+        try {
+          while (true) {
+            const part = await reader.read();
+            if (part.done) break;
+            size += part.value.byteLength;
+            if (size > 390_000) {
+              await reader.cancel();
+              break;
+            }
+            body += decoder.decode(part.value, { stream: true });
+          }
+          body += decoder.decode();
+        } finally { reader.releaseLock(); }
+        const evidence = size <= 390_000
+          ? parseExactCatalogPriceSource(body, PRODUCT_URL, EXPECTED_CATALOG) : null;
+        summary("catalog_only_diagnostic", {
+          bytes: size, withinLimit: size <= 390_000,
+          exactItemEvidence: Boolean(evidence),
+          moq: evidence?.minimumOrderQuantity ?? null,
+          min: evidence?.lowPrice ?? null, max: evidence?.highPrice ?? null,
+          confirmedSupplierQuote: false,
+        });
+      }
+    } catch (e) {
+      summary("catalog_only_diagnostic", {
+        errorClass: e instanceof Error ? e.name : "unknown",
+      });
+    }
+  }
 
   summary("live_probe", {
     result: result ? "PUBLIC_RANGE_CORROBORATED" : "NO_CONFIRMED_SOURCE_PAIR",
