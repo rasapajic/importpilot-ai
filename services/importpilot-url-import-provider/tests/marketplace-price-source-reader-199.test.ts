@@ -66,6 +66,13 @@ describe("read-only two-source extraction and fetch #199", () => {
     });
   });
 
+  it("selects the canonical catalog when live HTML also contains a plain category shortcut", () => {
+    const duplicated = productHtml +
+      '<a href="/product-group/UejAsgVMrLhv/Reading-glasses-1.html">Reading glasses</a>' +
+      '<a href="' + catalogUrl + '">View all</a>';
+    expect(discoverExactSellerCatalogUrl(duplicated, productUrl)).toBe(catalogUrl);
+  });
+
   it("extracts reference FOB price only from the exact video header and main price block", () => {
     expect(parseExactVideoPriceSource(videoHtml, productUrl, videoUrl)).toMatchObject({
       kind: "VIDEO_CHANNEL", lowPrice: "0.50", highPrice: "2.00",
