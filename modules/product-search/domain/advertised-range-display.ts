@@ -1,5 +1,5 @@
 import type { Locale } from "../../i18n/translations";
-import type { SupplierOfferUrlPreview } from "./search";
+import { isExactProductVideoEvidenceUrl, type SupplierOfferUrlPreview } from "./search";
 
 const labels = {
   sr: {
@@ -29,7 +29,10 @@ export function advertisedRangeDisplay(preview: SupplierOfferUrlPreview, locale:
       (preview.currency !== null && range.currency !== preview.currency) ||
       !Number.isFinite(range.lowPrice) || !Number.isFinite(range.highPrice) ||
       range.lowPrice <= 0 || range.highPrice <= range.lowPrice ||
-      range.evidence !== "EXACT_PRODUCT_JSONLD") return null;
+      (range.evidence !== "EXACT_PRODUCT_JSONLD" &&
+       range.evidence !== "MATCHED_VIDEO_CHANNEL") ||
+      (range.evidence === "MATCHED_VIDEO_CHANNEL" &&
+       (!range.evidenceUrl || !isExactProductVideoEvidenceUrl(range.sourceUrl, range.evidenceUrl)))) return null;
   const copy = labels[locale];
   const language = locale === "sr" ? "sr-RS" : locale === "de" ? "de-DE" : "en-US";
   const fmt = new Intl.NumberFormat(language, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
