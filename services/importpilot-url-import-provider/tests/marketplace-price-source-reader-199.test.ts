@@ -7,7 +7,7 @@ import {
   parseExactCatalogPriceSource,
   parseExactVideoPriceSource,
 } from "../src/marketplace-price-source-parser.js";
-import { readCorroboratedMarketplacePrice } from "../src/marketplace-price-source-reader.js";
+import { readCorroboratedMarketplacePrice, readSingleCatalogAdvertisedRange } from "../src/marketplace-price-source-reader.js";
 
 const productUrl = "https://pilotoptics.en.made-in-china.com/product/WJfUCnDTuekA/China-Pilot-Optics-Wholesale-High-Quality-5-Colors-Custom-Logo-Square-Reading-Glasses.html";
 const catalogUrl = "https://pilotoptics.en.made-in-china.com/product-group/UejAsgVMrLhv/Reading-glasses-catalog-1.html";
@@ -104,6 +104,44 @@ describe("read-only two-source extraction and fetch #199", () => {
       expect(call[1]?.redirect).toBe("manual");
       expect(call[1]?.method).toBe("GET");
     }
+  });
+
+  it("allows one seller catalog as EXPLICITLY uncorroborated public range, not a quote", async () => {
+    const fetcher = fakeFetcher();
+    const result = await readSingleCatalogAdvertisedRange(productUrl, productHtml, 1_200, {
+      enabled: true, fetcher: fetcher as typeof fetch,
+    });
+    expect(result).toMatchObject({
+      kind: "SINGLE_SELLER_CATALOG_ADVERTISED_RANGE",
+      productUrl, sourceUrl: catalogUrl,
+      lowPrice: "0.5", highPrice: "2", currency: "USD",
+      minimumOrderQuantity: 1_200, corroborated: false, verifiedQuote: false,
+    });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(String(fetcher.mock.calls[0]?.[0])).toBe(catalogUrl);
+  });
+
+  it("catalog-only evidence is disabled by default and rejects a mismatched primary MOQ", async () => {
+    const fetcher = fakeFetcher();
+    expect(await readSingleCatalogAdvertisedRange(productUrl, productHtml, 1_200, {
+      fetcher: fetcher as typeof fetch,
+    })).toBeNull();
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(await readSingleCatalogAdvertisedRange(productUrl, productHtml, 300, {
+      enabled: true, fetcher: fetcher as typeof fetch,
+    })).toBeNull();
+  });
+
+  it("catalog-only reader fails closed on an HTTP 403 and a malformed category", async () => {
+    const blocked = vi.fn(async () => fakeResponse("Access denied", { status: 403 }));
+    expect(await readSingleCatalogAdvertisedRange(productUrl, productHtml, 1_200, {
+      enabled: true, fetcher: blocked as typeof fetch,
+    })).toBeNull();
+    expect(blocked).toHaveBeenCalledTimes(1);
+    expect(await readSingleCatalogAdvertisedRange(productUrl, "<html>No category</html>", 1_200, {
+      enabled: true, fetcher: blocked as typeof fetch,
+    })).toBeNull();
+    expect(blocked).toHaveBeenCalledTimes(1);
   });
 
   it("never makes a network request by default or without catalog discovery", async () => {
