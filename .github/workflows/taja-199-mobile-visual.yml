@@ -1,0 +1,56 @@
+name: JAKOV360 #199 TAJA mobile 390x844 visual validation
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/visual/taja-199-*'
+      - '.github/workflows/taja-199-mobile-visual.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  visual_preview:
+    if: github.event_name == 'workflow_dispatch' || github.head_ref == 'test/jakov360-199-mobile-visual-390x844-20261105'
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    env:
+      URL_IMPORT_PROVIDER_URL: ""
+      URL_IMPORT_PROVIDER_TOKEN: ""
+      SUPPLIER_SEARCH_PROVIDER_URL: ""
+      SUPPLIER_SEARCH_PROVIDER_TOKEN: ""
+    steps:
+      - name: Checkout isolated visual branch without persistent credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install existing app dependencies
+        run: npm ci --ignore-scripts --no-audit
+
+      - name: Install temporary Chromium test tooling without modifying lockfile
+        run: npm install --no-save --no-package-lock --ignore-scripts playwright@1.55.1
+
+      - name: Install browser and system dependencies
+        run: npx playwright install --with-deps chromium
+
+      - name: Render TAJA component and exact app CSS into local HTML fixtures
+        run: npx tsx scripts/visual/taja-199-render-fixtures.tsx
+
+      - name: Capture mobile and desktop screenshots and assert zero horizontal overflow
+        run: node scripts/visual/taja-199-playwright.mjs
+
+      - name: Upload browser screenshot evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jakov360-taja-199-mobile-layout
+          path: test-results/taja-199-mobile/
+          if-no-files-found: warn
+          retention-days: 7
