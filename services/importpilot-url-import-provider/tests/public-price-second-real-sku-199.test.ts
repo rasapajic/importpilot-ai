@@ -75,6 +75,24 @@ describe("JAKOV360 #199 second real SKU candidate (offline regression fixtures)"
     expect(discoverExactSellerCatalogUrl(primaryHtml, secondUrl)).toBe(catalogUrl);
   });
 
+  it("finds the main MOQ beyond the old 2.5 KB window without reading related cards", () => {
+    // Real HTML places the exact product's MOQ behind lengthy main-listing markup.
+    const spaced = primaryHtml.replace(
+      '<div class="product-main-price">',
+      '<section class="product-gallery">' + 'x'.repeat(3500) +
+        '</section><div class="product-main-price">',
+    );
+    expect(parseProductPreview(spaced, secondUrl).minimumOrderQuantity).toBe("300");
+  });
+
+  it("does not promote an unrelated item's MOQ within the larger window", () => {
+    const unrelatedOnly = primaryHtml
+      .replace('US$0.50-2.00 300 Pieces (MOQ)', 'US$0.50-2.00')
+      .replace('1,200 Pieces (MOQ)</section>', '777 Pieces (MOQ)</section>');
+    // With no exact main-listing marker, retain the generic FAQ, never 777.
+    expect(parseProductPreview(unrelatedOnly, secondUrl).minimumOrderQuantity).toBe("1200");
+  });
+
   it("abstains on conflicting primary product MOQ values", () => {
     const contradiction = primaryHtml.replace(
       "US$0.50-2.00 300 Pieces (MOQ)",
