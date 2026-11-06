@@ -49,11 +49,11 @@ function gate() {
   });
 }
 
-function fakeFetch(sourceCatalogHtml: string, requested: string[]) {
+function fakeFetch(sourceCatalogHtml: string, requested: string[], sourceProductHtml = primaryHtml) {
   return (async (input: unknown) => {
     const url = String(input);
     requested.push(url);
-    if (url === secondUrl) return new Response(primaryHtml, {
+    if (url === secondUrl) return new Response(sourceProductHtml, {
       status: 200, headers: { "content-type": "text/html" },
     });
     if (url === catalogUrl) return new Response(sourceCatalogHtml, {
@@ -129,6 +129,67 @@ describe("JAKOV360 #199 second real SKU candidate (offline regression fixtures)"
       verifiedQuote: false,
     });
     expect(requested).toEqual([secondUrl, catalogUrl, secondVideo]);
+  });
+
+  it("quarantines public 300 catalog MOQ versus generic 1200 FAQ without price imports", async () => {
+    // This mirrors the ACTUAL ordering observed in bounded GitHub read-only
+    // source probe: the visible 300 badge is after related-product markup,
+    // not next to the exact main SKU's H1.
+    const realLayout = primaryHtml
+      .replace("US$0.50-2.00 300 Pieces (MOQ)</div>", "US$0.50-2.00</div>")
+      .replace("US$0.50-2.00 1,200 Pieces (MOQ)</section>",
+        "US$0.50-2.00 300 Pieces (MOQ)</section>");
+    expect(parseProductPreview(realLayout, secondUrl).minimumOrderQuantity).toBe("1200");
+
+    const requested: string[] = [];
+    const observations: string[] = [];
+    const gate = createPublicPriceCanaryGate({
+      enabled: true,
+      canaryProductUrl: firstUrl,
+      additionalProductUrlsJson: JSON.stringify([secondUrl]),
+      onEvent: (event) => observations.push(event.outcome),
+    });
+    const preview = await previewProductUrl(secondUrl, {
+      fetcher: fakeFetch(catalogHtml, requested, realLayout),
+      publicPriceEvidenceEnabled: true,
+      publicPriceCanaryGate: gate,
+    });
+    expect(preview.moqConflictEvidence).toMatchObject({
+      kind: "SELLER_CATALOG_FAQ_MOQ_CONFLICT",
+      productUrl: secondUrl,
+      sourceUrl: catalogUrl,
+      faqMinimumOrderQuantity: 1200,
+      catalogMinimumOrderQuantity: 300,
+      lowPrice: "0.50",
+      highPrice: "2.00",
+      currency: "USD",
+      corroborated: false,
+      verifiedQuote: false,
+      landedCostEligible: false,
+    });
+    expect(preview.minimumOrderQuantity).toBeNull();
+    expect(preview.price).toBeNull();
+    expect(preview.details).toBeNull();
+    expect(preview.marketplacePriceEvidence ?? null).toBeNull();
+    expect(observations).toEqual(["attempt_started", "catalog_moq_conflict"]);
+    expect(requested).toEqual([secondUrl, catalogUrl]); // zero video GET after conflict
+  });
+
+  it("does not trust a catalog mismatch when the primary MOQ came from exact product listing", async () => {
+    const requested: string[] = [];
+    const changedCatalog = catalogHtml.replace(
+      "FOB Price: US $0.50-2.00 / Piece Min. Order: 300 Pieces</div>",
+      "FOB Price: US $0.50-2.00 / Piece Min. Order: 400 Pieces</div>",
+    );
+    const preview = await previewProductUrl(secondUrl, {
+      fetcher: fakeFetch(changedCatalog, requested, primaryHtml),
+      publicPriceEvidenceEnabled: true,
+      publicPriceCanaryGate: gate(),
+    });
+    expect(preview.minimumOrderQuantity).toBe("300");
+    expect(preview.moqConflictEvidence ?? null).toBeNull();
+    expect(preview.marketplacePriceEvidence ?? null).toBeNull();
+    expect(requested).toEqual([secondUrl, catalogUrl]);
   });
 
   it("refuses first-SKU-only catalog prices instead of borrowing MOQ 1200", async () => {
