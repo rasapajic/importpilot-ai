@@ -251,6 +251,31 @@ export async function previewProductUrl(productUrl: string, options: FetchOption
           },
         });
       }
+    } else if (provider === "made-in-china" &&
+        options.publicPriceCanaryGate?.additionalSkuNeedsSourceProof(parsed.data.productUrl)) {
+      // If the server-only source-reading kill switch is OFF, keep the
+      // configured additional SKU's FAQ MOQ informational and unpriced.
+      // Do not start any secondary GET while the feature is disabled.
+      const primaryMoq = Number(preview.minimumOrderQuantity);
+      if (Number.isSafeInteger(primaryMoq) && primaryMoq > 0 &&
+          isSupplierFaqSourcedMoq(html, parsed.data.productUrl, preview.minimumOrderQuantity)) {
+        preview = productPreviewSchema.parse({
+          ...preview,
+          price: null,
+          minimumOrderQuantity: null,
+          details: null,
+          marketplacePriceEvidence: undefined,
+          moqConflictEvidence: undefined,
+          moqUnverifiedFaqEvidence: {
+            kind: "SELLER_FAQ_MOQ_UNVERIFIED",
+            productUrl: parsed.data.productUrl,
+            faqMinimumOrderQuantity: primaryMoq,
+            catalogVerified: false,
+            verifiedQuote: false,
+            landedCostEligible: false,
+          },
+        });
+      }
     }
     rememberPreviewDiagnostics({
       provider,
