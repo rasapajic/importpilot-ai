@@ -4,6 +4,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { previewRequestSchema, type PreviewFailure, type PreviewSuccess } from "./contract.js";
 import { getProviderDiagnostics, PROVIDER_VERSION } from "./diagnostics.js";
 import { previewProductUrl, UrlImportProviderError } from "./fetcher.js";
+import { createPublicPriceCanaryGate } from "./public-price-canary-policy.js";
 
 type AppOptions = {
   token?: string;
@@ -12,6 +13,7 @@ type AppOptions = {
   maxResponseBytes?: number;
   debugHtml?: boolean;
   publicPriceEvidenceEnabled?: boolean;
+  publicPriceEvidenceCanaryProductUrl?: string;
   fetcher?: typeof fetch;
 };
 
@@ -74,6 +76,10 @@ function failure(error: unknown): { status: number; body: PreviewFailure } {
 }
 
 export function createUrlImportProviderApp(options: AppOptions = {}) {
+  const publicPriceCanaryGate = createPublicPriceCanaryGate({
+    enabled: options.publicPriceEvidenceEnabled === true,
+    canaryProductUrl: options.publicPriceEvidenceCanaryProductUrl,
+  });
   return async function handler(request: IncomingMessage, response: ServerResponse) {
     const url = new URL(request.url ?? "/", "http://localhost");
 
@@ -136,6 +142,7 @@ export function createUrlImportProviderApp(options: AppOptions = {}) {
           maxResponseBytes: options.maxResponseBytes,
           debugHtml: options.debugHtml,
           publicPriceEvidenceEnabled: options.publicPriceEvidenceEnabled,
+          publicPriceCanaryGate,
         });
         logPreviewDiagnostics({
           reason: "OK",
