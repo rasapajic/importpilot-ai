@@ -12,6 +12,9 @@ const server = createServer(createUrlImportProviderApp({
   // OFF by default. Do not enable on shared production without a separate
   // rollout decision: this permits additional read-only catalog/video GETs.
   publicPriceEvidenceEnabled: process.env.URL_IMPORT_PUBLIC_PRICE_EVIDENCE === "enabled",
+  // Canary-only: unset/invalid SKU means no additional source GETs even if
+  // the general switch is enabled. Never expose this setting to request JSON.
+  publicPriceEvidenceCanaryProductUrl: process.env.URL_IMPORT_PUBLIC_PRICE_CANARY_PRODUCT_URL,
 }));
 
 server.listen(port, () => {

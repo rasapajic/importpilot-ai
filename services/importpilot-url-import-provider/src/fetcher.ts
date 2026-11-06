@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { detectProvider, hasProductIdentifier, inspectPreviewExtraction, isUnavailableProductHtml, parseProductPreview, type PreviewExtractionSnapshot } from "./parser.js";
 import { previewRequestSchema, productPreviewSchema, type ProductPreview } from "./contract.js";
 import { readMarketplacePublicPriceEvidence } from "./marketplace-price-source-reader.js";
+import type { PublicPriceCanaryGate } from "./public-price-canary-policy.js";
 import { classifyFetchError, rememberFetchError, rememberPreviewDiagnostics } from "./diagnostics.js";
 
 export class UrlImportProviderError extends Error {
@@ -19,6 +20,7 @@ type FetchOptions = {
   maxResponseBytes?: number;
   debugHtml?: boolean;
   publicPriceEvidenceEnabled?: boolean;
+  publicPriceCanaryGate?: PublicPriceCanaryGate;
 };
 
 function logDevelopment(event: Record<string, unknown>) {
@@ -163,17 +165,22 @@ export async function previewProductUrl(productUrl: string, options: FetchOption
     // provider performs no extra outbound GET unless an operator explicitly
     // enables this mode. Never substitute the advertised public range for
     // a quantity-tier price or a written supplier quote.
-    if (options.publicPriceEvidenceEnabled === true && provider === "made-in-china") {
+    if (options.publicPriceEvidenceEnabled === true &&
+        options.publicPriceCanaryGate?.eligible(parsed.data.productUrl) &&
+        provider === "made-in-china") {
       const primaryMoq = Number(preview.minimumOrderQuantity);
       if (Number.isSafeInteger(primaryMoq) && primaryMoq > 0) {
         try {
-          const evidence = await readMarketplacePublicPriceEvidence(
-            parsed.data.productUrl, html, primaryMoq, {
-              enabled: true,
-              fetcher: options.fetcher,
-              timeoutMs: Math.min(4_000, options.timeoutMs ?? 4_000),
-              maxResponseBytes: 350_000,
-            },
+          const evidence = await options.publicPriceCanaryGate.getOrRead(
+            parsed.data.productUrl,
+            () => readMarketplacePublicPriceEvidence(
+              parsed.data.productUrl, html, primaryMoq, {
+                enabled: true,
+                fetcher: options.fetcher,
+                timeoutMs: Math.min(4_000, options.timeoutMs ?? 4_000),
+                maxResponseBytes: 350_000,
+              },
+            ),
           );
           if (evidence && evidence.productUrl === preview.productUrl &&
               evidence.minimumOrderQuantity === primaryMoq &&
