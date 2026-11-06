@@ -119,6 +119,14 @@ jobs:
               afterH1Medium: markers.filter(i => i - h1End > 2500 && i - h1End <= 10000).length,
               afterH1Far: markers.filter(i => i - h1End > 10000).length,
             };
+            const mainWindow = html.slice(h1End, h1End + 10000);
+            const boundary = mainWindow.match(/<[^>]+\b(?:class|id)\s*=\s*["'][^"']*(?:related|recommend|similar|people-who-viewed|product-description|company-profile)[^"']*["']/i);
+            const boundaryAt = boundary?.index ?? -1;
+            const boundaryKind = !boundary ? 'none' :
+              /related|recommend|similar|people-who-viewed/i.test(boundary[0]) ? 'related' :
+              /product-description/i.test(boundary[0]) ? 'description' :
+              /company-profile/i.test(boundary[0]) ? 'company' : 'other';
+            const first300AfterH1 = markers.filter(i => i >= h1End).map(i => i - h1End)[0] ?? -1;
             const discovered = discoverExactSellerCatalogUrl(html, product);
             const catalogDiscovered = discovered === catalog;
             const sellerCatalogHtml = await readOnce(catalog, 350000);
@@ -139,6 +147,8 @@ jobs:
               ' afterH1Near=' + markerLocations.afterH1Near +
               ' afterH1Medium=' + markerLocations.afterH1Medium +
               ' afterH1Far=' + markerLocations.afterH1Far +
+              ' boundaryType=' + boundaryKind + ' boundaryAt=' + boundaryAt +
+              ' first300AfterH1=' + first300AfterH1 +
               ' requests=' + requests);
             if (!primary300 || !catalogDiscovered || !catalog300 || !catalogPrice) {
               throw Error('REAL_SOURCE_ACCEPTANCE_NOT_MET');
