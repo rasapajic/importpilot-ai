@@ -218,6 +218,16 @@ export const supplierOfferPublicMoqConflictSchema = z.object({
   }
 });
 
+/** Unverified seller FAQ when no exact SKU catalog evidence was obtained. */
+export const supplierOfferUnverifiedFaqSchema = z.object({
+  kind: z.literal("SELLER_FAQ_MOQ_UNVERIFIED"),
+  productUrl: supplierOfferUrlImportRequestSchema.shape.productUrl,
+  faqMinimumOrderQuantity: z.number().int().positive(),
+  catalogVerified: z.literal(false),
+  verifiedQuote: z.literal(false),
+  landedCostEligible: z.literal(false),
+}).strict();
+
 export const supplierOfferUrlPreviewSchema = z
   .object({
     title: optionalText(300),
@@ -244,17 +254,26 @@ export const supplierOfferUrlPreviewSchema = z
     source: z.string().trim().min(1).max(100),
     details: supplierOfferMarketplaceDetailsSchema.nullable().optional(),
     moqConflictEvidence: supplierOfferPublicMoqConflictSchema.nullable().optional(),
+    moqUnverifiedFaqEvidence: supplierOfferUnverifiedFaqSchema.nullable().optional(),
     isPartial: z.boolean().default(false),
     titleFromSlug: z.boolean().default(false),
   })
   .strict()
   .superRefine((preview, ctx) => {
     const conflict = preview.moqConflictEvidence;
-    if (!conflict) return;
-    if (conflict.productUrl !== preview.productUrl ||
+    const unverified = preview.moqUnverifiedFaqEvidence;
+    if (conflict && unverified) {
+      ctx.addIssue({ code: "custom", message: "Only one public MOQ review state is permitted." });
+    }
+    if (conflict && (conflict.productUrl !== preview.productUrl ||
         preview.minimumOrderQuantity !== null || preview.price !== null ||
-        (preview.details?.priceTiers.length ?? 0) > 0) {
+        preview.details != null)) {
       ctx.addIssue({ code: "custom", message: "Catalog/FAQ conflict cannot be a priced import." });
+    }
+    if (unverified && (unverified.productUrl !== preview.productUrl ||
+        preview.minimumOrderQuantity !== null || preview.price !== null ||
+        preview.details != null)) {
+      ctx.addIssue({ code: "custom", message: "Unverified seller FAQ cannot be a priced import." });
     }
   });
 
