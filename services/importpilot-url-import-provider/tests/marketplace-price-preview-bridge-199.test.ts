@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 import { previewProductUrl } from "../src/fetcher.js";
+import { createPublicPriceCanaryGate } from "../src/public-price-canary-policy.js";
 
 const productUrl =
   "https://pilotoptics.en.made-in-china.com/product/WJfUCnDTuekA/China-Pilot-Optics-Wholesale-High-Quality-5-Colors-Custom-Logo-Square-Reading-Glasses.html";
@@ -50,6 +51,7 @@ describe("provider #199 public evidence preview bridge", () => {
     const preview = await previewProductUrl(productUrl, {
       fetcher: fetcher as typeof fetch,
       publicPriceEvidenceEnabled: true,
+      publicPriceCanaryGate: createPublicPriceCanaryGate({ enabled: true, canaryProductUrl: productUrl }),
     });
     expect(fetcher).toHaveBeenCalledTimes(3); // main + catalog + video; bounded
     expect(fetcher.mock.calls.map(call => String(call[0]))).toEqual([
@@ -72,6 +74,7 @@ describe("provider #199 public evidence preview bridge", () => {
     const preview = await previewProductUrl(productUrl, {
       fetcher: fetcher as typeof fetch,
       publicPriceEvidenceEnabled: true,
+      publicPriceCanaryGate: createPublicPriceCanaryGate({ enabled: true, canaryProductUrl: productUrl }),
     });
     expect(fetcher).toHaveBeenCalledTimes(3);
     expect(preview.marketplacePriceEvidence).toMatchObject({
@@ -89,6 +92,7 @@ describe("provider #199 public evidence preview bridge", () => {
     const preview = await previewProductUrl(productUrl, {
       fetcher: fetcher as typeof fetch,
       publicPriceEvidenceEnabled: true,
+      publicPriceCanaryGate: createPublicPriceCanaryGate({ enabled: true, canaryProductUrl: productUrl }),
     });
     expect(preview.minimumOrderQuantity).toBe("1200");
     expect(preview.price).toBe("0.50");
