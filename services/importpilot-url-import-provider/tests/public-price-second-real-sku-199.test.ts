@@ -35,6 +35,13 @@ const primaryHtml =
   '<p>A3:1200 pcs per item,for some optical frame,only 300pcs per item per color.</p>' +
   '</section></body></html>';
 
+// Actual captured layout: seller-wide FAQ is 1,200, while a literal "300 MOQ"
+// is only found beyond a related-product boundary. It cannot be promoted.
+const realLayoutHtml = primaryHtml
+  .replace("US$0.50-2.00 300 Pieces (MOQ)</div>", "US$0.50-2.00</div>")
+  .replace("US$0.50-2.00 1,200 Pieces (MOQ)</section>",
+    "US$0.50-2.00 300 Pieces (MOQ)</section>");
+
 const catalogHtml =
   '<html><body><div class="product-card"><a href="' + firstUrl + '">' + firstTitle + '</a>' +
   ' FOB Price: US $0.50-2.00 / Piece Min. Order: 1,200 Pieces</div>' +
@@ -49,7 +56,10 @@ function gate() {
   });
 }
 
-function fakeFetch(sourceCatalogHtml: string, requested: string[], sourceProductHtml = primaryHtml) {
+function fakeFetch(
+  sourceCatalogHtml: string, requested: string[],
+  sourceProductHtml = primaryHtml, catalogStatus = 200,
+) {
   return (async (input: unknown) => {
     const url = String(input);
     requested.push(url);
@@ -57,7 +67,7 @@ function fakeFetch(sourceCatalogHtml: string, requested: string[], sourceProduct
       status: 200, headers: { "content-type": "text/html" },
     });
     if (url === catalogUrl) return new Response(sourceCatalogHtml, {
-      status: 200, headers: { "content-type": "text/html" },
+      status: catalogStatus, headers: { "content-type": "text/html" },
     });
     if (url === secondVideo) return new Response("Forbidden", {
       status: 403, headers: { "content-type": "text/html" },
@@ -135,11 +145,7 @@ describe("JAKOV360 #199 second real SKU candidate (offline regression fixtures)"
     // This mirrors the ACTUAL ordering observed in bounded GitHub read-only
     // source probe: the visible 300 badge is after related-product markup,
     // not next to the exact main SKU's H1.
-    const realLayout = primaryHtml
-      .replace("US$0.50-2.00 300 Pieces (MOQ)</div>", "US$0.50-2.00</div>")
-      .replace("US$0.50-2.00 1,200 Pieces (MOQ)</section>",
-        "US$0.50-2.00 300 Pieces (MOQ)</section>");
-    expect(parseProductPreview(realLayout, secondUrl).minimumOrderQuantity).toBe("1200");
+    expect(parseProductPreview(realLayoutHtml, secondUrl).minimumOrderQuantity).toBe("1200");
 
     const requested: string[] = [];
     const observations: string[] = [];
@@ -150,7 +156,7 @@ describe("JAKOV360 #199 second real SKU candidate (offline regression fixtures)"
       onEvent: (event) => observations.push(event.outcome),
     });
     const preview = await previewProductUrl(secondUrl, {
-      fetcher: fakeFetch(catalogHtml, requested, realLayout),
+      fetcher: fakeFetch(catalogHtml, requested, realLayoutHtml),
       publicPriceEvidenceEnabled: true,
       publicPriceCanaryGate: gate,
     });
@@ -206,4 +212,113 @@ describe("JAKOV360 #199 second real SKU candidate (offline regression fixtures)"
     expect(preview.marketplacePriceEvidence ?? null).toBeNull();
     expect(requested).toEqual([secondUrl, catalogUrl]);
   });
+  it("fails closed on blocked catalog 403 and cooldown cache without retry", async () => {
+    const requests: string[] = [];
+    const allowed = gate();
+    expect(allowed.additionalSkuNeedsSourceProof(secondUrl)).toBe(true);
+    expect(allowed.additionalSkuNeedsSourceProof(firstUrl)).toBe(false);
+    const fetcher = fakeFetch(catalogHtml, requests, realLayoutHtml, 403);
+    const options = {
+      fetcher, publicPriceEvidenceEnabled: true, publicPriceCanaryGate: allowed,
+    };
+    const first = await previewProductUrl(secondUrl, options);
+    expect(first.moqUnverifiedFaqEvidence).toEqual({
+      kind: "SELLER_FAQ_MOQ_UNVERIFIED",
+      productUrl: secondUrl,
+      faqMinimumOrderQuantity: 1200,
+      catalogVerified: false,
+      verifiedQuote: false,
+      landedCostEligible: false,
+    });
+    expect(first.price).toBeNull();
+    expect(first.minimumOrderQuantity).toBeNull();
+    expect(first.details).toBeNull();
+    expect(first.marketplacePriceEvidence ?? null).toBeNull();
+    expect(first.moqConflictEvidence ?? null).toBeNull();
+    expect(allowed.status().attemptsInCurrentWindow).toBe(1);
+
+    const second = await previewProductUrl(secondUrl, options);
+    expect(second.moqUnverifiedFaqEvidence).toEqual(first.moqUnverifiedFaqEvidence);
+    // Main product preview is still available; secondary 403 is not retried.
+    expect(requests).toEqual([secondUrl, catalogUrl, secondUrl]);
+  });
+
+  it("fails closed when exact seller catalog URL is missing or SKU card is absent", async () => {
+    const missingLink = realLayoutHtml.replace(
+      '<a href="' + catalogUrl + '">Reading glasses</a>', "",
+    );
+    const missingLinkRequests: string[] = [];
+    const noLink = await previewProductUrl(secondUrl, {
+      fetcher: fakeFetch(catalogHtml, missingLinkRequests, missingLink),
+      publicPriceEvidenceEnabled: true,
+      publicPriceCanaryGate: gate(),
+    });
+    expect(noLink.moqUnverifiedFaqEvidence?.faqMinimumOrderQuantity).toBe(1200);
+    expect(noLink.minimumOrderQuantity).toBeNull();
+    expect(noLink.price).toBeNull();
+    expect(missingLinkRequests).toEqual([secondUrl]);
+
+    const noSkuCatalogRequests: string[] = [];
+    const firstOnlyCatalog = '<html><body><a href="' + firstUrl + '">' +
+      firstTitle + '</a>FOB Price: US $0.50-2.00 / Piece Min. Order: 1,200 Pieces</body></html>';
+    const noSku = await previewProductUrl(secondUrl, {
+      fetcher: fakeFetch(firstOnlyCatalog, noSkuCatalogRequests, realLayoutHtml),
+      publicPriceEvidenceEnabled: true,
+      publicPriceCanaryGate: gate(),
+    });
+    expect(noSku.moqUnverifiedFaqEvidence?.catalogVerified).toBe(false);
+    expect(noSku.minimumOrderQuantity).toBeNull();
+    expect(noSku.price).toBeNull();
+    expect(noSkuCatalogRequests).toEqual([secondUrl, catalogUrl]);
+  });
+
+  it("does not leak FAQ MOQ or teaser after the shared quota is exhausted", async () => {
+    const other = "https://demooptics.en.made-in-china.com/product/ABCDEFGH1234/China-Other-Glasses.html";
+    const outcomes: string[] = [];
+    const allowed = createPublicPriceCanaryGate({
+      enabled: true, canaryProductUrl: firstUrl,
+      additionalProductUrlsJson: JSON.stringify([secondUrl, other]),
+      onEvent: event => outcomes.push(event.outcome),
+    });
+    await allowed.getOrRead(firstUrl, async () => null);
+    await allowed.getOrRead(other, async () => null);
+    expect(allowed.status().attemptsInCurrentWindow).toBe(2);
+    const requested: string[] = [];
+    const preview = await previewProductUrl(secondUrl, {
+      fetcher: fakeFetch(catalogHtml, requested, realLayoutHtml),
+      publicPriceEvidenceEnabled: true,
+      publicPriceCanaryGate: allowed,
+    });
+    expect(preview.moqUnverifiedFaqEvidence?.kind).toBe("SELLER_FAQ_MOQ_UNVERIFIED");
+    expect(preview.price).toBeNull();
+    expect(preview.minimumOrderQuantity).toBeNull();
+    expect(preview.details).toBeNull();
+    expect(requested).toEqual([secondUrl]); // quota skips catalog entirely
+    expect(outcomes).toContain("global_budget_exhausted");
+    expect(allowed.status().attemptsInCurrentWindow).toBe(2);
+  });
+
+  it("does not leak FAQ MOQ when another SKU is in flight", async () => {
+    const allowed = gate();
+    let finish = () => {};
+    const pending = allowed.getOrRead(firstUrl, () => new Promise<null>(resolve => {
+      finish = () => resolve(null);
+    }));
+    await Promise.resolve();
+    expect(allowed.status().inFlight).toBe(true);
+    const requested: string[] = [];
+    const preview = await previewProductUrl(secondUrl, {
+      fetcher: fakeFetch(catalogHtml, requested, realLayoutHtml),
+      publicPriceEvidenceEnabled: true,
+      publicPriceCanaryGate: allowed,
+    });
+    expect(preview.moqUnverifiedFaqEvidence?.catalogVerified).toBe(false);
+    expect(preview.price).toBeNull();
+    expect(preview.minimumOrderQuantity).toBeNull();
+    expect(requested).toEqual([secondUrl]);
+    finish();
+    await pending;
+    expect(allowed.status().inFlight).toBe(false);
+  });
+
 });
