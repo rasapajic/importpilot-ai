@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { extractSupplierName, parseProductPreview } from "../src/parser.js";
 import {
   exactMadeInChinaProductIdentity,
   expectedVideoSourceUrl,
@@ -37,6 +38,41 @@ describe("JAKOV360 #199 separate Dilicn SKU and single-price safety", () => {
     expect(expectedVideoSourceUrl(productUrl)).toBe(videoUrl);
     expect(expectedVideoSourceUrl(oldMistypedProductUrl)).not.toBe(videoUrl);
     expect(exactMadeInChinaProductIdentity(productUrl)?.seller).not.toBe("pilotoptics");
+  });
+
+  it("prefers the linked Dilicn seller legal name over generic manufacturer SEO metadata", () => {
+    const html = '<html><head><script type="application/ld+json">' +
+      '{"manufacturerName":"New Design Eyewear Manufacturer","price":"0.18"}</script>' +
+      '</head><body>' +
+      '<h1>' + exactName + '</h1>' +
+      '<a href="https://dilicn.en.made-in-china.com/">Wenzhou Dilicn Optical Co., Ltd</a>' +
+      '<p>1,200 Pieces (MOQ)</p>' +
+      '<p>Related products 0.53 USD</p>' +
+      '</body></html>';
+    expect(extractSupplierName(html, productUrl)).toBe("Wenzhou Dilicn Optical Co., Ltd");
+    const preview = parseProductPreview(html, productUrl);
+    expect(preview.supplierName).toBe("Wenzhou Dilicn Optical Co., Ltd");
+    expect(preview.minimumOrderQuantity).toBe("1200");
+    expect(preview.price).toBe("0.18");
+  });
+
+  it("never treats a recommendation from another seller as a verified supplier homepage", () => {
+    const html = '<head><script>{"manufacturerName":"New Design Eyewear Manufacturer"}</script></head>' +
+      '<a href="https://otheroptic.en.made-in-china.com/">Other Optical Co., Ltd</a>' +
+      '<a href="https://dilicn.en.made-in-china.com/product/Another123/China-Other-Glasses.html">' +
+      'Unrelated Eyewear Co., Ltd</a>';
+    const extracted = extractSupplierName(html, productUrl);
+    expect(extracted).not.toBe("Other Optical Co., Ltd");
+    expect(extracted).not.toBe("Unrelated Eyewear Co., Ltd");
+  });
+
+  it("keeps the exact Pilot Optics homepage legal seller and does not change MOQ", () => {
+    const pilot = "https://pilotoptics.en.made-in-china.com/product/WJfUCnDTuekA/China-Pilot-Optics-Wholesale-High-Quality-5-Colors-Custom-Logo-Square-Reading-Glasses.html";
+    const html = '<script>{"manufacturerName":"New Design Eyewear Manufacturer"}</script>' +
+      '<a href="https://pilotoptics.en.made-in-china.com/">Pilot Optics International Corp. Ltd.</a>' +
+      '<p>1,200 Pieces (MOQ)</p>';
+    expect(extractSupplierName(html, pilot)).toBe("Pilot Optics International Corp. Ltd.");
+    expect(parseProductPreview(html, pilot).minimumOrderQuantity).toBe("1200");
   });
 
   it("does not turn publicly advertised US$0.18/Piece into an invented price interval", () => {
