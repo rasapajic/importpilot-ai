@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/jakov360-199-real-source-readonly.yml"
+      - "services/importpilot-url-import-provider/src/parser.ts"
+      - "services/importpilot-url-import-provider/tests/public-price-second-real-sku-199.test.ts"
 
 permissions:
   contents: read
