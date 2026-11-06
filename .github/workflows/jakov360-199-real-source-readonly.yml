@@ -107,7 +107,16 @@ jobs:
             const mainH1 = html.match(/<h1\b[^>]*>([\s\S]{1,700}?)<\/h1>/i)?.[1] ?? '';
             const cleanH1 = mainH1.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
             const exactH1 = cleanH1 === identity.title;
-            const visible300 = /\b300\s*Pieces?\s*\(\s*MOQ\s*\)/i.test(html);
+            const markers = [...html.matchAll(/\b300\s*Pieces?\s*\(\s*MOQ\s*\)/gi)]
+              .map(match => match.index ?? -1).filter(index => index >= 0);
+            const visible300 = markers.length > 0;
+            const h1End = html.indexOf('</h1>', html.search(/<h1\b/i)) + 5;
+            const markerLocations = {
+              beforeH1: markers.filter(i => i < h1End).length,
+              afterH1Near: markers.filter(i => i >= h1End && i - h1End <= 2500).length,
+              afterH1Medium: markers.filter(i => i - h1End > 2500 && i - h1End <= 10000).length,
+              afterH1Far: markers.filter(i => i - h1End > 10000).length,
+            };
             const discovered = discoverExactSellerCatalogUrl(html, product);
             const catalogDiscovered = discovered === catalog;
             const sellerCatalogHtml = await readOnce(catalog, 350000);
@@ -123,6 +132,11 @@ jobs:
               ' primary1200=' + primary1200 + ' visible300=' + visible300 +
               ' catalogDiscovered=' + catalogDiscovered +
               ' catalog300=' + catalog300 + ' catalogPrice=' + catalogPrice +
+              ' markerCount=' + markers.length +
+              ' beforeH1=' + markerLocations.beforeH1 +
+              ' afterH1Near=' + markerLocations.afterH1Near +
+              ' afterH1Medium=' + markerLocations.afterH1Medium +
+              ' afterH1Far=' + markerLocations.afterH1Far +
               ' requests=' + requests);
             if (!primary300 || !catalogDiscovered || !catalog300 || !catalogPrice) {
               throw Error('REAL_SOURCE_ACCEPTANCE_NOT_MET');
