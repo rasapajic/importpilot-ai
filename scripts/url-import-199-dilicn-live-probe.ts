@@ -119,8 +119,12 @@ async function run() {
   let preview = null;
   try { preview = parseProductPreview(main.html, PRODUCT); }
   catch (error) { note("primary_parse_failure", { type: error instanceof Error ? error.name : "unknown" }); }
+  const sellerLegalMatch =
+    (preview?.supplierName ?? "").toLowerCase().replace(/[^a-z0-9]/g, "") ===
+    "wenzhoudilicnopticalcoltd";
   note("main_product", {
     bytes: main.bytes,
+    sellerLegalMatch,
     sourceTitleMatch: /New Model Senior Reading Glasses High[- ]Definition Wholesale From Manufacturers Direct Sales/i.test(main.html),
     supplier: preview?.supplierName ?? null,
     teaserUsd: preview?.price ?? null,
@@ -130,6 +134,16 @@ async function run() {
     catalogLinkCandidates: (main.html.match(/product-group\//gi) ?? []).length,
     faqMentions12PcsPerColor: /12\s*(?:pcs|pieces)\s*per\s*color/i.test(main.html),
   });
+
+  if (!sellerLegalMatch) {
+    // This is a real parser regression, not a missing supplier response.
+    // Keep probing video read-only to document whether it is accessible.
+    note("supplier_identity_diagnostic", {
+      result: "WRONG_SELLER_OR_MISSING_LEGAL_NAME",
+      expectedSeller: "Wenzhou Dilicn Optical Co., Ltd",
+    });
+    process.exitCode = 1;
+  }
 
   const video = await boundedExactGet(VIDEO, 390_000);
   if (!video) {
