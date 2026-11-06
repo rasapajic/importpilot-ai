@@ -889,6 +889,28 @@ function exactMadeInChinaPrimaryListingMoq(
   return new Set(moqs).size === 1 ? moqs[0] : null;
 }
 
+// Distinguish a seller-wide "per item" FAQ from an exact-SKU MOQ.
+// This is only a provenance signal; a FAQ is not a product-specific quote.
+function sellerFaqMoq(bodyText: string): string | null {
+  const value = bodyText.match(/\b(?:what(?:\x27s| is)?\s+(?:your\s+)?MOQ\s*\?|what\s+is\s+(?:your\s+)?minimum\s+order(?:\s+quantity)?\s*\?)\s*(?:A\s*\d+\s*[:：]\s*|answer\s*[:：]\s*)?([0-9]{1,3}(?:[,\s\u00a0][0-9]{3})+|[0-9]+)\s*(?:pieces?|pcs?|sets?|units?)\s+per\s+(?:item|product)\b/i)?.[1];
+  return value ? String(quantityNumber(value)) : null;
+}
+
+/**
+ * Only permit a distinct "seller FAQ vs exact catalog" observation if the
+ * primary MOQ actually came from the supplier FAQ, not from an exact listing.
+ * Uncertain or conflicting primary-source markers MUST NOT be upgraded.
+ */
+export function isSupplierFaqSourcedMoq(
+  html: string, productUrl: string, primaryMoq: string | null,
+): boolean {
+  if (!primaryMoq || exactMadeInChinaPrimaryListingMoq(html, productUrl) !== undefined) {
+    return false;
+  }
+  const bodyText = html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>|<[^>]+>/gi, " ");
+  return sellerFaqMoq(bodyText) === primaryMoq;
+}
+
 export function inspectPreviewExtraction(html: string, productUrl?: string): PreviewExtractionSnapshot {
   const blocked = isBlockedHtml(html);
   const pageTitle = pageTitleFromHtml(html);
@@ -932,13 +954,13 @@ export function inspectPreviewExtraction(html: string, productUrl?: string): Pre
   // Prefer an exact primary product MOQ. The seller-wide FAQ is still useful
   // when no trustworthy exact listing marker exists, e.g. the first Pilot SKU.
   const primaryListingMoq = exactMadeInChinaPrimaryListingMoq(html, productUrl);
-  const itemFaqMoq = bodyText.match(/\b(?:what(?:\x27s| is)?\s+(?:your\s+)?MOQ\s*\?|what\s+is\s+(?:your\s+)?minimum\s+order(?:\s+quantity)?\s*\?)\s*(?:A\s*\d+\s*[:：]\s*|answer\s*[:：]\s*)?([0-9]{1,3}(?:[,\s\u00a0][0-9]{3})+|[0-9]+)\s*(?:pieces?|pcs?|sets?|units?)\s+per\s+(?:item|product)\b/i)?.[1];
+  const itemFaqMoq = sellerFaqMoq(bodyText);
   const visibleListingMoq = bodyText.match(/\b([0-9]{1,3}(?:[,\s\u00a0][0-9]{3})+|[0-9]+)\s*(?:pieces?|pcs?|sets?|units?)\s*\(\s*MOQ\s*\)/i)?.[1];
   const minimumOrderQuantity = primaryListingMoq === null
     ? null
     : primaryListingMoq ?? (
       itemFaqMoq
-        ? String(quantityNumber(itemFaqMoq))
+        ? itemFaqMoq
         : visibleListingMoq
           ? String(quantityNumber(visibleListingMoq))
           : entryTier
