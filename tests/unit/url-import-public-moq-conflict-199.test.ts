@@ -46,6 +46,15 @@ const exactProviderPreview = {
   moqConflictEvidence: conflict,
 };
 
+const unverifiedFaq = {
+  kind: "SELLER_FAQ_MOQ_UNVERIFIED" as const,
+  productUrl: url,
+  faqMinimumOrderQuantity: 1200,
+  catalogVerified: false as const,
+  verifiedQuote: false as const,
+  landedCostEligible: false as const,
+};
+
 describe("JAKOV360 #199 informational seller FAQ versus exact catalog MOQ", () => {
   it("preserves both separate sources through the actual external provider preview", async () => {
     const requests: string[] = [];
@@ -130,4 +139,81 @@ describe("JAKOV360 #199 informational seller FAQ versus exact catalog MOQ", () =
     expect(component).toContain("Nijedan MOQ ni cena nisu automatski uneti");
     expect(component).toContain("landed-cost");
   });
+  it("preserves unavailable catalog FAQ observation without pricing or landed cost", async () => {
+    const provider = createDetailedSupplierOfferUrlImportProvider({
+      endpoint: "https://test-provider.invalid/preview",
+      requestedQuantity: 300,
+      fetcher: vi.fn(async () => new Response(JSON.stringify({
+        preview: {
+          ...exactProviderPreview,
+          moqConflictEvidence: null,
+          moqUnverifiedFaqEvidence: unverifiedFaq,
+        },
+      }), { status: 200, headers: { "content-type": "application/json" } })) as typeof fetch,
+    });
+    const preview = await provider.previewSupplierOfferUrl(url);
+    expect(preview.moqUnverifiedFaqEvidence).toEqual(unverifiedFaq);
+    expect(preview.moqConflictEvidence).toBeNull();
+    expect(preview.price).toBeNull();
+    expect(preview.minimumOrderQuantity).toBeNull();
+    expect(preview.details).toBeNull();
+
+    const summary = buildTajaPreviewBusinessSummary(preview, { requestedQuantity: 300 });
+    expect(summary.priceBasisStatus).toBe(TajaPreviewPriceBasisStatuses.MISSING);
+    expect(summary.moqStatus).toBe(TajaPreviewMoqStatuses.UNKNOWN);
+    expect(summary.landedCostStatus).toBe(TajaPreviewLandedCostStatuses.MISSING_PRICE);
+  });
+
+  it("rejects unsafe upgrades or cross-SKU forgery of unverified FAQ evidence", () => {
+    const base = {
+      title: exactProviderPreview.productTitle,
+      supplierName: exactProviderPreview.supplierName,
+      supplierCountry: null,
+      price: null,
+      currency: "USD",
+      minimumOrderQuantity: null,
+      incoterm: null,
+      imageUrl: null,
+      productUrl: url,
+      source: "pilotoptics.en.made-in-china.com",
+      details: null,
+      moqUnverifiedFaqEvidence: unverifiedFaq,
+      isPartial: true,
+      titleFromSlug: false,
+    };
+    expect(supplierOfferUrlPreviewSchema.safeParse(base).success).toBe(true);
+    expect(supplierOfferUrlPreviewSchema.safeParse({ ...base, price: 0.5 }).success).toBe(false);
+    expect(supplierOfferUrlPreviewSchema.safeParse({ ...base, minimumOrderQuantity: 1200 }).success).toBe(false);
+    expect(supplierOfferUrlPreviewSchema.safeParse({
+      ...base,
+      details: { priceTiers: [{ price: 0.5, currency: "USD", minQuantity: 300 }] },
+    }).success).toBe(false);
+    expect(supplierOfferUrlPreviewSchema.safeParse({
+      ...base, moqUnverifiedFaqEvidence: { ...unverifiedFaq, productUrl: url.replace("WZBfuPSTaRAU", "WJfUCnDTuekA") },
+    }).success).toBe(false);
+    expect(supplierOfferUrlPreviewSchema.safeParse({
+      ...base, moqUnverifiedFaqEvidence: { ...unverifiedFaq, verifiedQuote: true },
+    }).success).toBe(false);
+    expect(supplierOfferUrlPreviewSchema.safeParse({
+      ...base, moqUnverifiedFaqEvidence: { ...unverifiedFaq, landedCostEligible: true },
+    }).success).toBe(false);
+    expect(supplierOfferUrlPreviewSchema.safeParse({
+      ...base, moqUnverifiedFaqEvidence: { ...unverifiedFaq, catalogVerified: true },
+    }).success).toBe(false);
+    expect(supplierOfferUrlPreviewSchema.safeParse({
+      ...base, moqConflictEvidence: conflict,
+    }).success).toBe(false);
+  });
+
+  it("labels unavailable catalog and zero automatic price on all three locales", () => {
+    const root = join(import.meta.dirname, "../..");
+    const ui = readFileSync(join(root, "components/search/supplier-moq-conflict-evidence.tsx"), "utf8");
+    expect(ui).toContain("moqUnverifiedFaqEvidence");
+    expect(ui).toContain("MOQ iz FAQ-a — nije potvrđen");
+    expect(ui).toContain("MOQ aus Lieferanten-FAQ");
+    expect(ui).toContain("Supplier FAQ MOQ — not verified");
+    expect(ui).toContain("Cena i MOQ nisu uneti u ponudu ni u obračun uvoza.");
+    expect(ui).toContain("{conflict && (");
+  });
+
 });
