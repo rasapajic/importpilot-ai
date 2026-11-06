@@ -1,0 +1,134 @@
+name: JAKOV360 199 real source read-only gate
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/jakov360-199-real-source-readonly.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  read_only_second_sku:
+    if: github.event.pull_request.number == 213
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    defaults:
+      run:
+        working-directory: services/importpilot-url-import-provider
+    steps:
+      - name: Checkout PR code without persistent credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install isolated provider dependencies
+        run: npm install --package-lock-only --ignore-scripts --no-audit && npm ci
+      - name: Compile exact current provider
+        run: npm run build
+      - name: Bounded read-only verification of main SKU and seller catalog
+        run: |
+          node --input-type=module - <<'NODE'
+          import { parseProductPreview } from './dist/parser.js';
+          import {
+            discoverExactSellerCatalogUrl,
+            parseExactCatalogPriceSource,
+            exactMadeInChinaProductIdentity,
+          } from './dist/marketplace-price-source-parser.js';
+
+          // Two preapproved exact PUBLIC HTTPS targets. Never visit recommendations.
+          // No secrets, cookies, redirect-following, retries, video, contact,
+          // background tasks, database operations, Render calls or deployment.
+          const product =
+            'https://pilotoptics.en.made-in-china.com/product/WZBfuPSTaRAU/China-Pilot-Optics-2023-Fashion-Classic-Rectangle-Anti-Blue-Light-Blocking-Reading-Glasses.html';
+          const catalog =
+            'https://pilotoptics.en.made-in-china.com/product-group/UejAsgVMrLhv/Reading-glasses-catalog-1.html';
+          const allowed = new Set([product, catalog]);
+          let requests = 0;
+
+          async function readOnce(url, maxBytes) {
+            if (!allowed.has(url) || ++requests > 2) throw Error('REQUEST_BOUNDARY');
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 5000);
+            try {
+              const r = await fetch(url, {
+                method: 'GET',
+                redirect: 'manual',
+                signal: controller.signal,
+                headers: {
+                  accept: 'text/html,application/xhtml+xml;q=0.9',
+                  'user-agent': 'Mozilla/5.0 (compatible; JAKOV360/0.3; read-only source validation)',
+                },
+              });
+              if (r.status !== 200 || r.redirected || r.url !== url) {
+                throw Error('NON_200_OR_REDIRECT');
+              }
+              const type = (r.headers.get('content-type') || '').toLowerCase();
+              if (!/^(text\/html|application\/xhtml\+xml)(;|$)/.test(type)) {
+                throw Error('UNEXPECTED_CONTENT_TYPE');
+              }
+              const sizeHeader = r.headers.get('content-length');
+              if (sizeHeader && (!/^\d+$/.test(sizeHeader) || +sizeHeader > maxBytes)) {
+                throw Error('DECLARED_HTML_SIZE_EXCEEDED');
+              }
+              if (!r.body) throw Error('EMPTY_HTML_BODY');
+              const reader = r.body.getReader();
+              const decoder = new TextDecoder();
+              let bytes = 0, html = '';
+              try {
+                while (true) {
+                  const {done, value} = await reader.read();
+                  if (done) break;
+                  bytes += value.byteLength;
+                  if (bytes > maxBytes) {
+                    await reader.cancel();
+                    throw Error('STREAMED_HTML_SIZE_EXCEEDED');
+                  }
+                  html += decoder.decode(value, {stream: true});
+                }
+                html += decoder.decode();
+              } finally { reader.releaseLock(); }
+              return html;
+            } finally { clearTimeout(timeout); }
+          }
+
+          try {
+            const html = await readOnce(product, 1000000);
+            const identity = exactMadeInChinaProductIdentity(product);
+            if (!identity || identity.sku !== 'WZBfuPSTaRAU') throw Error('SKU_IDENTITY_MISMATCH');
+            const primary = parseProductPreview(html, product);
+            if (primary.productUrl !== product) throw Error('PREVIEW_IDENTITY_MISMATCH');
+            if (primary.minimumOrderQuantity !== '300') {
+              throw Error('EXACT_PRIMARY_MOQ_NOT_300');
+            }
+            const discovered = discoverExactSellerCatalogUrl(html, product);
+            if (discovered !== catalog) throw Error('SAME_SELLER_CATALOG_NOT_DISCOVERED');
+            const sellerCatalogHtml = await readOnce(catalog, 350000);
+            const evidence = parseExactCatalogPriceSource(sellerCatalogHtml, product, catalog);
+            if (!evidence || evidence.productUrl !== product ||
+                evidence.minimumOrderQuantity !== 300 ||
+                Number(evidence.lowPrice) !== 0.5 ||
+                Number(evidence.highPrice) !== 2 ||
+                evidence.currency !== 'USD' || evidence.unit !== 'Piece') {
+              throw Error('EXACT_CATALOG_EVIDENCE_NOT_CONFIRMED');
+            }
+            console.log('JAKOV360_199_REAL_SOURCE_PASS exact_sku=true primary_moq=true catalog_link=true catalog_price_moq=true requests=' + requests);
+          } catch (err) {
+            // Never log raw URLs, names, HTML, SKU or pricing.
+            const safeReasons = new Set([
+              'REQUEST_BOUNDARY', 'NON_200_OR_REDIRECT', 'UNEXPECTED_CONTENT_TYPE',
+              'DECLARED_HTML_SIZE_EXCEEDED', 'EMPTY_HTML_BODY',
+              'STREAMED_HTML_SIZE_EXCEEDED', 'SKU_IDENTITY_MISMATCH',
+              'PREVIEW_IDENTITY_MISMATCH', 'EXACT_PRIMARY_MOQ_NOT_300',
+              'SAME_SELLER_CATALOG_NOT_DISCOVERED',
+              'EXACT_CATALOG_EVIDENCE_NOT_CONFIRMED',
+            ]);
+            const reason = safeReasons.has(err?.message) ? err.message : 'SOURCE_FETCH_UNAVAILABLE';
+            console.error('JAKOV360_199_REAL_SOURCE_NOT_VERIFIED reason=' + reason + ' attempts=' + requests);
+            process.exitCode = 1;
+          }
+          NODE
