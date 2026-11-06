@@ -110,6 +110,7 @@ function normalizeExternalPreview(candidate: unknown) {
     imageUrl: record.imageUrl ?? null,
     source,
     details: record.details ?? null,
+    moqConflictEvidence: record.moqConflictEvidence ?? null,
     titleFromSlug: record.titleFromSlug ?? false,
   };
   const requiredPreviewValues = [
