@@ -1,10 +1,11 @@
 import { exactMadeInChinaProductIdentity } from "./marketplace-price-source-parser.js";
 import type { CorroboratedAdvertisedRange } from "./marketplace-price-evidence.js";
-import type { SingleCatalogAdvertisedRange } from "./marketplace-price-source-reader.js";
+import type { SingleCatalogAdvertisedRange, SellerCatalogFaqMoqConflict } from "./marketplace-price-source-reader.js";
 
 export type PublicPriceEvidence =
   | CorroboratedAdvertisedRange
-  | SingleCatalogAdvertisedRange;
+  | SingleCatalogAdvertisedRange
+  | SellerCatalogFaqMoqConflict;
 
 export type PublicPriceGateEvent = {
   // No product URL, seller, SKU, price, credentials or source page content.
@@ -12,6 +13,7 @@ export type PublicPriceGateEvent = {
   outcome:
     | "attempt_started"
     | "catalog_only"
+    | "catalog_moq_conflict"
     | "two_listings"
     | "no_evidence"
     | "request_failed"
@@ -196,11 +198,13 @@ export function createPublicPriceCanaryGate(
         (result) => {
           entry.cached = result?.productUrl === productUrl &&
             result.verifiedQuote === false ? result : null;
-          emit(entry.cached?.kind === "SINGLE_SELLER_CATALOG_ADVERTISED_RANGE"
-            ? "catalog_only"
-            : entry.cached?.kind === "CORROBORATED_ADVERTISED_RANGE"
-              ? "two_listings"
-              : "no_evidence");
+          emit(entry.cached?.kind === "SELLER_CATALOG_FAQ_MOQ_CONFLICT"
+            ? "catalog_moq_conflict"
+            : entry.cached?.kind === "SINGLE_SELLER_CATALOG_ADVERTISED_RANGE"
+              ? "catalog_only"
+              : entry.cached?.kind === "CORROBORATED_ADVERTISED_RANGE"
+                ? "two_listings"
+                : "no_evidence");
           return entry.cached;
         },
         () => {
