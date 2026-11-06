@@ -13,6 +13,8 @@ type ConflictCopy = {
   note: string;
   source: string;
   unit: string;
+  unverifiedTitle: string;
+  unverifiedNote: string;
 };
 
 const copy: Record<Locale, ConflictCopy> = {
@@ -24,6 +26,8 @@ const copy: Record<Locale, ConflictCopy> = {
     note: "Ovi podaci nisu potvrđena ponuda. Nijedan MOQ ni cena nisu automatski uneti u ponudu ili obračun uvoza. Potrebna je potvrda dobavljača.",
     source: "Proveri originalni katalog",
     unit: "kom.",
+    unverifiedTitle: "MOQ iz FAQ-a — nije potvrđen za ovaj proizvod",
+    unverifiedNote: "Nije dobijen pouzdan podatak iz kataloga ovog proizvoda (stranica može biti blokirana ili je limit zahteva dostignut). FAQ je samo informacija, ne potvrda količine. Cena i MOQ nisu uneti u ponudu ni u obračun uvoza.",
   },
   de: {
     title: "Abweichende Mindestmengen — nicht bestätigt",
@@ -33,6 +37,8 @@ const copy: Record<Locale, ConflictCopy> = {
     note: "Dies ist kein bestätigtes Angebot. Weder Mindestmenge noch Preis werden automatisch für ein Angebot oder die Einfuhrkosten verwendet. Lieferantenbestätigung erforderlich.",
     source: "Originalkatalog prüfen",
     unit: "Stück",
+    unverifiedTitle: "MOQ aus Lieferanten-FAQ — für dieses Produkt unbestätigt",
+    unverifiedNote: "Für dieses Produkt liegen keine überprüften Katalogdaten vor (Quelle gesperrt oder Abruflimit erreicht). Die FAQ ist nur ein Hinweis, keine verbindliche Mindestmenge. Weder Preis noch MOQ fließen in Angebot oder Einfuhrkosten ein.",
   },
   en: {
     title: "Conflicting minimum orders — unconfirmed",
@@ -42,6 +48,8 @@ const copy: Record<Locale, ConflictCopy> = {
     note: "This is not a confirmed supplier quote. Neither MOQ nor price is automatically used in an offer or landed-cost calculation. Supplier confirmation is required.",
     source: "Check original catalog",
     unit: "pieces",
+    unverifiedTitle: "Supplier FAQ MOQ — not verified for this product",
+    unverifiedNote: "Exact-product catalog evidence was not obtained (the source may be blocked or the request limit reached). The supplier FAQ is informational only, not a confirmed product minimum. No price or MOQ is applied to an offer or landed-cost calculation.",
   },
 };
 
@@ -51,8 +59,9 @@ const copy: Record<Locale, ConflictCopy> = {
  */
 export function SupplierMoqConflictEvidence({ preview }: Props) {
   const conflict = preview.moqConflictEvidence;
+  const unverified = preview.moqUnverifiedFaqEvidence;
   const { locale } = useI18n();
-  if (!conflict) return null;
+  if (!conflict && !unverified) return null;
   const c = copy[locale];
   const format = new Intl.NumberFormat(
     locale === "sr" ? "sr-RS" : locale === "de" ? "de-AT" : "en-GB",
@@ -62,32 +71,43 @@ export function SupplierMoqConflictEvidence({ preview }: Props) {
     locale === "sr" ? "sr-RS" : locale === "de" ? "de-AT" : "en-GB",
     { minimumFractionDigits: 2, maximumFractionDigits: 4 },
   );
-  const range = [
+  const range = conflict ? [
     money.format(Number(conflict.lowPrice)),
     money.format(Number(conflict.highPrice)),
-  ].join("–");
+  ].join("–") : null;
+  const title = conflict ? c.title : c.unverifiedTitle;
+  const faqMoq = conflict?.faqMinimumOrderQuantity ??
+    unverified?.faqMinimumOrderQuantity ?? null;
 
   return (
-    <section aria-label={c.title} className="warning-text" role="status">
-      <strong>{c.title}</strong>
+    <section aria-label={title} className="warning-text" role="status">
+      <strong>{title}</strong>
       <dl>
-        <div>
-          <dt>{c.supplierFaq}</dt>
-          <dd>{format.format(conflict.faqMinimumOrderQuantity)} {c.unit}</dd>
-        </div>
-        <div>
-          <dt>{c.exactCatalog}</dt>
-          <dd>{format.format(conflict.catalogMinimumOrderQuantity)} {c.unit}</dd>
-        </div>
-        <div>
-          <dt>{c.publicRange}</dt>
-          <dd>{range} {conflict.currency}/{conflict.unit}</dd>
-        </div>
+        {faqMoq !== null && (
+          <div>
+            <dt>{c.supplierFaq}</dt>
+            <dd>{format.format(faqMoq)} {c.unit}</dd>
+          </div>
+        )}
+        {conflict && (
+          <>
+            <div>
+              <dt>{c.exactCatalog}</dt>
+              <dd>{format.format(conflict.catalogMinimumOrderQuantity)} {c.unit}</dd>
+            </div>
+            <div>
+              <dt>{c.publicRange}</dt>
+              <dd>{range} {conflict.currency}/{conflict.unit}</dd>
+            </div>
+          </>
+        )}
       </dl>
-      <p>{c.note}</p>
-      <a href={conflict.sourceUrl} rel="noopener noreferrer" target="_blank">
-        {c.source}
-      </a>
+      <p>{conflict ? c.note : c.unverifiedNote}</p>
+      {conflict && (
+        <a href={conflict.sourceUrl} rel="noopener noreferrer" target="_blank">
+          {c.source}
+        </a>
+      )}
     </section>
   );
 }
