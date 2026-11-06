@@ -87,16 +87,26 @@ describe("provider #199 public evidence preview bridge", () => {
     expect(preview.price).toBe("0.50");
   });
 
-  it("ignores wrong catalog MOQ and retains a valid original product preview", async () => {
+  it("quarantines a catalog/FAQ MOQ mismatch without creating a priced offer", async () => {
     const fetcher = fetcherFor(200, catalogHtml.replace("Min. Order: 1,200 Pieces", "Min. Order: 200 Pieces"));
     const preview = await previewProductUrl(productUrl, {
       fetcher: fetcher as typeof fetch,
       publicPriceEvidenceEnabled: true,
       publicPriceCanaryGate: createPublicPriceCanaryGate({ enabled: true, canaryProductUrl: productUrl }),
     });
-    expect(preview.minimumOrderQuantity).toBe("1200");
-    expect(preview.price).toBe("0.50");
-    expect(preview.marketplacePriceEvidence).toBeUndefined();
+    expect(preview.minimumOrderQuantity).toBeNull();
+    expect(preview.price).toBeNull();
+    expect(preview.marketplacePriceEvidence ?? null).toBeNull();
+    expect(preview.moqConflictEvidence).toMatchObject({
+      kind: "SELLER_CATALOG_FAQ_MOQ_CONFLICT",
+      productUrl,
+      faqMinimumOrderQuantity: 1200,
+      catalogMinimumOrderQuantity: 200,
+      corroborated: false,
+      verifiedQuote: false,
+      landedCostEligible: false,
+    });
+    expect(fetcher.mock.calls.map(call => String(call[0]))).toEqual([productUrl, catalogUrl]);
   });
 
   it("requires the exact server-only opt-in before any source fetching", () => {
