@@ -6,6 +6,11 @@ on:
       - 'scripts/url-import-199-live-probe.ts'
       - 'services/importpilot-url-import-provider/src/marketplace-price-source-parser.ts'
       - 'services/importpilot-url-import-provider/src/marketplace-price-source-reader.ts'
+      - 'services/importpilot-url-import-provider/src/contract.ts'
+      - 'services/importpilot-url-import-provider/src/fetcher.ts'
+      - 'services/importpilot-url-import-provider/src/app.ts'
+      - 'services/importpilot-url-import-provider/src/dev.ts'
+      - 'services/importpilot-url-import-provider/tests/marketplace-price-preview-bridge-199.test.ts'
       - 'services/importpilot-url-import-provider/tests/marketplace-price-source-reader-199.test.ts'
       - '.github/workflows/jakov360-199-live-source-probe.yml'
   workflow_dispatch:
@@ -38,7 +43,7 @@ jobs:
         run: npx tsx scripts/url-import-199-live-probe.ts
 
   provider_security:
-    if: github.event_name == 'workflow_dispatch' || github.head_ref == 'feat/url-import-199-bounded-video-catalog-reader'
+    if: github.event_name == 'workflow_dispatch' || github.head_ref == 'feat/url-import-199-bounded-video-catalog-reader' || github.head_ref == 'feat/url-import-199-opt-in-provenance-bridge-20261105'
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:

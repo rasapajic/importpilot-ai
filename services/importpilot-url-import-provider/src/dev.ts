@@ -9,6 +9,9 @@ const server = createServer(createUrlImportProviderApp({
   timeoutMs: Number(process.env.URL_IMPORT_TIMEOUT_MS ?? 12_000),
   maxResponseBytes: Number(process.env.URL_IMPORT_MAX_RESPONSE_BYTES ?? 1_000_000),
   debugHtml: process.env.URL_IMPORT_DEBUG_HTML === "true",
+  // OFF by default. Do not enable on shared production without a separate
+  // rollout decision: this permits additional read-only catalog/video GETs.
+  publicPriceEvidenceEnabled: process.env.URL_IMPORT_PUBLIC_PRICE_EVIDENCE === "enabled",
 }));
 
 server.listen(port, () => {

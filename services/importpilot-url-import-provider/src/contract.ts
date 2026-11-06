@@ -382,6 +382,43 @@ export const marketplaceProductDetailsSchema =
     };
   });
 
+/**
+ * The shared provider returns only verified public-source metadata. These
+ * fields are informational, not quantity-tier pricing or a supplier quote.
+ */
+export const marketplacePublicPriceEvidenceSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("SINGLE_SELLER_CATALOG_ADVERTISED_RANGE"),
+    productUrl: previewRequestSchema.shape.productUrl,
+    sourceUrl: z.url(),
+    lowPrice: z.string().regex(/^\d+(?:\.\d{1,4})?$/),
+    highPrice: z.string().regex(/^\d+(?:\.\d{1,4})?$/),
+    currency: z.string().regex(/^[A-Z]{3}$/),
+    unit: z.enum(["Piece", "Set", "Unit"]),
+    minimumOrderQuantity: z.number().int().positive(),
+    corroborated: z.literal(false),
+    verifiedQuote: z.literal(false),
+  }).strict(),
+  z.object({
+    kind: z.literal("CORROBORATED_ADVERTISED_RANGE"),
+    productUrl: previewRequestSchema.shape.productUrl,
+    evidence: z.tuple([z.url(), z.url()]),
+    lowPrice: z.string().regex(/^\d+(?:\.\d{1,4})?$/),
+    highPrice: z.string().regex(/^\d+(?:\.\d{1,4})?$/),
+    currency: z.string().regex(/^[A-Z]{3}$/),
+    unit: z.enum(["Piece", "Set", "Unit"]),
+    minimumOrderQuantity: z.number().int().positive(),
+    verifiedQuote: z.literal(false),
+  }).strict(),
+]).superRefine((value, ctx) => {
+  if (!(Number(value.highPrice) > Number(value.lowPrice))) {
+    ctx.addIssue({
+      code: "custom", path: ["highPrice"],
+      message: "Invalid public advertised range.",
+    });
+  }
+});
+
 export const productPreviewSchema = z.object({
   productTitle: optionalText(300),
   supplierName: optionalText(200),
@@ -391,6 +428,7 @@ export const productPreviewSchema = z.object({
     z.string().regex(/^[A-Z]{3}$/).nullable(),
   ),
   minimumOrderQuantity: optionalNumberText,
+  marketplacePriceEvidence: marketplacePublicPriceEvidenceSchema.nullable().optional(),
   incoterm: z.preprocess(
     (value) => (value === "" || value === undefined || value === null ? null : String(value).toUpperCase()),
     z.string().trim().min(2).max(20).nullable(),

@@ -3,7 +3,8 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 import { detectProvider, hasProductIdentifier, inspectPreviewExtraction, isUnavailableProductHtml, parseProductPreview, type PreviewExtractionSnapshot } from "./parser.js";
-import { previewRequestSchema, type ProductPreview } from "./contract.js";
+import { previewRequestSchema, productPreviewSchema, type ProductPreview } from "./contract.js";
+import { readMarketplacePublicPriceEvidence } from "./marketplace-price-source-reader.js";
 import { classifyFetchError, rememberFetchError, rememberPreviewDiagnostics } from "./diagnostics.js";
 
 export class UrlImportProviderError extends Error {
@@ -17,6 +18,7 @@ type FetchOptions = {
   timeoutMs?: number;
   maxResponseBytes?: number;
   debugHtml?: boolean;
+  publicPriceEvidenceEnabled?: boolean;
 };
 
 function logDevelopment(event: Record<string, unknown>) {
@@ -156,7 +158,36 @@ export async function previewProductUrl(productUrl: string, options: FetchOption
     if (isUnavailableProductHtml(html)) {
       throw new UrlImportProviderError("UNAVAILABLE", "Supplier product is no longer available.");
     }
-    const preview = parseProductPreview(html, parsed.data.productUrl);
+    let preview = parseProductPreview(html, parsed.data.productUrl);
+    // Opt-in informational source metadata only. The shared production
+    // provider performs no extra outbound GET unless an operator explicitly
+    // enables this mode. Never substitute the advertised public range for
+    // a quantity-tier price or a written supplier quote.
+    if (options.publicPriceEvidenceEnabled === true && provider === "made-in-china") {
+      const primaryMoq = Number(preview.minimumOrderQuantity);
+      if (Number.isSafeInteger(primaryMoq) && primaryMoq > 0) {
+        try {
+          const evidence = await readMarketplacePublicPriceEvidence(
+            parsed.data.productUrl, html, primaryMoq, {
+              enabled: true,
+              fetcher: options.fetcher,
+              timeoutMs: Math.min(4_000, options.timeoutMs ?? 4_000),
+              maxResponseBytes: 350_000,
+            },
+          );
+          if (evidence && evidence.productUrl === preview.productUrl &&
+              evidence.minimumOrderQuantity === primaryMoq &&
+              (preview.currency === null || evidence.currency === preview.currency)) {
+            const candidate = productPreviewSchema.safeParse({
+              ...preview, marketplacePriceEvidence: evidence,
+            });
+            if (candidate.success) preview = candidate.data;
+          }
+        } catch {
+          // The main product preview must survive missing/blocked source pages.
+        }
+      }
+    }
     rememberPreviewDiagnostics({
       provider,
       productUrl: parsed.data.productUrl,
