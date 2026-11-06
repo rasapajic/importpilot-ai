@@ -59,7 +59,7 @@ describe("JAKOV360 #199 multiple exact SKU source-read budget", () => {
       JSON.stringify(["https://example.org/product/ABCDEFGH1234/China-Glasses.html"]),
       JSON.stringify(["https://user:password@demooptics.en.made-in-china.com/product/ABCDEFGH1234/China-Polarized-Outdoor-Sunglasses.html"]),
       JSON.stringify([123]),
-      " ".repeat(2002) + JSON.stringify([two]),
+      JSON.stringify([two + "x".repeat(2100)]),
     ];
     for (const input of invalid) {
       const gate = createPublicPriceCanaryGate({
