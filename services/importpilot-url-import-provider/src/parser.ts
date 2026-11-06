@@ -873,10 +873,11 @@ function exactMadeInChinaPrimaryListingMoq(
       plainText(headings[0][1]).toLowerCase() !== expectedTitle) return undefined;
 
   const start = (headings[0].index ?? 0) + headings[0][0].length;
-  // Real catalog layouts can put the exact listing badge beyond 2.5 KB after
-  // the H1. Bound the main-content window at 10 KB and stop before any
-  // related/recommended card, seller FAQ or company-profile section.
-  const afterHeading = html.slice(start, start + 10_000);
+  // Deliberately short scope: a later "300 Pieces (MOQ)" marker may occur
+  // AFTER related-product markup and must never be attributed to this SKU.
+  // Exact same-seller catalog evidence is tracked separately and may conflict
+  // with a generic seller FAQ; do not silently copy it into primary MOQ.
+  const afterHeading = html.slice(start, start + 2500);
   const boundary = afterHeading.search(/<[^>]+\b(?:class|id)\s*=\s*["'][^"']*(?:related|recommend|similar|people-who-viewed|product-description|company-profile)[^"']*["']/i);
   const exactSection = boundary === -1 ? afterHeading : afterHeading.slice(0, boundary);
   const sectionText = exactSection
