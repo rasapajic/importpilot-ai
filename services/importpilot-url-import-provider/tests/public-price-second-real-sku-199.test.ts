@@ -25,6 +25,7 @@ const primaryHtml =
   '<html><head><meta property="og:title" content="' + secondTitle + '">' +
   '<script type="application/ld+json">{"minimumOrderQuantity":"1200","price":"0.50","currency":"USD"}</script>' +
   '</head><body><h1>' + secondTitle + '</h1>' +
+  '<a href="https://pilotoptics.en.made-in-china.com">Pilot Optics International Corp.Ltd.Wenzhou</a>' +
   '<div class="product-main-price">US$0.50-2.00 300 Pieces (MOQ)</div>' +
   '<a href="' + catalogUrl + '">Reading glasses</a>' +
   '<section class="related-product"><a href="' + firstUrl + '">' + firstTitle + '</a>' +
@@ -70,6 +71,7 @@ describe("JAKOV360 #199 second real SKU candidate (offline regression fixtures)"
     const parsed = parseProductPreview(primaryHtml, secondUrl);
     expect(parsed.minimumOrderQuantity).toBe("300");
     expect(parsed.price).toBe("0.50");
+    expect(parsed.supplierName).toContain("Pilot Optics International");
     expect(discoverExactSellerCatalogUrl(primaryHtml, secondUrl)).toBe(catalogUrl);
   });
 
@@ -132,7 +134,7 @@ describe("JAKOV360 #199 second real SKU candidate (offline regression fixtures)"
       publicPriceCanaryGate: gate(),
     });
     expect(preview.minimumOrderQuantity).toBe("300");
-    expect(preview.marketplacePriceEvidence).toBeNull();
+    expect(preview.marketplacePriceEvidence ?? null).toBeNull();
     expect(requested).toEqual([secondUrl, catalogUrl]);
   });
 });
