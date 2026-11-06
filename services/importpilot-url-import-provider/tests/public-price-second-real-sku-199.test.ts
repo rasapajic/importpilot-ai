@@ -321,4 +321,28 @@ describe("JAKOV360 #199 second real SKU candidate (offline regression fixtures)"
     expect(allowed.status().inFlight).toBe(false);
   });
 
+  it("retains fail-closed FAQ MOQ when the catalog-reading kill switch is OFF", async () => {
+    const allowed = createPublicPriceCanaryGate({
+      enabled: false,
+      canaryProductUrl: firstUrl,
+      additionalProductUrlsJson: JSON.stringify([secondUrl]),
+    });
+    expect(allowed.eligible(secondUrl)).toBe(false);
+    expect(allowed.additionalSkuNeedsSourceProof(firstUrl)).toBe(false);
+    expect(allowed.additionalSkuNeedsSourceProof(secondUrl)).toBe(true);
+    const requested: string[] = [];
+    const preview = await previewProductUrl(secondUrl, {
+      fetcher: fakeFetch(catalogHtml, requested, realLayoutHtml),
+      publicPriceEvidenceEnabled: false,
+      publicPriceCanaryGate: allowed,
+    });
+    expect(preview.moqUnverifiedFaqEvidence?.faqMinimumOrderQuantity).toBe(1200);
+    expect(preview.moqUnverifiedFaqEvidence?.catalogVerified).toBe(false);
+    expect(preview.minimumOrderQuantity).toBeNull();
+    expect(preview.price).toBeNull();
+    expect(preview.details).toBeNull();
+    expect(requested).toEqual([secondUrl]);
+    expect(allowed.status().attemptsInCurrentWindow).toBe(0);
+  });
+
 });
