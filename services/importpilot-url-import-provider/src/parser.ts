@@ -255,7 +255,7 @@ export function extractSupplierName(html: string, productUrl?: string) {
   try {
     if (productUrl) {
       const url = new URL(productUrl);
-      const match = url.hostname.match(/^([a-z0-9-]+)\\.en\\.made-in-china\\.com$/i);
+      const match = url.hostname.match(/^([a-z0-9-]+)\.en\.made-in-china\.com$/i);
       if (url.protocol === "https:" && match && !url.username && !url.password) {
         exactSellerHost = url.hostname.toLowerCase();
         sellerSlug = match[1].toLowerCase();
@@ -266,7 +266,7 @@ export function extractSupplierName(html: string, productUrl?: string) {
   }
   if (exactSellerHost && sellerSlug) {
     for (const match of html.matchAll(
-      /<a\\b[^>]*\\bhref\\s*=\\s*["']([^"']+)["'][^>]*>([\\s\\S]{0,350}?)<\\/a>/gi,
+      /<a\b[^>]*\bhref\s*=\s*["']([^"']+)["'][^>]*>([\s\S]{0,350}?)<\/a>/gi,
     )) {
       let target: URL;
       try { target = new URL(match[1], productUrl); } catch { continue; }
@@ -274,7 +274,7 @@ export function extractSupplierName(html: string, productUrl?: string) {
           target.username || target.password || target.port || target.search || target.hash ||
           target.pathname !== "/") continue;
       const visible = cleanSupplierName(plainText(match[2]));
-      const legal = /\\b(?:Co\\.,?\\s*Ltd\\.?|Company\\s+Limited|Limited|Ltd\\.?)$/i.test(visible ?? "");
+      const legal = /\b(?:Co\.,?\s*Ltd\.?|Company\s+Limited|Limited|Ltd\.?)$/i.test(visible ?? "");
       const sellerKey = visible?.toLowerCase().replace(/[^a-z0-9]/g, "") ?? "";
       if (legal && sellerKey.includes(sellerSlug)) add(visible, 185);
     }
