@@ -172,6 +172,12 @@ export async function previewProductUrl(productUrl: string, options: FetchOption
       const sellerFaqMoqOnly = isSupplierFaqSourcedMoq(
         html, parsed.data.productUrl, preview.minimumOrderQuantity,
       );
+      // The original Pilot Optics canary retains its historical preview.
+      // Optional future SKUs must never turn a generic FAQ into a valid SKU MOQ
+      // when catalog reads are absent, blocked, busy, exhausted or rejected.
+      const additionalSkuNeedsSourceProof = options.publicPriceCanaryGate
+        .additionalSkuNeedsSourceProof(parsed.data.productUrl);
+      let sourceEvidenceAccepted = false;
       if (Number.isSafeInteger(primaryMoq) && primaryMoq > 0) {
         try {
           const evidence = await options.publicPriceCanaryGate.getOrRead(
@@ -202,7 +208,10 @@ export async function previewProductUrl(productUrl: string, options: FetchOption
                 marketplacePriceEvidence: undefined,
                 moqConflictEvidence: evidence,
               });
-              if (candidate.success) preview = candidate.data;
+              if (candidate.success) {
+                preview = candidate.data;
+                sourceEvidenceAccepted = true;
+              }
             }
           } else if (evidence && evidence.productUrl === preview.productUrl &&
               evidence.minimumOrderQuantity === primaryMoq &&
@@ -210,11 +219,37 @@ export async function previewProductUrl(productUrl: string, options: FetchOption
             const candidate = productPreviewSchema.safeParse({
               ...preview, marketplacePriceEvidence: evidence,
             });
-            if (candidate.success) preview = candidate.data;
+            if (candidate.success) {
+              preview = candidate.data;
+              sourceEvidenceAccepted = true;
+            }
           }
         } catch {
-          // The main product preview must survive missing/blocked source pages.
+          // Optional catalog failure must not break the primary product preview.
         }
+      }
+      if (additionalSkuNeedsSourceProof && sellerFaqMoqOnly &&
+          !sourceEvidenceAccepted && Number.isSafeInteger(primaryMoq) && primaryMoq > 0) {
+        // Critical fail-closed path: applies even when getOrRead returns null
+        // BEFORE invoking its loader due to global quota or cross-SKU busy.
+        // Preserve the supplier FAQ only as an unverified observation. Never
+        // send its MOQ, teaser price or unconfirmed tiers to quote/cost code.
+        preview = productPreviewSchema.parse({
+          ...preview,
+          price: null,
+          minimumOrderQuantity: null,
+          details: null,
+          marketplacePriceEvidence: undefined,
+          moqConflictEvidence: undefined,
+          moqUnverifiedFaqEvidence: {
+            kind: "SELLER_FAQ_MOQ_UNVERIFIED",
+            productUrl: parsed.data.productUrl,
+            faqMinimumOrderQuantity: primaryMoq,
+            catalogVerified: false,
+            verifiedQuote: false,
+            landedCostEligible: false,
+          },
+        });
       }
     }
     rememberPreviewDiagnostics({
