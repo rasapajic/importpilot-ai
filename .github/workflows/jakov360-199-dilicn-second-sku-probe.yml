@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - 'scripts/url-import-199-dilicn-live-probe.ts'
+      - 'services/importpilot-url-import-provider/src/parser.ts'
+      - 'services/importpilot-url-import-provider/tests/dilicn-second-sku-199.test.ts'
       - '.github/workflows/jakov360-199-dilicn-second-sku-probe.yml'
   workflow_dispatch:
 
