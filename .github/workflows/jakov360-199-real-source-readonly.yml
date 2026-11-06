@@ -102,19 +102,30 @@ jobs:
             if (!identity || identity.sku !== 'WZBfuPSTaRAU') throw Error('SKU_IDENTITY_MISMATCH');
             const primary = parseProductPreview(html, product);
             if (primary.productUrl !== product) throw Error('PREVIEW_IDENTITY_MISMATCH');
-            if (primary.minimumOrderQuantity !== '300') {
-              throw Error('EXACT_PRIMARY_MOQ_NOT_300');
-            }
+            const primary300 = primary.minimumOrderQuantity === '300';
+            const primary1200 = primary.minimumOrderQuantity === '1200';
+            const mainH1 = html.match(/<h1\b[^>]*>([\s\S]{1,700}?)<\/h1>/i)?.[1] ?? '';
+            const cleanH1 = mainH1.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+            const exactH1 = cleanH1 === identity.title;
+            const visible300 = /\b300\s*Pieces?\s*\(\s*MOQ\s*\)/i.test(html);
             const discovered = discoverExactSellerCatalogUrl(html, product);
-            if (discovered !== catalog) throw Error('SAME_SELLER_CATALOG_NOT_DISCOVERED');
+            const catalogDiscovered = discovered === catalog;
             const sellerCatalogHtml = await readOnce(catalog, 350000);
             const evidence = parseExactCatalogPriceSource(sellerCatalogHtml, product, catalog);
-            if (!evidence || evidence.productUrl !== product ||
-                evidence.minimumOrderQuantity !== 300 ||
-                Number(evidence.lowPrice) !== 0.5 ||
-                Number(evidence.highPrice) !== 2 ||
-                evidence.currency !== 'USD' || evidence.unit !== 'Piece') {
-              throw Error('EXACT_CATALOG_EVIDENCE_NOT_CONFIRMED');
+            const catalog300 = Boolean(evidence && evidence.productUrl === product &&
+                evidence.minimumOrderQuantity === 300);
+            const catalogPrice = Boolean(evidence &&
+                Number(evidence.lowPrice) === 0.5 &&
+                Number(evidence.highPrice) === 2 &&
+                evidence.currency === 'USD' && evidence.unit === 'Piece');
+            console.log('JAKOV360_199_REAL_SOURCE_DIAGNOSTIC ' +
+              'exactH1=' + exactH1 + ' primary300=' + primary300 +
+              ' primary1200=' + primary1200 + ' visible300=' + visible300 +
+              ' catalogDiscovered=' + catalogDiscovered +
+              ' catalog300=' + catalog300 + ' catalogPrice=' + catalogPrice +
+              ' requests=' + requests);
+            if (!primary300 || !catalogDiscovered || !catalog300 || !catalogPrice) {
+              throw Error('REAL_SOURCE_ACCEPTANCE_NOT_MET');
             }
             console.log('JAKOV360_199_REAL_SOURCE_PASS exact_sku=true primary_moq=true catalog_link=true catalog_price_moq=true requests=' + requests);
           } catch (err) {
@@ -125,7 +136,7 @@ jobs:
               'STREAMED_HTML_SIZE_EXCEEDED', 'SKU_IDENTITY_MISMATCH',
               'PREVIEW_IDENTITY_MISMATCH', 'EXACT_PRIMARY_MOQ_NOT_300',
               'SAME_SELLER_CATALOG_NOT_DISCOVERED',
-              'EXACT_CATALOG_EVIDENCE_NOT_CONFIRMED',
+              'EXACT_CATALOG_EVIDENCE_NOT_CONFIRMED', 'REAL_SOURCE_ACCEPTANCE_NOT_MET',
             ]);
             const reason = safeReasons.has(err?.message) ? err.message : 'SOURCE_FETCH_UNAVAILABLE';
             console.error('JAKOV360_199_REAL_SOURCE_NOT_VERIFIED reason=' + reason + ' attempts=' + requests);
