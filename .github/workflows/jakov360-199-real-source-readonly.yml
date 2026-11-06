@@ -7,6 +7,10 @@ on:
       - ".github/workflows/jakov360-199-real-source-readonly.yml"
       - "services/importpilot-url-import-provider/src/parser.ts"
       - "services/importpilot-url-import-provider/tests/public-price-second-real-sku-199.test.ts"
+      - "services/importpilot-url-import-provider/src/fetcher.ts"
+      - "services/importpilot-url-import-provider/src/marketplace-price-source-reader.ts"
+      - "services/importpilot-url-import-provider/src/contract.ts"
+      - "services/importpilot-url-import-provider/src/public-price-canary-policy.ts"
 
 permissions:
   contents: read
@@ -33,9 +37,13 @@ jobs:
       - name: Compile exact current provider
         run: npm run build
       - name: Bounded read-only verification of main SKU and seller catalog
+        env:
+          NODE_ENV: production
         run: |
           node --input-type=module - <<'NODE'
           import { parseProductPreview } from './dist/parser.js';
+          import { previewProductUrl } from './dist/fetcher.js';
+          import { createPublicPriceCanaryGate } from './dist/public-price-canary-policy.js';
           import {
             discoverExactSellerCatalogUrl,
             parseExactCatalogPriceSource,
@@ -150,10 +158,61 @@ jobs:
               ' boundaryType=' + boundaryKind + ' boundaryAt=' + boundaryAt +
               ' first300AfterH1=' + first300AfterH1 +
               ' requests=' + requests);
-            if (!primary300 || !catalogDiscovered || !catalog300 || !catalogPrice) {
+            // Real primary FAQ is not an exact SKU MOQ. The catalog is
+            // exact-SKU but unconfirmed. Neither number may be auto-applied.
+            if (!exactH1 || !primary1200 || !catalogDiscovered || !catalog300 || !catalogPrice) {
               throw Error('REAL_SOURCE_ACCEPTANCE_NOT_MET');
             }
-            console.log('JAKOV360_199_REAL_SOURCE_PASS exact_sku=true primary_moq=true catalog_link=true catalog_price_moq=true requests=' + requests);
+
+            // Replay the two real bounded HTML captures through the actual
+            // provider bridge, with an INJECTED fetcher. This cannot produce
+            // a third real HTTP GET, even if the bridge accidentally tries.
+            const mockedCalls = [];
+            const mockOnly = async (requestedUrl) => {
+              const target = String(requestedUrl);
+              mockedCalls.push(target);
+              if (target !== product && target !== catalog) {
+                throw Error('UNEXPECTED_REPLAY_TARGET');
+              }
+              const responseHtml = target === product ? html : sellerCatalogHtml;
+              return new Response(responseHtml, {
+                status: 200,
+                headers: { 'content-type': 'text/html; charset=utf-8' },
+              });
+            };
+            const firstProduct =
+              'https://pilotoptics.en.made-in-china.com/product/WJfUCnDTuekA/China-Pilot-Optics-Wholesale-High-Quality-5-Colors-Custom-Logo-Square-Reading-Glasses.html';
+            const gate = createPublicPriceCanaryGate({
+              enabled: true,
+              canaryProductUrl: firstProduct,
+              additionalProductUrlsJson: JSON.stringify([product]),
+            });
+            const replay = await previewProductUrl(product, {
+              fetcher: mockOnly,
+              publicPriceEvidenceEnabled: true,
+              publicPriceCanaryGate: gate,
+            });
+            const discrepancy = replay.moqConflictEvidence;
+            const correctlySeparated = Boolean(
+              discrepancy?.kind === 'SELLER_CATALOG_FAQ_MOQ_CONFLICT' &&
+              discrepancy.productUrl === product &&
+              discrepancy.sourceUrl === catalog &&
+              discrepancy.faqMinimumOrderQuantity === 1200 &&
+              discrepancy.catalogMinimumOrderQuantity === 300 &&
+              Number(discrepancy.lowPrice) === 0.5 &&
+              Number(discrepancy.highPrice) === 2 &&
+              discrepancy.verifiedQuote === false &&
+              discrepancy.landedCostEligible === false &&
+              replay.price === null &&
+              replay.minimumOrderQuantity === null &&
+              replay.details === null &&
+              !replay.marketplacePriceEvidence &&
+              mockedCalls.length === 2 &&
+              mockedCalls[0] === product &&
+              mockedCalls[1] === catalog
+            );
+            if (!correctlySeparated) throw Error('SOURCE_CONFLICT_NOT_QUARANTINED');
+            console.log('JAKOV360_199_REAL_SOURCE_PASS exact_sku=true source_scoped_moq=true unpriced_conflict=true requests=' + requests);
           } catch (err) {
             // Never log raw URLs, names, HTML, SKU or pricing.
             const safeReasons = new Set([
@@ -163,6 +222,7 @@ jobs:
               'PREVIEW_IDENTITY_MISMATCH', 'EXACT_PRIMARY_MOQ_NOT_300',
               'SAME_SELLER_CATALOG_NOT_DISCOVERED',
               'EXACT_CATALOG_EVIDENCE_NOT_CONFIRMED', 'REAL_SOURCE_ACCEPTANCE_NOT_MET',
+              'SOURCE_CONFLICT_NOT_QUARANTINED', 'UNEXPECTED_REPLAY_TARGET',
             ]);
             const reason = safeReasons.has(err?.message) ? err.message : 'SOURCE_FETCH_UNAVAILABLE';
             console.error('JAKOV360_199_REAL_SOURCE_NOT_VERIFIED reason=' + reason + ' attempts=' + requests);
