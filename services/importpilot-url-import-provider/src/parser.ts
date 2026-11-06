@@ -847,6 +847,44 @@ function detailCounts(details: MarketplaceProductDetails | null) {
   };
 }
 
+
+/**
+ * Only a visible MOQ next to the canonical product H1 can override a generic
+ * supplier FAQ. A recommended-product card or a seller-wide FAQ is not an
+ * exact-SKU offer. Conflicting primary MOQ markers deliberately abstain.
+ *
+ * undefined = no trusted primary marker (use previous fallbacks);
+ * null = conflicting primary markers (do not guess).
+ */
+function exactMadeInChinaPrimaryListingMoq(
+  html: string,
+  productUrl: string | undefined,
+): string | null | undefined {
+  if (!productUrl) return undefined;
+  let url: URL;
+  try { url = new URL(productUrl); } catch { return undefined; }
+  if (detectProvider(url) !== "made-in-china") return undefined;
+  const slug = url.pathname.match(/^\/product\/[A-Za-z0-9]{8,}\/(?:China-)?([A-Za-z0-9-]+)\.html$/i)?.[1];
+  if (!slug) return undefined;
+
+  const expectedTitle = slug.replace(/-/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
+  const headings = [...html.matchAll(/<h1\b[^>]*>([\s\S]{1,700}?)<\/h1>/gi)];
+  if (headings.length !== 1 ||
+      plainText(headings[0][1]).toLowerCase() !== expectedTitle) return undefined;
+
+  const start = (headings[0].index ?? 0) + headings[0][0].length;
+  const afterHeading = html.slice(start, start + 2500);
+  const boundary = afterHeading.search(/<[^>]+\b(?:class|id)\s*=\s*["'][^"']*(?:related|recommend|similar|people-who-viewed|product-description|company-profile)[^"']*["']/i);
+  const exactSection = boundary === -1 ? afterHeading : afterHeading.slice(0, boundary);
+  const sectionText = exactSection
+    .replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>|<[^>]+>/gi, " ")
+    .replace(/\s+/g, " ");
+  const moqs = [...sectionText.matchAll(/\b([0-9]{1,3}(?:[,\s\u00a0][0-9]{3})+|[0-9]+)\s*(?:pieces?|pcs?|sets?|units?)\s*\(\s*MOQ\s*\)/gi)]
+    .map((match) => String(quantityNumber(match[1])));
+  if (moqs.length === 0) return undefined;
+  return new Set(moqs).size === 1 ? moqs[0] : null;
+}
+
 export function inspectPreviewExtraction(html: string, productUrl?: string): PreviewExtractionSnapshot {
   const blocked = isBlockedHtml(html);
   const pageTitle = pageTitleFromHtml(html);
@@ -887,21 +925,25 @@ export function inspectPreviewExtraction(html: string, productUrl?: string): Pre
     embeddedJsonString(html, ["priceCurrency", "currency", "currencyCode", "priceUnit"]) ??
     (/US\s*\$|USD|\$\s*\d/i.test(html) ? "USD" : null),
   );
-  // Supplier FAQ explicitly stating units per item is stronger evidence than
-  // an arbitrary "200 Pieces (MOQ)" copied from a related-product card.
-  // This does not establish a price tier or written acceptance of the order.
+  // Prefer an exact primary product MOQ. The seller-wide FAQ is still useful
+  // when no trustworthy exact listing marker exists, e.g. the first Pilot SKU.
+  const primaryListingMoq = exactMadeInChinaPrimaryListingMoq(html, productUrl);
   const itemFaqMoq = bodyText.match(/\b(?:what(?:\x27s| is)?\s+(?:your\s+)?MOQ\s*\?|what\s+is\s+(?:your\s+)?minimum\s+order(?:\s+quantity)?\s*\?)\s*(?:A\s*\d+\s*[:：]\s*|answer\s*[:：]\s*)?([0-9]{1,3}(?:[,\s\u00a0][0-9]{3})+|[0-9]+)\s*(?:pieces?|pcs?|sets?|units?)\s+per\s+(?:item|product)\b/i)?.[1];
   const visibleListingMoq = bodyText.match(/\b([0-9]{1,3}(?:[,\s\u00a0][0-9]{3})+|[0-9]+)\s*(?:pieces?|pcs?|sets?|units?)\s*\(\s*MOQ\s*\)/i)?.[1];
-  const minimumOrderQuantity = itemFaqMoq
-    ? String(quantityNumber(itemFaqMoq))
-    : visibleListingMoq
-      ? String(quantityNumber(visibleListingMoq))
-    : entryTier
-      ? String(entryTier.minQuantity)
-      : embeddedJsonNumber(html, ["moq", "minOrderQuantity", "minimumOrderQuantity", "minOrder", "minOrderNum"]) ??
-        bodyText.match(/(?:MOQ|minimum\s+order(?:\s+quantity)?|min\.\s*order)\s*[:\-]?\s*(\d+)/i)?.[1] ??
-        bodyText.match(/(\d+)\s*(?:piece|pieces|pcs|set|sets|unit|units)\s*\(?(?:MOQ|Min\.\s*Order|Minimum\s+Order)\)?/i)?.[1] ??
-        null;
+  const minimumOrderQuantity = primaryListingMoq === null
+    ? null
+    : primaryListingMoq ?? (
+      itemFaqMoq
+        ? String(quantityNumber(itemFaqMoq))
+        : visibleListingMoq
+          ? String(quantityNumber(visibleListingMoq))
+          : entryTier
+            ? String(entryTier.minQuantity)
+            : embeddedJsonNumber(html, ["moq", "minOrderQuantity", "minimumOrderQuantity", "minOrder", "minOrderNum"]) ??
+              bodyText.match(/(?:MOQ|minimum\s+order(?:\s+quantity)?|min\.\s*order)\s*[:\-]?\s*(\d+)/i)?.[1] ??
+              bodyText.match(/(\d+)\s*(?:piece|pieces|pcs|set|sets|unit|units)\s*\(?(?:MOQ|Min\.\s*Order|Minimum\s+Order)\)?/i)?.[1] ??
+              null
+    );
   const incoterm = extractIncoterm(bodyText);
   const imageUrl = extractProductImageUrl(html, productUrl);
   const values = {
