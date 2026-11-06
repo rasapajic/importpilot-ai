@@ -2,7 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-import { detectProvider, hasProductIdentifier, inspectPreviewExtraction, isUnavailableProductHtml, parseProductPreview, type PreviewExtractionSnapshot } from "./parser.js";
+import { detectProvider, hasProductIdentifier, inspectPreviewExtraction, isSupplierFaqSourcedMoq, isUnavailableProductHtml, parseProductPreview, type PreviewExtractionSnapshot } from "./parser.js";
 import { previewRequestSchema, productPreviewSchema, type ProductPreview } from "./contract.js";
 import { readMarketplacePublicPriceEvidence } from "./marketplace-price-source-reader.js";
 import type { PublicPriceCanaryGate } from "./public-price-canary-policy.js";
@@ -169,6 +169,9 @@ export async function previewProductUrl(productUrl: string, options: FetchOption
         options.publicPriceCanaryGate?.eligible(parsed.data.productUrl) &&
         provider === "made-in-china") {
       const primaryMoq = Number(preview.minimumOrderQuantity);
+      const sellerFaqMoqOnly = isSupplierFaqSourcedMoq(
+        html, parsed.data.productUrl, preview.minimumOrderQuantity,
+      );
       if (Number.isSafeInteger(primaryMoq) && primaryMoq > 0) {
         try {
           const evidence = await options.publicPriceCanaryGate.getOrRead(
@@ -179,10 +182,29 @@ export async function previewProductUrl(productUrl: string, options: FetchOption
                 fetcher: options.fetcher,
                 timeoutMs: Math.min(4_000, options.timeoutMs ?? 4_000),
                 maxResponseBytes: 350_000,
+                allowSellerFaqCatalogMismatch: sellerFaqMoqOnly,
               },
             ),
           );
-          if (evidence && evidence.productUrl === preview.productUrl &&
+          if (evidence?.kind === "SELLER_CATALOG_FAQ_MOQ_CONFLICT") {
+            // The catalog card is exact-SKU but the primary value came from a
+            // seller-wide FAQ. Never use either number, teaser price or
+            // unverified tiers for a quote, requested quantity or landed cost.
+            if (sellerFaqMoqOnly && evidence.productUrl === preview.productUrl &&
+                evidence.faqMinimumOrderQuantity === primaryMoq &&
+                evidence.catalogMinimumOrderQuantity !== primaryMoq &&
+                (preview.currency === null || evidence.currency === preview.currency)) {
+              const candidate = productPreviewSchema.safeParse({
+                ...preview,
+                price: null,
+                minimumOrderQuantity: null,
+                details: null,
+                marketplacePriceEvidence: undefined,
+                moqConflictEvidence: evidence,
+              });
+              if (candidate.success) preview = candidate.data;
+            }
+          } else if (evidence && evidence.productUrl === preview.productUrl &&
               evidence.minimumOrderQuantity === primaryMoq &&
               (preview.currency === null || evidence.currency === preview.currency)) {
             const candidate = productPreviewSchema.safeParse({
