@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { useI18n } from "@/components/i18n/i18n-provider";
 import { MarketplaceProductEvidence } from "@/components/search/marketplace-product-evidence";
+import { SupplierMoqConflictEvidence } from "@/components/search/supplier-moq-conflict-evidence";
 import { TajaPreviewBusinessSummary } from "@/components/search/taja-preview-business-summary";
 import { readApiJson } from "@/lib/http/api-response";
 import {
@@ -412,6 +413,7 @@ export function CreateProjectFromUrlForm({
               ? t("Delimično prepoznati podaci")
               : `✓ ${t("Podaci preuzeti")}`}
           </p>
+          <SupplierMoqConflictEvidence preview={preview} />
           <label>
             {t("Naziv proizvoda")}
             <input
