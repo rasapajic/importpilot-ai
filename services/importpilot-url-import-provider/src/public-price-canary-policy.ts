@@ -35,7 +35,7 @@ export type PublicPriceGateStatus = {
 
 export type PublicPriceCanaryGate = {
   eligible(productUrl: string): boolean;
-  /** Only optional extra SKU entries, never the mandatory live Pilot canary. */
+  /** Configured optional SKU needs proof EVEN IF source reading is disabled. */
   additionalSkuNeedsSourceProof(productUrl: string): boolean;
   getOrRead(
     productUrl: string,
@@ -148,7 +148,9 @@ export function createPublicPriceCanaryGate(
       return enabled && byProduct.has(productUrl);
     },
     additionalSkuNeedsSourceProof(productUrl) {
-      return enabled && productUrl !== products?.[0] && byProduct.has(productUrl);
+      // Keep fail-closed pricing on extra SKUs when an operator flips the
+      // source-reading kill switch OFF; no secondary HTTP GET is authorized.
+      return products !== null && productUrl !== products[0] && byProduct.has(productUrl);
     },
     status() {
       prune(now());
