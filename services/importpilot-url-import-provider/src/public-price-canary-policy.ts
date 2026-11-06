@@ -35,6 +35,8 @@ export type PublicPriceGateStatus = {
 
 export type PublicPriceCanaryGate = {
   eligible(productUrl: string): boolean;
+  /** Only optional extra SKU entries, never the mandatory live Pilot canary. */
+  additionalSkuNeedsSourceProof(productUrl: string): boolean;
   getOrRead(
     productUrl: string,
     loader: () => Promise<PublicPriceEvidence | null>,
@@ -144,6 +146,9 @@ export function createPublicPriceCanaryGate(
   return {
     eligible(productUrl) {
       return enabled && byProduct.has(productUrl);
+    },
+    additionalSkuNeedsSourceProof(productUrl) {
+      return enabled && productUrl !== products?.[0] && byProduct.has(productUrl);
     },
     status() {
       prune(now());
