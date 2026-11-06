@@ -213,7 +213,7 @@ function supplierScore(value: string, baseScore: number) {
  * Made-in-China's real `compnay-name` typo without mistaking marketplace copy
  * or chat controls for a supplier.
  */
-export function extractSupplierName(html: string) {
+export function extractSupplierName(html: string, productUrl?: string) {
   const candidates = new Map<string, SupplierCandidate>();
   const add = (value: string | null | undefined, baseScore: number) => {
     const cleaned = cleanSupplierName(value ?? null);
@@ -245,6 +245,40 @@ export function extractSupplierName(html: string) {
   }
 
   add(meta(html, "author"), 105);
+
+  // Same-seller homepage + company legal name is stronger identity evidence
+  // than generic "manufacturerName" SEO keywords. Require an exact seller-host
+  // link and a brand/slug match before elevating the candidate. Never take a
+  // company name from a related-seller link on the same marketplace.
+  let exactSellerHost: string | null = null;
+  let sellerSlug: string | null = null;
+  try {
+    if (productUrl) {
+      const url = new URL(productUrl);
+      const match = url.hostname.match(/^([a-z0-9-]+)\\.en\\.made-in-china\\.com$/i);
+      if (url.protocol === "https:" && match && !url.username && !url.password) {
+        exactSellerHost = url.hostname.toLowerCase();
+        sellerSlug = match[1].toLowerCase();
+      }
+    }
+  } catch {
+    // This optional evidence must not affect parsing of valid product fields.
+  }
+  if (exactSellerHost && sellerSlug) {
+    for (const match of html.matchAll(
+      /<a\\b[^>]*\\bhref\\s*=\\s*["']([^"']+)["'][^>]*>([\\s\\S]{0,350}?)<\\/a>/gi,
+    )) {
+      let target: URL;
+      try { target = new URL(match[1], productUrl); } catch { continue; }
+      if (target.protocol !== "https:" || target.hostname.toLowerCase() !== exactSellerHost ||
+          target.username || target.password || target.port || target.search || target.hash ||
+          target.pathname !== "/") continue;
+      const visible = cleanSupplierName(plainText(match[2]));
+      const legal = /\\b(?:Co\\.,?\\s*Ltd\\.?|Company\\s+Limited|Limited|Ltd\\.?)$/i.test(visible ?? "");
+      const sellerKey = visible?.toLowerCase().replace(/[^a-z0-9]/g, "") ?? "";
+      if (legal && sellerKey.includes(sellerSlug)) add(visible, 185);
+    }
+  }
 
   for (const match of html.matchAll(
     /<[^>]+(?:class|id)=["'][^"']*(?:company|compnay|supplier|manufacturer|seller|store)[^"']*["'][^>]*>([\s\S]{0,700}?)<\/[^>]+>/gi,
@@ -860,7 +894,7 @@ export function inspectPreviewExtraction(html: string, productUrl?: string): Pre
     ]) ??
     pageTitle,
   );
-  const supplierName = extractSupplierName(html);
+  const supplierName = extractSupplierName(html, productUrl);
   let details: MarketplaceProductDetails | null = null;
   if (productUrl) {
     try {
