@@ -1,0 +1,187 @@
+/*
+ * JAKOV360 URL import — scoped layout for BOTH entry points:
+ * new-project URL-first form and import into an existing project.
+ * The missing .url-* declarations previously left all labels inline,
+ * crushing editable values into a single unreadable row.
+ */
+.url-first-flow,
+.url-import {
+  min-width: 0;
+  width: 100%;
+}
+
+.url-first-flow {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.url-import-form {
+  align-items: end;
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-width: 0;
+  width: 100%;
+}
+
+.url-import-form > label,
+.url-review-form > label,
+.url-first-project-fields > label {
+  display: grid;
+  font-weight: 700;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.url-import-form input,
+.url-review-form > label > input,
+.url-first-project-fields input {
+  background: #fff;
+  border: 1px solid #b8c9c0;
+  border-radius: 0.5rem;
+  color: #14221b;
+  display: block;
+  font: inherit;
+  min-height: 2.75rem;
+  min-width: 0;
+  padding: 0.7rem 0.8rem;
+  width: 100%;
+}
+
+.url-import-form > button {
+  justify-self: start;
+  white-space: nowrap;
+}
+
+.url-review-form {
+  align-items: start;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-width: 0;
+  width: 100%;
+}
+
+/* Summaries, warnings, marketplace details and action panels span the form. */
+.url-review-form > :not(label) {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.url-review-form > label:first-of-type,
+.url-review-form > label:has(> input[type="url"]) {
+  grid-column: 1 / -1;
+}
+
+.url-review-form > p {
+  line-height: 1.5;
+  margin: 0;
+}
+
+.url-review-form input:disabled {
+  background: #f1f4f2;
+  color: #556b60;
+  cursor: not-allowed;
+  opacity: 1;
+}
+
+.url-first-project-fields {
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  min-width: 0;
+  width: 100%;
+}
+
+.url-review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.url-review-form > button[type="submit"] {
+  justify-self: start;
+}
+
+.url-review-form .supplier-moq-evidence {
+  background: #fffaf1;
+  border: 1px solid #dfc493;
+  border-radius: 0.75rem;
+  color: #72510a;
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+}
+
+.supplier-moq-evidence > strong {
+  font-size: 1rem;
+}
+
+.supplier-moq-evidence dl {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+}
+
+.supplier-moq-evidence dl > div {
+  background: rgba(255, 255, 255, 0.76);
+  border: 1px solid #ecddc5;
+  border-radius: 0.45rem;
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+  padding: 0.65rem 0.8rem;
+}
+
+.supplier-moq-evidence dt {
+  font-size: 0.83rem;
+  font-weight: 700;
+}
+
+.supplier-moq-evidence dd {
+  font-size: 1rem;
+  font-weight: 800;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.supplier-moq-evidence p {
+  line-height: 1.5;
+  margin: 0;
+}
+
+.supplier-moq-evidence a {
+  font-weight: 700;
+  justify-self: start;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 720px) {
+  .url-import-form,
+  .url-review-form,
+  .url-first-project-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .url-review-form > label,
+  .url-review-form > label:first-of-type,
+  .url-review-form > label:has(> input[type="url"]) {
+    grid-column: 1;
+  }
+
+  .url-import-form > button {
+    justify-self: stretch;
+    width: 100%;
+  }
+
+  .url-review-form .supplier-moq-evidence dl {
+    grid-template-columns: 1fr;
+  }
+
+  .url-review-actions > button,
+  .url-review-form > button[type="submit"] {
+    justify-self: stretch;
+    width: 100%;
+  }
+}
