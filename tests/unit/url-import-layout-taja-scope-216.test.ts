@@ -85,12 +85,11 @@ describe("JAKOV360 #216 URL import layout and TAJA scope regression", () => {
 
   it("does not render misting equipment for glasses within a misting project", () => {
     const rendered = renderToStaticMarkup(createElement(
-      I18nProvider, { initialLocale: "en" },
-      createElement(TajaPreviewBusinessSummary, {
+      I18nProvider, { initialLocale: "en", children: createElement(TajaPreviewBusinessSummary, {
         preview: glasses,
         productQuery: "water mist cooling system with pump and 20 nozzles",
         requestedQuantity: 300,
-      }),
+      }) },
     ));
     expect(rendered).toContain("Reading Glasses");
     expect(rendered.toLowerCase()).not.toContain("nozzles only");
@@ -114,8 +113,7 @@ describe("JAKOV360 #216 URL import layout and TAJA scope regression", () => {
     for (const sample of cases) {
       const rendered = renderToStaticMarkup(createElement(
         I18nProvider,
-        { initialLocale: sample.locale },
-        createElement(TajaPreviewBusinessSummary, { preview: regularProduct, requestedQuantity: 300 }),
+        { initialLocale: sample.locale, children: createElement(TajaPreviewBusinessSummary, { preview: regularProduct, requestedQuantity: 300 }) },
       ));
       expect(rendered).toContain(sample.required);
       for (const word of sample.forbidden) {
@@ -130,8 +128,7 @@ describe("JAKOV360 #216 URL import layout and TAJA scope regression", () => {
       price: 0.75, moqConflictEvidence: null,
     };
     const rendered = renderToStaticMarkup(createElement(
-      I18nProvider, { initialLocale: "en" },
-      createElement(TajaPreviewBusinessSummary, { preview, requestedQuantity: 300 }),
+      I18nProvider, { initialLocale: "en", children: createElement(TajaPreviewBusinessSummary, { preview, requestedQuantity: 300 }) },
     ));
     expect(rendered).toContain("nozzle");
     expect(rendered).toContain("0.75 USD");
