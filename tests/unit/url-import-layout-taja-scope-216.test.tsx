@@ -1,4 +1,3 @@
-import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { I18nProvider } from "@/components/i18n/i18n-provider";
 import { TajaPreviewBusinessSummary } from "@/components/search/taja-preview-business-summary";
@@ -84,13 +83,15 @@ describe("JAKOV360 #216 URL import layout and TAJA scope regression", () => {
   });
 
   it("does not render misting equipment for glasses within a misting project", () => {
-    const rendered = renderToStaticMarkup(createElement(
-      I18nProvider, { initialLocale: "en", children: createElement(TajaPreviewBusinessSummary, {
-        preview: glasses,
-        productQuery: "water mist cooling system with pump and 20 nozzles",
-        requestedQuantity: 300,
-      }) },
-    ));
+    const rendered = renderToStaticMarkup(
+      <I18nProvider initialLocale="en">
+        <TajaPreviewBusinessSummary
+          preview={glasses}
+          productQuery="water mist cooling system with pump and 20 nozzles"
+          requestedQuantity={300}
+        />
+      </I18nProvider>,
+    );
     expect(rendered).toContain("Reading Glasses");
     expect(rendered.toLowerCase()).not.toContain("nozzles only");
     expect(rendered).not.toContain(">Nozzles<");
@@ -111,10 +112,11 @@ describe("JAKOV360 #216 URL import layout and TAJA scope regression", () => {
       { locale: "en" as const, required: "Does the displayed price of 0.75 USD", forbidden: ["nozzle", "pump"] },
     ];
     for (const sample of cases) {
-      const rendered = renderToStaticMarkup(createElement(
-        I18nProvider,
-        { initialLocale: sample.locale, children: createElement(TajaPreviewBusinessSummary, { preview: regularProduct, requestedQuantity: 300 }) },
-      ));
+      const rendered = renderToStaticMarkup(
+        <I18nProvider initialLocale={sample.locale}>
+          <TajaPreviewBusinessSummary preview={regularProduct} requestedQuantity={300} />
+        </I18nProvider>,
+      );
       expect(rendered).toContain(sample.required);
       for (const word of sample.forbidden) {
         expect(rendered.toLowerCase()).not.toContain(word.toLowerCase());
@@ -127,9 +129,11 @@ describe("JAKOV360 #216 URL import layout and TAJA scope regression", () => {
       ...glasses, title: "High Pressure Misting System with Nozzles",
       price: 0.75, moqConflictEvidence: null,
     };
-    const rendered = renderToStaticMarkup(createElement(
-      I18nProvider, { initialLocale: "en", children: createElement(TajaPreviewBusinessSummary, { preview, requestedQuantity: 300 }) },
-    ));
+    const rendered = renderToStaticMarkup(
+      <I18nProvider initialLocale="en">
+        <TajaPreviewBusinessSummary preview={preview} requestedQuantity={300} />
+      </I18nProvider>,
+    );
     expect(rendered).toContain("nozzle");
     expect(rendered).toContain("0.75 USD");
   });
