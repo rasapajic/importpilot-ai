@@ -84,7 +84,7 @@ export function SupplierMoqConflictEvidence({ preview }: Props) {
     unverified?.faqMinimumOrderQuantity ?? null;
 
   return (
-    <section aria-label={title} className="warning-text" role="status">
+    <section aria-label={title} className="warning-text supplier-moq-evidence" role="status">
       <strong>{title}</strong>
       <dl>
         {faqMoq !== null && (
