@@ -15,6 +15,7 @@ type ConflictCopy = {
   unit: string;
   unverifiedTitle: string;
   unverifiedNote: string;
+  lockedFields: string;
 };
 
 const copy: Record<Locale, ConflictCopy> = {
@@ -26,6 +27,7 @@ const copy: Record<Locale, ConflictCopy> = {
     note: "Ovi podaci nisu potvrđena ponuda. Nijedan MOQ ni cena nisu automatski uneti u ponudu ili obračun uvoza. Potrebna je potvrda dobavljača.",
     source: "Proveri originalni katalog",
     unit: "kom.",
+    lockedFields: "Polja za cenu i MOQ su zaključana dok ne dobijemo potvrdu dobavljača. Proizvod se može dodati bez tih podataka.",
     unverifiedTitle: "MOQ iz FAQ-a — nije potvrđen za ovaj proizvod",
     unverifiedNote: "Nije dobijen pouzdan podatak iz kataloga ovog proizvoda (stranica može biti blokirana ili je limit zahteva dostignut). FAQ je samo informacija, ne potvrda količine. Cena i MOQ nisu uneti u ponudu ni u obračun uvoza.",
   },
@@ -37,6 +39,7 @@ const copy: Record<Locale, ConflictCopy> = {
     note: "Dies ist kein bestätigtes Angebot. Weder Mindestmenge noch Preis werden automatisch für ein Angebot oder die Einfuhrkosten verwendet. Lieferantenbestätigung erforderlich.",
     source: "Originalkatalog prüfen",
     unit: "Stück",
+    lockedFields: "Preis und Mindestmenge bleiben bis zur Lieferantenbestätigung gesperrt. Das Produkt kann ohne diese Daten hinzugefügt werden.",
     unverifiedTitle: "MOQ aus Lieferanten-FAQ — für dieses Produkt unbestätigt",
     unverifiedNote: "Für dieses Produkt liegen keine überprüften Katalogdaten vor (Quelle gesperrt oder Abruflimit erreicht). Die FAQ ist nur ein Hinweis, keine verbindliche Mindestmenge. Weder Preis noch MOQ fließen in Angebot oder Einfuhrkosten ein.",
   },
@@ -48,6 +51,7 @@ const copy: Record<Locale, ConflictCopy> = {
     note: "This is not a confirmed supplier quote. Neither MOQ nor price is automatically used in an offer or landed-cost calculation. Supplier confirmation is required.",
     source: "Check original catalog",
     unit: "pieces",
+    lockedFields: "Price and MOQ fields remain locked until the supplier confirms them. You can add the product without these details.",
     unverifiedTitle: "Supplier FAQ MOQ — not verified for this product",
     unverifiedNote: "Exact-product catalog evidence was not obtained (the source may be blocked or the request limit reached). The supplier FAQ is informational only, not a confirmed product minimum. No price or MOQ is applied to an offer or landed-cost calculation.",
   },
@@ -103,6 +107,7 @@ export function SupplierMoqConflictEvidence({ preview }: Props) {
         )}
       </dl>
       <p>{conflict ? c.note : c.unverifiedNote}</p>
+      <p>{c.lockedFields}</p>
       {conflict && (
         <a href={conflict.sourceUrl} rel="noopener noreferrer" target="_blank">
           {c.source}
