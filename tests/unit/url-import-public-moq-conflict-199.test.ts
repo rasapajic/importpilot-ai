@@ -4,6 +4,10 @@ import { describe, expect, it, vi } from "vitest";
 
 import { supplierOfferUrlPreviewSchema } from "@/modules/product-search/domain/search";
 import {
+  requiresSupplierMoqConfirmation,
+  safeCommercialFieldsForPreview,
+} from "@/modules/product-search/domain/public-moq-review";
+import {
   buildTajaPreviewBusinessSummary,
   TajaPreviewLandedCostStatuses,
   TajaPreviewMoqStatuses,
@@ -203,6 +207,89 @@ describe("JAKOV360 #199 informational seller FAQ versus exact catalog MOQ", () =
     expect(supplierOfferUrlPreviewSchema.safeParse({
       ...base, moqConflictEvidence: conflict,
     }).success).toBe(false);
+  });
+
+  it("hard-clamps accidental price and MOQ edits in a conflicting source preview", () => {
+    const preview = supplierOfferUrlPreviewSchema.parse({
+      title: exactProviderPreview.productTitle,
+      supplierName: exactProviderPreview.supplierName,
+      supplierCountry: null,
+      price: null,
+      currency: "USD",
+      minimumOrderQuantity: null,
+      incoterm: null,
+      imageUrl: null,
+      productUrl: url,
+      source: "pilotoptics.en.made-in-china.com",
+      details: null,
+      moqConflictEvidence: conflict,
+      isPartial: true,
+      titleFromSlug: false,
+    });
+    expect(requiresSupplierMoqConfirmation(preview)).toBe(true);
+    // Simulate a stale local form state with manually entered commercial data.
+    expect(safeCommercialFieldsForPreview({
+      ...preview, price: 0.5, minimumOrderQuantity: 1200,
+    })).toEqual({
+      price: null,
+      minimumOrderQuantity: null,
+      marketplaceDetails: null,
+      supplierLogistics: null,
+    });
+    expect(safeCommercialFieldsForPreview({
+      ...preview,
+      moqConflictEvidence: null,
+      moqUnverifiedFaqEvidence: unverifiedFaq,
+      price: 0.5, minimumOrderQuantity: 300,
+    })).toEqual({
+      price: null, minimumOrderQuantity: null,
+      marketplaceDetails: null, supplierLogistics: null,
+    });
+  });
+
+  it("continues importing normal verified fields without public MOQ review", () => {
+    const preview = supplierOfferUrlPreviewSchema.parse({
+      title: exactProviderPreview.productTitle,
+      supplierName: exactProviderPreview.supplierName,
+      supplierCountry: null,
+      price: 4.25,
+      currency: "USD",
+      minimumOrderQuantity: 300,
+      incoterm: null,
+      imageUrl: null,
+      productUrl: url,
+      source: "pilotoptics.en.made-in-china.com",
+      details: null,
+      moqConflictEvidence: null,
+      moqUnverifiedFaqEvidence: null,
+      isPartial: true,
+      titleFromSlug: false,
+    });
+    expect(requiresSupplierMoqConfirmation(preview)).toBe(false);
+    expect(safeCommercialFieldsForPreview(preview)).toEqual({
+      price: 4.25,
+      minimumOrderQuantity: 300,
+      marketplaceDetails: null,
+      supplierLogistics: null,
+    });
+  });
+
+  it("locks commercial fields in both URL import forms while keeping unpriced import", () => {
+    const root = join(import.meta.dirname, "../..");
+    const review = readFileSync(join(root, "components/search/url-import-review.tsx"), "utf8");
+    const creation = readFileSync(join(root, "components/projects/create-project-from-url-form.tsx"), "utf8");
+    for (const source of [review, creation]) {
+      expect(source).toContain("safeCommercialFieldsForPreview(preview)");
+      expect(source).toContain("disabled={requiresSupplierMoqConfirmation(preview)}");
+      expect(source).toContain("price: commercial.price");
+      expect(source).toContain("minimumOrderQuantity: commercial.minimumOrderQuantity");
+      expect(source).toContain("marketplaceDetails: commercial.marketplaceDetails");
+      expect(source).toContain("supplierLogistics: commercial.supplierLogistics");
+    }
+    const evidence = readFileSync(join(root, "components/search/supplier-moq-conflict-evidence.tsx"), "utf8");
+    expect(evidence).toContain("Polja za cenu i MOQ su zaključana");
+    expect(evidence).toContain("Preis und Mindestmenge bleiben");
+    expect(evidence).toContain("Price and MOQ fields remain locked");
   });
 
   it("labels unavailable catalog and zero automatic price on all three locales", () => {
