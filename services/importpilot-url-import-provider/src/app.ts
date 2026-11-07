@@ -14,6 +14,7 @@ type AppOptions = {
   debugHtml?: boolean;
   publicPriceEvidenceEnabled?: boolean;
   publicPriceEvidenceCanaryProductUrl?: string;
+  publicPriceEvidenceAdditionalProductUrlsJson?: string;
   fetcher?: typeof fetch;
 };
 
@@ -79,7 +80,18 @@ export function createUrlImportProviderApp(options: AppOptions = {}) {
   const publicPriceCanaryGate = createPublicPriceCanaryGate({
     enabled: options.publicPriceEvidenceEnabled === true,
     canaryProductUrl: options.publicPriceEvidenceCanaryProductUrl,
+    additionalProductUrlsJson: options.publicPriceEvidenceAdditionalProductUrlsJson,
+    onEvent: (event) => console.info(JSON.stringify(event)),
   });
+  // Do not log the SKU URLs, supplier identity, price, page HTML or secrets.
+  const policy = publicPriceCanaryGate.status();
+  console.info(JSON.stringify({
+    event: "public_price_source_configuration",
+    enabled: policy.enabled,
+    configurationValid: policy.configurationValid,
+    allowedProducts: policy.allowedProducts,
+    maxPairsPerTenMinutesPerInstance: policy.maxPairsPerTenMinutesPerInstance,
+  }));
   return async function handler(request: IncomingMessage, response: ServerResponse) {
     const url = new URL(request.url ?? "/", "http://localhost");
 

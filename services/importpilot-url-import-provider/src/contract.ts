@@ -419,6 +419,44 @@ export const marketplacePublicPriceEvidenceSchema = z.discriminatedUnion("kind",
   }
 });
 
+/**
+ * A single seller catalog row contradicts an unconfirmed, generic seller FAQ.
+ * These must never be silently collapsed to one SKU MOQ or quantity-tier price.
+ */
+export const sellerCatalogFaqMoqConflictSchema = z.object({
+  kind: z.literal("SELLER_CATALOG_FAQ_MOQ_CONFLICT"),
+  productUrl: previewRequestSchema.shape.productUrl,
+  sourceUrl: z.url(),
+  faqMinimumOrderQuantity: z.number().int().positive(),
+  catalogMinimumOrderQuantity: z.number().int().positive(),
+  lowPrice: z.string().regex(/^\d+(?:\.\d{1,4})?$/),
+  highPrice: z.string().regex(/^\d+(?:\.\d{1,4})?$/),
+  currency: z.string().regex(/^[A-Z]{3}$/),
+  unit: z.enum(["Piece", "Set", "Unit"]),
+  corroborated: z.literal(false),
+  verifiedQuote: z.literal(false),
+  landedCostEligible: z.literal(false),
+}).strict().superRefine((v, ctx) => {
+  if (v.faqMinimumOrderQuantity === v.catalogMinimumOrderQuantity ||
+      Number(v.lowPrice) <= 0 || Number(v.highPrice) <= Number(v.lowPrice)) {
+    ctx.addIssue({ code: "custom", message: "Not an independently scoped FAQ/catalog conflict." });
+  }
+});
+
+/**
+ * Fail-closed, source-specific FAQ observation when a newly allowlisted SKU
+ * cannot obtain an exact catalog result (403, missing catalog, busy or quota).
+ * No catalog value or public-price assertion is invented.
+ */
+export const sellerFaqMoqUnverifiedSchema = z.object({
+  kind: z.literal("SELLER_FAQ_MOQ_UNVERIFIED"),
+  productUrl: previewRequestSchema.shape.productUrl,
+  faqMinimumOrderQuantity: z.number().int().positive(),
+  catalogVerified: z.literal(false),
+  verifiedQuote: z.literal(false),
+  landedCostEligible: z.literal(false),
+}).strict();
+
 export const productPreviewSchema = z.object({
   productTitle: optionalText(300),
   supplierName: optionalText(200),
@@ -429,6 +467,8 @@ export const productPreviewSchema = z.object({
   ),
   minimumOrderQuantity: optionalNumberText,
   marketplacePriceEvidence: marketplacePublicPriceEvidenceSchema.nullable().optional(),
+  moqConflictEvidence: sellerCatalogFaqMoqConflictSchema.nullable().optional(),
+  moqUnverifiedFaqEvidence: sellerFaqMoqUnverifiedSchema.nullable().optional(),
   incoterm: z.preprocess(
     (value) => (value === "" || value === undefined || value === null ? null : String(value).toUpperCase()),
     z.string().trim().min(2).max(20).nullable(),
@@ -436,7 +476,26 @@ export const productPreviewSchema = z.object({
   imageUrl: optionalText(2_000).refine((value) => value === null || z.url().safeParse(value).success),
   productUrl: previewRequestSchema.shape.productUrl,
   details: marketplaceProductDetailsSchema.nullable().optional(),
-}).strict();
+}).strict().superRefine((v, ctx) => {
+  if (v.moqConflictEvidence && v.moqUnverifiedFaqEvidence) {
+    ctx.addIssue({ code: "custom", message: "Only one MOQ review state is permitted." });
+  }
+  if (v.moqConflictEvidence) {
+    // No conflicting source values may leak into fields used for quote/landed cost.
+    if (v.moqConflictEvidence.productUrl !== v.productUrl ||
+        v.minimumOrderQuantity !== null || v.price !== null ||
+        v.marketplacePriceEvidence || v.details !== null) {
+      ctx.addIssue({ code: "custom", message: "Conflicting public MOQ cannot be a priced offer." });
+    }
+  }
+  if (v.moqUnverifiedFaqEvidence) {
+    if (v.moqUnverifiedFaqEvidence.productUrl !== v.productUrl ||
+        v.minimumOrderQuantity !== null || v.price !== null ||
+        v.marketplacePriceEvidence || v.details !== null) {
+      ctx.addIssue({ code: "custom", message: "Unverified FAQ MOQ cannot be a priced offer." });
+    }
+  }
+});
 
 export type PreviewRequest = z.infer<typeof previewRequestSchema>;
 export type ProductPreview = z.infer<typeof productPreviewSchema>;

@@ -19,6 +19,8 @@ export type PriceSourceReaderOptions = {
   fetcher?: typeof fetch;
   timeoutMs?: number;
   maxResponseBytes?: number;
+  /** Only when primary MOQ was provably extracted from a generic supplier FAQ. */
+  allowSellerFaqCatalogMismatch?: boolean;
 };
 
 function trustedEvidenceTarget(
@@ -213,6 +215,26 @@ export async function readSingleCatalogAdvertisedRange(
 
 
 /**
+ * One exact-SKU catalog card contradicts the supplier-wide FAQ on the primary
+ * page. The values remain independently attributed; neither is a firm MOQ or
+ * a price that may be used by landed-cost, tier selection or RFQ automation.
+ */
+export type SellerCatalogFaqMoqConflict = {
+  kind: "SELLER_CATALOG_FAQ_MOQ_CONFLICT";
+  productUrl: string;
+  sourceUrl: string;
+  faqMinimumOrderQuantity: number;
+  catalogMinimumOrderQuantity: number;
+  lowPrice: string;
+  highPrice: string;
+  currency: string;
+  unit: "Piece" | "Set" | "Unit";
+  corroborated: false;
+  verifiedQuote: false;
+  landedCostEligible: false;
+};
+
+/**
  * Preview-bridge helper: one trusted catalog GET plus at most one same-SKU
  * video GET. If the video denies access (HTTP 403) this yields catalog-only
  * public evidence, never a fabricated two-source confirmation.
@@ -226,7 +248,7 @@ export async function readMarketplacePublicPriceEvidence(
   verifiedProductHtml: string,
   primaryProductMoq: number,
   options: PriceSourceReaderOptions = {},
-): Promise<CorroboratedAdvertisedRange | SingleCatalogAdvertisedRange | null> {
+): Promise<CorroboratedAdvertisedRange | SingleCatalogAdvertisedRange | SellerCatalogFaqMoqConflict | null> {
   if (options.enabled !== true || !Number.isSafeInteger(primaryProductMoq) ||
       primaryProductMoq <= 0 || verifiedProductHtml.length > 1_000_000 ||
       !exactMadeInChinaProductIdentity(productUrl)) return null;
@@ -238,7 +260,24 @@ export async function readMarketplacePublicPriceEvidence(
   );
   if (!catalogHtml) return null;
   const catalog = parseExactCatalogPriceSource(catalogHtml, productUrl, catalogUrl);
-  if (!catalog || catalog.minimumOrderQuantity !== primaryProductMoq) return null;
+  if (!catalog) return null;
+  if (catalog.minimumOrderQuantity !== primaryProductMoq) {
+    if (options.allowSellerFaqCatalogMismatch !== true) return null;
+    return {
+      kind: "SELLER_CATALOG_FAQ_MOQ_CONFLICT",
+      productUrl: catalog.productUrl,
+      sourceUrl: catalog.sourceUrl,
+      faqMinimumOrderQuantity: primaryProductMoq,
+      catalogMinimumOrderQuantity: catalog.minimumOrderQuantity,
+      lowPrice: catalog.lowPrice,
+      highPrice: catalog.highPrice,
+      currency: catalog.currency,
+      unit: catalog.unit,
+      corroborated: false,
+      verifiedQuote: false,
+      landedCostEligible: false,
+    };
+  }
 
   const catalogOnly: SingleCatalogAdvertisedRange = {
     kind: "SINGLE_SELLER_CATALOG_ADVERTISED_RANGE",

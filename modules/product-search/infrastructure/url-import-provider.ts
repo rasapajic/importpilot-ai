@@ -719,6 +719,8 @@ function normalizeExternalPreview(candidate: unknown) {
     imageUrl: record.imageUrl ?? null,
     source,
     details: record.details ?? null,
+    moqConflictEvidence: record.moqConflictEvidence ?? null,
+    moqUnverifiedFaqEvidence: record.moqUnverifiedFaqEvidence ?? null,
     titleFromSlug: record.titleFromSlug ?? false,
   };
   const requiredPreviewValues = [

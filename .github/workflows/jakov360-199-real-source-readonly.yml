@@ -1,0 +1,231 @@
+name: JAKOV360 199 real source read-only gate
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/jakov360-199-real-source-readonly.yml"
+      - "services/importpilot-url-import-provider/src/parser.ts"
+      - "services/importpilot-url-import-provider/tests/public-price-second-real-sku-199.test.ts"
+      - "services/importpilot-url-import-provider/src/fetcher.ts"
+      - "services/importpilot-url-import-provider/src/marketplace-price-source-reader.ts"
+      - "services/importpilot-url-import-provider/src/contract.ts"
+      - "services/importpilot-url-import-provider/src/public-price-canary-policy.ts"
+
+permissions:
+  contents: read
+
+jobs:
+  read_only_second_sku:
+    if: github.event.pull_request.number == 213
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    defaults:
+      run:
+        working-directory: services/importpilot-url-import-provider
+    steps:
+      - name: Checkout PR code without persistent credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install isolated provider dependencies
+        run: npm install --package-lock-only --ignore-scripts --no-audit && npm ci
+      - name: Compile exact current provider
+        run: npm run build
+      - name: Bounded read-only verification of main SKU and seller catalog
+        env:
+          NODE_ENV: production
+        run: |
+          node --input-type=module - <<'NODE'
+          import { parseProductPreview } from './dist/parser.js';
+          import { previewProductUrl } from './dist/fetcher.js';
+          import { createPublicPriceCanaryGate } from './dist/public-price-canary-policy.js';
+          import {
+            discoverExactSellerCatalogUrl,
+            parseExactCatalogPriceSource,
+            exactMadeInChinaProductIdentity,
+          } from './dist/marketplace-price-source-parser.js';
+
+          // Two preapproved exact PUBLIC HTTPS targets. Never visit recommendations.
+          // No secrets, cookies, redirect-following, retries, video, contact,
+          // background tasks, database operations, Render calls or deployment.
+          const product =
+            'https://pilotoptics.en.made-in-china.com/product/WZBfuPSTaRAU/China-Pilot-Optics-2023-Fashion-Classic-Rectangle-Anti-Blue-Light-Blocking-Reading-Glasses.html';
+          const catalog =
+            'https://pilotoptics.en.made-in-china.com/product-group/UejAsgVMrLhv/Reading-glasses-catalog-1.html';
+          const allowed = new Set([product, catalog]);
+          let requests = 0;
+
+          async function readOnce(url, maxBytes) {
+            if (!allowed.has(url) || ++requests > 2) throw Error('REQUEST_BOUNDARY');
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 5000);
+            try {
+              const r = await fetch(url, {
+                method: 'GET',
+                redirect: 'manual',
+                signal: controller.signal,
+                headers: {
+                  accept: 'text/html,application/xhtml+xml;q=0.9',
+                  'user-agent': 'Mozilla/5.0 (compatible; JAKOV360/0.3; read-only source validation)',
+                },
+              });
+              if (r.status !== 200 || r.redirected || r.url !== url) {
+                throw Error('NON_200_OR_REDIRECT');
+              }
+              const type = (r.headers.get('content-type') || '').toLowerCase();
+              if (!/^(text\/html|application\/xhtml\+xml)(;|$)/.test(type)) {
+                throw Error('UNEXPECTED_CONTENT_TYPE');
+              }
+              const sizeHeader = r.headers.get('content-length');
+              if (sizeHeader && (!/^\d+$/.test(sizeHeader) || +sizeHeader > maxBytes)) {
+                throw Error('DECLARED_HTML_SIZE_EXCEEDED');
+              }
+              if (!r.body) throw Error('EMPTY_HTML_BODY');
+              const reader = r.body.getReader();
+              const decoder = new TextDecoder();
+              let bytes = 0, html = '';
+              try {
+                while (true) {
+                  const {done, value} = await reader.read();
+                  if (done) break;
+                  bytes += value.byteLength;
+                  if (bytes > maxBytes) {
+                    await reader.cancel();
+                    throw Error('STREAMED_HTML_SIZE_EXCEEDED');
+                  }
+                  html += decoder.decode(value, {stream: true});
+                }
+                html += decoder.decode();
+              } finally { reader.releaseLock(); }
+              return html;
+            } finally { clearTimeout(timeout); }
+          }
+
+          try {
+            const html = await readOnce(product, 1000000);
+            const identity = exactMadeInChinaProductIdentity(product);
+            if (!identity || identity.sku !== 'WZBfuPSTaRAU') throw Error('SKU_IDENTITY_MISMATCH');
+            const primary = parseProductPreview(html, product);
+            if (primary.productUrl !== product) throw Error('PREVIEW_IDENTITY_MISMATCH');
+            const primary300 = primary.minimumOrderQuantity === '300';
+            const primary1200 = primary.minimumOrderQuantity === '1200';
+            const mainH1 = html.match(/<h1\b[^>]*>([\s\S]{1,700}?)<\/h1>/i)?.[1] ?? '';
+            const cleanH1 = mainH1.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+            const exactH1 = cleanH1 === identity.title;
+            const markers = [...html.matchAll(/\b300\s*Pieces?\s*\(\s*MOQ\s*\)/gi)]
+              .map(match => match.index ?? -1).filter(index => index >= 0);
+            const visible300 = markers.length > 0;
+            const h1End = html.indexOf('</h1>', html.search(/<h1\b/i)) + 5;
+            const markerLocations = {
+              beforeH1: markers.filter(i => i < h1End).length,
+              afterH1Near: markers.filter(i => i >= h1End && i - h1End <= 2500).length,
+              afterH1Medium: markers.filter(i => i - h1End > 2500 && i - h1End <= 10000).length,
+              afterH1Far: markers.filter(i => i - h1End > 10000).length,
+            };
+            const mainWindow = html.slice(h1End, h1End + 10000);
+            const boundary = mainWindow.match(/<[^>]+\b(?:class|id)\s*=\s*["'][^"']*(?:related|recommend|similar|people-who-viewed|product-description|company-profile)[^"']*["']/i);
+            const boundaryAt = boundary?.index ?? -1;
+            const boundaryKind = !boundary ? 'none' :
+              /related|recommend|similar|people-who-viewed/i.test(boundary[0]) ? 'related' :
+              /product-description/i.test(boundary[0]) ? 'description' :
+              /company-profile/i.test(boundary[0]) ? 'company' : 'other';
+            const first300AfterH1 = markers.filter(i => i >= h1End).map(i => i - h1End)[0] ?? -1;
+            const discovered = discoverExactSellerCatalogUrl(html, product);
+            const catalogDiscovered = discovered === catalog;
+            const sellerCatalogHtml = await readOnce(catalog, 350000);
+            const evidence = parseExactCatalogPriceSource(sellerCatalogHtml, product, catalog);
+            const catalog300 = Boolean(evidence && evidence.productUrl === product &&
+                evidence.minimumOrderQuantity === 300);
+            const catalogPrice = Boolean(evidence &&
+                Number(evidence.lowPrice) === 0.5 &&
+                Number(evidence.highPrice) === 2 &&
+                evidence.currency === 'USD' && evidence.unit === 'Piece');
+            console.log('JAKOV360_199_REAL_SOURCE_DIAGNOSTIC ' +
+              'exactH1=' + exactH1 + ' primary300=' + primary300 +
+              ' primary1200=' + primary1200 + ' visible300=' + visible300 +
+              ' catalogDiscovered=' + catalogDiscovered +
+              ' catalog300=' + catalog300 + ' catalogPrice=' + catalogPrice +
+              ' markerCount=' + markers.length +
+              ' beforeH1=' + markerLocations.beforeH1 +
+              ' afterH1Near=' + markerLocations.afterH1Near +
+              ' afterH1Medium=' + markerLocations.afterH1Medium +
+              ' afterH1Far=' + markerLocations.afterH1Far +
+              ' boundaryType=' + boundaryKind + ' boundaryAt=' + boundaryAt +
+              ' first300AfterH1=' + first300AfterH1 +
+              ' requests=' + requests);
+            // Real primary FAQ is not an exact SKU MOQ. The catalog is
+            // exact-SKU but unconfirmed. Neither number may be auto-applied.
+            if (!exactH1 || !primary1200 || !catalogDiscovered || !catalog300 || !catalogPrice) {
+              throw Error('REAL_SOURCE_ACCEPTANCE_NOT_MET');
+            }
+
+            // Replay the two real bounded HTML captures through the actual
+            // provider bridge, with an INJECTED fetcher. This cannot produce
+            // a third real HTTP GET, even if the bridge accidentally tries.
+            const mockedCalls = [];
+            const mockOnly = async (requestedUrl) => {
+              const target = String(requestedUrl);
+              mockedCalls.push(target);
+              if (target !== product && target !== catalog) {
+                throw Error('UNEXPECTED_REPLAY_TARGET');
+              }
+              const responseHtml = target === product ? html : sellerCatalogHtml;
+              return new Response(responseHtml, {
+                status: 200,
+                headers: { 'content-type': 'text/html; charset=utf-8' },
+              });
+            };
+            const firstProduct =
+              'https://pilotoptics.en.made-in-china.com/product/WJfUCnDTuekA/China-Pilot-Optics-Wholesale-High-Quality-5-Colors-Custom-Logo-Square-Reading-Glasses.html';
+            const gate = createPublicPriceCanaryGate({
+              enabled: true,
+              canaryProductUrl: firstProduct,
+              additionalProductUrlsJson: JSON.stringify([product]),
+            });
+            const replay = await previewProductUrl(product, {
+              fetcher: mockOnly,
+              publicPriceEvidenceEnabled: true,
+              publicPriceCanaryGate: gate,
+            });
+            const discrepancy = replay.moqConflictEvidence;
+            const correctlySeparated = Boolean(
+              discrepancy?.kind === 'SELLER_CATALOG_FAQ_MOQ_CONFLICT' &&
+              discrepancy.productUrl === product &&
+              discrepancy.sourceUrl === catalog &&
+              discrepancy.faqMinimumOrderQuantity === 1200 &&
+              discrepancy.catalogMinimumOrderQuantity === 300 &&
+              Number(discrepancy.lowPrice) === 0.5 &&
+              Number(discrepancy.highPrice) === 2 &&
+              discrepancy.verifiedQuote === false &&
+              discrepancy.landedCostEligible === false &&
+              replay.price === null &&
+              replay.minimumOrderQuantity === null &&
+              replay.details === null &&
+              !replay.marketplacePriceEvidence &&
+              mockedCalls.length === 2 &&
+              mockedCalls[0] === product &&
+              mockedCalls[1] === catalog
+            );
+            if (!correctlySeparated) throw Error('SOURCE_CONFLICT_NOT_QUARANTINED');
+            console.log('JAKOV360_199_REAL_SOURCE_PASS exact_sku=true source_scoped_moq=true unpriced_conflict=true requests=' + requests);
+          } catch (err) {
+            // Never log raw URLs, names, HTML, SKU or pricing.
+            const safeReasons = new Set([
+              'REQUEST_BOUNDARY', 'NON_200_OR_REDIRECT', 'UNEXPECTED_CONTENT_TYPE',
+              'DECLARED_HTML_SIZE_EXCEEDED', 'EMPTY_HTML_BODY',
+              'STREAMED_HTML_SIZE_EXCEEDED', 'SKU_IDENTITY_MISMATCH',
+              'PREVIEW_IDENTITY_MISMATCH', 'EXACT_PRIMARY_MOQ_NOT_300',
+              'SAME_SELLER_CATALOG_NOT_DISCOVERED',
+              'EXACT_CATALOG_EVIDENCE_NOT_CONFIRMED', 'REAL_SOURCE_ACCEPTANCE_NOT_MET',
+              'SOURCE_CONFLICT_NOT_QUARANTINED', 'UNEXPECTED_REPLAY_TARGET',
+            ]);
+            const reason = safeReasons.has(err?.message) ? err.message : 'SOURCE_FETCH_UNAVAILABLE';
+            console.error('JAKOV360_199_REAL_SOURCE_NOT_VERIFIED reason=' + reason + ' attempts=' + requests);
+            process.exitCode = 1;
+          }
+          NODE
