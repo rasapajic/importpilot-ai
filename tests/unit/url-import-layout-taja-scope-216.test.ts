@@ -1,3 +1,7 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { I18nProvider } from "@/components/i18n/i18n-provider";
+import { TajaPreviewBusinessSummary } from "@/components/search/taja-preview-business-summary";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -70,6 +74,45 @@ describe("JAKOV360 #216 URL import layout and TAJA scope regression", () => {
     expect(result.landedCostStatus).toBe(TajaPreviewLandedCostStatuses.MISSING_PRICE);
   });
 
+  it("shows product-neutral supplier questions for non-misting imports in SR/DE/EN", () => {
+    // Simulate a displayed but unconfirmed price on an ordinary product.
+    // Presentation must never ask about pump/nozzle quantities.
+    const regularProduct: SupplierOfferUrlPreview = {
+      ...glasses,
+      title: "Blue light reading glasses",
+      price: 0.75,
+      moqConflictEvidence: null,
+    };
+    const cases = [
+      { locale: "sr" as const, required: "Da li prikazana cena 0.75 USD", forbidden: ["mlaznic", "pumpu"] },
+      { locale: "de" as const, required: "Gilt der angezeigte Preis von 0.75 USD", forbidden: ["Düse", "Pumpe"] },
+      { locale: "en" as const, required: "Does the displayed price of 0.75 USD", forbidden: ["nozzle", "pump"] },
+    ];
+    for (const sample of cases) {
+      const rendered = renderToStaticMarkup(createElement(
+        I18nProvider,
+        { initialLocale: sample.locale },
+        createElement(TajaPreviewBusinessSummary, { preview: regularProduct, requestedQuantity: 300 }),
+      ));
+      expect(rendered).toContain(sample.required);
+      for (const word of sample.forbidden) {
+        expect(rendered.toLowerCase()).not.toContain(word.toLowerCase());
+      }
+    }
+  });
+
+  it("keeps genuine misting questions product-specific", () => {
+    const preview: SupplierOfferUrlPreview = {
+      ...glasses, title: "High Pressure Misting System with Nozzles",
+      price: 0.75, moqConflictEvidence: null,
+    };
+    const rendered = renderToStaticMarkup(createElement(
+      I18nProvider, { initialLocale: "en" },
+      createElement(TajaPreviewBusinessSummary, { preview, requestedQuantity: 300 }),
+    ));
+    expect(rendered).toContain("nozzle");
+    expect(rendered).toContain("0.75 USD");
+  });
   it("hides equipment-specific pump and nozzle rows for generic imports", () => {
     const ui = read("components/search/taja-preview-business-summary.tsx");
     expect(ui).toContain("summary.mistingSpecific && (");
