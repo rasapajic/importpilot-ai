@@ -1,0 +1,100 @@
+name: JAKOV360 199 live provider public HTTP smoke
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/jakov360-199-live-http-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  public_read_only_http:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Set up Node 24 (no source checkout, no secrets)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Verify fixed Render /health and /version responses only
+        shell: bash
+        run: |
+          node --input-type=module - <<'NODE'
+          // External HTTP-only post-deploy smoke for the exact production
+          // URL import provider. No auth, POST, /preview, source pages, cookies,
+          // database, secrets, vendor contacts, Render mutations, or retries
+          // against rate-limited catalog endpoints.
+          const ORIGIN = 'https://importpilot-url-import-provider.onrender.com';
+          const ENDPOINTS = ['/health', '/version'];
+          const EXPECTED_REVISION = '6990dfd07734';
+          const MAX_BYTES = 4096;
+
+          async function readJson(path) {
+            if (!ENDPOINTS.includes(path)) throw Error('FORBIDDEN_PATH');
+            const url = ORIGIN + path;
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 25000);
+            try {
+              const response = await fetch(url, {
+                method: 'GET',
+                redirect: 'manual',
+                cache: 'no-store',
+                signal: controller.signal,
+                headers: {accept: 'application/json'},
+              });
+              if (response.status !== 200) {
+                throw Error('HTTP_NOT_200_' + response.status);
+              }
+              if (response.redirected || response.url !== url) {
+                throw Error('REDIRECT_OR_FINAL_URL_MISMATCH');
+              }
+              if (!/^application\/json(?:;|$)/i.test(response.headers.get('content-type') || '')) {
+                throw Error('UNEXPECTED_CONTENT_TYPE');
+              }
+              const txt = await response.text();
+              if (Buffer.byteLength(txt, 'utf8') > MAX_BYTES) throw Error('OVERSIZED_RESPONSE');
+              let data;
+              try { data = JSON.parse(txt); }
+              catch { throw Error('INVALID_JSON'); }
+              if (!data || typeof data !== 'object') throw Error('NOT_A_JSON_OBJECT');
+              return data;
+            } finally {
+              clearTimeout(timer);
+            }
+          }
+
+          async function checked(path, validate) {
+            let lastReason = 'UNKNOWN';
+            for (let attempt = 1; attempt <= 2; attempt++) {
+              try {
+                const result = await readJson(path);
+                if (!validate(result)) throw Error('BAD_RESPONSE_FIELDS');
+                console.log('JAKOV360_PUBLIC_HTTP_PASS path=' + path + ' attempt=' + attempt);
+                return;
+              } catch (error) {
+                // Never print raw response content, URLs, or internal headers.
+                lastReason = new Set([
+                  'FORBIDDEN_PATH', 'REDIRECT_OR_FINAL_URL_MISMATCH',
+                  'UNEXPECTED_CONTENT_TYPE', 'OVERSIZED_RESPONSE', 'INVALID_JSON',
+                  'NOT_A_JSON_OBJECT', 'BAD_RESPONSE_FIELDS',
+                ]).has(error?.message) ? error.message :
+                  /^HTTP_NOT_200_\d+$/.test(error?.message || '')
+                    ? error.message : 'NETWORK_OR_TIMEOUT';
+                if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 8000));
+              }
+            }
+            console.error('JAKOV360_PUBLIC_HTTP_FAILED path=' + path + ' reason=' + lastReason);
+            process.exitCode = 1;
+          }
+
+          await checked('/health', value => value.ok === true);
+          await checked('/version', value =>
+            value.service === 'importpilot-url-import-provider' &&
+            value.revision === EXPECTED_REVISION);
+          if (!process.exitCode) {
+            console.log('JAKOV360_199_LIVE_READ_ONLY_HTTP_SMOKE_PASS');
+          }
+          NODE
