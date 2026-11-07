@@ -106,9 +106,11 @@ type PreviewSummaryContext = {
  * pumps, nozzles, or complete misting systems. This gates only presentation:
  * it never changes supplier evidence, quantity, price or landed-cost policy.
  */
-function usesMistingReview(title: string | null, productQuery: string | null): boolean {
-  const content = [title ?? "", productQuery ?? ""].join(" ").toLowerCase();
-  return /\b(?:mist\w*|fog\w*|nozzl\w*|mlaznic\w*|magl\w*|atomiz\w*|nebuliz\w*|spray\s+cool\w*|rasprs\w*)\b/i.test(content);
+function usesMistingReview(title: string | null): boolean {
+  // Search intent is not evidence of what a supplier actually offers.
+  // A misting query can return an unrelated product such as reading glasses.
+  const offeredTitle = title?.trim() ?? "";
+  return /\b(?:mist\w*|fog\w*|nozzl\w*|mlaznic\w*|magl\w*|atomiz\w*|nebuliz\w*|spray\s+cool\w*|rasprs\w*)\b/i.test(offeredTitle);
 }
 
 function normalizedName(value: string) {
@@ -260,7 +262,7 @@ export function buildTajaPreviewBusinessSummary(
 ): TajaPreviewBusinessSummary {
   const productQuery = context.productQuery?.trim() || null;
   const requestedQuantity = normalizeRequestedQuantity(context.requestedQuantity);
-  const mistingSpecific = usesMistingReview(preview.title, productQuery);
+  const mistingSpecific = usesMistingReview(preview.title);
   const result = {
     title: preview.title ?? "",
     marketplaceDetails: preview.details ?? null,

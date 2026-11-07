@@ -63,6 +63,15 @@ describe("JAKOV360 #216 URL import layout and TAJA scope regression", () => {
     expect(glasses.moqConflictEvidence?.catalogMinimumOrderQuantity).toBe(300);
   });
 
+  it("does not infer misting equipment from a mismatching search query", () => {
+    const result = buildTajaPreviewBusinessSummary(glasses, {
+      productQuery: "water mist cooling system with pump and 20 nozzles",
+      requestedQuantity: 300,
+    });
+    expect(result.mistingSpecific).toBe(false);
+    expect(result.priceBasisStatus).toBe(TajaPreviewPriceBasisStatuses.MISSING);
+    expect(result.landedCostStatus).toBe(TajaPreviewLandedCostStatuses.MISSING_PRICE);
+  });
   it("keeps misting-specific review for actual system/nozzle products", () => {
     const withMist = { ...glasses, title: "High Pressure Misting System with 20 Nozzles" };
     const result = buildTajaPreviewBusinessSummary(withMist, {
@@ -74,6 +83,20 @@ describe("JAKOV360 #216 URL import layout and TAJA scope regression", () => {
     expect(result.landedCostStatus).toBe(TajaPreviewLandedCostStatuses.MISSING_PRICE);
   });
 
+  it("does not render misting equipment for glasses within a misting project", () => {
+    const rendered = renderToStaticMarkup(createElement(
+      I18nProvider, { initialLocale: "en" },
+      createElement(TajaPreviewBusinessSummary, {
+        preview: glasses,
+        productQuery: "water mist cooling system with pump and 20 nozzles",
+        requestedQuantity: 300,
+      }),
+    ));
+    expect(rendered).toContain("Reading Glasses");
+    expect(rendered.toLowerCase()).not.toContain("nozzles only");
+    expect(rendered).not.toContain(">Nozzles<");
+    expect(rendered).not.toContain(">Pump<");
+  });
   it("shows product-neutral supplier questions for non-misting imports in SR/DE/EN", () => {
     // Simulate a displayed but unconfirmed price on an ordinary product.
     // Presentation must never ask about pump/nozzle quantities.
