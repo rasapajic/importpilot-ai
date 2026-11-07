@@ -8,8 +8,9 @@ import { MarketplaceProductEvidence } from "@/components/search/marketplace-prod
 import { SupplierMoqConflictEvidence } from "@/components/search/supplier-moq-conflict-evidence";
 import { TajaPreviewBusinessSummary } from "@/components/search/taja-preview-business-summary";
 import {
-  marketplaceDetailsToSupplierLogistics,
-} from "@/modules/product-search/domain/marketplace-product-details";
+  requiresSupplierMoqConfirmation,
+  safeCommercialFieldsForPreview,
+} from "@/modules/product-search/domain/public-moq-review";
 import type {
   SupplierOfferSearchResult,
   SupplierOfferUrlPreview,
@@ -94,6 +95,8 @@ export function UrlImportReview({
   function update(field: keyof SupplierOfferUrlPreview, value: string) {
     setPreview((current) => {
       const base = current ?? emptyPreview;
+      if (requiresSupplierMoqConfirmation(base) &&
+          ["price", "minimumOrderQuantity"].includes(field)) return base;
       if (["price", "minimumOrderQuantity"].includes(field)) {
         return { ...base, [field]: value === "" ? null : Number(value) };
       }
@@ -114,19 +117,20 @@ export function UrlImportReview({
     if (!preview) return;
     setSaving(true);
     setError("");
+    const commercial = safeCommercialFieldsForPreview(preview);
     const result: SupplierOfferSearchResult = {
       title: preview.title ?? "",
       supplierName: preview.supplierName ?? "",
       supplierCountry: preview.supplierCountry,
-      price: preview.price,
+      price: commercial.price,
       currency: preview.currency,
-      minimumOrderQuantity: preview.minimumOrderQuantity,
+      minimumOrderQuantity: commercial.minimumOrderQuantity,
       incoterm: preview.incoterm,
       productUrl: preview.productUrl,
       imageUrl: preview.imageUrl,
       source: preview.source,
-      marketplaceDetails: preview.details ?? null,
-      supplierLogistics: marketplaceDetailsToSupplierLogistics(preview.details),
+      marketplaceDetails: commercial.marketplaceDetails,
+      supplierLogistics: commercial.supplierLogistics,
     };
     try {
       const response = await fetch(`/api/projects/${projectId}/supplier-search/import`, {
@@ -205,6 +209,7 @@ export function UrlImportReview({
             <input
               min="0"
               onChange={(event) => update("price", event.target.value)}
+              disabled={requiresSupplierMoqConfirmation(preview)}
               placeholder={t("Nije prepoznato")}
               step="any"
               type="number"
@@ -225,6 +230,7 @@ export function UrlImportReview({
             <input
               min="1"
               onChange={(event) => update("minimumOrderQuantity", event.target.value)}
+              disabled={requiresSupplierMoqConfirmation(preview)}
               placeholder={t("Nije navedeno")}
               type="number"
               value={preview.minimumOrderQuantity ?? ""}
