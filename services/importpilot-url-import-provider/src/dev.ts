@@ -15,6 +15,9 @@ const server = createServer(createUrlImportProviderApp({
   // Canary-only: unset/invalid SKU means no additional source GETs even if
   // the general switch is enabled. Never expose this setting to request JSON.
   publicPriceEvidenceCanaryProductUrl: process.env.URL_IMPORT_PUBLIC_PRICE_CANARY_PRODUCT_URL,
+  // Optional JSON array of up to two additional exact products. Unset on
+  // existing shared provider: Pilot Optics remains the only allowed SKU.
+  publicPriceEvidenceAdditionalProductUrlsJson: process.env.URL_IMPORT_PUBLIC_PRICE_EXTRA_PRODUCT_URLS_JSON,
 }));
 
 server.listen(port, () => {

@@ -5,11 +5,13 @@ import { useRouter } from "next/navigation";
 
 import { useI18n } from "@/components/i18n/i18n-provider";
 import { MarketplaceProductEvidence } from "@/components/search/marketplace-product-evidence";
+import { SupplierMoqConflictEvidence } from "@/components/search/supplier-moq-conflict-evidence";
 import { TajaPreviewBusinessSummary } from "@/components/search/taja-preview-business-summary";
 import { readApiJson } from "@/lib/http/api-response";
 import {
-  marketplaceDetailsToSupplierLogistics,
-} from "@/modules/product-search/domain/marketplace-product-details";
+  requiresSupplierMoqConfirmation,
+  safeCommercialFieldsForPreview,
+} from "@/modules/product-search/domain/public-moq-review";
 import type {
   SupplierOfferSearchResult,
   SupplierOfferUrlPreview,
@@ -145,6 +147,8 @@ export function CreateProjectFromUrlForm({
   function update(field: keyof SupplierOfferUrlPreview, value: string) {
     setPreview((current) => {
       if (!current) return current;
+      if (requiresSupplierMoqConfirmation(current) &&
+          ["price", "minimumOrderQuantity"].includes(field)) return current;
       if (["price", "minimumOrderQuantity"].includes(field)) {
         return { ...current, [field]: value === "" ? null : Number(value) };
       }
@@ -203,19 +207,20 @@ export function CreateProjectFromUrlForm({
       initialProductName ??
       new URL(preview.productUrl).hostname;
     try {
+      const commercial = safeCommercialFieldsForPreview(preview);
       const result: SupplierOfferSearchResult = {
         title: preview.title ?? projectName,
         supplierName: preview.supplierName ?? t("Nije prepoznato"),
         supplierCountry: preview.supplierCountry,
-        price: preview.price,
+        price: commercial.price,
         currency: preview.currency,
-        minimumOrderQuantity: preview.minimumOrderQuantity,
+        minimumOrderQuantity: commercial.minimumOrderQuantity,
         incoterm: preview.incoterm,
         productUrl: preview.productUrl,
         imageUrl: preview.imageUrl,
         source: preview.source,
-        marketplaceDetails: preview.details ?? null,
-        supplierLogistics: marketplaceDetailsToSupplierLogistics(preview.details),
+        marketplaceDetails: commercial.marketplaceDetails,
+        supplierLogistics: commercial.supplierLogistics,
       };
       await createProjectAndImportOffer(form, result);
     } catch (createError) {
@@ -412,6 +417,7 @@ export function CreateProjectFromUrlForm({
               ? t("Delimično prepoznati podaci")
               : `✓ ${t("Podaci preuzeti")}`}
           </p>
+          <SupplierMoqConflictEvidence preview={preview} />
           <label>
             {t("Naziv proizvoda")}
             <input
@@ -434,6 +440,7 @@ export function CreateProjectFromUrlForm({
             <input
               min="0"
               onChange={(event) => update("price", event.target.value)}
+              disabled={requiresSupplierMoqConfirmation(preview)}
               placeholder={t("Nije prepoznato")}
               step="any"
               type="number"
@@ -445,6 +452,7 @@ export function CreateProjectFromUrlForm({
             <input
               min="1"
               onChange={(event) => update("minimumOrderQuantity", event.target.value)}
+              disabled={requiresSupplierMoqConfirmation(preview)}
               placeholder={t("Nije navedeno")}
               type="number"
               value={preview.minimumOrderQuantity ?? ""}
