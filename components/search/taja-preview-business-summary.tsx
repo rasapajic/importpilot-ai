@@ -27,6 +27,7 @@ type SummaryCopy = {
   statusBlocked: string;
   descriptionReady: string;
   descriptionReview: string;
+  descriptionGenericReview: string;
   descriptionBlocked: string;
   productForm: string;
   requirementMatch: string;
@@ -43,6 +44,7 @@ type SummaryCopy = {
   formNozzles: string;
   formComponent: string;
   formUnclear: string;
+  formUnknownGeneric: string;
   matchFull: string;
   matchPartial: string;
   matchUnconfirmed: string;
@@ -88,6 +90,7 @@ const copyByLocale: Record<Locale, SummaryCopy> = {
     statusBlocked: "NIJE UPOREDIVO",
     descriptionReady: "Osnovni podaci su dovoljno jasni za preliminarno poređenje. Konačna odluka i dalje zahteva proveru dobavljača.",
     descriptionReview: "Stranica sadrži korisne podatke, ali još nije dovoljno jasno šta se prodaje ili šta prikazana cena obuhvata.",
+    descriptionGenericReview: "Pronađen je proizvod, ali za pouzdano poređenje nedostaje potvrđena cena i njena prodajna jedinica.",
     descriptionBlocked: "Ponuda trenutno nije direktno uporediva sa traženim proizvodom ili količinom.",
     productForm: "Šta se prodaje",
     requirementMatch: "Usklađenost sa zahtevom",
@@ -104,6 +107,7 @@ const copyByLocale: Record<Locale, SummaryCopy> = {
     formNozzles: "samo mlaznice",
     formComponent: "komponenta ili rezervni deo",
     formUnclear: "nije jasno da li je kompletan sistem",
+    formUnknownGeneric: "naziv proizvoda nije potvrđen",
     matchFull: "potpuno potvrđena",
     matchPartial: "delimično potvrđena",
     matchUnconfirmed: "nije potvrđena",
@@ -151,6 +155,7 @@ const copyByLocale: Record<Locale, SummaryCopy> = {
     statusBlocked: "NICHT VERGLEICHBAR",
     descriptionReady: "Die Grunddaten sind für einen vorläufigen Vergleich ausreichend. Die endgültige Entscheidung erfordert weiterhin eine Lieferantenprüfung.",
     descriptionReview: "Die Seite enthält nützliche Daten, aber Produktumfang oder Preisbasis sind noch nicht eindeutig.",
+    descriptionGenericReview: "Das Produkt wurde erkannt. Für einen verlässlichen Vergleich fehlen jedoch ein bestätigter Preis und die Verkaufseinheit.",
     descriptionBlocked: "Das Angebot ist derzeit nicht direkt mit dem gesuchten Produkt oder der gewünschten Menge vergleichbar.",
     productForm: "Was wird verkauft",
     requirementMatch: "Übereinstimmung mit der Anfrage",
@@ -167,6 +172,7 @@ const copyByLocale: Record<Locale, SummaryCopy> = {
     formNozzles: "nur Düsen",
     formComponent: "Komponente oder Ersatzteil",
     formUnclear: "unklar, ob es sich um ein komplettes System handelt",
+    formUnknownGeneric: "Produktbezeichnung nicht bestätigt",
     matchFull: "vollständig bestätigt",
     matchPartial: "teilweise bestätigt",
     matchUnconfirmed: "nicht bestätigt",
@@ -214,6 +220,7 @@ const copyByLocale: Record<Locale, SummaryCopy> = {
     statusBlocked: "NOT COMPARABLE",
     descriptionReady: "The core data is clear enough for a preliminary comparison. Final selection still requires supplier verification.",
     descriptionReview: "The page contains useful data, but the product scope or price basis is not yet clear enough.",
+    descriptionGenericReview: "The product was identified, but a confirmed price and selling unit are still needed for a reliable comparison.",
     descriptionBlocked: "The offer is not currently comparable with the requested product or quantity.",
     productForm: "What is being sold",
     requirementMatch: "Match to the request",
@@ -230,6 +237,7 @@ const copyByLocale: Record<Locale, SummaryCopy> = {
     formNozzles: "nozzles only",
     formComponent: "component or spare part",
     formUnclear: "unclear whether this is a complete system",
+    formUnknownGeneric: "product name unconfirmed",
     matchFull: "fully confirmed",
     matchPartial: "partially confirmed",
     matchUnconfirmed: "not confirmed",
@@ -395,7 +403,11 @@ function statusCopy(summary: TajaPreviewBusinessSummaryValue, copy: SummaryCopy)
   if (summary.status === TajaPreviewBusinessStatuses.BLOCKED) {
     return { label: copy.statusBlocked, description: copy.descriptionBlocked, className: "blocked" };
   }
-  return { label: copy.statusReview, description: copy.descriptionReview, className: "review" };
+  return {
+    label: copy.statusReview,
+    description: summary.mistingSpecific ? copy.descriptionReview : copy.descriptionGenericReview,
+    className: "review",
+  };
 }
 
 function SummaryRow({ label, value }: { label: string; value: string }) {
@@ -439,23 +451,32 @@ export function TajaPreviewBusinessSummary({
       </header>
 
       <dl className="taja-preview-summary-grid">
-        <SummaryRow label={copy.productForm} value={productFormText(summary, copy)} />
+        <SummaryRow
+          label={copy.productForm}
+          value={summary.mistingSpecific
+            ? productFormText(summary, copy)
+            : preview.title?.trim() || copy.formUnknownGeneric}
+        />
         {summary.requirementMatchStatus !== null && (
           <SummaryRow
             label={copy.requirementMatch}
             value={requirementText(summary.requirementMatchStatus, copy)}
           />
         )}
-        <SummaryRow
-          label={copy.pump}
-          value={evidenceText(summary.pumpStatus, summary.pumpValue, copy)}
-        />
-        <SummaryRow
-          label={summary.requestedNozzleCount !== null
-            ? copy.exactNozzleCount(summary.requestedNozzleCount)
-            : copy.nozzles}
-          value={evidenceText(nozzleStatus, summary.nozzleValue, copy)}
-        />
+        {summary.mistingSpecific && (
+          <>
+            <SummaryRow
+              label={copy.pump}
+              value={evidenceText(summary.pumpStatus, summary.pumpValue, copy)}
+            />
+            <SummaryRow
+              label={summary.requestedNozzleCount !== null
+                ? copy.exactNozzleCount(summary.requestedNozzleCount)
+                : copy.nozzles}
+              value={evidenceText(nozzleStatus, summary.nozzleValue, copy)}
+            />
+          </>
+        )}
         <SummaryRow
           label={copy.displayedPrice}
           value={priceText(preview, summary, copy)}
