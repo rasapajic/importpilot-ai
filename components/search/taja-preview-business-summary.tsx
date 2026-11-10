@@ -27,6 +27,7 @@ type SummaryCopy = {
   statusBlocked: string;
   descriptionReady: string;
   descriptionReview: string;
+  descriptionGenericReview: string;
   descriptionBlocked: string;
   productForm: string;
   requirementMatch: string;
@@ -43,6 +44,7 @@ type SummaryCopy = {
   formNozzles: string;
   formComponent: string;
   formUnclear: string;
+  formUnknownGeneric: string;
   matchFull: string;
   matchPartial: string;
   matchUnconfirmed: string;
@@ -73,6 +75,8 @@ type SummaryCopy = {
   actionReady: string;
   questionConfirmPrice: (price: string | null) => string;
   questionDoNotCompare: string;
+  questionConfirmPriceGeneric: (price: string | null) => string;
+  questionDoNotCompareGeneric: string;
   questionConfirmRequirements: string;
   questionNegotiateMoq: string;
   questionConfirmIncoterm: string;
@@ -88,6 +92,7 @@ const copyByLocale: Record<Locale, SummaryCopy> = {
     statusBlocked: "NIJE UPOREDIVO",
     descriptionReady: "Osnovni podaci su dovoljno jasni za preliminarno poređenje. Konačna odluka i dalje zahteva proveru dobavljača.",
     descriptionReview: "Stranica sadrži korisne podatke, ali još nije dovoljno jasno šta se prodaje ili šta prikazana cena obuhvata.",
+    descriptionGenericReview: "Pronađen je proizvod, ali za pouzdano poređenje nedostaje potvrđena cena i njena prodajna jedinica.",
     descriptionBlocked: "Ponuda trenutno nije direktno uporediva sa traženim proizvodom ili količinom.",
     productForm: "Šta se prodaje",
     requirementMatch: "Usklađenost sa zahtevom",
@@ -104,6 +109,7 @@ const copyByLocale: Record<Locale, SummaryCopy> = {
     formNozzles: "samo mlaznice",
     formComponent: "komponenta ili rezervni deo",
     formUnclear: "nije jasno da li je kompletan sistem",
+    formUnknownGeneric: "naziv proizvoda nije potvrđen",
     matchFull: "potpuno potvrđena",
     matchPartial: "delimično potvrđena",
     matchUnconfirmed: "nije potvrđena",
@@ -138,6 +144,10 @@ const copyByLocale: Record<Locale, SummaryCopy> = {
       ? `Da li prikazana cena ${price} važi za jednu mlaznicu, paket delova ili kompletan sistem? Molimo navedite tačan sadržaj prodajne jedinice.`
       : "Šta tačno obuhvata jedna prodajna jedinica i koja je cena za kompletan proizvod?",
     questionDoNotCompare: "Da li dobavljač nudi kompletan proizvod koji odgovara našem zahtevu, a ne samo pumpu, mlaznice ili drugi deo?",
+    questionConfirmPriceGeneric: (price) => price
+      ? `Da li prikazana cena ${price} važi za jednu prodajnu jedinicu? Molimo navedite šta jedinica sadrži.`
+      : "Koja je cena po prodajnoj jedinici i šta tačno ponuda obuhvata?",
+    questionDoNotCompareGeneric: "Da li dobavljač može ponuditi proizvod koji odgovara našoj traženoj specifikaciji?",
     questionConfirmRequirements: "Molimo potvrdite sve tražene osobine proizvoda i pošaljite tačnu specifikaciju ponuđene varijante.",
     questionNegotiateMoq: "Da li možete prihvatiti našu traženu količinu ispod navedenog MOQ-a i po kojoj ceni?",
     questionConfirmIncoterm: "Koji Incoterm važi za prikazanu cenu i iz kog grada ili luke roba polazi?",
@@ -151,6 +161,7 @@ const copyByLocale: Record<Locale, SummaryCopy> = {
     statusBlocked: "NICHT VERGLEICHBAR",
     descriptionReady: "Die Grunddaten sind für einen vorläufigen Vergleich ausreichend. Die endgültige Entscheidung erfordert weiterhin eine Lieferantenprüfung.",
     descriptionReview: "Die Seite enthält nützliche Daten, aber Produktumfang oder Preisbasis sind noch nicht eindeutig.",
+    descriptionGenericReview: "Das Produkt wurde erkannt. Für einen verlässlichen Vergleich fehlen jedoch ein bestätigter Preis und die Verkaufseinheit.",
     descriptionBlocked: "Das Angebot ist derzeit nicht direkt mit dem gesuchten Produkt oder der gewünschten Menge vergleichbar.",
     productForm: "Was wird verkauft",
     requirementMatch: "Übereinstimmung mit der Anfrage",
@@ -167,6 +178,7 @@ const copyByLocale: Record<Locale, SummaryCopy> = {
     formNozzles: "nur Düsen",
     formComponent: "Komponente oder Ersatzteil",
     formUnclear: "unklar, ob es sich um ein komplettes System handelt",
+    formUnknownGeneric: "Produktbezeichnung nicht bestätigt",
     matchFull: "vollständig bestätigt",
     matchPartial: "teilweise bestätigt",
     matchUnconfirmed: "nicht bestätigt",
@@ -201,6 +213,10 @@ const copyByLocale: Record<Locale, SummaryCopy> = {
       ? `Gilt der angezeigte Preis von ${price} für eine Düse, ein Teilepaket oder ein komplettes System? Bitte nennen Sie den genauen Inhalt einer Verkaufseinheit.`
       : "Was umfasst eine Verkaufseinheit genau und wie hoch ist der Preis für das komplette Produkt?",
     questionDoNotCompare: "Bietet der Lieferant ein vollständiges Produkt gemäß unserer Anfrage an und nicht nur Pumpe, Düsen oder Einzelteile?",
+    questionConfirmPriceGeneric: (price) => price
+      ? `Gilt der angezeigte Preis von ${price} für eine Verkaufseinheit? Bitte nennen Sie deren genauen Inhalt.`
+      : "Wie hoch ist der Preis je Verkaufseinheit und was umfasst das Angebot genau?",
+    questionDoNotCompareGeneric: "Kann der Lieferant ein Produkt anbieten, das unserer angefragten Spezifikation entspricht?",
     questionConfirmRequirements: "Bitte bestätigen Sie alle geforderten Produkteigenschaften und senden Sie die genaue Spezifikation der angebotenen Variante.",
     questionNegotiateMoq: "Können Sie unsere gewünschte Menge unterhalb der MOQ akzeptieren und zu welchem Preis?",
     questionConfirmIncoterm: "Welcher Incoterm gilt für den angezeigten Preis und von welcher Stadt oder welchem Hafen startet die Ware?",
@@ -214,6 +230,7 @@ const copyByLocale: Record<Locale, SummaryCopy> = {
     statusBlocked: "NOT COMPARABLE",
     descriptionReady: "The core data is clear enough for a preliminary comparison. Final selection still requires supplier verification.",
     descriptionReview: "The page contains useful data, but the product scope or price basis is not yet clear enough.",
+    descriptionGenericReview: "The product was identified, but a confirmed price and selling unit are still needed for a reliable comparison.",
     descriptionBlocked: "The offer is not currently comparable with the requested product or quantity.",
     productForm: "What is being sold",
     requirementMatch: "Match to the request",
@@ -230,6 +247,7 @@ const copyByLocale: Record<Locale, SummaryCopy> = {
     formNozzles: "nozzles only",
     formComponent: "component or spare part",
     formUnclear: "unclear whether this is a complete system",
+    formUnknownGeneric: "product name unconfirmed",
     matchFull: "fully confirmed",
     matchPartial: "partially confirmed",
     matchUnconfirmed: "not confirmed",
@@ -264,6 +282,10 @@ const copyByLocale: Record<Locale, SummaryCopy> = {
       ? `Does the displayed price of ${price} apply to one nozzle, a parts package or a complete system? Please state the exact contents of one selling unit.`
       : "What exactly is included in one selling unit and what is the price of the complete product?",
     questionDoNotCompare: "Does the supplier offer a complete product matching our request rather than only a pump, nozzles or another component?",
+    questionConfirmPriceGeneric: (price) => price
+      ? `Does the displayed price of ${price} apply to one selling unit? Please specify exactly what that unit includes.`
+      : "What is the price per selling unit, and what exactly does the offer include?",
+    questionDoNotCompareGeneric: "Can the supplier offer a product matching our requested specification?",
     questionConfirmRequirements: "Please confirm every requested product feature and send the exact specification of the offered variant.",
     questionNegotiateMoq: "Can you accept our requested quantity below the stated MOQ, and at what price?",
     questionConfirmIncoterm: "Which Incoterm applies to the displayed price, and from which city or port will the goods depart?",
@@ -368,10 +390,12 @@ function supplierQuestion(
     ? `${preview.price} ${preview.currency}`
     : null;
   if (summary.nextAction === TajaPreviewNextActions.CONFIRM_PRICE_AND_CONTENTS) {
-    return copy.questionConfirmPrice(price);
+    return summary.mistingSpecific
+      ? copy.questionConfirmPrice(price)
+      : copy.questionConfirmPriceGeneric(price);
   }
   if (summary.nextAction === TajaPreviewNextActions.DO_NOT_COMPARE_AS_REQUESTED_PRODUCT) {
-    return copy.questionDoNotCompare;
+    return summary.mistingSpecific ? copy.questionDoNotCompare : copy.questionDoNotCompareGeneric;
   }
   if (summary.nextAction === TajaPreviewNextActions.CONFIRM_REQUIREMENTS) {
     return copy.questionConfirmRequirements;
@@ -395,7 +419,11 @@ function statusCopy(summary: TajaPreviewBusinessSummaryValue, copy: SummaryCopy)
   if (summary.status === TajaPreviewBusinessStatuses.BLOCKED) {
     return { label: copy.statusBlocked, description: copy.descriptionBlocked, className: "blocked" };
   }
-  return { label: copy.statusReview, description: copy.descriptionReview, className: "review" };
+  return {
+    label: copy.statusReview,
+    description: summary.mistingSpecific ? copy.descriptionReview : copy.descriptionGenericReview,
+    className: "review",
+  };
 }
 
 function SummaryRow({ label, value }: { label: string; value: string }) {
@@ -439,23 +467,32 @@ export function TajaPreviewBusinessSummary({
       </header>
 
       <dl className="taja-preview-summary-grid">
-        <SummaryRow label={copy.productForm} value={productFormText(summary, copy)} />
+        <SummaryRow
+          label={copy.productForm}
+          value={summary.mistingSpecific
+            ? productFormText(summary, copy)
+            : preview.title?.trim() || copy.formUnknownGeneric}
+        />
         {summary.requirementMatchStatus !== null && (
           <SummaryRow
             label={copy.requirementMatch}
             value={requirementText(summary.requirementMatchStatus, copy)}
           />
         )}
-        <SummaryRow
-          label={copy.pump}
-          value={evidenceText(summary.pumpStatus, summary.pumpValue, copy)}
-        />
-        <SummaryRow
-          label={summary.requestedNozzleCount !== null
-            ? copy.exactNozzleCount(summary.requestedNozzleCount)
-            : copy.nozzles}
-          value={evidenceText(nozzleStatus, summary.nozzleValue, copy)}
-        />
+        {summary.mistingSpecific && (
+          <>
+            <SummaryRow
+              label={copy.pump}
+              value={evidenceText(summary.pumpStatus, summary.pumpValue, copy)}
+            />
+            <SummaryRow
+              label={summary.requestedNozzleCount !== null
+                ? copy.exactNozzleCount(summary.requestedNozzleCount)
+                : copy.nozzles}
+              value={evidenceText(nozzleStatus, summary.nozzleValue, copy)}
+            />
+          </>
+        )}
         <SummaryRow
           label={copy.displayedPrice}
           value={priceText(preview, summary, copy)}

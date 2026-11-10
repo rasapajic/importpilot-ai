@@ -77,6 +77,8 @@ export type TajaPreviewNextAction =
 
 export type TajaPreviewBusinessSummary = {
   status: TajaPreviewBusinessStatus;
+  /** Show pump/nozzle/complete-system details only for actual misting products. */
+  mistingSpecific: boolean;
   productForm: TajaOfferProductForm;
   productFormMatchStatus: TajaProductFormMatchStatus | null;
   requirementMatchStatus: TajaRequirementMatchStatus | null;
@@ -99,6 +101,17 @@ type PreviewSummaryContext = {
   productQuery?: string | null;
   requestedQuantity?: number | null;
 };
+
+/** Do not describe reading glasses, textiles or other general imports as
+ * pumps, nozzles, or complete misting systems. This gates only presentation:
+ * it never changes supplier evidence, quantity, price or landed-cost policy.
+ */
+function usesMistingReview(title: string | null): boolean {
+  // Search intent is not evidence of what a supplier actually offers.
+  // A misting query can return an unrelated product such as reading glasses.
+  const offeredTitle = title?.trim() ?? "";
+  return /\b(?:mist\w*|fog\w*|nozzl\w*|mlaznic\w*|magl\w*|atomiz\w*|nebuliz\w*|spray\s+cool\w*|rasprs\w*)\b/i.test(offeredTitle);
+}
 
 function normalizedName(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
@@ -249,6 +262,7 @@ export function buildTajaPreviewBusinessSummary(
 ): TajaPreviewBusinessSummary {
   const productQuery = context.productQuery?.trim() || null;
   const requestedQuantity = normalizeRequestedQuantity(context.requestedQuantity);
+  const mistingSpecific = usesMistingReview(preview.title);
   const result = {
     title: preview.title ?? "",
     marketplaceDetails: preview.details ?? null,
@@ -280,6 +294,7 @@ export function buildTajaPreviewBusinessSummary(
   });
 
   return {
+    mistingSpecific,
     status: businessStatus({
       productFormMatchStatus: productFormAssessment?.matchStatus ?? null,
       moqStatus: moq,
