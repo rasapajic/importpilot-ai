@@ -210,7 +210,7 @@ export function UrlImportReview({
               min="0"
               onChange={(event) => update("price", event.target.value)}
               disabled={requiresSupplierMoqConfirmation(preview)}
-              placeholder={t("Nije prepoznato")}
+              placeholder={requiresSupplierMoqConfirmation(preview) ? t("Nije potvrđeno") : t("Nije prepoznato")}
               step="any"
               type="number"
               value={preview.price ?? ""}
@@ -231,7 +231,7 @@ export function UrlImportReview({
               min="1"
               onChange={(event) => update("minimumOrderQuantity", event.target.value)}
               disabled={requiresSupplierMoqConfirmation(preview)}
-              placeholder={t("Nije navedeno")}
+              placeholder={requiresSupplierMoqConfirmation(preview) ? t("Nije potvrđeno") : t("Nije navedeno")}
               type="number"
               value={preview.minimumOrderQuantity ?? ""}
             />

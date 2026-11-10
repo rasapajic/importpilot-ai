@@ -3,6 +3,7 @@
 import { useI18n } from "@/components/i18n/i18n-provider";
 import type { Locale } from "@/modules/i18n/translations";
 import type { SupplierOfferUrlPreview } from "@/modules/product-search/domain/search";
+import { requiresSupplierMoqConfirmation } from "@/modules/product-search/domain/public-moq-review";
 import {
   buildTajaPreviewBusinessSummary,
   TajaPreviewBusinessStatuses,
@@ -54,13 +55,16 @@ type SummaryCopy = {
   evidenceUnconfirmed: string;
   sourceStates: (value: string) => string;
   priceMissing: string;
+  pricePublicUnconfirmed: string;
   priceConfirmed: (price: string, sellingUnit: string | null) => string;
   priceUnconfirmed: (price: string) => string;
   moqUnknown: string;
+  moqPublicUnconfirmed: string;
   moqStated: (moq: number) => string;
   moqOk: (moq: number, quantity: number) => string;
   moqBlocking: (moq: number, quantity: number) => string;
   landedMissingPrice: string;
+  landedPublicUnconfirmed: string;
   landedBlockedPrice: string;
   landedBlockedMoq: string;
   landedBlockedIncoterm: string;
@@ -119,15 +123,18 @@ const copyByLocale: Record<Locale, SummaryCopy> = {
     evidenceUnconfirmed: "nije potvrđeno",
     sourceStates: (value) => `Stranica navodi: ${value}`,
     priceMissing: "cena nije navedena",
+    pricePublicUnconfirmed: "cena nije potvrđena za ponudu",
     priceConfirmed: (price, sellingUnit) => sellingUnit
       ? `${price}; jedinica cene: ${sellingUnit}`
       : `${price}; jedinica cene je potvrđena`,
     priceUnconfirmed: (price) => `${price}; nije potvrđeno na koju jedinicu se cena odnosi`,
     moqUnknown: "MOQ nije naveden",
+    moqPublicUnconfirmed: "MOQ nije potvrđen za ovaj proizvod",
     moqStated: (moq) => `naveden MOQ ${moq}`,
     moqOk: (moq, quantity) => `MOQ ${moq}; odgovara traženoj količini ${quantity}`,
     moqBlocking: (moq, quantity) => `MOQ ${moq} je iznad tražene količine ${quantity}`,
     landedMissingPrice: "nije obračunat — nedostaje potpuna cena",
+    landedPublicUnconfirmed: "nije obračunat — cena i MOQ nisu potvrđeni",
     landedBlockedPrice: "nije obračunat — jedinica cene nije potvrđena",
     landedBlockedMoq: "nije obračunat — tražena količina je ispod MOQ-a",
     landedBlockedIncoterm: "nije obračunat — Incoterm nije potvrđen",
@@ -188,15 +195,18 @@ const copyByLocale: Record<Locale, SummaryCopy> = {
     evidenceUnconfirmed: "nicht bestätigt",
     sourceStates: (value) => `Die Seite nennt: ${value}`,
     priceMissing: "Preis nicht angegeben",
+    pricePublicUnconfirmed: "Preis für das Angebot nicht bestätigt",
     priceConfirmed: (price, sellingUnit) => sellingUnit
       ? `${price}; Preiseinheit: ${sellingUnit}`
       : `${price}; Preiseinheit bestätigt`,
     priceUnconfirmed: (price) => `${price}; die Preiseinheit ist nicht bestätigt`,
     moqUnknown: "MOQ nicht angegeben",
+    moqPublicUnconfirmed: "MOQ für dieses Produkt nicht bestätigt",
     moqStated: (moq) => `angegebene MOQ ${moq}`,
     moqOk: (moq, quantity) => `MOQ ${moq}; passend zur gewünschten Menge ${quantity}`,
     moqBlocking: (moq, quantity) => `MOQ ${moq} liegt über der gewünschten Menge ${quantity}`,
     landedMissingPrice: "nicht berechnet — vollständiger Preis fehlt",
+    landedPublicUnconfirmed: "nicht berechnet — Preis und MOQ sind nicht bestätigt",
     landedBlockedPrice: "nicht berechnet — Preiseinheit nicht bestätigt",
     landedBlockedMoq: "nicht berechnet — gewünschte Menge liegt unter der MOQ",
     landedBlockedIncoterm: "nicht berechnet — Incoterm nicht bestätigt",
@@ -257,15 +267,18 @@ const copyByLocale: Record<Locale, SummaryCopy> = {
     evidenceUnconfirmed: "not confirmed",
     sourceStates: (value) => `The page states: ${value}`,
     priceMissing: "price not stated",
+    pricePublicUnconfirmed: "offer price not confirmed",
     priceConfirmed: (price, sellingUnit) => sellingUnit
       ? `${price}; price unit: ${sellingUnit}`
       : `${price}; price unit confirmed`,
     priceUnconfirmed: (price) => `${price}; the price unit is not confirmed`,
     moqUnknown: "MOQ not stated",
+    moqPublicUnconfirmed: "MOQ not confirmed for this product",
     moqStated: (moq) => `stated MOQ ${moq}`,
     moqOk: (moq, quantity) => `MOQ ${moq}; compatible with requested quantity ${quantity}`,
     moqBlocking: (moq, quantity) => `MOQ ${moq} exceeds requested quantity ${quantity}`,
     landedMissingPrice: "not calculated — complete price is missing",
+    landedPublicUnconfirmed: "not calculated — price and MOQ are unconfirmed",
     landedBlockedPrice: "not calculated — price unit is unconfirmed",
     landedBlockedMoq: "not calculated — requested quantity is below MOQ",
     landedBlockedIncoterm: "not calculated — Incoterm is unconfirmed",
@@ -333,7 +346,9 @@ function priceText(
   summary: TajaPreviewBusinessSummaryValue,
   copy: SummaryCopy,
 ) {
-  if (preview.price === null || preview.currency === null) return copy.priceMissing;
+  if (preview.price === null || preview.currency === null) {
+    return requiresSupplierMoqConfirmation(preview) ? copy.pricePublicUnconfirmed : copy.priceMissing;
+  }
   const price = `${preview.price} ${preview.currency}`;
   return summary.priceBasisStatus === TajaPreviewPriceBasisStatuses.CONFIRMED
     ? copy.priceConfirmed(price, summary.sellingUnit)
@@ -346,7 +361,7 @@ function moqText(
   copy: SummaryCopy,
 ) {
   if (summary.moqStatus === TajaPreviewMoqStatuses.UNKNOWN || preview.minimumOrderQuantity === null) {
-    return copy.moqUnknown;
+    return requiresSupplierMoqConfirmation(preview) ? copy.moqPublicUnconfirmed : copy.moqUnknown;
   }
   if (summary.moqStatus === TajaPreviewMoqStatuses.STATED || summary.requestedQuantity === null) {
     return copy.moqStated(preview.minimumOrderQuantity);
@@ -359,8 +374,11 @@ function moqText(
 function landedCostText(
   status: TajaPreviewBusinessSummaryValue["landedCostStatus"],
   copy: SummaryCopy,
+  preview: SupplierOfferUrlPreview,
 ) {
-  if (status === TajaPreviewLandedCostStatuses.MISSING_PRICE) return copy.landedMissingPrice;
+  if (status === TajaPreviewLandedCostStatuses.MISSING_PRICE) {
+    return requiresSupplierMoqConfirmation(preview) ? copy.landedPublicUnconfirmed : copy.landedMissingPrice;
+  }
   if (status === TajaPreviewLandedCostStatuses.BLOCKED_PRICE_BASIS) return copy.landedBlockedPrice;
   if (status === TajaPreviewLandedCostStatuses.BLOCKED_MOQ) return copy.landedBlockedMoq;
   if (status === TajaPreviewLandedCostStatuses.BLOCKED_INCOTERM) return copy.landedBlockedIncoterm;
@@ -500,7 +518,7 @@ export function TajaPreviewBusinessSummary({
         <SummaryRow label={copy.moq} value={moqText(preview, summary, copy)} />
         <SummaryRow
           label={copy.landedCost}
-          value={landedCostText(summary.landedCostStatus, copy)}
+          value={landedCostText(summary.landedCostStatus, copy, preview)}
         />
       </dl>
 
