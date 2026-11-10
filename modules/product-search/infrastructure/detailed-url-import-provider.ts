@@ -22,11 +22,18 @@ import {
 
 const DEFAULT_TIMEOUT_MS = 20_000;
 const COMPANY_SUFFIX_SOURCE =
-  "(?:Co\\.,?\\s*Ltd\\.?|Company\\s+Limited|Limited|Ltd\\.?|Factory|Manufacturer)";
+  "(?:Corp(?:oration)?\\.?\\s*,?\\s*Ltd\\.?|Co\\.,?\\s*Ltd\\.?|Company\\s+Limited|Limited|Ltd\\.?|Factory|Manufacturer)";
 const PLATFORM_COMPANY_PATTERN =
   /\b(?:Made-in-China(?:\.com)?|Focus\s+Technology|Google|Facebook|Microsoft)\b/i;
 const SUPPLIER_PROFILE_PROSE_PATTERN =
   /\b(?:located\s+in|major\s+port\s+city|province|speciali[sz](?:es|ing)|founded\s+in|established\s+in|we\s+are|our\s+company|manufacturer\s+of|supplier\s+of)\b/i;
+// Marketplace seller mastheads can concatenate the legal suffix and city,
+// e.g. "Pilot Optics International Corp.Ltd.Wenzhou" without spaces.
+// This is a standalone seller label, NOT product-title inference or profile
+// prose. Retain the exact public label rather than silently deleting a city.
+const EXPLICIT_COMPACT_CORP_LTD_LABEL =
+  /^(?:[A-Z][A-Za-z0-9&'()/-]*\s+){2,14}Corp(?:oration)?\.\s*,?\s*Ltd\.(?:[A-Z][A-Za-z]{2,32})?$/i;
+
 
 type DetailedProviderOptions = {
   endpoint?: string | null;
@@ -48,7 +55,9 @@ function companyNameCandidates(value: string) {
     .filter((candidate) =>
       candidate.length >= 3 &&
       candidate.length <= 200 &&
-      !PLATFORM_COMPANY_PATTERN.test(candidate)
+      !PLATFORM_COMPANY_PATTERN.test(candidate) &&
+      // "is a prominent manufacturer" is descriptive prose, never a seller.
+      !/^(?:is|are)\s+(?:a|an)\s+(?:prominent|leading|reputable|professional|experienced)\s+(?:manufacturer|factory)\b/i.test(candidate)
     );
 }
 
@@ -69,6 +78,11 @@ export function normalizeExternalSupplierName(value: unknown) {
     .replace(/\s+/g, " ")
     .trim();
   if (!normalized || PLATFORM_COMPANY_PATTERN.test(normalized)) return null;
+
+  if (EXPLICIT_COMPACT_CORP_LTD_LABEL.test(normalized) &&
+      !SUPPLIER_PROFILE_PROSE_PATTERN.test(normalized)) {
+    return normalized;
+  }
 
   const legalEntities = companyNameCandidates(normalized);
   if (legalEntities.length > 0) return legalEntities.at(-1) ?? null;
