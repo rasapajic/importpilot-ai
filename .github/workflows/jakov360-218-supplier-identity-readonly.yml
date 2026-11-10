@@ -1,0 +1,98 @@
+name: JAKOV360 218 supplier identity real source read-only
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/jakov360-218-supplier-identity-readonly.yml"
+      - "modules/product-search/infrastructure/detailed-url-import-provider.ts"
+      - "tests/unit/url-import-pilot-supplier-identity-218.test.ts"
+
+permissions:
+  contents: read
+
+jobs:
+  exact_sku_seller_identity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Read branch without persistent credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install locked root dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Check only one exact public seller URL, no secrets and no supplier contact
+        shell: bash
+        run: |
+          node --import tsx --input-type=module - <<'NODE'
+          import { parseProductPreview } from './services/importpilot-url-import-provider/src/parser.ts';
+          import { normalizeExternalSupplierName } from './modules/product-search/infrastructure/detailed-url-import-provider.ts';
+
+          const target =
+            'https://pilotoptics.en.made-in-china.com/product/WZBfuPSTaRAU/China-Pilot-Optics-2023-Fashion-Classic-Rectangle-Anti-Blue-Light-Blocking-Reading-Glasses.html';
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 12000);
+          let requests = 0;
+
+          async function readOnlyExactUrl() {
+            if (++requests !== 1) throw Error('GET_BUDGET_EXCEEDED');
+            const response = await fetch(target, {
+              method: 'GET',
+              redirect: 'manual',
+              signal: controller.signal,
+              headers: { accept: 'text/html' },
+            });
+            if (response.status !== 200 || response.redirected || response.url !== target) {
+              throw Error('NON_200_OR_REDIRECT');
+            }
+            if (!/^text\/html(?:;|$)/i.test(response.headers.get('content-type') || '')) {
+              throw Error('WRONG_CONTENT_TYPE');
+            }
+            let size = 0;
+            const chunks = [];
+            for await (const data of response.body) {
+              size += data.length;
+              if (size > 1_000_000) throw Error('HTML_TOO_LARGE');
+              chunks.push(data);
+            }
+            if (size < 100) throw Error('HTML_TOO_SMALL');
+            return Buffer.concat(chunks).toString('utf8');
+          }
+
+          try {
+            const html = await readOnlyExactUrl();
+            const preview = parseProductPreview(html, target);
+            const normalized = normalizeExternalSupplierName(preview.supplierName);
+            // The exact seller public label is used as the comparison basis.
+            // Never log names, HTML, product links, prices, or supplier metadata.
+            const extracted = Boolean(preview.supplierName);
+            const retained = Boolean(normalized) && 
+              /^Pilot Optics International Corp\.Ltd(?:\.|$)/i.test(normalized);
+            const negativeSafe = normalizeExternalSupplierName(
+              'Pilot Optics established in 1999, is a prominent manufacturer'
+            ) === null;
+            console.log('JAKOV360_218_REAL_SOURCE_CHECK ' +
+              'sellerExtracted=' + extracted + ' appRetained=' + retained +
+              ' profileProseRejected=' + negativeSafe + ' requests=' + requests);
+            if (!extracted || !retained || !negativeSafe) {
+              throw Error('SELLER_IDENTITY_BRIDGE_NOT_CONFIRMED');
+            }
+            console.log('JAKOV360_218_REAL_SOURCE_PASS');
+          } catch (error) {
+            const safe = new Set([
+              'GET_BUDGET_EXCEEDED', 'NON_200_OR_REDIRECT', 'WRONG_CONTENT_TYPE',
+              'HTML_TOO_LARGE', 'HTML_TOO_SMALL', 'SELLER_IDENTITY_BRIDGE_NOT_CONFIRMED',
+            ]);
+            const reason = safe.has(error?.message) ? error.message : 'PUBLIC_SOURCE_UNAVAILABLE';
+            console.error('JAKOV360_218_REAL_SOURCE_NOT_VERIFIED reason=' + reason);
+            process.exitCode = 1;
+          } finally {
+            clearTimeout(timer);
+          }
+          NODE
