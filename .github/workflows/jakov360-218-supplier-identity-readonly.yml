@@ -31,8 +31,16 @@ jobs:
         shell: bash
         run: |
           node --import tsx --input-type=module - <<'NODE'
-          import { parseProductPreview } from './services/importpilot-url-import-provider/src/parser.ts';
-          import { normalizeExternalSupplierName } from './modules/product-search/infrastructure/detailed-url-import-provider.ts';
+          // Root package uses CJS interop under Node + tsx, so tolerate both
+          // the CJS default object and direct ESM namespace exports.
+          import * as parserModule from './services/importpilot-url-import-provider/src/parser.ts';
+          import * as appModule from './modules/product-search/infrastructure/detailed-url-import-provider.ts';
+          const parseProductPreview = parserModule.parseProductPreview ?? parserModule.default?.parseProductPreview;
+          const normalizeExternalSupplierName = appModule.normalizeExternalSupplierName ?? appModule.default?.normalizeExternalSupplierName;
+          if (typeof parseProductPreview !== 'function' ||
+              typeof normalizeExternalSupplierName !== 'function') {
+            throw Error('BRIDGE_IMPORT_UNAVAILABLE');
+          }
 
           const target =
             'https://pilotoptics.en.made-in-china.com/product/WZBfuPSTaRAU/China-Pilot-Optics-2023-Fashion-Classic-Rectangle-Anti-Blue-Light-Blocking-Reading-Glasses.html';
