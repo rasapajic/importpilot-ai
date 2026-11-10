@@ -24,7 +24,7 @@ jobs:
         run: |
           node --input-type=module - <<'NODE'
           const ORIGIN = 'https://importpilot-1-0-staging.onrender.com';
-          const REVISION = '6990dfd07734';
+          const REVISION = 'c8ed7c4d17e7';
           const ALLOWED = new Set(['/api/health', '/login']);
           let calls = 0;
 
