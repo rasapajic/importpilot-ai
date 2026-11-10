@@ -204,6 +204,7 @@ const entries: Translation[] = [
   { en: "Optional", de: "Optional", sr: "Opcionalno" },
   { en: "Not recognized", de: "Nicht erkannt", sr: "Nije prepoznato" },
   { en: "Not provided", de: "Nicht angegeben", sr: "Nije navedeno" },
+  { en: "Not confirmed", de: "Nicht bestätigt", sr: "Nije potvrđeno" },
   { en: "Not specified", de: "Nicht angegeben", sr: "Nije naveden" },
   { en: "Product name", de: "Produktname", sr: "Naziv proizvoda" },
   { en: "e.g. 3MP PTZ camera", de: "z. B. 3MP-PTZ-Kamera", sr: "npr. PTZ kamera 3MP" },
