@@ -1,0 +1,157 @@
+name: JAKOV360 221 first canary real-source unpriced gate
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/jakov360-221-first-canary-readonly.yml"
+      - "services/importpilot-url-import-provider/src/fetcher.ts"
+      - "services/importpilot-url-import-provider/src/contract.ts"
+      - "services/importpilot-url-import-provider/src/public-price-canary-policy.ts"
+      - "services/importpilot-url-import-provider/tests/marketplace-price-preview-bridge-199.test.ts"
+
+permissions:
+  contents: read
+
+jobs:
+  first_exact_sku_readonly:
+    if: github.event.pull_request.number == 221
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    defaults:
+      run:
+        working-directory: services/importpilot-url-import-provider
+    steps:
+      - name: Checkout without persistent credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Build isolated provider with locked dependencies
+        run: npm install --package-lock-only --ignore-scripts --no-audit && npm ci && npm run build
+      - name: Two fixed public GETs and in-memory provider replay only
+        run: |
+          node --input-type=module - <<'NODE'
+          import { parseProductPreview, isSupplierFaqSourcedMoq } from './dist/parser.js';
+          import { previewProductUrl } from './dist/fetcher.js';
+          import { createPublicPriceCanaryGate } from './dist/public-price-canary-policy.js';
+          import {
+            discoverExactSellerCatalogUrl, parseExactCatalogPriceSource,
+          } from './dist/marketplace-price-source-parser.js';
+
+          // No secrets or supplier outreach. Exactly two allowlisted public
+          // HTTPS sources; NO real video GET, retries, API POST, DB or Render.
+          const product =
+            'https://pilotoptics.en.made-in-china.com/product/WJfUCnDTuekA/China-Pilot-Optics-Wholesale-High-Quality-5-Colors-Custom-Logo-Square-Reading-Glasses.html';
+          const catalog =
+            'https://pilotoptics.en.made-in-china.com/product-group/UejAsgVMrLhv/Reading-glasses-catalog-1.html';
+          const allowed = new Set([product, catalog]);
+          let realRequests = 0;
+          async function publicGet(url, maxBytes) {
+            if (!allowed.has(url) || ++realRequests > 2) throw Error('REAL_REQUEST_BOUNDARY');
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 7000);
+            try {
+              const r = await fetch(url, {
+                method: 'GET', redirect: 'manual', signal: controller.signal,
+                headers: {accept: 'text/html,application/xhtml+xml;q=0.9'},
+              });
+              if (r.status !== 200 || r.redirected || r.url !== url) throw Error('NON_200_OR_REDIRECT');
+              if (!/^(text\/html|application\/xhtml\+xml)(;|$)/i.test(
+                r.headers.get('content-type') || '')) throw Error('NOT_HTML');
+              if (!r.body) throw Error('NO_BODY');
+              const chunks = [];
+              let size = 0;
+              for await (const piece of r.body) {
+                size += piece.byteLength;
+                if (size > maxBytes) throw Error('SIZE_BOUNDARY');
+                chunks.push(Buffer.from(piece));
+              }
+              if (size < 100) throw Error('BODY_TOO_SMALL');
+              return Buffer.concat(chunks).toString('utf8');
+            } finally {
+              clearTimeout(timer);
+            }
+          }
+          try {
+            const productHtml = await publicGet(product, 1_000_000);
+            const primary = parseProductPreview(productHtml, product);
+            const faqOnly = isSupplierFaqSourcedMoq(productHtml, product, primary.minimumOrderQuantity);
+            const exactCatalog = discoverExactSellerCatalogUrl(productHtml, product);
+            if (exactCatalog !== catalog) throw Error('CATALOG_NOT_DISCOVERED');
+            const catalogHtml = await publicGet(catalog, 350_000);
+            const card = parseExactCatalogPriceSource(catalogHtml, product, catalog);
+            const observed = Boolean(
+              primary.productUrl === product &&
+              primary.minimumOrderQuantity === '1200' &&
+              faqOnly &&
+              card?.productUrl === product &&
+              card?.minimumOrderQuantity === 1200 &&
+              Number(card?.lowPrice) === 0.5 &&
+              Number(card?.highPrice) === 2 &&
+              card?.currency === 'USD' &&
+              card?.unit === 'Piece'
+            );
+            console.log('JAKOV360_221_REAL_SOURCE_DIAGNOSTIC ' +
+              'faqOnly=' + faqOnly + ' catalog1200=' + (card?.minimumOrderQuantity === 1200) +
+              ' publicRange=' + (Number(card?.lowPrice) === 0.5 && Number(card?.highPrice) === 2) +
+              ' realRequests=' + realRequests);
+            if (!observed) throw Error('REAL_SOURCE_PUBLIC_MATCH_NOT_VERIFIED');
+
+            // Actual captured HTML replayed in-memory. Video 403 is synthesized
+            // and never fetched externally. Enforces no commercial promotion.
+            const localCalls = [];
+            const mock = async requested => {
+              const target = String(requested);
+              localCalls.push(target);
+              if (target === product || target === catalog) {
+                return new Response(target === product ? productHtml : catalogHtml, {
+                  status: 200, headers: {'content-type': 'text/html'},
+                });
+              }
+              // Source reader can try the precomputed exact video path,
+              // but external networking is strictly forbidden in this replay.
+              if (target.startsWith('https://www.made-in-china.com/video-channel/')) {
+                return new Response('Unavailable', {status: 403});
+              }
+              throw Error('UNEXPECTED_REPLAY_TARGET');
+            };
+            const gate = createPublicPriceCanaryGate({
+              enabled: true, canaryProductUrl: product,
+            });
+            const result = await previewProductUrl(product, {
+              fetcher: mock, publicPriceEvidenceEnabled: true,
+              publicPriceCanaryGate: gate,
+            });
+            const a = result.moqAlignedFaqEvidence;
+            const quarantined = Boolean(
+              a?.kind === 'SELLER_FAQ_CATALOG_MOQ_ALIGNED_UNCONFIRMED' &&
+              a.productUrl === product && a.sourceUrl === catalog &&
+              a.faqMinimumOrderQuantity === 1200 &&
+              a.catalogMinimumOrderQuantity === 1200 &&
+              a.verifiedQuote === false && a.landedCostEligible === false &&
+              result.price === null && result.minimumOrderQuantity === null &&
+              result.details === null && !result.marketplacePriceEvidence &&
+              localCalls[0] === product && localCalls[1] === catalog &&
+              localCalls.length <= 3 && realRequests === 2
+            );
+            if (!quarantined) throw Error('FIRST_SKU_PUBLIC_TERMS_NOT_QUARANTINED');
+            console.log('JAKOV360_221_FIRST_SKU_REAL_SOURCE_PASS ' +
+              'unpriced=true sourceScoped=true realRequests=2');
+          } catch (error) {
+            const known = new Set([
+              'REAL_REQUEST_BOUNDARY', 'NON_200_OR_REDIRECT', 'NOT_HTML',
+              'NO_BODY', 'SIZE_BOUNDARY', 'BODY_TOO_SMALL', 'CATALOG_NOT_DISCOVERED',
+              'REAL_SOURCE_PUBLIC_MATCH_NOT_VERIFIED',
+              'FIRST_SKU_PUBLIC_TERMS_NOT_QUARANTINED',
+              'UNEXPECTED_REPLAY_TARGET',
+            ]);
+            const reason = known.has(error?.message) ? error.message : 'PUBLIC_SOURCE_UNAVAILABLE';
+            console.error('JAKOV360_221_REAL_SOURCE_NOT_VERIFIED reason=' + reason +
+              ' realRequests=' + realRequests);
+            process.exitCode = 1;
+          }
+          NODE
