@@ -26,11 +26,11 @@ function response(html: string, status = 200) {
   return new Response(html, { status, headers: { "content-type": "text/html; charset=utf-8" } });
 }
 
-function fetcherFor(videoStatus = 403, catalog = catalogHtml) {
+function fetcherFor(videoStatus = 403, catalog = catalogHtml, catalogStatus = 200) {
   return vi.fn(async (target: RequestInfo | URL, _init?: RequestInit) => {
     const url = String(target);
     if (url === productUrl) return response(productHtml);
-    if (url === catalogUrl) return response(catalog);
+    if (url === catalogUrl) return response(catalog, catalogStatus);
     if (url === videoUrl) return response(videoStatus === 200 ? videoHtml : "Blocked", videoStatus);
     throw new Error("Unexpected URL fetch");
   });
@@ -46,7 +46,7 @@ describe("provider #199 public evidence preview bridge", () => {
     expect(preview.marketplacePriceEvidence).toBeUndefined();
   });
 
-  it("with opt-in, returns a non-corroborated seller catalog range after video 403", async () => {
+  it("with opt-in, refuses to promote matched public catalog/FAQ values after video 403", async () => {
     const fetcher = fetcherFor(403);
     const preview = await previewProductUrl(productUrl, {
       fetcher: fetcher as typeof fetch,
@@ -57,19 +57,23 @@ describe("provider #199 public evidence preview bridge", () => {
     expect(fetcher.mock.calls.map(call => String(call[0]))).toEqual([
       productUrl, catalogUrl, videoUrl,
     ]);
-    expect(preview.price).toBe("0.50");
+    expect(preview.price).toBeNull();
     expect(preview.currency).toBe("USD");
-    expect(preview.minimumOrderQuantity).toBe("1200");
-    expect(preview.marketplacePriceEvidence).toEqual({
-      kind: "SINGLE_SELLER_CATALOG_ADVERTISED_RANGE",
+    expect(preview.minimumOrderQuantity).toBeNull();
+    expect(preview.details).toBeNull();
+    expect(preview.marketplacePriceEvidence ?? null).toBeNull();
+    expect(preview.moqAlignedFaqEvidence).toMatchObject({
+      kind: "SELLER_FAQ_CATALOG_MOQ_ALIGNED_UNCONFIRMED",
       sourceUrl: catalogUrl, productUrl,
+      faqMinimumOrderQuantity: 1200,
+      catalogMinimumOrderQuantity: 1200,
       lowPrice: "0.5", highPrice: "2", currency: "USD",
-      unit: "Piece", minimumOrderQuantity: 1200,
-      corroborated: false, verifiedQuote: false,
+      unit: "Piece", corroborated: false,
+      verifiedQuote: false, landedCostEligible: false,
     });
   });
 
-  it("returns two same-platform listing references only when video is truly readable", async () => {
+  it("never equates two public listing references with a confirmed quote", async () => {
     const fetcher = fetcherFor(200);
     const preview = await previewProductUrl(productUrl, {
       fetcher: fetcher as typeof fetch,
@@ -77,14 +81,57 @@ describe("provider #199 public evidence preview bridge", () => {
       publicPriceCanaryGate: createPublicPriceCanaryGate({ enabled: true, canaryProductUrl: productUrl }),
     });
     expect(fetcher).toHaveBeenCalledTimes(3);
-    expect(preview.marketplacePriceEvidence).toMatchObject({
-      kind: "CORROBORATED_ADVERTISED_RANGE",
+    // Two public listing references still do not constitute a supplier quote.
+    expect(preview.moqAlignedFaqEvidence).toMatchObject({
+      kind: "SELLER_FAQ_CATALOG_MOQ_ALIGNED_UNCONFIRMED",
       productUrl,
-      evidence: [videoUrl, catalogUrl],
+      sourceUrl: catalogUrl,
+      faqMinimumOrderQuantity: 1200,
+      catalogMinimumOrderQuantity: 1200,
       lowPrice: "0.50", highPrice: "2.00",
-      verifiedQuote: false,
+      verifiedQuote: false, landedCostEligible: false,
     });
-    expect(preview.price).toBe("0.50");
+    expect(preview.price).toBeNull();
+    expect(preview.minimumOrderQuantity).toBeNull();
+    expect(preview.marketplacePriceEvidence ?? null).toBeNull();
+  });
+
+  it("keeps the original canary FAQ-only and unpriced when its catalog is blocked", async () => {
+    const fetcher = fetcherFor(403, "Forbidden", 403);
+    const preview = await previewProductUrl(productUrl, {
+      fetcher: fetcher as typeof fetch,
+      publicPriceEvidenceEnabled: true,
+      publicPriceCanaryGate: createPublicPriceCanaryGate({ enabled: true, canaryProductUrl: productUrl }),
+    });
+    expect(preview.price).toBeNull();
+    expect(preview.minimumOrderQuantity).toBeNull();
+    expect(preview.details).toBeNull();
+    expect(preview.marketplacePriceEvidence ?? null).toBeNull();
+    expect(preview.moqAlignedFaqEvidence ?? null).toBeNull();
+    expect(preview.moqUnverifiedFaqEvidence).toMatchObject({
+      kind: "SELLER_FAQ_MOQ_UNVERIFIED",
+      productUrl, faqMinimumOrderQuantity: 1200,
+      catalogVerified: false, verifiedQuote: false, landedCostEligible: false,
+    });
+    expect(fetcher.mock.calls.map(call => String(call[0]))).toEqual([productUrl, catalogUrl]);
+  });
+
+  it("keeps the original canary unpriced under the source kill switch with zero extra GETs", async () => {
+    const fetcher = fetcherFor();
+    const gate = createPublicPriceCanaryGate({ enabled: false, canaryProductUrl: productUrl });
+    expect(gate.eligible(productUrl)).toBe(false);
+    expect(gate.configuredSkuNeedsFaqReview(productUrl)).toBe(true);
+    const preview = await previewProductUrl(productUrl, {
+      fetcher: fetcher as typeof fetch,
+      publicPriceEvidenceEnabled: false,
+      publicPriceCanaryGate: gate,
+    });
+    expect(preview.price).toBeNull();
+    expect(preview.minimumOrderQuantity).toBeNull();
+    expect(preview.details).toBeNull();
+    expect(preview.moqUnverifiedFaqEvidence?.catalogVerified).toBe(false);
+    expect(fetcher.mock.calls.map(call => String(call[0]))).toEqual([productUrl]);
+    expect(gate.status().attemptsInCurrentWindow).toBe(0);
   });
 
   it("quarantines a catalog/FAQ MOQ mismatch without creating a priced offer", async () => {
