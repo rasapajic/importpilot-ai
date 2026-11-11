@@ -29,7 +29,7 @@ jobs:
           // against rate-limited catalog endpoints.
           const ORIGIN = 'https://importpilot-url-import-provider.onrender.com';
           const ENDPOINTS = ['/health', '/version'];
-          const EXPECTED_REVISION = '6990dfd07734';
+          const EXPECTED_REVISION = '52eaecf12a8d';
           const MAX_BYTES = 4096;
 
           async function readJson(path) {
