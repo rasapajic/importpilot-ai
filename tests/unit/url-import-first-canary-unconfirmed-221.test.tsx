@@ -111,7 +111,7 @@ describe("JAKOV360 #221 first original public SKU is not a confirmed quote", () 
     expect(render("en")).toContain("FAQ and catalog agree on MOQ");
     for (const locale of ["de", "en"] as const) {
       const html = render(locale);
-      expect(html).toContain("1,200");
+      expect(html).toContain(locale === "de" ? "1.200" : "1,200");
       expect(html).not.toContain("Pumpa");
     }
   });
