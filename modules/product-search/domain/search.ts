@@ -218,6 +218,39 @@ export const supplierOfferPublicMoqConflictSchema = z.object({
   }
 });
 
+/**
+ * A same-SKU catalog card agreeing with the seller FAQ is still only a public
+ * observation. Neither the advertised FOB range nor MOQ is a supplier quote.
+ */
+export const supplierOfferPublicMoqAlignedSchema = z.object({
+  kind: z.literal("SELLER_FAQ_CATALOG_MOQ_ALIGNED_UNCONFIRMED"),
+  productUrl: supplierOfferUrlImportRequestSchema.shape.productUrl,
+  sourceUrl: z.url(),
+  faqMinimumOrderQuantity: z.number().int().positive(),
+  catalogMinimumOrderQuantity: z.number().int().positive(),
+  lowPrice: z.string().regex(/^\d+(?:\.\d{1,4})?$/),
+  highPrice: z.string().regex(/^\d+(?:\.\d{1,4})?$/),
+  currency: z.string().regex(/^[A-Z]{3}$/),
+  unit: z.enum(["Piece", "Set", "Unit"]),
+  corroborated: z.literal(false),
+  verifiedQuote: z.literal(false),
+  landedCostEligible: z.literal(false),
+}).strict().superRefine((v, ctx) => {
+  try {
+    const product = new URL(v.productUrl);
+    const source = new URL(v.sourceUrl);
+    if (source.protocol !== "https:" || source.hostname !== product.hostname ||
+        source.username || source.password || source.port || source.search || source.hash ||
+        !/^\/product-group\/[A-Za-z0-9]{6,}\/[A-Za-z0-9-]+\.html$/.test(source.pathname) ||
+        v.faqMinimumOrderQuantity !== v.catalogMinimumOrderQuantity ||
+        Number(v.lowPrice) <= 0 || Number(v.highPrice) <= Number(v.lowPrice)) {
+      ctx.addIssue({ code: "custom", message: "Untrusted or mismatched public catalog MOQ observation." });
+    }
+  } catch {
+    ctx.addIssue({ code: "custom", message: "Invalid exact seller catalog URL." });
+  }
+});
+
 /** Unverified seller FAQ when no exact SKU catalog evidence was obtained. */
 export const supplierOfferUnverifiedFaqSchema = z.object({
   kind: z.literal("SELLER_FAQ_MOQ_UNVERIFIED"),
@@ -254,6 +287,7 @@ export const supplierOfferUrlPreviewSchema = z
     source: z.string().trim().min(1).max(100),
     details: supplierOfferMarketplaceDetailsSchema.nullable().optional(),
     moqConflictEvidence: supplierOfferPublicMoqConflictSchema.nullable().optional(),
+    moqAlignedFaqEvidence: supplierOfferPublicMoqAlignedSchema.nullable().optional(),
     moqUnverifiedFaqEvidence: supplierOfferUnverifiedFaqSchema.nullable().optional(),
     isPartial: z.boolean().default(false),
     titleFromSlug: z.boolean().default(false),
@@ -262,13 +296,19 @@ export const supplierOfferUrlPreviewSchema = z
   .superRefine((preview, ctx) => {
     const conflict = preview.moqConflictEvidence;
     const unverified = preview.moqUnverifiedFaqEvidence;
-    if (conflict && unverified) {
+    if ([conflict, preview.moqAlignedFaqEvidence, unverified].filter(Boolean).length > 1) {
       ctx.addIssue({ code: "custom", message: "Only one public MOQ review state is permitted." });
     }
     if (conflict && (conflict.productUrl !== preview.productUrl ||
         preview.minimumOrderQuantity !== null || preview.price !== null ||
         preview.details != null)) {
       ctx.addIssue({ code: "custom", message: "Catalog/FAQ conflict cannot be a priced import." });
+    }
+    if (preview.moqAlignedFaqEvidence &&
+        (preview.moqAlignedFaqEvidence.productUrl !== preview.productUrl ||
+        preview.minimumOrderQuantity !== null || preview.price !== null ||
+        preview.details != null)) {
+      ctx.addIssue({ code: "custom", message: "Matching FAQ/catalog public listing cannot become a priced import." });
     }
     if (unverified && (unverified.productUrl !== preview.productUrl ||
         preview.minimumOrderQuantity !== null || preview.price !== null ||
