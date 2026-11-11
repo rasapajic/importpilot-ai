@@ -45,6 +45,27 @@ describe("shared provider exact-product price source canary and fetch quota", ()
     expect(loader).toHaveBeenCalledTimes(1);
   });
 
+  it("requires original canary FAQ review even when source reading is disabled", () => {
+    const enabled = createPublicPriceCanaryGate({
+      enabled: true, canaryProductUrl: pilot,
+      additionalProductUrlsJson: JSON.stringify([other]),
+    });
+    const off = createPublicPriceCanaryGate({
+      enabled: false, canaryProductUrl: pilot,
+      additionalProductUrlsJson: JSON.stringify([other]),
+    });
+    for (const gate of [enabled, off]) {
+      expect(gate.configuredSkuNeedsFaqReview(pilot)).toBe(true);
+      expect(gate.configuredSkuNeedsFaqReview(other)).toBe(true);
+      expect(gate.configuredSkuNeedsFaqReview(pilot + "?other=1")).toBe(false);
+      expect(gate.configuredSkuNeedsFaqReview(pilot.replace("pilotoptics", "different"))).toBe(false);
+      expect(gate.additionalSkuNeedsSourceProof(pilot)).toBe(false);
+      expect(gate.additionalSkuNeedsSourceProof(other)).toBe(true);
+    }
+    expect(off.eligible(pilot)).toBe(false);
+    expect(off.status().attemptsInCurrentWindow).toBe(0);
+  });
+
   it("coalesces concurrent authenticated previews and limits reads to one pair per ten minutes", async () => {
     let clock = 1_000_000;
     const gate = createPublicPriceCanaryGate({
