@@ -37,6 +37,8 @@ export type PublicPriceCanaryGate = {
   eligible(productUrl: string): boolean;
   /** Configured optional SKU needs proof EVEN IF source reading is disabled. */
   additionalSkuNeedsSourceProof(productUrl: string): boolean;
+  /** Every configured exact canary, including the original, needs safe FAQ handling. */
+  configuredSkuNeedsFaqReview(productUrl: string): boolean;
   getOrRead(
     productUrl: string,
     loader: () => Promise<PublicPriceEvidence | null>,
@@ -151,6 +153,11 @@ export function createPublicPriceCanaryGate(
       // Keep fail-closed pricing on extra SKUs when an operator flips the
       // source-reading kill switch OFF; no secondary HTTP GET is authorized.
       return products !== null && productUrl !== products[0] && byProduct.has(productUrl);
+    },
+    configuredSkuNeedsFaqReview(productUrl) {
+      // The first original Pilot SKU must not bypass the commercial firewall.
+      // This remains true with source reading OFF: no secondary GET is added.
+      return products !== null && byProduct.has(productUrl);
     },
     status() {
       prune(now());

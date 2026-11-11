@@ -13,6 +13,8 @@ type ConflictCopy = {
   note: string;
   source: string;
   unit: string;
+  alignedTitle: string;
+  alignedNote: string;
   unverifiedTitle: string;
   unverifiedNote: string;
   lockedFields: string;
@@ -28,6 +30,8 @@ const copy: Record<Locale, ConflictCopy> = {
     source: "Proveri originalni katalog",
     unit: "kom.",
     lockedFields: "Polja za cenu i MOQ su zaključana dok ne dobijemo potvrdu dobavljača. Proizvod se može dodati bez tih podataka.",
+    alignedTitle: "FAQ i katalog navode isti MOQ — ponuda nije potvrđena",
+    alignedNote: "Oba javna izvora navode istu minimalnu količinu, ali to nije potvrđena ponuda dobavljača. Javno oglašena cena i MOQ nisu uneti u obračun uvoza.",
     unverifiedTitle: "MOQ iz FAQ-a — nije potvrđen za ovaj proizvod",
     unverifiedNote: "Nije dobijen pouzdan podatak iz kataloga ovog proizvoda (stranica može biti blokirana ili je limit zahteva dostignut). FAQ je samo informacija, ne potvrda količine. Cena i MOQ nisu uneti u ponudu ni u obračun uvoza.",
   },
@@ -40,6 +44,8 @@ const copy: Record<Locale, ConflictCopy> = {
     source: "Originalkatalog prüfen",
     unit: "Stück",
     lockedFields: "Preis und Mindestmenge bleiben bis zur Lieferantenbestätigung gesperrt. Das Produkt kann ohne diese Daten hinzugefügt werden.",
+    alignedTitle: "FAQ und Katalog nennen dieselbe MOQ — Angebot unbestätigt",
+    alignedNote: "Beide öffentlichen Quellen nennen die gleiche Mindestmenge, aber kein bestätigtes Lieferantenangebot. Weder Preis noch MOQ werden für die Einfuhrkosten übernommen.",
     unverifiedTitle: "MOQ aus Lieferanten-FAQ — für dieses Produkt unbestätigt",
     unverifiedNote: "Für dieses Produkt liegen keine überprüften Katalogdaten vor (Quelle gesperrt oder Abruflimit erreicht). Die FAQ ist nur ein Hinweis, keine verbindliche Mindestmenge. Weder Preis noch MOQ fließen in Angebot oder Einfuhrkosten ein.",
   },
@@ -52,6 +58,8 @@ const copy: Record<Locale, ConflictCopy> = {
     source: "Check original catalog",
     unit: "pieces",
     lockedFields: "Price and MOQ fields remain locked until the supplier confirms them. You can add the product without these details.",
+    alignedTitle: "FAQ and catalog agree on MOQ — quote unconfirmed",
+    alignedNote: "Both public listings state the same minimum order, but neither is a confirmed supplier quote. Public price and MOQ are not used for landed cost.",
     unverifiedTitle: "Supplier FAQ MOQ — not verified for this product",
     unverifiedNote: "Exact-product catalog evidence was not obtained (the source may be blocked or the request limit reached). The supplier FAQ is informational only, not a confirmed product minimum. No price or MOQ is applied to an offer or landed-cost calculation.",
   },
@@ -63,9 +71,11 @@ const copy: Record<Locale, ConflictCopy> = {
  */
 export function SupplierMoqConflictEvidence({ preview }: Props) {
   const conflict = preview.moqConflictEvidence;
+  const aligned = preview.moqAlignedFaqEvidence;
+  const catalogEvidence = conflict ?? aligned;
   const unverified = preview.moqUnverifiedFaqEvidence;
   const { locale } = useI18n();
-  if (!conflict && !unverified) return null;
+  if (!catalogEvidence && !unverified) return null;
   const c = copy[locale];
   const format = new Intl.NumberFormat(
     locale === "sr" ? "sr-RS" : locale === "de" ? "de-AT" : "en-GB",
@@ -75,12 +85,12 @@ export function SupplierMoqConflictEvidence({ preview }: Props) {
     locale === "sr" ? "sr-RS" : locale === "de" ? "de-AT" : "en-GB",
     { minimumFractionDigits: 2, maximumFractionDigits: 4 },
   );
-  const range = conflict ? [
-    money.format(Number(conflict.lowPrice)),
-    money.format(Number(conflict.highPrice)),
+  const range = catalogEvidence ? [
+    money.format(Number(catalogEvidence.lowPrice)),
+    money.format(Number(catalogEvidence.highPrice)),
   ].join("–") : null;
-  const title = conflict ? c.title : c.unverifiedTitle;
-  const faqMoq = conflict?.faqMinimumOrderQuantity ??
+  const title = conflict ? c.title : aligned ? c.alignedTitle : c.unverifiedTitle;
+  const faqMoq = catalogEvidence?.faqMinimumOrderQuantity ??
     unverified?.faqMinimumOrderQuantity ?? null;
 
   return (
@@ -93,23 +103,23 @@ export function SupplierMoqConflictEvidence({ preview }: Props) {
             <dd>{format.format(faqMoq)} {c.unit}</dd>
           </div>
         )}
-        {conflict && (
+        {catalogEvidence && (
           <>
             <div>
               <dt>{c.exactCatalog}</dt>
-              <dd>{format.format(conflict.catalogMinimumOrderQuantity)} {c.unit}</dd>
+              <dd>{format.format(catalogEvidence.catalogMinimumOrderQuantity)} {c.unit}</dd>
             </div>
             <div>
               <dt>{c.publicRange}</dt>
-              <dd>{range} {conflict.currency}/{conflict.unit}</dd>
+              <dd>{range} {catalogEvidence.currency}/{catalogEvidence.unit}</dd>
             </div>
           </>
         )}
       </dl>
-      <p>{conflict ? c.note : c.unverifiedNote}</p>
+      <p>{conflict ? c.note : aligned ? c.alignedNote : c.unverifiedNote}</p>
       <p>{c.lockedFields}</p>
-      {conflict && (
-        <a href={conflict.sourceUrl} rel="noopener noreferrer" target="_blank">
+      {catalogEvidence && (
+        <a href={catalogEvidence.sourceUrl} rel="noopener noreferrer" target="_blank">
           {c.source}
         </a>
       )}

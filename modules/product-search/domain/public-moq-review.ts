@@ -11,9 +11,9 @@ import type {
  * Catalog/FAQ discrepancies are informational observations, not sale terms.
  */
 export function requiresSupplierMoqConfirmation(
-  preview: Pick<SupplierOfferUrlPreview, "moqConflictEvidence" | "moqUnverifiedFaqEvidence">,
+  preview: Pick<SupplierOfferUrlPreview, "moqConflictEvidence" | "moqAlignedFaqEvidence" | "moqUnverifiedFaqEvidence">,
 ): boolean {
-  return Boolean(preview.moqConflictEvidence || preview.moqUnverifiedFaqEvidence);
+  return Boolean(preview.moqConflictEvidence || preview.moqAlignedFaqEvidence || preview.moqUnverifiedFaqEvidence);
 }
 
 /**

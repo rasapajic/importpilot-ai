@@ -172,11 +172,11 @@ export async function previewProductUrl(productUrl: string, options: FetchOption
       const sellerFaqMoqOnly = isSupplierFaqSourcedMoq(
         html, parsed.data.productUrl, preview.minimumOrderQuantity,
       );
-      // The original Pilot Optics canary retains its historical preview.
-      // Optional future SKUs must never turn a generic FAQ into a valid SKU MOQ
-      // when catalog reads are absent, blocked, busy, exhausted or rejected.
-      const additionalSkuNeedsSourceProof = options.publicPriceCanaryGate
-        .additionalSkuNeedsSourceProof(parsed.data.productUrl);
+      // Both the original canary and additional allowlisted exact SKUs must
+      // quarantine a seller-wide FAQ. Matching public catalog observations
+      // are NOT supplier-confirmed transaction terms.
+      const configuredSkuNeedsFaqReview = options.publicPriceCanaryGate
+        .configuredSkuNeedsFaqReview(parsed.data.productUrl);
       let sourceEvidenceAccepted = false;
       if (Number.isSafeInteger(primaryMoq) && primaryMoq > 0) {
         try {
@@ -216,19 +216,50 @@ export async function previewProductUrl(productUrl: string, options: FetchOption
           } else if (evidence && evidence.productUrl === preview.productUrl &&
               evidence.minimumOrderQuantity === primaryMoq &&
               (preview.currency === null || evidence.currency === preview.currency)) {
-            const candidate = productPreviewSchema.safeParse({
-              ...preview, marketplacePriceEvidence: evidence,
-            });
-            if (candidate.success) {
-              preview = candidate.data;
-              sourceEvidenceAccepted = true;
+            if (sellerFaqMoqOnly && configuredSkuNeedsFaqReview) {
+              const catalogUrl = evidence.kind === "SINGLE_SELLER_CATALOG_ADVERTISED_RANGE"
+                ? evidence.sourceUrl
+                : evidence.evidence[1]; // second exact listing is the trusted seller catalog
+              const candidate = productPreviewSchema.safeParse({
+                ...preview,
+                price: null,
+                minimumOrderQuantity: null,
+                details: null,
+                marketplacePriceEvidence: undefined,
+                moqAlignedFaqEvidence: {
+                  kind: "SELLER_FAQ_CATALOG_MOQ_ALIGNED_UNCONFIRMED",
+                  productUrl: evidence.productUrl,
+                  sourceUrl: catalogUrl,
+                  faqMinimumOrderQuantity: primaryMoq,
+                  catalogMinimumOrderQuantity: evidence.minimumOrderQuantity,
+                  lowPrice: evidence.lowPrice,
+                  highPrice: evidence.highPrice,
+                  currency: evidence.currency,
+                  unit: evidence.unit,
+                  corroborated: false,
+                  verifiedQuote: false,
+                  landedCostEligible: false,
+                },
+              });
+              if (candidate.success) {
+                preview = candidate.data;
+                sourceEvidenceAccepted = true;
+              }
+            } else {
+              const candidate = productPreviewSchema.safeParse({
+                ...preview, marketplacePriceEvidence: evidence,
+              });
+              if (candidate.success) {
+                preview = candidate.data;
+                sourceEvidenceAccepted = true;
+              }
             }
           }
         } catch {
           // Optional catalog failure must not break the primary product preview.
         }
       }
-      if (additionalSkuNeedsSourceProof && sellerFaqMoqOnly &&
+      if (configuredSkuNeedsFaqReview && sellerFaqMoqOnly &&
           !sourceEvidenceAccepted && Number.isSafeInteger(primaryMoq) && primaryMoq > 0) {
         // Critical fail-closed path: applies even when getOrRead returns null
         // BEFORE invoking its loader due to global quota or cross-SKU busy.
@@ -252,9 +283,9 @@ export async function previewProductUrl(productUrl: string, options: FetchOption
         });
       }
     } else if (provider === "made-in-china" &&
-        options.publicPriceCanaryGate?.additionalSkuNeedsSourceProof(parsed.data.productUrl)) {
-      // If the server-only source-reading kill switch is OFF, keep the
-      // configured additional SKU's FAQ MOQ informational and unpriced.
+        options.publicPriceCanaryGate?.configuredSkuNeedsFaqReview(parsed.data.productUrl)) {
+      // If the server-only source-reading kill switch is OFF, keep any
+      // configured SKU (including the original canary) unpriced.
       // Do not start any secondary GET while the feature is disabled.
       const primaryMoq = Number(preview.minimumOrderQuantity);
       if (Number.isSafeInteger(primaryMoq) && primaryMoq > 0 &&

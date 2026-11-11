@@ -125,6 +125,7 @@ function normalizeExternalPreview(candidate: unknown) {
     source,
     details: record.details ?? null,
     moqConflictEvidence: record.moqConflictEvidence ?? null,
+    moqAlignedFaqEvidence: record.moqAlignedFaqEvidence ?? null,
     moqUnverifiedFaqEvidence: record.moqUnverifiedFaqEvidence ?? null,
     titleFromSlug: record.titleFromSlug ?? false,
   };
