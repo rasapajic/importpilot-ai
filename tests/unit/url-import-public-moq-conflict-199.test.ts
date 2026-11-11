@@ -300,7 +300,7 @@ describe("JAKOV360 #199 informational seller FAQ versus exact catalog MOQ", () =
     expect(ui).toContain("MOQ aus Lieferanten-FAQ");
     expect(ui).toContain("Supplier FAQ MOQ — not verified");
     expect(ui).toContain("Cena i MOQ nisu uneti u ponudu ni u obračun uvoza.");
-    expect(ui).toContain("{conflict && (");
+    expect(ui).toContain("{catalogEvidence && (");
   });
 
 });
