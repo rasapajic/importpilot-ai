@@ -444,6 +444,31 @@ export const sellerCatalogFaqMoqConflictSchema = z.object({
 });
 
 /**
+ * Exact product catalog and supplier-wide FAQ publicly agree on an MOQ, but
+ * neither document is a seller-confirmed quotation for the requested order.
+ * Provenance is retained without exposing usable commercial/landed-cost fields.
+ */
+export const sellerFaqCatalogMoqAlignedSchema = z.object({
+  kind: z.literal("SELLER_FAQ_CATALOG_MOQ_ALIGNED_UNCONFIRMED"),
+  productUrl: previewRequestSchema.shape.productUrl,
+  sourceUrl: z.url(),
+  faqMinimumOrderQuantity: z.number().int().positive(),
+  catalogMinimumOrderQuantity: z.number().int().positive(),
+  lowPrice: z.string().regex(/^\d+(?:\.\d{1,4})?$/),
+  highPrice: z.string().regex(/^\d+(?:\.\d{1,4})?$/),
+  currency: z.string().regex(/^[A-Z]{3}$/),
+  unit: z.enum(["Piece", "Set", "Unit"]),
+  corroborated: z.literal(false),
+  verifiedQuote: z.literal(false),
+  landedCostEligible: z.literal(false),
+}).strict().superRefine((v, ctx) => {
+  if (v.faqMinimumOrderQuantity !== v.catalogMinimumOrderQuantity ||
+      Number(v.lowPrice) <= 0 || Number(v.highPrice) <= Number(v.lowPrice)) {
+    ctx.addIssue({ code: "custom", message: "Not matching FAQ/catalog public observations." });
+  }
+});
+
+/**
  * Fail-closed, source-specific FAQ observation when a newly allowlisted SKU
  * cannot obtain an exact catalog result (403, missing catalog, busy or quota).
  * No catalog value or public-price assertion is invented.
@@ -468,6 +493,7 @@ export const productPreviewSchema = z.object({
   minimumOrderQuantity: optionalNumberText,
   marketplacePriceEvidence: marketplacePublicPriceEvidenceSchema.nullable().optional(),
   moqConflictEvidence: sellerCatalogFaqMoqConflictSchema.nullable().optional(),
+  moqAlignedFaqEvidence: sellerFaqCatalogMoqAlignedSchema.nullable().optional(),
   moqUnverifiedFaqEvidence: sellerFaqMoqUnverifiedSchema.nullable().optional(),
   incoterm: z.preprocess(
     (value) => (value === "" || value === undefined || value === null ? null : String(value).toUpperCase()),
@@ -477,7 +503,8 @@ export const productPreviewSchema = z.object({
   productUrl: previewRequestSchema.shape.productUrl,
   details: marketplaceProductDetailsSchema.nullable().optional(),
 }).strict().superRefine((v, ctx) => {
-  if (v.moqConflictEvidence && v.moqUnverifiedFaqEvidence) {
+  const reviewStates = [v.moqConflictEvidence, v.moqAlignedFaqEvidence, v.moqUnverifiedFaqEvidence];
+  if (reviewStates.filter(Boolean).length > 1) {
     ctx.addIssue({ code: "custom", message: "Only one MOQ review state is permitted." });
   }
   if (v.moqConflictEvidence) {
@@ -486,6 +513,13 @@ export const productPreviewSchema = z.object({
         v.minimumOrderQuantity !== null || v.price !== null ||
         v.marketplacePriceEvidence || v.details !== null) {
       ctx.addIssue({ code: "custom", message: "Conflicting public MOQ cannot be a priced offer." });
+    }
+  }
+  if (v.moqAlignedFaqEvidence) {
+    if (v.moqAlignedFaqEvidence.productUrl !== v.productUrl ||
+        v.minimumOrderQuantity !== null || v.price !== null ||
+        v.marketplacePriceEvidence || v.details !== null) {
+      ctx.addIssue({ code: "custom", message: "Aligned public FAQ/catalog evidence cannot be a priced offer." });
     }
   }
   if (v.moqUnverifiedFaqEvidence) {
