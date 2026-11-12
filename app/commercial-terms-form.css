@@ -1,0 +1,68 @@
+/* Only the confirmed-offer input; other JAKOV360 forms are unaffected. */
+.commercial-terms-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 0.95rem 1rem;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.commercial-terms-form > .commercial-terms-wide {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.commercial-terms-form > header h3 {
+  margin: 0 0 0.35rem;
+}
+
+.commercial-terms-form > header p {
+  margin: 0;
+}
+
+.commercial-terms-form > label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-width: 0;
+  margin: 0;
+  line-height: 1.35;
+  font-weight: 650;
+}
+
+.commercial-terms-form > label > input {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 2.75rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid #b8c9c0;
+  border-radius: 0.5rem;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+}
+
+.commercial-terms-form > label > small {
+  font-weight: 400;
+  line-height: 1.45;
+}
+
+.commercial-terms-form > button.commercial-terms-wide {
+  justify-self: start;
+}
+
+@media (max-width: 760px) {
+  .commercial-terms-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .commercial-terms-form > button.commercial-terms-wide {
+    justify-self: stretch;
+    width: 100%;
+  }
+}
