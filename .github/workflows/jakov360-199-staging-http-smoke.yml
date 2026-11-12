@@ -1,0 +1,81 @@
+name: JAKOV360 199 staging public HTTP acceptance
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/jakov360-199-staging-http-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  read_only_staging_http:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Check staging public health and login, no credentials or writes
+        shell: bash
+        run: |
+          node --input-type=module - <<'NODE'
+          const ORIGIN = 'https://importpilot-1-0-staging.onrender.com';
+          const REVISION = '52eaecf12a8d';
+          const ALLOWED = new Set(['/api/health', '/login']);
+          let calls = 0;
+
+          async function check(path, verify) {
+            if (!ALLOWED.has(path)) throw Error('PATH_NOT_ALLOWLISTED');
+            let reason = 'UNKNOWN';
+            for (let i = 0; i < 3; i++) {
+              const controller = new AbortController();
+              const timer = setTimeout(() => controller.abort(), 35000);
+              try {
+                if (++calls > 6) throw Error('REQUEST_BUDGET_EXCEEDED');
+                const url = ORIGIN + path;
+                const response = await fetch(url, {
+                  method: 'GET',
+                  redirect: 'manual',
+                  cache: 'no-store',
+                  signal: controller.signal,
+                  headers: {accept: path === '/api/health' ? 'application/json' : 'text/html'},
+                });
+                if (response.status !== 200) throw Error('HTTP_' + response.status);
+                if (response.url !== url || response.redirected) throw Error('REDIRECT');
+                const type = response.headers.get('content-type') || '';
+                if (path === '/api/health') {
+                  if (!/^application\/json(?:;|$)/i.test(type)) throw Error('NOT_JSON');
+                  const text = await response.text();
+                  if (Buffer.byteLength(text, 'utf8') > 4096) throw Error('OVERSIZED_HEALTH');
+                  let payload;
+                  try { payload = JSON.parse(text); } catch { throw Error('BAD_HEALTH_JSON'); }
+                  if (payload?.service !== 'tradepilot-ai' ||
+                      payload?.status !== 'ok' ||
+                      payload?.database !== 'ok' ||
+                      payload?.revision !== REVISION) throw Error('HEALTH_FIELDS_MISMATCH');
+                } else {
+                  if (!/^text\/html(?:;|$)/i.test(type)) throw Error('NOT_HTML');
+                  // Do not parse user data, login forms, cookies or page contents.
+                  await response.body?.cancel();
+                }
+                console.log('JAKOV360_STAGING_HTTP_PASS path=' + path + ' attempt=' + (i + 1));
+                return;
+              } catch (error) {
+                reason = /^HTTP_[0-9]{3}$/.test(error?.message || '') ? error.message :
+                  new Set(['REDIRECT','NOT_JSON','NOT_HTML','OVERSIZED_HEALTH',
+                    'BAD_HEALTH_JSON','HEALTH_FIELDS_MISMATCH','REQUEST_BUDGET_EXCEEDED'
+                  ]).has(error?.message) ? error.message : 'NETWORK_OR_TIMEOUT';
+              } finally { clearTimeout(timer); }
+              if (i < 2) await new Promise(resolve => setTimeout(resolve, 8000));
+            }
+            console.error('JAKOV360_STAGING_HTTP_NOT_VERIFIED path=' + path + ' reason=' + reason);
+            process.exitCode = 1;
+          }
+          await check('/api/health');
+          await check('/login');
+          if (!process.exitCode) console.log('JAKOV360_STAGING_PUBLIC_HTTP_ACCEPTANCE_PASS');
+          NODE
