@@ -12,6 +12,8 @@ type Copy = {
   description: string;
   price: string;
   currency: string;
+  currencyPlaceholder: string;
+  currencyHint: string;
   incoterm: string;
   delivery: string;
   deliveryOptional: string;
@@ -27,6 +29,8 @@ const copy: Record<Locale, Copy> = {
     description: "Za tačan obračun potrebni su cena, valuta i Incoterm. Unesite ili potvrdite samo ove podatke.",
     price: "Cena po komadu",
     currency: "Valuta",
+    currencyPlaceholder: "ISO kod (USD, EUR...)",
+    currencyHint: "Unesite valutu koja odgovara potvrđenoj ceni dobavljača.",
     incoterm: "Incoterm",
     delivery: "Rok isporuke (dana)",
     deliveryOptional: "opciono",
@@ -40,6 +44,8 @@ const copy: Record<Locale, Copy> = {
     description: "Für eine verlässliche Kalkulation werden Preis, Währung und Incoterm benötigt. Bestätigen oder ergänzen Sie nur diese Angaben.",
     price: "Stückpreis",
     currency: "Währung",
+    currencyPlaceholder: "ISO-Code (USD, EUR...)",
+    currencyHint: "Geben Sie die Währung des vom Lieferanten bestätigten Preises ein.",
     incoterm: "Incoterm",
     delivery: "Lieferzeit (Tage)",
     deliveryOptional: "optional",
@@ -53,6 +59,8 @@ const copy: Record<Locale, Copy> = {
     description: "A reliable calculation needs price, currency, and Incoterm. Confirm or complete only these details.",
     price: "Unit price",
     currency: "Currency",
+    currencyPlaceholder: "ISO code (USD, EUR...)",
+    currencyHint: "Enter the currency of the price confirmed by the supplier.",
     incoterm: "Incoterm",
     delivery: "Delivery time (days)",
     deliveryOptional: "optional",
@@ -112,8 +120,8 @@ export function CommercialTermsForm({
   }
 
   return (
-    <form className="offer-form" onSubmit={submit}>
-      <header className="cost-form-wide">
+    <form className="offer-form commercial-terms-form" onSubmit={submit}>
+      <header className="commercial-terms-wide">
         <h3>{text.title}</h3>
         <p className="muted-text">{text.description}</p>
       </header>
@@ -135,9 +143,10 @@ export function CommercialTermsForm({
           maxLength={3}
           name="currency"
           pattern="[A-Za-z]{3}"
-          placeholder="EUR"
+          placeholder={text.currencyPlaceholder}
           required
         />
+        <small className="muted-text">{text.currencyHint}</small>
       </label>
       <label>
         {text.incoterm}
@@ -172,8 +181,8 @@ export function CommercialTermsForm({
           type="number"
         />
       </label>
-      {error && <p className="form-error cost-form-wide" role="alert">{error}</p>}
-      <button className="cost-form-wide" disabled={pending} type="submit">
+      {error && <p className="form-error commercial-terms-wide" role="alert">{error}</p>}
+      <button className="commercial-terms-wide" disabled={pending} type="submit">
         {pending ? text.saving : text.save}
       </button>
     </form>
