@@ -26,19 +26,26 @@ export function safeCommercialFieldsForPreview(
   preview: SupplierOfferUrlPreview,
 ): Pick<
   SupplierOfferSearchResult,
-  "price" | "minimumOrderQuantity" | "marketplaceDetails" | "supplierLogistics"
+  "price" | "currency" | "minimumOrderQuantity" | "marketplaceDetails" | "supplierLogistics"
 > {
   if (requiresSupplierMoqConfirmation(preview)) {
     return {
       price: null,
+      currency: null,
       minimumOrderQuantity: null,
       marketplaceDetails: null,
       supplierLogistics: null,
     };
   }
 
+  // Preview may display a public currency (USD) without a confirmed
+  // numeric price. The supplier-offer API requires price AND currency as a
+  // pair, so preserve neither when one is absent. This also covers ordinary
+  // partial previews unrelated to the public MOQ review states.
+  const hasPriceAndCurrency = preview.price !== null && preview.currency !== null;
   return {
-    price: preview.price,
+    price: hasPriceAndCurrency ? preview.price : null,
+    currency: hasPriceAndCurrency ? preview.currency : null,
     minimumOrderQuantity: preview.minimumOrderQuantity,
     marketplaceDetails: preview.details ?? null,
     supplierLogistics: marketplaceDetailsToSupplierLogistics(preview.details),

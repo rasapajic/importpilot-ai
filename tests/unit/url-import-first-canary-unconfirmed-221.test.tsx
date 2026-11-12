@@ -42,7 +42,7 @@ const preview: SupplierOfferUrlPreview = {
   isPartial: true,
   titleFromSlug: false,
 };
-const fields = {price: null, minimumOrderQuantity: null, marketplaceDetails: null, supplierLogistics: null};
+const fields = {price: null, currency: null, minimumOrderQuantity: null, marketplaceDetails: null, supplierLogistics: null};
 
 function render(locale: "sr" | "de" | "en") {
   return renderToStaticMarkup(

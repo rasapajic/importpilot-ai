@@ -96,6 +96,7 @@ describe("JAKOV360 #220 source-scoped wording, without commercial promotion", ()
     expect(html).toContain("MOQ nije potvrđen za ovaj proizvod");
     expect(safeCommercialFieldsForPreview(unverifiedFaq)).toEqual({
       price: null,
+      currency: null,
       minimumOrderQuantity: null,
       marketplaceDetails: null,
       supplierLogistics: null,

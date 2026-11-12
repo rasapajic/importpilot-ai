@@ -232,6 +232,7 @@ describe("JAKOV360 #199 informational seller FAQ versus exact catalog MOQ", () =
       ...preview, price: 0.5, minimumOrderQuantity: 1200,
     })).toEqual({
       price: null,
+      currency: null,
       minimumOrderQuantity: null,
       marketplaceDetails: null,
       supplierLogistics: null,
@@ -242,7 +243,7 @@ describe("JAKOV360 #199 informational seller FAQ versus exact catalog MOQ", () =
       moqUnverifiedFaqEvidence: unverifiedFaq,
       price: 0.5, minimumOrderQuantity: 300,
     })).toEqual({
-      price: null, minimumOrderQuantity: null,
+      price: null, currency: null, minimumOrderQuantity: null,
       marketplaceDetails: null, supplierLogistics: null,
     });
   });
@@ -268,6 +269,7 @@ describe("JAKOV360 #199 informational seller FAQ versus exact catalog MOQ", () =
     expect(requiresSupplierMoqConfirmation(preview)).toBe(false);
     expect(safeCommercialFieldsForPreview(preview)).toEqual({
       price: 4.25,
+      currency: "USD",
       minimumOrderQuantity: 300,
       marketplaceDetails: null,
       supplierLogistics: null,

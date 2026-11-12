@@ -213,7 +213,7 @@ export function CreateProjectFromUrlForm({
         supplierName: preview.supplierName ?? t("Nije prepoznato"),
         supplierCountry: preview.supplierCountry,
         price: commercial.price,
-        currency: preview.currency,
+        currency: commercial.currency,
         minimumOrderQuantity: commercial.minimumOrderQuantity,
         incoterm: preview.incoterm,
         productUrl: preview.productUrl,
