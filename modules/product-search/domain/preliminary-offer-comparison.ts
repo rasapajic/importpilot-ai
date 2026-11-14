@@ -16,6 +16,7 @@ export type PreliminaryComparisonPriceEvidence =
   | "CONFIRMED_QUOTE"
   | "ADVERTISED_RANGE"
   | "ADVERTISED_PRICE"
+  | "USER_ENTERED_UNVERIFIED"
   | "UNKNOWN";
 
 export type PreliminaryComparisonInput = {
@@ -110,6 +111,7 @@ export function comparisonInquiryPriority(
     suitability: PreliminaryComparisonRow["suitability"];
     priceCurrency: string | null;
     priceLow: number | null;
+    priceEvidence: PreliminaryComparisonPriceEvidence;
     listedMoq: number | null;
     purchasePriceConfirmed: boolean;
   }>,
@@ -117,8 +119,10 @@ export function comparisonInquiryPriority(
   return inquiryContactPriority(rows.map((row) => ({
     id: row.id,
     suitability: row.suitability,
-    currency: row.purchasePriceConfirmed ? null : row.priceCurrency,
-    advertisedPrice: row.purchasePriceConfirmed ? null : row.priceLow,
+    currency: row.priceEvidence === "ADVERTISED_PRICE" || row.priceEvidence === "ADVERTISED_RANGE"
+      ? row.priceCurrency : null,
+    advertisedPrice: row.priceEvidence === "ADVERTISED_PRICE" || row.priceEvidence === "ADVERTISED_RANGE"
+      ? row.priceLow : null,
     listedMoq: row.listedMoq,
     confirmedPurchasePrice: row.purchasePriceConfirmed,
   })));
@@ -147,11 +151,17 @@ export function buildPreliminaryOfferComparison(
         ? "ADVERTISED_RANGE"
         : advertisedLow !== null
           ? "ADVERTISED_PRICE"
-          : "UNKNOWN";
+          : storedPrice !== null && Boolean(offer.currency)
+            ? "USER_ENTERED_UNVERIFIED"
+            : "UNKNOWN";
+    // A price entered by the user is visible, but not a supplier quote and
+    // never a qualifying advertised price for the inquiry priority ranking.
     const priceLow = writtenQuote
       ? storedPrice
-      : advertisedLow;
-    const currency = writtenQuote ? offer.currency : offer.advertisedCurrency;
+      : advertisedLow ?? storedPrice;
+    const currency = writtenQuote
+      ? offer.currency
+      : advertisedLow !== null ? offer.advertisedCurrency : offer.currency;
 
     return {
       id: offer.id,
