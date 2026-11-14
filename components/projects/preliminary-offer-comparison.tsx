@@ -88,6 +88,7 @@ const copy: Record<Locale, Copy> = {
       CONFIRMED_QUOTE: "Potvrđena pisana ponuda",
       ADVERTISED_RANGE: "Reklamirani raspon, nije čvrsta ponuda",
       ADVERTISED_PRICE: "Reklamirana cena, nije potvrđena nabavna cena",
+      USER_ENTERED_UNVERIFIED: "Ručno uneta cena — nema dokaza o pisanoj ponudi dobavljača",
       UNKNOWN: "Cena nije poznata",
     },
     fit: {
@@ -138,6 +139,7 @@ const copy: Record<Locale, Copy> = {
       CONFIRMED_QUOTE: "Bestätigtes schriftliches Angebot",
       ADVERTISED_RANGE: "Beworbene Spanne, kein festes Angebot",
       ADVERTISED_PRICE: "Beworbener Preis, kein bestätigter Einkaufspreis",
+      USER_ENTERED_UNVERIFIED: "Manuell eingegebener Preis — kein belegtes schriftliches Lieferantenangebot",
       UNKNOWN: "Preis unbekannt",
     },
     fit: {
@@ -188,6 +190,7 @@ const copy: Record<Locale, Copy> = {
       CONFIRMED_QUOTE: "Confirmed written quotation",
       ADVERTISED_RANGE: "Advertised range, not a firm quote",
       ADVERTISED_PRICE: "Advertised price, not a confirmed purchase price",
+      USER_ENTERED_UNVERIFIED: "Manually entered price — no verified written supplier quotation",
       UNKNOWN: "Price unknown",
     },
     fit: {
