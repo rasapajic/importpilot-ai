@@ -15,6 +15,7 @@ import "./search-result-actions.css";
 import "./taja-requirement-match.css";
 import "./marketplace-evidence.css";
 import "./url-import-layout.css";
+import "./commercial-terms-form.css";
 
 export const viewport: Viewport = {
   width: "device-width",
