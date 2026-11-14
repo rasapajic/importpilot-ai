@@ -32,8 +32,10 @@ describe("Issue #176: adapt existing #177 comparison without regressing #222/#22
     expect(page).toContain("cachedSearchResults={initialSupplierSearch?.results ?? []}");
     expect(domain).toContain('const writtenQuote = offer.writtenQuoteConfirmed && storedPrice !== null');
     expect(domain).toContain('const priceLow = writtenQuote');
-    expect(domain).toContain('      : advertisedLow;');
-    expect(domain).not.toContain("advertisedLow ?? storedPrice");
+    expect(domain).toContain("advertisedLow ?? storedPrice");
+    expect(domain).toContain('"USER_ENTERED_UNVERIFIED"');
+    expect(domain).toContain('row.priceEvidence === "ADVERTISED_PRICE" || row.priceEvidence === "ADVERTISED_RANGE"');
+    expect(comparison).toContain("Ručno uneta cena — nema dokaza");
     expect(comparison).toContain("nije nabavna cena");
     expect(comparison).toContain("blokirano dok nema potvrđene nabavne cene");
   });
