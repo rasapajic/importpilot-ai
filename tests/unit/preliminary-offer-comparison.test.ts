@@ -260,15 +260,14 @@ describe("comparison column order", () => {
   });
 });
 
-describe("advertised price range presentation", () => {
-  it("shows both bounds from the provider field and does not confirm procurement", () => {
+describe("current search provider price contract", () => {
+  it("keeps a public listing price informational, without inventing an upper bound", () => {
     const zlin: SupplierOfferSearchResult = {
       title: "Zlin reading glasses",
       supplierName: "Wenzhou Zlin Eyewear Co., Ltd",
       supplierCountry: "CN",
       price: 1.2,
       currency: "USD",
-      advertisedPriceHigh: 2.9,
       minimumOrderQuantity: 12,
       incoterm: null,
       productUrl: "https://zlineyewear.en.made-in-china.com/product/example.html",
@@ -276,29 +275,13 @@ describe("advertised price range presentation", () => {
       source: "Made-in-China",
     };
 
-    expect(presentSupplierOfferPrice(zlin, 1000)).toMatchObject({
+    const displayed = presentSupplierOfferPrice(zlin, 1000);
+    expect(displayed).toMatchObject({
       kind: "ADVERTISED_ONLY",
       quantityUnitPrice: null,
       advertisedPrice: 1.2,
-      advertisedPriceHigh: 2.9,
       supplierOrderQuote: false,
     });
-  });
-
-  it("does not invent an upper bound when the source only has one price", () => {
-    const single: SupplierOfferSearchResult = {
-      title: "Reading glasses",
-      supplierName: "Example",
-      supplierCountry: "CN",
-      price: 1.2,
-      currency: "USD",
-      minimumOrderQuantity: 12,
-      incoterm: null,
-      productUrl: "https://example.com/product",
-      imageUrl: null,
-      source: "Made-in-China",
-    };
-
-    expect(presentSupplierOfferPrice(single, 1000).advertisedPriceHigh).toBeNull();
+    expect("advertisedPriceHigh" in displayed).toBe(false);
   });
 });
