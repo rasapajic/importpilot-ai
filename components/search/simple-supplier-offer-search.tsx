@@ -22,6 +22,12 @@ import type {
   SupplierOfferUrlPreview,
 } from "@/modules/product-search/domain/search";
 import type { SupplierOfferMarketplaceSupplierProfile } from "@/modules/product-search/domain/marketplace-product-details";
+import {
+  canPresentBestChoice,
+  evaluateExplicitProductConstraintsForQueries,
+  explicitProductConstraintRank,
+  type ExplicitProductConstraintStatus,
+} from "@/modules/product-search/domain/explicit-product-constraints";
 import { estimateTajaPreliminaryLandedCost } from "@/modules/product-search/domain/taja-preliminary-cost-estimate";
 import {
   presentSupplierOfferPrice,
@@ -96,6 +102,8 @@ type Copy = {
   cachedSelectionOverview: (shown: number) => string;
   liveSelectionOverview: (found: number, relevant: number, shown: number) => string;
   bestChoice: string;
+  productDisqualified: string;
+  productUnconfirmed: string;
   selectionCriteria: string;
   whySelected: string;
   reasonProductMatch: string;
@@ -177,6 +185,8 @@ const copy: Record<Locale, Copy> = {
     cachedSelectionOverview: (shown) => `Prikazano je ${shown} sačuvanih ponuda iz prethodne pretrage. Ovo nije ukupan broj kandidata nove pretrage.`,
     liveSelectionOverview: (found, relevant, shown) => `Pronađeno ${found} kandidata → prikazano svih ${shown} dostupnih ponuda → ${relevant} trenutno prolazi osnovnu proveru.`,
     bestChoice: "Najbolji izbor",
+    productDisqualified: "Ne odgovara traženoj specifikaciji (dioptrije ili tip sočiva).",
+    productUnconfirmed: "Tip sočiva i usklađenost sa zahtevom nisu potvrđeni.",
     selectionCriteria: "Sve dostupne ponude su prikazane redom. Najbolji izbor se određuje prema podudaranju proizvoda, količini i MOQ-u, ceni/uslovima i kvalitetu dostupnih podataka.",
     whySelected: "Zašto je izdvojena",
     reasonProductMatch: "Proizvod odgovara traženom tipu ili specifikaciji.",
@@ -258,6 +268,8 @@ const copy: Record<Locale, Copy> = {
     cachedSelectionOverview: (shown) => `${shown} gespeicherte Angebote aus der vorherigen Suche werden angezeigt. Dies ist nicht die Gesamtzahl der Kandidaten einer neuen Suche.`,
     liveSelectionOverview: (found, relevant, shown) => `${found} Kandidaten gefunden → alle ${shown} verfügbaren Angebote werden angezeigt → ${relevant} bestehen derzeit die Grundprüfung.`,
     bestChoice: "Beste Wahl",
+    productDisqualified: "Entspricht nicht der verlangten Spezifikation (Dioptrien oder Gläsertyp).",
+    productUnconfirmed: "Gläsertyp und Eignung sind noch nicht bestätigt.",
     selectionCriteria: "Alle verfügbaren Angebote werden in Rangfolge angezeigt. Die beste Wahl basiert auf Produktübereinstimmung, Menge und MOQ, Preis/Konditionen sowie Datenqualität.",
     whySelected: "Warum ausgewählt",
     reasonProductMatch: "Das Produkt entspricht dem gesuchten Typ oder der Spezifikation.",
@@ -339,6 +351,8 @@ const copy: Record<Locale, Copy> = {
     cachedSelectionOverview: (shown) => `Showing ${shown} saved offers from the previous search. This is not the total candidate count for a new search.`,
     liveSelectionOverview: (found, relevant, shown) => `${found} candidates found → all ${shown} available offers are displayed → ${relevant} currently pass the basic check.`,
     bestChoice: "Best choice",
+    productDisqualified: "Does not match the requested specification (diopter or lens type).",
+    productUnconfirmed: "Lens type and suitability are not yet confirmed.",
     selectionCriteria: "All available offers are shown in ranked order. The best choice is based on product fit, quantity and MOQ, price/terms, and data quality.",
     whySelected: "Why it was selected",
     reasonProductMatch: "The product matches the requested type or specification.",
@@ -597,10 +611,15 @@ function selectionReasons(
   analysis: TajaCandidateAnalysisWithProductForm | undefined,
   quantity: number | null,
   text: Copy,
+  constraintStatus: ExplicitProductConstraintStatus,
 ) {
   const reasons: string[] = [];
 
-  if (analysis?.productForm.matchStatus === "MATCH" || analysis?.requirementMatch.status === "FULL") {
+  if (constraintStatus === "DISQUALIFIED") {
+    reasons.push(text.productDisqualified);
+  } else if (constraintStatus === "NEEDS_CONFIRMATION") {
+    reasons.push(text.productUnconfirmed);
+  } else if (analysis?.productForm.matchStatus === "MATCH" || analysis?.requirementMatch.status === "FULL") {
     reasons.push(text.reasonProductMatch);
   } else if (
     analysis?.productForm.matchStatus === "UNCLEAR" ||
@@ -858,8 +877,24 @@ export function SimpleSupplierOfferSearch({
 
   const analysisByUrl = new Map(analyses.map((analysis) => [analysis.productUrl, analysis]));
   const visible = (results ?? [])
-    .map((result, index) => ({ result, index, analysis: analysisByUrl.get(result.productUrl) }))
-    .sort((left, right) => (left.analysis?.rank ?? left.index + 100) - (right.analysis?.rank ?? right.index + 100));
+    .map((result, index) => ({
+      result,
+      index,
+      analysis: analysisByUrl.get(result.productUrl),
+      constraint: evaluateExplicitProductConstraintsForQueries([productName], result),
+    }))
+    .sort((left, right) => {
+      const suitability = explicitProductConstraintRank(left.constraint.status) -
+        explicitProductConstraintRank(right.constraint.status);
+      return suitability !== 0
+        ? suitability
+        : (left.analysis?.rank ?? left.index + 100) - (right.analysis?.rank ?? right.index + 100);
+    });
+  const bestChoiceUrl = visible.find(({ analysis, constraint }) => canPresentBestChoice({
+    status: constraint.status,
+    confidenceScore: analysis?.confidenceScore ?? null,
+    finalEligible: analysis?.status === "FINAL" && analysis.finalEligible,
+  }))?.result.productUrl ?? null;
   const hasDeferredSupplierRisk = visible.some(({ result, analysis }) =>
     (!analysis || analysis.supplierRiskLevel === "UNKNOWN") &&
     !supplierPlatformProfileSummary(result.marketplaceDetails?.supplierProfile, locale)
@@ -946,8 +981,11 @@ export function SimpleSupplierOfferSearch({
             )}
           </section>
           <div className="search-result-list">
-          {visible.map(({ result, analysis }, index) => {
-            const decision = simpleDecision(analysis);
+          {visible.map(({ result, analysis, constraint }, index) => {
+            const decision = constraint.status === "DISQUALIFIED" ? "SKIP"
+              : constraint.status === "NEEDS_CONFIRMATION" ? "WATCH"
+                : simpleDecision(analysis);
+            const isBestChoice = bestChoiceUrl === result.productUrl;
             const pricePresentation = presentSupplierOfferPrice(result, quantity);
             const publishedTier = pricePresentation.kind === "PUBLISHED_TIER";
             const effectiveResult = publishedTier
@@ -980,7 +1018,7 @@ export function SimpleSupplierOfferSearch({
               : null;
             const selecting = selectingUrl === result.productUrl;
             const selected = selectedUrls.includes(result.productUrl);
-            const reasons = selectionReasons(result, analysis, quantity, text);
+            const reasons = selectionReasons(result, analysis, quantity, text, constraint.status);
             const showAdvertisedPrice = pricePresentation.advertisedPrice !== null &&
               pricePresentation.advertisedCurrency !== null &&
               (
@@ -988,7 +1026,7 @@ export function SimpleSupplierOfferSearch({
                 pricePresentation.advertisedPrice !== pricePresentation.quantityUnitPrice
               );
             return (
-              <article className={`search-result-card${index === 0 ? " search-result-card-best" : ""}`} key={`${result.source}-${result.productUrl}`}>
+              <article className={`search-result-card${isBestChoice ? " search-result-card-best" : ""}`} key={`${result.source}-${result.productUrl}`}>
                 <SearchResultImage src={result.imageUrl} title={t(result.title)} />
                 <div>
                   <p className="eyebrow">
@@ -1002,7 +1040,7 @@ export function SimpleSupplierOfferSearch({
                       #{index + 1} · {t(result.supplierName)}
                     </a>
                   </p>
-                  {index === 0 && <span className="best-choice-badge">{text.bestChoice}</span>}
+                  {isBestChoice && <span className="best-choice-badge">{text.bestChoice}</span>}
                   <span className={`provider-status ${decisionClass(decision)}`}>{text.decision[decision]}</span>
                   <h3>{t(result.title)}</h3>
                   <div className="offer-highlights">
