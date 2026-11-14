@@ -1,0 +1,37 @@
+name: JAKOV360 #199 Dilicn exact SKU second-supplier source check
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/url-import-199-dilicn-live-probe.ts'
+      - 'services/importpilot-url-import-provider/src/parser.ts'
+      - 'services/importpilot-url-import-provider/tests/dilicn-second-sku-199.test.ts'
+      - '.github/workflows/jakov360-199-dilicn-second-sku-probe.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  isolated_public_source_check:
+    if: github.event_name == 'workflow_dispatch' || github.head_ref == 'test/jakov360-199-dilicn-second-sku-20261106'
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      URL_IMPORT_PROVIDER_TOKEN: ""
+      URL_IMPORT_PROVIDER_URL: ""
+      SUPPLIER_SEARCH_PROVIDER_TOKEN: ""
+      SUPPLIER_SEARCH_PROVIDER_URL: ""
+    steps:
+      - name: Checkout isolated branch without persisted credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install existing test tooling without lifecycle scripts
+        run: npm ci --ignore-scripts --no-audit
+      - name: Probe corrected Dilicn SKU and derived video with bounded read-only GETs
+        run: npx tsx scripts/url-import-199-dilicn-live-probe.ts
