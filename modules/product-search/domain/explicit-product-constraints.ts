@@ -98,6 +98,8 @@ function normalize(value: string) {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
+    // Serbian decimal commas must be normalized before punctuation removal.
+    .replace(/(\d),(\d)/g, "$1.$2")
     .replace(/[^a-z0-9+.\s-]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
