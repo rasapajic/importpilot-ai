@@ -43,7 +43,8 @@ function presentedAdvertisedPrice(
   return {
     advertisedPrice: presentation.advertisedPrice,
     advertisedCurrency: presentation.advertisedCurrency,
-    advertisedPriceHigh: presentation.advertisedPriceHigh,
+    // Current main search contract has no validated upper bound; do not infer one.
+    advertisedPriceHigh: null,
     title: result.title,
     marketplaceDetails: result.marketplaceDetails ?? null,
   };
