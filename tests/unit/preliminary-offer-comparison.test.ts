@@ -92,12 +92,25 @@ describe("preliminary offer comparison", () => {
     }]);
 
     expect(row).toMatchObject({
-      // A saved/manual unit price alone is not proof of an advertised source price.
-      priceEvidence: "UNKNOWN",
-      priceLow: null,
+      // The manual value remains visible, but not independently verified.
+      priceEvidence: "USER_ENTERED_UNVERIFIED",
+      priceLow: 1.2,
+      priceCurrency: "USD",
       purchasePriceConfirmed: false,
       landedCostAvailable: false,
     });
+  });
+
+
+  it("does not rank user-entered prices as if they were sourced advertisements", () => {
+    const rows = buildPreliminaryOfferComparison([
+      { id: "manual", supplierName: "Manual", title: "Reading glasses", productUrl: null, supplierCountry: "CN", listedMoq: 100, incoterm: null, unitPrice: 0.15, currency: "USD", advertisedPrice: null, advertisedCurrency: null, advertisedPriceHigh: null, writtenQuoteConfirmed: false, productQuery: REQUEST },
+      { id: "advertised", supplierName: "Advertised", title: "Reading glasses", productUrl: null, supplierCountry: "CN", listedMoq: 100, incoterm: null, unitPrice: null, currency: null, advertisedPrice: 1.25, advertisedCurrency: "USD", advertisedPriceHigh: null, writtenQuoteConfirmed: false, productQuery: REQUEST },
+    ]);
+    const inquiry = comparisonInquiryPriority(rows);
+    expect(rows[0]).toMatchObject({ priceEvidence: "USER_ENTERED_UNVERIFIED", priceLow: 0.15, purchasePriceConfirmed: false });
+    expect(inquiry.priceUsed).toBe(false);
+    expect(inquiry.priorityById).toEqual({});
   });
 
   it("keeps page-evidence suitability consistent between search and comparison", () => {
