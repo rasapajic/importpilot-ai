@@ -237,6 +237,8 @@ export default async function ProjectPage({
             focusedOfferId={focusedOfferId}
             selectedCalculationOfferId={selectedCalculationOfferId}
             profitabilityError={resolvedSearchParams.profitabilityError}
+            cachedSearchResults={initialSupplierSearch?.results ?? []}
+            cachedSearchScores={initialSupplierSearch?.candidateAnalyses ?? []}
           />
         </ProjectWorkflowStep>
       </div>
