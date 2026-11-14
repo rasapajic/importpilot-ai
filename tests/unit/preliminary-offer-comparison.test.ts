@@ -92,7 +92,9 @@ describe("preliminary offer comparison", () => {
     }]);
 
     expect(row).toMatchObject({
-      priceEvidence: "ADVERTISED_PRICE",
+      // A saved/manual unit price alone is not proof of an advertised source price.
+      priceEvidence: "UNKNOWN",
+      priceLow: null,
       purchasePriceConfirmed: false,
       landedCostAvailable: false,
     });
