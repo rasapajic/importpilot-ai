@@ -1,0 +1,77 @@
+/* Issue #176 — isolated source-backed comparison, independent of PR #223 commercial form. */
+.preliminary-comparison {
+  display: grid;
+  gap: 0.85rem;
+  min-width: 0;
+  max-width: 100%;
+}
+.preliminary-comparison > h3,
+.preliminary-comparison > p { margin: 0; }
+.preliminary-comparison-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.8rem;
+  min-width: 0;
+}
+.preliminary-comparison-grid[data-columns="2"] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.preliminary-comparison-grid[data-columns="3"] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.preliminary-comparison-grid > article {
+  min-width: 0;
+  border: 1px solid #dce7e1;
+  border-radius: 0.75rem;
+  padding: 1rem;
+  background: #fff;
+  overflow-wrap: anywhere;
+}
+.preliminary-comparison-grid > article h4 {
+  margin: 0 0 0.65rem;
+}
+.preliminary-comparison-grid dl {
+  display: grid;
+  gap: 0;
+  margin: 0 0 0.75rem;
+}
+.preliminary-comparison-grid dl > div {
+  border-top: 1px solid #e2ebe6;
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.6rem 0;
+  min-width: 0;
+}
+.preliminary-comparison-grid dt {
+  color: #596f64;
+  font-size: 0.82rem;
+}
+.preliminary-comparison-grid dd {
+  font-weight: 600;
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.preliminary-comparison-grid a {
+  overflow-wrap: anywhere;
+}
+.preliminary-comparison-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  text-align: center;
+}
+@media (max-width: 760px) {
+  .preliminary-comparison-grid,
+  .preliminary-comparison-grid[data-columns="2"],
+  .preliminary-comparison-grid[data-columns="3"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .preliminary-comparison-grid > article {
+    padding: 0.9rem;
+  }
+  .preliminary-comparison-action {
+    width: 100%;
+  }
+}

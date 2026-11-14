@@ -29,7 +29,7 @@ describe("ImportPilot 1.0 simple supplier results", () => {
     expect(resultsSource).toContain("Ovo nije ukupan broj kandidata nove pretrage.");
     expect(resultsSource).toContain('origin === "cache"');
     expect(resultsSource).toContain('whySelected: "Zašto je izdvojena"');
-    expect(resultsSource).toContain("selectionReasons(result, analysis, quantity, text)");
+    expect(resultsSource).toContain("selectionReasons(result, analysis, quantity, text, constraint.status)");
     expect(resultsSource).toContain('className="supplier-selection-summary"');
     expect(resultsSource).toContain('className="selection-reasons"');
     expect(resultCss).toContain(".supplier-selection-summary");
@@ -138,14 +138,17 @@ describe("ImportPilot 1.0 simple supplier results", () => {
     expect(resultsSource).toContain("selectOffer(effectiveResult)");
   });
 
-  it("shows every available candidate and marks only the top-ranked offer as best", () => {
+  it("shows every candidate and gates the best-choice label on eligibility, not result position", () => {
     const rankingStart = resultsSource.indexOf("const analysisByUrl");
     const renderStart = resultsSource.indexOf("return (", rankingStart);
     const rankingSource = resultsSource.slice(rankingStart, renderStart);
     expect(rankingSource).not.toContain('matchStatus !== "MISMATCH"');
     expect(rankingSource).not.toContain(".slice(0, 10)");
     expect(resultsSource).toContain('bestChoice: "Najbolji izbor"');
-    expect(resultsSource).toContain('index === 0 && <span className="best-choice-badge">');
+    expect(resultsSource).toContain('isBestChoice && <span className="best-choice-badge">');
+    expect(resultsSource).toContain("const bestChoiceUrl = visible.find");
+    expect(resultsSource).toContain("canPresentBestChoice({");
+    expect(resultsSource).not.toContain('index === 0 && <span className="best-choice-badge">');
     expect(resultCss).toContain(".search-result-card-best");
     expect(resultCss).toContain(".best-choice-badge");
   });
