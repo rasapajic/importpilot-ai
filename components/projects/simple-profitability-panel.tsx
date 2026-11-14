@@ -9,6 +9,12 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { CostCalculatorForm } from "@/components/costs/cost-calculator-form";
+import { PreliminaryOfferComparison } from "@/components/projects/preliminary-offer-comparison";
+import { readStoredMarketplaceDetails } from "@/modules/product-search/domain/preliminary-offer-comparison";
+import {
+  bridgeSavedOfferSearchEvidence,
+  matchingSearchScore,
+} from "@/modules/product-search/domain/saved-offer-search-evidence";
 import { useI18n } from "@/components/i18n/i18n-provider";
 import { CommercialTermsForm } from "@/components/offers/commercial-terms-form";
 import { ProfitabilityCheckControl } from "@/components/projects/profitability-check-control";
@@ -28,6 +34,12 @@ import { estimateTajaPreliminaryLandedCost } from "@/modules/product-search/doma
 import { extractSupplierLogisticsData } from "@/modules/transport/domain/transport-estimator";
 
 type DecisionView = ProjectDecisionResult & { id: string; createdAt: Date };
+
+type SearchAnalysisScore = {
+  productUrl: string;
+  overallScore: number;
+  confidenceScore: number;
+};
 
 type OfferWithDetails = SupplierOffer & {
   costCalculations: CostCalculation[];
@@ -55,6 +67,7 @@ type SimpleCopy = {
   offerDetail: string;
   sourceOffer: string;
   commercialDataMissing: string;
+  backToComparison: string;
   preliminaryEstimateTitle: string;
   preliminaryEstimateBody: string;
   preliminaryBase: string;
@@ -107,6 +120,7 @@ const copy: Record<Locale, SimpleCopy> = {
     offerDetail: "Izabrana ponuda",
     sourceOffer: "Otvori izvornu ponudu",
     commercialDataMissing: "Nedostaju cena ili valuta potrebni za računicu.",
+    backToComparison: "Nazad na poređenje",
     preliminaryEstimateTitle: "Preliminarna procena uvoza",
     preliminaryEstimateBody: "JAKOV360 može da napravi konzervativnu procenu i pre potvrde Incoterm-a. Nepotvrđeni podaci su jasno označeni i ne predstavljaju uslov dobavljača.",
     preliminaryBase: "Osnovna procena",
@@ -157,6 +171,7 @@ const copy: Record<Locale, SimpleCopy> = {
     offerDetail: "Ausgewähltes Angebot",
     sourceOffer: "Quellangebot öffnen",
     commercialDataMissing: "Für die Kalkulation fehlen Preis oder Währung.",
+    backToComparison: "Zurück zum Vergleich",
     preliminaryEstimateTitle: "Vorläufige Importkostenschätzung",
     preliminaryEstimateBody: "JAKOV360 kann vor der Bestätigung des Incoterms eine konservative Schätzung erstellen. Unbestätigte Angaben sind klar gekennzeichnet und gelten nicht als Lieferantenkonditionen.",
     preliminaryBase: "Basisschätzung",
@@ -207,6 +222,7 @@ const copy: Record<Locale, SimpleCopy> = {
     offerDetail: "Selected offer",
     sourceOffer: "Open source offer",
     commercialDataMissing: "A supplier price or currency is missing for the calculation.",
+    backToComparison: "Back to comparison",
     preliminaryEstimateTitle: "Preliminary import estimate",
     preliminaryEstimateBody: "JAKOV360 can produce a conservative estimate before the Incoterm is confirmed. Unconfirmed values are clearly labeled and are not supplier terms.",
     preliminaryBase: "Base estimate",
@@ -256,6 +272,21 @@ function metadataText(metadata: unknown, key: string) {
   if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
   const value = (metadata as Record<string, unknown>)[key];
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function metadataNumber(metadata: unknown, key: string) {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  const value = (metadata as Record<string, unknown>)[key];
+  const parsed = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function comparisonProductQuery(metadata: unknown, projectName: string) {
+  const direct = metadataText(metadata, "originalQuery");
+  if (direct) return direct;
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return projectName;
+  const source = (metadata as Record<string, unknown>).provenance;
+  return metadataText(source, "originalQuery") ?? projectName;
 }
 
 function preliminarySearchResult(
@@ -334,6 +365,8 @@ export function SimpleProfitabilityPanel({
   focusedOfferId,
   selectedCalculationOfferId,
   profitabilityError,
+  cachedSearchResults = [],
+  cachedSearchScores = [],
 }: {
   projectId: string;
   projectName: string;
@@ -344,6 +377,8 @@ export function SimpleProfitabilityPanel({
   focusedOfferId?: string;
   selectedCalculationOfferId?: string;
   profitabilityError?: string;
+  cachedSearchResults?: SupplierOfferSearchResult[];
+  cachedSearchScores?: SearchAnalysisScore[];
 }) {
   const { locale, t } = useI18n();
   const text = copy[locale];
@@ -367,6 +402,8 @@ export function SimpleProfitabilityPanel({
     ? offers.find((offer) => offer.id === selectedCalculationOfferId) ?? null
     : null;
   const offersForInput = focusedOffer ? [focusedOffer] : offers;
+  const showComparison = !focusedOffer && offersForInput.length >= 2;
+  const comparisonHref = `/projects/${projectId}#workflow-step-decision`;
   const canCheckProfitability = focusedOffer
     ? focusedOffer.costCalculations.length > 0
     : calculatedOffers.length > 0;
@@ -505,7 +542,61 @@ export function SimpleProfitabilityPanel({
       ) : (
         <>
           {canCheckProfitability && <p>{text.readyForCheck}</p>}
+          {showComparison && (
+            <PreliminaryOfferComparison
+              locale={locale}
+              requestedQuantity={projectQuantity}
+              detailHrefById={Object.fromEntries(offersForInput.map((offer) => [
+                offer.id,
+                `/projects/${projectId}?selectedOffer=${offer.id}#workflow-step-decision`,
+              ]))}
+              leadTimeById={Object.fromEntries(offersForInput.map((offer) => [
+                offer.id,
+                offer.deliveryTimeDays === null ? null : `${offer.deliveryTimeDays} ${text.days}`,
+              ]))}
+              offers={offersForInput.map((offer) => {
+                const metadata = offer.sourceMetadata;
+                const productUrl = sourceOfferUrl(metadata);
+                const storedMarketplaceDetails = readStoredMarketplaceDetails(metadata);
+                const evidence = bridgeSavedOfferSearchEvidence({
+                  productUrl,
+                  storedAdvertisedPrice: metadataNumber(metadata, "advertisedPrice"),
+                  storedAdvertisedCurrency: metadataText(metadata, "advertisedCurrency"),
+                  storedAdvertisedPriceHigh: metadataNumber(metadata, "advertisedPriceHigh"),
+                  storedTitle: metadataText(metadata, "title"),
+                  storedMarketplaceDetails,
+                  cachedResults: cachedSearchResults,
+                  quantity: projectQuantity,
+                });
+                const score = matchingSearchScore(cachedSearchScores, productUrl);
+                return {
+                  id: offer.id,
+                  supplierName: offer.supplierName,
+                  title: evidence.title ?? metadataText(metadata, "title"),
+                  productUrl,
+                  supplierCountry: offer.supplierCountry,
+                  listedMoq: offer.moq,
+                  incoterm: offer.incoterm,
+                  unitPrice: numberValue(offer.unitPrice),
+                  currency: offer.currency,
+                  advertisedPrice: evidence.advertisedPrice,
+                  advertisedCurrency: evidence.advertisedCurrency,
+                  advertisedPriceHigh: evidence.advertisedPriceHigh,
+                  writtenQuoteConfirmed: false,
+                  productQuery: comparisonProductQuery(metadata, projectName),
+                  marketplaceDetails: evidence.marketplaceDetails,
+                  baseAnalysisScore: score?.overallScore ?? null,
+                  confidenceScore: score?.confidenceScore ?? null,
+                  missingAdvertisedPriceReason: evidence.missingAdvertisedPriceReason,
+                };
+              })}
+            />
+          )}
+          {!showComparison && (
           <div className="offer-list">
+            {focusedOffer && offers.length > 1 && (
+              <p><Link className="secondary-button" href={comparisonHref}>{text.backToComparison}</Link></p>
+            )}
             {offersForInput.map((offer) => {
               const latest = offer.costCalculations[0];
               const sourceUrl = sourceOfferUrl(offer.sourceMetadata);
@@ -635,6 +726,7 @@ export function SimpleProfitabilityPanel({
               );
             })}
           </div>
+          )}
         </>
       )}
     </section>
