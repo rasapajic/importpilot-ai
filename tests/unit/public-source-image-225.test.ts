@@ -62,7 +62,7 @@ describe("Issue #225 exact-page supplier photo provenance", () => {
   });
 
   it("fails closed before requesting an IP if DNS contains any private address", async () => {
-    const readPage = vi.fn(async () => PAGE);
+    const readPage = vi.fn(async (_url: URL, _validatedIp: string) => PAGE);
     const image = await recoverExactSourceProductImage(SOURCE, TITLE, {
       lookup4: async () => ["8.8.8.8", "127.0.0.1"],
       readPage,
@@ -72,7 +72,7 @@ describe("Issue #225 exact-page supplier photo provenance", () => {
   });
 
   it("reads at the validated IP and changes image only (no quote or MOQ)", async () => {
-    const readPage = vi.fn(async () => PAGE);
+    const readPage = vi.fn(async (_url: URL, _validatedIp: string) => PAGE);
     const image = await recoverExactSourceProductImage(SOURCE, TITLE, {
       lookup4: async () => ["8.8.8.8"],
       readPage,
