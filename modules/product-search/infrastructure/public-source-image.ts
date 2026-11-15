@@ -124,6 +124,7 @@ export function imageFromExactSourcePage(
         imageUrl.protocol !== "https:" || imageUrl.username ||
         imageUrl.password || imageUrl.port || isIP(imageUrl.hostname) !== 0 ||
         !imageUrl.hostname.includes(".") ||
+        /(?:^|\.)(?:localhost|local|internal|test|invalid|onion)$/.test(imageUrl.hostname) ||
         imageUrl.href.length > 2_000 ||
         NON_PRODUCT_IMAGE.test(imageUrl.pathname) ||
         imageUrl.href === source.href
