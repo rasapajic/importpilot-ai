@@ -693,6 +693,7 @@ export function SimpleSupplierOfferSearch({
   const [fxSnapshot, setFxSnapshot] = useState<FxSnapshot | null>(null);
   const automaticSearchStarted = useRef(false);
   const recoveryAttemptedUrls = useRef(new Set<string>());
+  const sourceImageAttemptedUrls = useRef(new Set<string>());
 
   const runSearch = useCallback(async () => {
     if (!quantity || !targetCountry) return;
@@ -700,6 +701,7 @@ export function SimpleSupplierOfferSearch({
     setError("");
     setLimitReached(false);
     recoveryAttemptedUrls.current.clear();
+    sourceImageAttemptedUrls.current.clear();
     try {
       const response = await fetch(`/api/projects/${projectId}/supplier-search`, {
         method: "POST",
@@ -832,6 +834,54 @@ export function SimpleSupplierOfferSearch({
     });
 
     return () => controller.abort();
+  }, [projectId, results]);
+
+  // Issue #225: TAJA web-search sources often omit imageUrl. Recover only the
+  // exact cited public product page's own photo metadata after search renders.
+  // This never starts another paid search or changes the supplier's price/MOQ.
+  useEffect(() => {
+    if (!results?.length) return;
+    const candidates = results.filter((result) =>
+      !isLikelyProductImageUrl(result.imageUrl) &&
+      !isRecoverableMarketplaceProductUrl(result.productUrl) &&
+      /\/(?:product|products|product-detail)\/[^/]+/i.test(result.productUrl) &&
+      !sourceImageAttemptedUrls.current.has(result.productUrl)
+    ).slice(0, 10);
+    if (candidates.length === 0) return;
+    candidates.forEach((result) => sourceImageAttemptedUrls.current.add(result.productUrl));
+
+    let next = 0;
+    const worker = async () => {
+      while (next < candidates.length) {
+        const candidate = candidates[next++];
+        try {
+          const response = await fetch("/api/projects/" + projectId + "/supplier-search/source-image", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              productUrl: candidate.productUrl,
+              title: candidate.title,
+            }),
+          });
+          if (!response.ok) continue;
+          const payload = await response.json().catch(() => null) as {
+            imageUrl?: string | null;
+          } | null;
+          if (!payload?.imageUrl || !isLikelyProductImageUrl(payload.imageUrl)) continue;
+          setResults((current) => current?.map((result) =>
+            result.productUrl === candidate.productUrl &&
+            !isLikelyProductImageUrl(result.imageUrl)
+              ? { ...result, imageUrl: payload.imageUrl! }
+              : result
+          ) ?? current);
+        } catch {
+          // The original result and honest missing-photo placeholder remain.
+        }
+      }
+    };
+    // Bounded concurrency prevents a batch of web results from flooding the
+    // exact-page metadata route or delaying the existing search results.
+    void Promise.all(Array.from({ length: Math.min(3, candidates.length) }, () => worker()));
   }, [projectId, results]);
 
   async function selectOffer(result: SupplierOfferSearchResult) {
