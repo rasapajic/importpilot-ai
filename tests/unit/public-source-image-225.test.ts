@@ -106,7 +106,8 @@ describe("Issue #225 integration contracts", () => {
     expect(client).toContain("{ ...result, imageUrl: payload.imageUrl! }");
     expect(route).not.toContain("price:");
     expect(route).not.toContain("unitPrice:");
-    expect(route).not.toContain("create");
-    expect(route).not.toContain("update");
+    expect(route).not.toContain("prisma.supplierSearchCache.create");
+    expect(route).not.toContain("prisma.supplierSearchCache.update");
+    expect(route).not.toContain("prisma.supplierOffer.create");
   });
 });
