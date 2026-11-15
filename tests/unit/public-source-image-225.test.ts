@@ -36,6 +36,8 @@ describe("Issue #225 exact-page supplier photo provenance", () => {
       "wp-content/uploads/reading-glasses.jpg", "wp-content/uploads/company-logo.png",
     );
     expect(imageFromExactSourcePage(logo, SOURCE, TITLE)).toBeNull();
+    const internal = PAGE.replace("https://mazerwholesale.com/wp-content", "https://assets.internal/wp-content");
+    expect(imageFromExactSourcePage(internal, SOURCE, TITLE)).toBeNull();
     expect(imageFromExactSourcePage(PAGE, SOURCE, "Industrial hydraulic press controls")).toBeNull();
     expect(imageFromExactSourcePage(PAGE, SOURCE, "Reading Glasses")).toBe(
       "https://mazerwholesale.com/wp-content/uploads/reading-glasses.jpg?size=large&quality=80",
